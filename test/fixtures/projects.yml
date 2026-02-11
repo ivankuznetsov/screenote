@@ -1,0 +1,9 @@
+alice_project:
+  name: "Alice's Project"
+  description: "A test project for Alice"
+  user: alice
+
+bob_project:
+  name: "Bob's Project"
+  description: "A test project for Bob"
+  user: bob

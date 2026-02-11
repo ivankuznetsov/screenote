@@ -1,0 +1,27 @@
+<%= form_with(model: project, class: "form") do |f| %>
+  <% if project.errors.any? %>
+    <div class="form__errors">
+      <strong><%= pluralize(project.errors.count, "error") %> prevented this project from being saved:</strong>
+      <ul>
+        <% project.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="form__group">
+    <%= f.label :name, class: "form__label" %>
+    <%= f.text_field :name, class: "form__input", autofocus: true %>
+  </div>
+
+  <div class="form__group">
+    <%= f.label :description, class: "form__label" %>
+    <%= f.text_area :description, class: "form__textarea", rows: 3 %>
+  </div>
+
+  <div class="form__actions">
+    <%= f.submit class: "btn btn--primary" %>
+    <%= link_to "Cancel", projects_path, class: "btn btn--secondary" %>
+  </div>
+<% end %>

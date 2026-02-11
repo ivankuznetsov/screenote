@@ -1,0 +1,24 @@
+<div class="page-header">
+  <h1 class="page-header__title">Projects</h1>
+  <%= link_to "New project", new_project_path, class: "btn btn--primary" %>
+</div>
+
+<% if @projects.any? %>
+  <div class="project-list">
+    <% @projects.each do |project| %>
+      <%= link_to project_path(project), class: "project-card" do %>
+        <div class="project-card__name"><%= project.name %></div>
+        <% if project.description.present? %>
+          <div class="project-card__description"><%= truncate(project.description, length: 120) %></div>
+        <% end %>
+        <div class="project-card__meta">Created <%= time_ago_in_words(project.created_at) %> ago</div>
+      <% end %>
+    <% end %>
+  </div>
+<% else %>
+  <div class="empty-state">
+    <div class="empty-state__title">No projects yet</div>
+    <div class="empty-state__description">Create a project to start collecting visual feedback.</div>
+    <%= link_to "Create your first project", new_project_path, class: "btn btn--primary" %>
+  </div>
+<% end %>

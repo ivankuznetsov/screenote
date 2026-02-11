@@ -1,0 +1,9 @@
+alice_session:
+  user: alice
+  ip_address: 127.0.0.1
+  user_agent: "TestAgent"
+
+bob_session:
+  user: bob
+  ip_address: 127.0.0.1
+  user_agent: "TestAgent"
