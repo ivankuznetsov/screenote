@@ -1,0 +1,12 @@
+<div class="invitation-acceptance">
+  <h1>You've been invited</h1>
+
+  <p>
+    <strong><%= @invitation.inviter.email %></strong> invited you to collaborate on
+    "<strong><%= @invitation.project.name %></strong>" on Screenote.
+  </p>
+
+  <%= form_with url: accept_invitation_path(params[:token]), method: :post, class: "invitation-acceptance__form", data: { turbo_submits_with: "Accepting…" } do %>
+    <%= submit_tag "Accept Invitation", class: "invitation-acceptance__button" %>
+  <% end %>
+</div>

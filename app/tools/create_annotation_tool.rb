@@ -18,7 +18,7 @@ class CreateAnnotationTool < ApplicationTool
       screenshot = current_project.screenshots.find(screenshot_id)
 
       annotation = screenshot.annotations.create!(
-        user: current_project.user,
+        user: current_project.creator,
         x_percent: x_percent,
         y_percent: y_percent,
         width_percent: width_percent,

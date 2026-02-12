@@ -1,0 +1,5 @@
+pending_invitation:
+  project: alice_project
+  inviter: alice
+  email: "newuser@example.com"
+  status: 0

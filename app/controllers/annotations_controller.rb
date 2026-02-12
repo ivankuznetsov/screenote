@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class AnnotationsController < ApplicationController
+  include ProjectAuthorization
+
   before_action :set_project
   before_action :set_screenshot
   before_action :set_annotation, only: %i[update destroy]
@@ -33,10 +35,6 @@ class AnnotationsController < ApplicationController
   end
 
   private
-
-  def set_project
-    @project = Current.user.projects.find(params[:project_id])
-  end
 
   def set_screenshot
     @screenshot = @project.screenshots.find(params[:screenshot_id])

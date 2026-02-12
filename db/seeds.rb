@@ -4,7 +4,7 @@ user = User.find_or_create_by!(email: "test@screenote.app") do |u|
   u.confirmed_at = Time.current
 end
 
-user.projects.find_or_create_by!(name: "Demo Project") do |p|
+user.owned_projects.find_or_create_by!(name: "Demo Project") do |p|
   p.description = "A sample project for testing."
 end
 

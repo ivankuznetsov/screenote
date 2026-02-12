@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 class ApiKeysController < ApplicationController
+  include ProjectAuthorization
+
   before_action :set_project
+  before_action :require_owner!
   before_action :set_api_key, only: :destroy
 
   def index
@@ -29,10 +32,6 @@ class ApiKeysController < ApplicationController
   end
 
   private
-
-  def set_project
-    @project = Current.user.projects.find(params[:project_id])
-  end
 
   def set_api_key
     @api_key = @project.api_keys.active.find(params[:id])
