@@ -1,0 +1,32 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../config/environment"
+
+token = ARGV.find { |arg| arg.start_with?("--token=") }&.split("=", 2)&.last
+token ||= ARGV[ARGV.index("--token") + 1] if ARGV.include?("--token")
+
+unless token
+  warn "Usage: bin/mcp --token <api_key_token>"
+  exit 1
+end
+
+api_key = ApiKey.active.find_by(token: token)
+unless api_key
+  warn "Error: Invalid or revoked API key"
+  exit 1
+end
+
+Thread.current[:mcp_current_project] = api_key.project
+Thread.current[:mcp_current_api_key] = api_key
+
+server = FastMcp::Server.new(
+  name: "screenote",
+  version: "1.0.0",
+  logger: Logger.new($stderr)
+)
+
+tool_classes = ApplicationTool.descendants
+server.register_tools(*tool_classes) if tool_classes.any?
+
+server.start

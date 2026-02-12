@@ -1,0 +1,26 @@
+<div class="page-header">
+  <h1 class="page-header__title">New API Key</h1>
+</div>
+
+<%= form_with(model: [@project, @api_key], class: "form") do |f| %>
+  <% if @api_key.errors.any? %>
+    <div class="form__errors">
+      <strong><%= pluralize(@api_key.errors.count, "error") %> prevented this API key from being created:</strong>
+      <ul>
+        <% @api_key.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="form__group">
+    <%= f.label :name, "Key name", class: "form__label" %>
+    <%= f.text_field :name, class: "form__input", autofocus: true, placeholder: "e.g. Claude Code - Dashboard project" %>
+  </div>
+
+  <div class="form__actions">
+    <%= f.submit "Create API key", class: "btn btn--primary" %>
+    <%= link_to "Cancel", project_api_keys_path(@project), class: "btn btn--secondary" %>
+  </div>
+<% end %>
