@@ -10,24 +10,19 @@ class ScreenshotsTest < ApplicationSystemTestCase
   include Pages::ProjectsPage
   include Pages::ScreenshotsPage
 
+  TEST_IMAGE_PATH = Rails.root.join("test/fixtures/files/test_image.png").to_s
+
   setup do
     login_as_test_user
   end
 
   test "upload a screenshot to a project" do
-    # Navigate to the seed project
-    visit_projects
-    click_project("Demo Project")
-    assert_on_project_show("Demo Project")
-
-    # Upload screenshot
+    navigate_to_demo_project
     click_link "Upload screenshot"
     assert_selector PAGE_TITLE, text: "Upload screenshot", wait: 10
 
     screenshot_title = "E2E Screenshot #{Time.now.to_i}"
-    image_path = Rails.root.join("test/fixtures/files/test_image.png").to_s
-
-    fill_screenshot_form(title: screenshot_title, image_path: image_path)
+    fill_screenshot_form(title: screenshot_title, image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
 
     assert_flash_notice "Screenshot uploaded."
@@ -36,15 +31,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
   end
 
   test "screenshot show page displays image and sidebar" do
-    # Create a screenshot first
-    visit_projects
-    click_project("Demo Project")
-    click_link "Upload screenshot"
-
-    screenshot_title = "Show Test #{Time.now.to_i}"
-    image_path = Rails.root.join("test/fixtures/files/test_image.png").to_s
-    fill_screenshot_form(title: screenshot_title, image_path: image_path)
-    submit_screenshot_form
+    create_screenshot("Show Test #{Time.now.to_i}")
 
     assert_on_screenshot_show
     assert_screenshot_image_loaded
@@ -54,18 +41,9 @@ class ScreenshotsTest < ApplicationSystemTestCase
   end
 
   test "edit a screenshot title" do
-    # Create a screenshot
-    visit_projects
-    click_project("Demo Project")
-    click_link "Upload screenshot"
-
     original_title = "Original Title #{Time.now.to_i}"
-    image_path = Rails.root.join("test/fixtures/files/test_image.png").to_s
-    fill_screenshot_form(title: original_title, image_path: image_path)
-    submit_screenshot_form
-    assert_on_screenshot_show
+    create_screenshot(original_title)
 
-    # Edit
     click_link "Edit"
     assert_selector PAGE_TITLE, text: "Edit screenshot", wait: 10
 
@@ -78,55 +56,49 @@ class ScreenshotsTest < ApplicationSystemTestCase
   end
 
   test "delete a screenshot" do
-    # Create a screenshot
-    visit_projects
-    click_project("Demo Project")
-    click_link "Upload screenshot"
+    create_screenshot("Delete Me #{Time.now.to_i}")
 
-    screenshot_title = "Delete Me #{Time.now.to_i}"
-    image_path = Rails.root.join("test/fixtures/files/test_image.png").to_s
-    fill_screenshot_form(title: screenshot_title, image_path: image_path)
-    submit_screenshot_form
-    assert_on_screenshot_show
-
-    # Delete
     accept_confirm do
       click_button "Delete"
     end
 
     assert_flash_notice "Screenshot deleted."
-    # Should redirect back to the project or screenshots index
     assert_selector PAGE_TITLE, wait: 10
   end
 
   test "upload screenshot without title shows validation error" do
-    visit_projects
-    click_project("Demo Project")
+    navigate_to_demo_project
     click_link "Upload screenshot"
 
-    image_path = Rails.root.join("test/fixtures/files/test_image.png").to_s
-    fill_screenshot_form(title: "", image_path: image_path)
+    fill_screenshot_form(title: "", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
 
-    assert_selector ".form__errors", wait: 5
+    assert_form_error
   end
 
   test "screenshot appears in project screenshot grid" do
     screenshot_title = "Grid Test #{Time.now.to_i}"
+    create_screenshot(screenshot_title)
 
-    visit_projects
-    click_project("Demo Project")
-    click_link "Upload screenshot"
-
-    image_path = Rails.root.join("test/fixtures/files/test_image.png").to_s
-    fill_screenshot_form(title: screenshot_title, image_path: image_path)
-    submit_screenshot_form
-    assert_on_screenshot_show
-
-    # Go back to project
     find(BREADCRUMB).find("a", match: :first).click
     wait_for_turbo
 
     assert_selector SCREENSHOT_CARD_TITLE, text: screenshot_title, wait: 10
+  end
+
+  private
+
+  def navigate_to_demo_project
+    visit_projects
+    click_project("Demo Project")
+    assert_on_project_show("Demo Project")
+  end
+
+  def create_screenshot(title)
+    navigate_to_demo_project
+    click_link "Upload screenshot"
+    fill_screenshot_form(title: title, image_path: TEST_IMAGE_PATH)
+    submit_screenshot_form
+    assert_on_screenshot_show
   end
 end

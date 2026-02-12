@@ -10,7 +10,7 @@
           <% end %>
         </div>
         <div class="screenshot-card__info">
-          <div class="screenshot-card__title"><%= screenshot.title %></div>
+          <div class="screenshot-card__title" data-testid="screenshot-card-title"><%= screenshot.title %></div>
           <div class="screenshot-card__meta">
             <%= screenshot.try(:open_annotations_count_cache) || screenshot.annotations.open.count %> open
             <span class="screenshot-card__separator">&middot;</span>
@@ -21,7 +21,7 @@
     <% end %>
   </div>
 <% else %>
-  <div class="empty-state">
+  <div class="empty-state" data-testid="empty-state">
     <div class="empty-state__title">No screenshots yet</div>
     <div class="empty-state__description">Upload a screenshot to start collecting annotations.</div>
     <%= link_to "Upload your first screenshot", new_project_screenshot_path(project), class: "btn btn--primary" %>

@@ -1,6 +1,6 @@
-<%= form_with(model: [@project, screenshot], class: "form") do |f| %>
+<%= form_with(model: [@project, screenshot], class: "form", data: { testid: "form" }) do |f| %>
   <% if screenshot.errors.any? %>
-    <div class="form__errors">
+    <div class="form__errors" data-testid="form-errors">
       <strong><%= pluralize(screenshot.errors.count, "error") %> prevented this screenshot from being saved:</strong>
       <ul>
         <% screenshot.errors.full_messages.each do |message| %>

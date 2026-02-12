@@ -21,7 +21,7 @@ class AuthTest < ApplicationSystemTestCase
     submit_sign_in
 
     assert_signed_in(email: "test@screenote.app")
-    assert_selector ".page-header__title, .project-list, .empty-state", wait: 10
+    assert_selector '[data-testid="page-title"], [data-testid="project-list"], [data-testid="empty-state"]', wait: 10
   end
 
   test "sign in with invalid credentials shows error" do

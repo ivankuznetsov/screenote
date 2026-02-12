@@ -7,14 +7,10 @@ module Pages
     ANNOTATION_FORM = "#annotation-form"
     COMMENT_FIELD = 'textarea[name="annotation[comment]"]'
     SAVE_BUTTON = '#annotation-form input[type="submit"]'
-    CANCEL_BUTTON = "#annotation-form .btn--secondary"
+    CANCEL_BUTTON = '[data-testid="cancel-button"]'
 
-    ANNOTATION_ITEM = ".annotation-item"
-    ANNOTATION_COMMENT = ".annotation-item__comment"
-    ANNOTATION_STATUS = ".annotation-item__status"
-    ANNOTATION_NUMBER = ".annotation-item__number"
-    RESOLVE_BUTTON = ".annotation-item__actions .btn--secondary"
-    DELETE_ANNOTATION_BUTTON = ".annotation-item__actions .btn--danger"
+    ANNOTATION_ITEM = '[data-testid="annotation-item"]'
+    ANNOTATION_COMMENT = '[data-testid="annotation-comment"]'
 
     ANNOTATION_PIN = ".annotation-pin"
 
@@ -55,8 +51,7 @@ module Pages
     end
 
     def assert_annotation_resolved(comment_text)
-      item = find(ANNOTATION_ITEM, text: comment_text)
-      assert item.matches_css?(".annotation-item--resolved"), "Annotation '#{comment_text}' should be resolved"
+      assert_selector "#{ANNOTATION_ITEM}[data-status=\"resolved\"]", text: comment_text, wait: 10
     end
   end
 end

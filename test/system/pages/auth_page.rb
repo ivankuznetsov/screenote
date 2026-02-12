@@ -4,28 +4,19 @@ module Pages
   module AuthPage
     # --- Selectors ---
 
+    # Selectors below target rails_simple_auth gem markup (no data-testid available)
     SIGN_IN_FORM = ".rsa-auth-form"
     SIGN_IN_TITLE = ".rsa-auth-form__title"
-    EMAIL_FIELD = 'input[name="email"]'
-    PASSWORD_FIELD = 'input[name="password"]'
-    SIGN_IN_BUTTON = 'input[type="submit"][value="Sign In"]'
     SIGN_UP_LINK = 'a[href="/sign_up"]'
     FORGOT_PASSWORD_LINK = 'a[href="/passwords/new"]'
     MAGIC_LINK_BUTTON = ".rsa-auth-form__magic-link-button"
     AUTH_ERROR = ".rsa-auth-form__error"
-
-    # Sign up form
     SIGN_UP_EMAIL = 'input[name="user[email]"]'
     SIGN_UP_PASSWORD = 'input[name="user[password]"]'
     SIGN_UP_BUTTON = 'input[type="submit"][value="Sign Up"]'
-
-    # Flash messages
-    FLASH_NOTICE = ".flash.flash--notice"
-    FLASH_ALERT = ".flash.flash--alert"
-
-    # Header
-    SIGN_OUT_BUTTON = ".header__sign-out"
-    USER_EMAIL = ".header__email"
+    FLASH_NOTICE = '[data-testid="flash-notice"]'
+    SIGN_OUT_BUTTON = '[data-testid="sign-out-button"]'
+    USER_EMAIL = '[data-testid="user-email"]'
 
     # --- Actions ---
 
@@ -46,17 +37,6 @@ module Pages
 
     def submit_sign_in
       click_button "Sign In"
-    end
-
-    def fill_sign_up(email:, password:)
-      within SIGN_IN_FORM do
-        fill_in "user[email]", with: email
-        fill_in "user[password]", with: password
-      end
-    end
-
-    def submit_sign_up
-      click_button "Sign Up"
     end
 
     # --- Assertions ---
@@ -81,10 +61,6 @@ module Pages
 
     def assert_flash_notice(text)
       assert_selector FLASH_NOTICE, text: text, wait: 10
-    end
-
-    def assert_flash_alert(text)
-      assert_selector FLASH_ALERT, text: text, wait: 10
     end
   end
 end

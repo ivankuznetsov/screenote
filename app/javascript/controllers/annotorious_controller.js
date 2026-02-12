@@ -123,7 +123,7 @@ export default class extends Controller {
 
     if (!xPercent || !yPercent) return null
 
-    const isResolved = annotationEl.classList.contains("annotation-item--resolved")
+    const isResolved = annotationEl.dataset.status === "resolved"
 
     if (widthPercent && heightPercent) {
       const region = document.createElement("div")

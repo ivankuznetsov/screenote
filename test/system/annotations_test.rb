@@ -12,6 +12,9 @@ class AnnotationsTest < ApplicationSystemTestCase
   include Pages::ScreenshotsPage
   include Pages::AnnotationsPage
 
+  ANNOTORIOUS_OVERLAY = ".screenshot-canvas svg, .a9s-annotationlayer"
+  TEST_IMAGE_PATH = Rails.root.join("test/fixtures/files/test_image.png").to_s
+
   setup do
     login_as_test_user
     create_screenshot_for_annotation
@@ -45,15 +48,8 @@ class AnnotationsTest < ApplicationSystemTestCase
   end
 
   test "create multiple annotations" do
-    # First annotation
-    click_on_image_to_annotate
-    assert_annotation_form_visible
-    fill_annotation_comment("Annotation One")
-    submit_annotation
-    wait_for_turbo
-    assert_annotation_visible("Annotation One")
+    create_annotation("Annotation One")
 
-    # Second annotation (click a different spot)
     click_on_image_to_annotate(x_offset: 100, y_offset: 50)
     assert_annotation_form_visible
     fill_annotation_comment("Annotation Two")
@@ -65,15 +61,8 @@ class AnnotationsTest < ApplicationSystemTestCase
   end
 
   test "resolve an annotation" do
-    # Create an annotation first
-    click_on_image_to_annotate
-    assert_annotation_form_visible
-    fill_annotation_comment("Will be resolved")
-    submit_annotation
-    wait_for_turbo
-    assert_annotation_visible("Will be resolved")
+    create_annotation("Will be resolved")
 
-    # Resolve it
     within find(ANNOTATION_ITEM, text: "Will be resolved") do
       click_button "Resolve"
     end
@@ -84,15 +73,8 @@ class AnnotationsTest < ApplicationSystemTestCase
   end
 
   test "delete an annotation" do
-    # Create an annotation first
-    click_on_image_to_annotate
-    assert_annotation_form_visible
-    fill_annotation_comment("Will be deleted")
-    submit_annotation
-    wait_for_turbo
-    assert_annotation_visible("Will be deleted")
+    create_annotation("Will be deleted")
 
-    # Delete it
     within find(ANNOTATION_ITEM, text: "Will be deleted") do
       accept_confirm do
         click_button "Delete"
@@ -105,11 +87,7 @@ class AnnotationsTest < ApplicationSystemTestCase
   end
 
   test "annotation pins appear on the canvas" do
-    click_on_image_to_annotate
-    assert_annotation_form_visible
-    fill_annotation_comment("Pin test")
-    submit_annotation
-    wait_for_turbo
+    create_annotation("Pin test")
 
     assert_selector ANNOTATION_PIN, minimum: 1, wait: 10
   end
@@ -122,40 +100,37 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_on_project_show("Demo Project")
 
     click_link "Upload screenshot"
-
-    screenshot_title = "Annotation Test #{Time.now.to_i}"
-    image_path = Rails.root.join("test/fixtures/files/test_image.png").to_s
-    fill_screenshot_form(title: screenshot_title, image_path: image_path)
+    fill_screenshot_form(title: "Annotation Test #{Time.now.to_i}", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show
     assert_screenshot_image_loaded
   end
 
-  # Click on the image to start creating an annotation using Annotorious.
-  # Uses Playwright's low-level mouse API to simulate click-click drawing mode:
-  # first click sets the start point, second click completes the annotation.
+  def create_annotation(comment_text)
+    click_on_image_to_annotate
+    assert_annotation_form_visible
+    fill_annotation_comment(comment_text)
+    submit_annotation
+    wait_for_turbo
+    assert_annotation_visible(comment_text)
+  end
+
+  # Click on the image to draw an annotation rectangle using Annotorious.
+  # Uses Playwright mouse API: first click sets start point, second click completes.
   def click_on_image_to_annotate(x_offset: 0, y_offset: 0)
-    # Wait for the Annotorious SVG overlay to be injected into the DOM
-    assert_selector ".screenshot-canvas svg, .a9s-annotationlayer", wait: 15
+    assert_selector ANNOTORIOUS_OVERLAY, wait: 15
 
     with_playwright_page do |pw_page|
-      # Wait for the Annotorious SVG container that sits over the image
-      svg = pw_page.locator(".screenshot-canvas svg, .a9s-annotationlayer").first
+      svg = pw_page.locator(ANNOTORIOUS_OVERLAY).first
       svg.wait_for(state: "visible", timeout: 10_000)
 
       box = svg.bounding_box
-
-      # Calculate click positions within the SVG overlay area
       start_x = box["x"] + (box["width"] * 0.3) + x_offset
       start_y = box["y"] + (box["height"] * 0.3) + y_offset
-      end_x = start_x + 80
-      end_y = start_y + 60
 
-      # Click-click drawing mode: first click starts, second click finishes
       pw_page.mouse.click(start_x, start_y)
-      # Brief pause for Annotorious to register the first click
       pw_page.wait_for_timeout(200)
-      pw_page.mouse.click(end_x, end_y)
+      pw_page.mouse.click(start_x + 80, start_y + 60)
     end
   end
 end

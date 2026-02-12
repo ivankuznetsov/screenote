@@ -4,32 +4,14 @@ module Pages
   module ScreenshotsPage
     # --- Selectors ---
 
-    PAGE_TITLE = ".page-header__title"
-    FORM = ".form"
-    TITLE_FIELD = 'input[name="screenshot[title]"]'
-    IMAGE_FIELD = 'input[name="screenshot[image]"]'
-
-    # Screenshot show
-    SCREENSHOT_HEADER = ".screenshot-header"
-    BREADCRUMB = ".screenshot-header__breadcrumb"
-    SCREENSHOT_WORKSPACE = ".screenshot-workspace"
-    SCREENSHOT_IMAGE = ".screenshot-canvas__image"
-    EDIT_BUTTON = ".screenshot-header__actions .btn--secondary"
-    DELETE_BUTTON = ".screenshot-header__actions .btn--danger"
-
-    # Sidebar
-    ANNOTATION_SIDEBAR = ".annotation-sidebar"
-    SIDEBAR_TITLE = ".annotation-sidebar__title"
-    SIDEBAR_EMPTY = ".annotation-sidebar__empty"
-    ANNOTATION_FILTER = ".annotation-filter"
-    ANNOTATION_FILTER_ACTIVE = ".annotation-filter--active"
+    BREADCRUMB = '[data-testid="breadcrumb"]'
+    SCREENSHOT_WORKSPACE = '[data-testid="screenshot-workspace"]'
+    SCREENSHOT_IMAGE = '[data-testid="screenshot-image"]'
+    ANNOTATION_SIDEBAR = '[data-testid="annotation-sidebar"]'
+    SIDEBAR_TITLE = '[data-testid="sidebar-title"]'
+    SIDEBAR_EMPTY = '[data-testid="sidebar-empty"]'
 
     # --- Actions ---
-
-    def visit_new_screenshot(project_id)
-      visit "/projects/#{project_id}/screenshots/new"
-      assert_selector FORM, wait: 10
-    end
 
     def fill_screenshot_form(title:, image_path: nil)
       fill_in "screenshot[title]", with: title

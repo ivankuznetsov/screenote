@@ -1,4 +1,6 @@
 <div class="annotation-item annotation-item--<%= annotation.status %>" id="<%= dom_id(annotation) %>"
+  data-testid="annotation-item"
+  data-status="<%= annotation.status %>"
   data-x-percent="<%= annotation.x_percent %>"
   data-y-percent="<%= annotation.y_percent %>"
   data-width-percent="<%= annotation.width_percent %>"
@@ -10,7 +12,7 @@
   </div>
 
   <% if annotation.comment.present? %>
-    <div class="annotation-item__comment"><%= annotation.comment %></div>
+    <div class="annotation-item__comment" data-testid="annotation-comment"><%= annotation.comment %></div>
   <% end %>
 
   <div class="annotation-item__meta">

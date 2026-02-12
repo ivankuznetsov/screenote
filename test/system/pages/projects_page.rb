@@ -4,34 +4,14 @@ module Pages
   module ProjectsPage
     # --- Selectors ---
 
-    PAGE_HEADER = ".page-header"
-    PAGE_TITLE = ".page-header__title"
-    NEW_PROJECT_BUTTON = 'a.btn.btn--primary[href="/projects/new"]'
-    PROJECT_LIST = ".project-list"
-    PROJECT_CARD = ".project-card"
-    PROJECT_CARD_NAME = ".project-card__name"
-    PROJECT_CARD_DESCRIPTION = ".project-card__description"
-    EMPTY_STATE = ".empty-state"
-    EMPTY_STATE_TITLE = ".empty-state__title"
-
-    # Project form
-    FORM = ".form"
-    NAME_FIELD = 'input[name="project[name]"]'
-    DESCRIPTION_FIELD = 'textarea[name="project[description]"]'
-    FORM_ERRORS = ".form__errors"
-
-    # Project detail
-    PROJECT_DETAIL_TITLE = ".project-detail__title"
-    PROJECT_DETAIL_DESCRIPTION = ".project-detail__description"
-    PROJECT_DETAIL_ACTIONS = ".project-detail__actions"
-    UPLOAD_SCREENSHOT_BUTTON = ".project-detail__actions .btn--primary"
-    EDIT_PROJECT_BUTTON = "a.btn.btn--secondary"
-    DELETE_PROJECT_BUTTON = ".project-detail__actions .btn--danger"
-
-    # Screenshot grid on project show
-    SCREENSHOT_GRID = ".screenshot-grid"
-    SCREENSHOT_CARD = ".screenshot-card"
-    SCREENSHOT_CARD_TITLE = ".screenshot-card__title"
+    PAGE_TITLE = '[data-testid="page-title"]'
+    PROJECT_CARD = '[data-testid="project-card"]'
+    PROJECT_CARD_NAME = '[data-testid="project-card-name"]'
+    FORM = '[data-testid="form"]'
+    FORM_ERRORS = '[data-testid="form-errors"]'
+    PROJECT_DETAIL_TITLE = '[data-testid="project-detail-title"]'
+    PROJECT_DETAIL_DESCRIPTION = '[data-testid="project-detail-description"]'
+    SCREENSHOT_CARD_TITLE = '[data-testid="screenshot-card-title"]'
 
     # --- Actions ---
 
@@ -64,20 +44,12 @@ module Pages
       assert_selector PAGE_TITLE, text: "Projects", wait: 10
     end
 
-    def assert_project_visible(name)
-      assert_selector PROJECT_CARD_NAME, text: name, wait: 10
-    end
-
     def assert_project_not_visible(name)
       assert_no_selector PROJECT_CARD_NAME, text: name, wait: 5
     end
 
     def assert_on_project_show(name)
       assert_selector PROJECT_DETAIL_TITLE, text: name, wait: 10
-    end
-
-    def assert_empty_projects
-      assert_selector EMPTY_STATE_TITLE, text: "No projects yet", wait: 10
     end
 
     def assert_form_error

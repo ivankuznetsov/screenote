@@ -1,8 +1,8 @@
 <div class="project-detail__header">
   <div>
-    <h1 class="project-detail__title"><%= @project.name %></h1>
+    <h1 class="project-detail__title" data-testid="project-detail-title"><%= @project.name %></h1>
     <% if @project.description.present? %>
-      <p class="project-detail__description"><%= @project.description %></p>
+      <p class="project-detail__description" data-testid="project-detail-description"><%= @project.description %></p>
     <% end %>
   </div>
   <div class="project-detail__actions">

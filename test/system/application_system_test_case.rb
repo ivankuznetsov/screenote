@@ -33,7 +33,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     fill_in "email", with: email
     fill_in "password", with: password
     click_button "Sign In"
-    assert_selector ".page-header, .empty-state, .project-list", wait: 10
+    assert_selector '[data-testid="page-title"], [data-testid="empty-state"], [data-testid="project-list"]', wait: 10
   end
 
   def login_as_test_user
@@ -55,19 +55,5 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   def with_playwright_page(&block)
     page.driver.with_playwright_page(&block)
-  end
-
-  def evaluate_script(js, arg: nil)
-    with_playwright_page do |pw_page|
-      arg ? pw_page.evaluate(js, arg: arg) : pw_page.evaluate(js)
-    end
-  end
-
-  # --- Dialog helpers ---
-
-  def accept_confirm_and_click(button_text)
-    page.accept_confirm do
-      click_button button_text
-    end
   end
 end

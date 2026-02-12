@@ -1,5 +1,5 @@
 <div class="page-header">
-  <h1 class="page-header__title"><%= @project.name %> &mdash; Screenshots</h1>
+  <h1 class="page-header__title" data-testid="page-title"><%= @project.name %> &mdash; Screenshots</h1>
   <%= link_to "Upload screenshot", new_project_screenshot_path(@project), class: "btn btn--primary" %>
 </div>
 
