@@ -1,0 +1,30 @@
+<%= form_with(model: [@project, screenshot], class: "form") do |f| %>
+  <% if screenshot.errors.any? %>
+    <div class="form__errors">
+      <strong><%= pluralize(screenshot.errors.count, "error") %> prevented this screenshot from being saved:</strong>
+      <ul>
+        <% screenshot.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="form__group">
+    <%= f.label :title, class: "form__label" %>
+    <%= f.text_field :title, class: "form__input", autofocus: true %>
+  </div>
+
+  <div class="form__group">
+    <%= f.label :image, class: "form__label" %>
+    <%= f.file_field :image, class: "form__input", accept: "image/png,image/jpeg" %>
+    <% if screenshot.image.attached? %>
+      <div class="form__hint">Current image will be replaced if you upload a new one.</div>
+    <% end %>
+  </div>
+
+  <div class="form__actions">
+    <%= f.submit class: "btn btn--primary" %>
+    <%= link_to "Cancel", project_path(@project), class: "btn btn--secondary" %>
+  </div>
+<% end %>
