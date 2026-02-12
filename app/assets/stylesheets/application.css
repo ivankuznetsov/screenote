@@ -662,7 +662,7 @@ a:hover {
 .annotation-pin {
   position: absolute;
   z-index: 10;
-  cursor: pointer;
+  pointer-events: none;
 }
 
 .annotation-pin--point {

@@ -19,6 +19,8 @@ export default class extends Controller {
   }
 
   initAnnotorious() {
+    this.pendingAnnotationId = null
+
     this.anno = createImageAnnotator(this.imageTarget, {
       drawingEnabled: true,
       drawingMode: "click"
@@ -27,9 +29,20 @@ export default class extends Controller {
     this.anno.on("createAnnotation", (annotation) => {
       this.handleCreate(annotation)
     })
+
+    // Show the form immediately after drawing completes (on selection)
+    // rather than waiting for the user to click away to deselect
+    this.anno.on("selectionChanged", (annotations) => {
+      if (annotations.length === 1 && annotations[0].bodies.length === 0) {
+        this.handleCreate(annotations[0])
+      }
+    })
   }
 
   handleCreate(annotation) {
+    if (this.pendingAnnotationId === annotation.id) return
+    this.pendingAnnotationId = annotation.id
+
     const selector = annotation.target?.selector
     if (!selector) return
 
@@ -42,17 +55,17 @@ export default class extends Controller {
   }
 
   parseSelector(selector) {
-    const value = selector.value || ""
-    const match = value.match(/xywh=pixel:(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)/)
-    if (!match) return null
+    // Annotorious v3 returns structured geometry, not W3C media fragment strings
+    const geometry = selector.geometry
+    if (!geometry) return null
 
     const naturalW = this.imageTarget.naturalWidth
     const naturalH = this.imageTarget.naturalHeight
 
-    const x = parseFloat(match[1])
-    const y = parseFloat(match[2])
-    const w = parseFloat(match[3])
-    const h = parseFloat(match[4])
+    const x = geometry.x
+    const y = geometry.y
+    const w = geometry.w
+    const h = geometry.h
 
     const xPercent = (x / naturalW) * 100
     const yPercent = (y / naturalH) * 100
