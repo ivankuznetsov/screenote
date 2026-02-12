@@ -57,10 +57,10 @@ Rails.application.configure do
   config.action_mailer.raise_delivery_errors = true
 
   # Set host to be used by links generated in mailer templates.
-  config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST", "screenote.app") }
+  config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST", "screenote.ai") }
 
   # Set default URL options for routes (needed for background jobs/MCP tools)
-  Rails.application.routes.default_url_options = { host: ENV.fetch("APP_HOST", "screenote.app"), protocol: "https" }
+  Rails.application.routes.default_url_options = { host: ENV.fetch("APP_HOST", "screenote.ai"), protocol: "https" }
 
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to
   # the I18n.default_locale when a translation cannot be found).

@@ -31,7 +31,7 @@ RailsSimpleAuth.configure do |config|
   config.layout = "auth"
 
   # Mailer
-  config.mailer_sender = ENV.fetch("MAILER_FROM", "noreply@screenote.app")
+  config.mailer_sender = ENV.fetch("MAILER_FROM", "noreply@screenote.ai")
   config.mailer_class = "UserMailer"
 
   # Models

@@ -12,7 +12,7 @@ servers:
 # Enable SSL auto certification via Let's Encrypt (handled by Cloudflare)
 proxy:
   ssl: true
-  host: screenote.app
+  host: screenote.ai
 
 # Local Docker registry (Kamal will automatically start it)
 registry:
@@ -53,7 +53,7 @@ env:
     RAILS_LOG_TO_STDOUT: true
 
     # Domain configuration
-    APP_HOST: screenote.app
+    APP_HOST: screenote.ai
 
     # S3 configuration (Rabata.io)
     RABATA_ENDPOINT: https://s3.eu-central-1.rabata.io
