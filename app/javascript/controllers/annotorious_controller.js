@@ -2,14 +2,10 @@ import { Controller } from "@hotwired/stimulus"
 import { createImageAnnotator } from "@annotorious/annotorious"
 
 export default class extends Controller {
-  static values = {
-    screenshotId: Number,
-    projectId: Number
-  }
+  static targets = ["image", "canvas", "list", "formTemplate", "form", "xPercent", "yPercent", "widthPercent", "heightPercent", "comment"]
 
   connect() {
-    this.imageEl = document.getElementById("screenshot-image")
-    if (!this.imageEl) return
+    if (!this.hasImageTarget) return
 
     this.initAnnotorious()
     this.renderExistingPins()
@@ -23,7 +19,7 @@ export default class extends Controller {
   }
 
   initAnnotorious() {
-    this.anno = createImageAnnotator(this.imageEl, {
+    this.anno = createImageAnnotator(this.imageTarget, {
       drawingEnabled: true,
       drawingMode: "click"
     })
@@ -50,8 +46,8 @@ export default class extends Controller {
     const match = value.match(/xywh=pixel:(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)/)
     if (!match) return null
 
-    const naturalW = this.imageEl.naturalWidth
-    const naturalH = this.imageEl.naturalHeight
+    const naturalW = this.imageTarget.naturalWidth
+    const naturalH = this.imageTarget.naturalHeight
 
     const x = parseFloat(match[1])
     const y = parseFloat(match[2])
@@ -74,88 +70,35 @@ export default class extends Controller {
   }
 
   showAnnotationForm(coords) {
-    const existingForm = document.getElementById("annotation-form")
-    if (existingForm) existingForm.remove()
+    this.cancelForm()
 
-    this.createAnnotationForm(coords)
-  }
+    const template = this.formTemplateTarget
+    const clone = template.content.cloneNode(true)
 
-  createAnnotationForm(coords) {
-    const url = `/projects/${this.projectIdValue}/screenshots/${this.screenshotIdValue}/annotations`
-    const csrfToken = document.querySelector("meta[name='csrf-token']")?.content || ""
+    this.listTarget.prepend(clone)
 
-    const form = document.createElement("form")
-    form.id = "annotation-form"
-    form.className = "annotation-form"
-    form.method = "post"
-    form.action = url
-    form.setAttribute("data-turbo", "true")
-
-    const addHidden = (name, value) => {
-      const input = document.createElement("input")
-      input.type = "hidden"
-      input.name = name
-      input.value = value
-      form.appendChild(input)
-    }
-
-    addHidden("authenticity_token", csrfToken)
-    addHidden("annotation[x_percent]", coords.x_percent)
-    addHidden("annotation[y_percent]", coords.y_percent)
-    addHidden("annotation[width_percent]", coords.width_percent || "")
-    addHidden("annotation[height_percent]", coords.height_percent || "")
-
-    const body = document.createElement("div")
-    body.className = "annotation-form__body"
-
-    const textarea = document.createElement("textarea")
-    textarea.name = "annotation[comment]"
-    textarea.className = "annotation-form__textarea"
-    textarea.placeholder = "Add a comment..."
-    textarea.rows = 3
-    body.appendChild(textarea)
-
-    const actions = document.createElement("div")
-    actions.className = "annotation-form__actions"
-
-    const submitBtn = document.createElement("button")
-    submitBtn.type = "submit"
-    submitBtn.className = "btn btn--primary btn--small"
-    submitBtn.textContent = "Save"
-    actions.appendChild(submitBtn)
-
-    const cancelBtn = document.createElement("button")
-    cancelBtn.type = "button"
-    cancelBtn.className = "btn btn--secondary btn--small"
-    cancelBtn.textContent = "Cancel"
-    cancelBtn.setAttribute("data-action", "click->annotorious#cancelForm")
-    actions.appendChild(cancelBtn)
-
-    body.appendChild(actions)
-    form.appendChild(body)
-
-    const sidebar = document.getElementById("annotations-list")
-    if (sidebar) {
-      sidebar.prepend(form)
-      textarea.focus()
-    }
+    this.xPercentTarget.value = coords.x_percent
+    this.yPercentTarget.value = coords.y_percent
+    this.widthPercentTarget.value = coords.width_percent || ""
+    this.heightPercentTarget.value = coords.height_percent || ""
+    this.commentTarget.focus()
   }
 
   cancelForm() {
-    const form = document.getElementById("annotation-form")
-    if (form) form.remove()
+    if (this.hasFormTarget) {
+      this.formTarget.remove()
+    }
   }
 
   renderExistingPins() {
     this.removePins()
 
-    const canvas = this.element.querySelector(".screenshot-canvas")
-    if (!canvas) return
+    if (!this.hasCanvasTarget) return
 
-    const annotations = document.querySelectorAll(".annotation-item")
+    const annotations = this.element.querySelectorAll(".annotation-item")
     annotations.forEach((item, index) => {
       const pin = this.createPin(item, index + 1)
-      if (pin) canvas.appendChild(pin)
+      if (pin) this.canvasTarget.appendChild(pin)
     })
   }
 
@@ -195,9 +138,8 @@ export default class extends Controller {
   }
 
   removePins() {
-    const canvas = this.element.querySelector(".screenshot-canvas")
-    if (!canvas) return
+    if (!this.hasCanvasTarget) return
 
-    canvas.querySelectorAll(".annotation-pin").forEach(pin => pin.remove())
+    this.canvasTarget.querySelectorAll(".annotation-pin").forEach(pin => pin.remove())
   }
 }
