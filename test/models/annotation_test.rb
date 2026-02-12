@@ -163,6 +163,30 @@ class AnnotationTest < ActiveSupport::TestCase
     assert_equal users(:alice), annotation.user
   end
 
+  test "requires comment" do
+    annotation = Annotation.new(
+      screenshot: screenshots(:alice_screenshot),
+      user: users(:alice),
+      x_percent: 50.0,
+      y_percent: 30.0,
+      comment: ""
+    )
+    assert_not annotation.valid?, "Should require comment"
+    assert annotation.errors[:comment].any?
+  end
+
+  test "comment cannot exceed 5000 characters" do
+    annotation = Annotation.new(
+      screenshot: screenshots(:alice_screenshot),
+      user: users(:alice),
+      x_percent: 50.0,
+      y_percent: 30.0,
+      comment: "a" * 5001
+    )
+    assert_not annotation.valid?, "Comment exceeding 5000 chars should be invalid"
+    assert annotation.errors[:comment].any?
+  end
+
   test "resolved_by_user is optional" do
     annotation = Annotation.new(
       screenshot: screenshots(:alice_screenshot),

@@ -19,14 +19,14 @@
     <%= javascript_importmap_tags %>
 
     <% if Rails.env.production? && ENV["HONEYBADGER_JS_API_KEY"].present? %>
-      <script src="https://js.honeybadger.io/v6.11/honeybadger.min.js" type="text/javascript"></script>
-      <script type="text/javascript">
+      <%= javascript_include_tag "https://js.honeybadger.io/v6.11/honeybadger.min.js", nonce: true %>
+      <%= javascript_tag nonce: true do %>
         Honeybadger.configure({
           apiKey: '<%= j(ENV["HONEYBADGER_JS_API_KEY"].to_s) %>',
           environment: 'production',
           revision: '<%= j(ENV.fetch("KAMAL_VERSION", "unknown")) %>'
         });
-      </script>
+      <% end %>
     <% end %>
   </head>
 

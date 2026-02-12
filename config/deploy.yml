@@ -9,7 +9,7 @@ servers:
   web:
     - screenote
 
-# Enable SSL auto certification via Let's Encrypt (handled by Cloudflare)
+# Enable SSL via Let's Encrypt on kamal-proxy (origin). Cloudflare terminates SSL at the edge (Full mode).
 proxy:
   ssl: true
   host: screenote.ai
@@ -41,10 +41,10 @@ env:
     # Run Solid Queue Supervisor inside Puma for single-server deployment
     SOLID_QUEUE_IN_PUMA: true
 
-    # Set number of processes for Solid Queue
+    # Number of Solid Queue worker threads
     JOB_CONCURRENCY: 3
 
-    # Set number of cores for the application
+    # Number of Puma worker processes
     WEB_CONCURRENCY: 2
 
     # Rails environment

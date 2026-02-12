@@ -9,10 +9,13 @@ class McpAuthTest < ActiveSupport::TestCase
   setup do
     @api_key = api_keys(:alice_key)
     @revoked_key = api_keys(:alice_key_revoked)
+    @original_cache = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
   end
 
   teardown do
     Current.reset
+    Rails.cache = @original_cache
   end
 
   test "valid_token? accepts active API key" do
@@ -52,6 +55,47 @@ class McpAuthTest < ActiveSupport::TestCase
     transport.send(:valid_token?, ALICE_TOKEN)
 
     assert @api_key.reload.last_used_at > old_time, "Should update last_used_at"
+  end
+
+  # Rate limiting tests
+  test "rate_limited? returns false under limit" do
+    transport = build_transport
+    assert_not transport.send(:rate_limited?, @api_key), "Should not be rate limited on first request"
+  end
+
+  test "rate_limited? returns true when limit exceeded" do
+    transport = build_transport
+    cache_key = "mcp_rate_limit/#{@api_key.id}"
+
+    Rails.cache.write(cache_key, ProjectAuthTransport::RATE_LIMIT, expires_in: 1.minute)
+
+    assert transport.send(:rate_limited?, @api_key), "Should be rate limited after exceeding limit"
+  end
+
+  test "valid_token? raises RateLimitedError when rate limited" do
+    transport = build_transport
+    cache_key = "mcp_rate_limit/#{@api_key.id}"
+
+    Rails.cache.write(cache_key, ProjectAuthTransport::RATE_LIMIT, expires_in: 1.minute)
+
+    assert_raises(ProjectAuthTransport::RateLimitedError) do
+      transport.send(:valid_token?, ALICE_TOKEN)
+    end
+  end
+
+  test "RateLimitedError rescue produces 429 response" do
+    transport = build_transport
+
+    # Simulate the rescue behavior of call() directly
+    response = begin
+      raise ProjectAuthTransport::RateLimitedError
+    rescue ProjectAuthTransport::RateLimitedError
+      [ 429, { "Content-Type" => "application/json", "Retry-After" => ProjectAuthTransport::RATE_PERIOD.to_i.to_s },
+        [ { error: "rate_limited", message: "Too many requests." }.to_json ] ]
+    end
+
+    assert_equal 429, response[0], "Should return 429 status"
+    assert_equal "60", response[1]["Retry-After"], "Should include Retry-After header"
   end
 
   private

@@ -2,7 +2,7 @@
 
 class CreateAnnotationTool < ApplicationTool
   tool_name "create_annotation"
-  description "Create an annotation on a screenshot. Provide coordinates as percentages (0-100)."
+  description "Create an annotation on a screenshot. Provide coordinates as percentages (0.0-100.0)."
 
   arguments do
     required(:screenshot_id).filled(:integer).description("The screenshot ID to annotate")
@@ -18,7 +18,7 @@ class CreateAnnotationTool < ApplicationTool
       screenshot = current_project.screenshots.find(screenshot_id)
 
       annotation = screenshot.annotations.create!(
-        user: current_api_key.project.user,
+        user: current_project.user,
         x_percent: x_percent,
         y_percent: y_percent,
         width_percent: width_percent,

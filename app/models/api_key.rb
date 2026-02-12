@@ -5,6 +5,8 @@ class ApiKey < ApplicationRecord
 
   attr_accessor :raw_token
 
+  attr_readonly :token_digest, :token_prefix
+
   validates :token_digest, presence: true, uniqueness: true
   validates :name, presence: true, length: { maximum: 255 }
 
@@ -20,6 +22,8 @@ class ApiKey < ApplicationRecord
   end
 
   def revoke!
+    return if revoked?
+
     update!(revoked_at: Time.current)
   end
 

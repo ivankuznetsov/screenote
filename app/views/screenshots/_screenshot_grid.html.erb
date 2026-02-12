@@ -12,9 +12,9 @@
         <div class="screenshot-card__info">
           <div class="screenshot-card__title"><%= screenshot.title %></div>
           <div class="screenshot-card__meta">
-            <%= screenshot.annotations.open.count %> open
+            <%= screenshot.try(:open_annotations_count_cache) || screenshot.annotations.open.count %> open
             <span class="screenshot-card__separator">&middot;</span>
-            <%= screenshot.annotations.count %> total
+            <%= screenshot.try(:annotations_count_cache) || screenshot.annotations.count %> total
           </div>
         </div>
       <% end %>

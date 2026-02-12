@@ -79,6 +79,41 @@ class ApiKeyTest < ActiveSupport::TestCase
     assert @api_key.reload.last_used_at > old_time, "last_used_at should be updated"
   end
 
+  test "touch_last_used! is throttled within 5 minutes" do
+    @api_key.update_column(:last_used_at, 2.minutes.ago)
+    timestamp_before = @api_key.reload.last_used_at
+
+    @api_key.touch_last_used!
+
+    assert_equal timestamp_before, @api_key.reload.last_used_at,
+      "Should not update last_used_at within 5 minute throttle window"
+  end
+
+  test "touch_last_used! updates when last_used_at is nil" do
+    @api_key.update_column(:last_used_at, nil)
+    @api_key.reload
+
+    @api_key.touch_last_used!
+
+    assert @api_key.reload.last_used_at.present?, "Should update last_used_at when nil"
+  end
+
+  test "revoke! is idempotent" do
+    @api_key.revoke!
+    first_revoked_at = @api_key.revoked_at
+
+    @api_key.revoke!
+
+    assert_equal first_revoked_at, @api_key.revoked_at,
+      "Revoking twice should not change revoked_at"
+  end
+
+  test "name cannot exceed 255 characters" do
+    key = @project.api_keys.build(name: "a" * 256)
+    assert_not key.valid?, "Name exceeding 255 chars should be invalid"
+    assert key.errors[:name].any?
+  end
+
   test "belongs to project" do
     assert_equal @project, @api_key.project
   end

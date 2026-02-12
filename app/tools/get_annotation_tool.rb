@@ -2,7 +2,7 @@
 
 class GetAnnotationTool < ApplicationTool
   tool_name "get_annotation"
-  description "Get annotation details with a cropped image of the annotated region, optimized for AI vision."
+  description "Get annotation details with a cropped image of the annotated region (base64-encoded PNG)."
 
   arguments do
     required(:annotation_id).filled(:integer).description("The annotation ID")
@@ -13,8 +13,13 @@ class GetAnnotationTool < ApplicationTool
       annotation = project_annotations.find(annotation_id)
 
       screenshot = annotation.screenshot
-      cropped_base64 = if screenshot.ready? && screenshot.image.attached?
-        AnnotationCropService.crop(screenshot, annotation)
+      cropped_base64 = nil
+      if screenshot.ready? && screenshot.image.attached?
+        begin
+          cropped_base64 = AnnotationCropService.crop(screenshot, annotation)
+        rescue => e
+          Honeybadger.notify(e, context: { annotation_id: annotation.id, screenshot_id: screenshot.id })
+        end
       end
 
       serialize_annotation(annotation).merge(

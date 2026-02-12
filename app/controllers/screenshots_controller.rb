@@ -5,7 +5,12 @@ class ScreenshotsController < ApplicationController
   before_action :set_screenshot, only: %i[show edit update destroy]
 
   def index
-    @screenshots = @project.screenshots.with_attached_image.order(created_at: :desc)
+    @screenshots = @project.screenshots
+      .with_attached_image
+      .left_joins(:annotations)
+      .select("screenshots.*, COUNT(annotations.id) AS annotations_count_cache, COUNT(CASE WHEN annotations.status = 0 THEN 1 END) AS open_annotations_count_cache")
+      .group("screenshots.id")
+      .order(created_at: :desc)
   end
 
   def show

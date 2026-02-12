@@ -17,6 +17,9 @@ class ApplicationTool < FastMcp::Tool
     { error: "not_found", message: e.message }.to_json
   rescue ActiveRecord::RecordInvalid => e
     { error: "validation_failed", message: e.message, details: e.record.errors.full_messages }.to_json
+  rescue StandardError => e
+    Honeybadger.notify(e)
+    { error: "internal_error", message: "An unexpected error occurred" }.to_json
   end
 
   def project_annotations
