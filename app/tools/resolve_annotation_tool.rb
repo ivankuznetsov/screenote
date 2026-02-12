@@ -10,9 +10,7 @@ class ResolveAnnotationTool < ApplicationTool
 
   def call(annotation_id:)
     with_error_handling do
-      annotation = Annotation.joins(screenshot: :project)
-        .where(projects: { id: current_project.id })
-        .find(annotation_id)
+      annotation = project_annotations.find(annotation_id)
 
       annotation.update!(status: :resolved, resolved_by_api_key: current_api_key)
 

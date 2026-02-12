@@ -32,9 +32,7 @@ class CreateScreenshotTool < ApplicationTool
         content_type: mime_type
       )
 
-      url = Rails.application.routes.url_helpers.project_screenshot_url(
-        project, screenshot, host: ENV.fetch("APP_HOST", "localhost:3005")
-      )
+      url = Rails.application.routes.url_helpers.project_screenshot_url(project, screenshot)
 
       { screenshot_id: screenshot.id, annotate_url: url }.to_json
     end

@@ -14,7 +14,10 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
 
     api_key = ApiKey.active.find_by_token(token)
     return false unless api_key
-    return false if rate_limited?(api_key)
+
+    if rate_limited?(api_key)
+      raise RateLimitedError
+    end
 
     api_key.touch_last_used!
     Current.mcp_project = api_key.project
@@ -27,6 +30,15 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
     count = Rails.cache.increment(cache_key, 1, expires_in: RATE_PERIOD) || 1
     count > RATE_LIMIT
   end
+
+  def call(env)
+    super
+  rescue RateLimitedError
+    [ 429, { "Content-Type" => "application/json", "Retry-After" => RATE_PERIOD.to_i.to_s },
+      [ { error: "rate_limited", message: "Too many requests. Retry after #{RATE_PERIOD.to_i} seconds." }.to_json ] ]
+  end
+
+  class RateLimitedError < StandardError; end
 end
 
 FastMcp.mount_in_rails(

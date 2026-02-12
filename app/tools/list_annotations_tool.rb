@@ -16,11 +16,7 @@ class ListAnnotationsTool < ApplicationTool
       limit = limit.to_i.clamp(1, 100)
       offset = [ offset.to_i, 0 ].max
 
-      annotations = Annotation.joins(screenshot: :project)
-        .where(projects: { id: current_project.id })
-        .includes(:user, :screenshot)
-        .order(:created_at)
-
+      annotations = project_annotations.order(:created_at)
       annotations = annotations.where(screenshot_id: screenshot_id) if screenshot_id
       annotations = annotations.where(status: status) if status.present?
 
@@ -28,23 +24,7 @@ class ListAnnotationsTool < ApplicationTool
       annotations = annotations.limit(limit).offset(offset)
 
       {
-        annotations: annotations.map do |a|
-          {
-            id: a.id,
-            screenshot_id: a.screenshot_id,
-            type: a.point? ? "point" : "region",
-            coordinates: {
-              x_percent: a.x_percent,
-              y_percent: a.y_percent,
-              width_percent: a.width_percent,
-              height_percent: a.height_percent
-            },
-            comment: a.comment,
-            status: a.status,
-            author: a.user.email,
-            created_at: a.created_at.iso8601
-          }
-        end,
+        annotations: annotations.map { |a| serialize_annotation(a) },
         pagination: { total: total, limit: limit, offset: offset }
       }.to_json
     end

@@ -2,6 +2,7 @@
 
 class ScreenshotDimensionJob < ApplicationJob
   def perform(screenshot)
+    return if screenshot.ready?
     return unless screenshot.image.attached?
 
     screenshot.image.blob.analyze unless screenshot.image.blob.analyzed?

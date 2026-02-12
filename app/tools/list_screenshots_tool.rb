@@ -23,9 +23,7 @@ class ListScreenshotsTool < ApplicationTool
 
       {
         screenshots: screenshots.map do |s|
-          url = Rails.application.routes.url_helpers.project_screenshot_url(
-            current_project, s, host: ENV.fetch("APP_HOST", "localhost:3005")
-          )
+          url = Rails.application.routes.url_helpers.project_screenshot_url(current_project, s)
 
           {
             id: s.id,

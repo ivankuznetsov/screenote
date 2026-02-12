@@ -26,22 +26,7 @@ class CreateAnnotationTool < ApplicationTool
         comment: comment
       )
 
-      {
-        annotation: {
-          id: annotation.id,
-          screenshot_id: annotation.screenshot_id,
-          type: annotation.point? ? "point" : "region",
-          coordinates: {
-            x_percent: annotation.x_percent,
-            y_percent: annotation.y_percent,
-            width_percent: annotation.width_percent,
-            height_percent: annotation.height_percent
-          },
-          comment: annotation.comment,
-          status: annotation.status,
-          created_at: annotation.created_at.iso8601
-        }
-      }.to_json
+      { annotation: serialize_annotation(annotation) }.to_json
     end
   end
 end
