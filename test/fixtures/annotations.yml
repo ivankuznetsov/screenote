@@ -1,0 +1,33 @@
+point_annotation:
+  screenshot: alice_screenshot
+  user: alice
+  x_percent: 50.0
+  y_percent: 30.0
+  comment: "Button text too small"
+  status: 0
+
+region_annotation:
+  screenshot: alice_screenshot
+  user: alice
+  x_percent: 10.0
+  y_percent: 20.0
+  width_percent: 30.0
+  height_percent: 25.0
+  comment: "This section needs redesign"
+  status: 0
+
+resolved_annotation:
+  screenshot: alice_screenshot
+  user: bob
+  x_percent: 80.0
+  y_percent: 10.0
+  comment: "Fixed the alignment"
+  status: 1
+
+bob_annotation:
+  screenshot: bob_screenshot
+  user: bob
+  x_percent: 25.0
+  y_percent: 50.0
+  comment: "Check this area"
+  status: 0

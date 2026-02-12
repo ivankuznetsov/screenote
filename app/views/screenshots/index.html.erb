@@ -1,23 +1,11 @@
-<div class="project-detail__header">
-  <div>
-    <h1 class="project-detail__title"><%= @project.name %></h1>
-    <% if @project.description.present? %>
-      <p class="project-detail__description"><%= @project.description %></p>
-    <% end %>
-  </div>
-  <div class="project-detail__actions">
-    <%= link_to "Upload screenshot", new_project_screenshot_path(@project), class: "btn btn--primary" %>
-    <%= link_to "Edit", edit_project_path(@project), class: "btn btn--secondary" %>
-    <%= button_to "Delete", project_path(@project), method: :delete, class: "btn btn--danger btn--small",
-        data: { turbo_confirm: "Are you sure you want to delete this project?" } %>
-  </div>
+<div class="page-header">
+  <h1 class="page-header__title"><%= @project.name %> &mdash; Screenshots</h1>
+  <%= link_to "Upload screenshot", new_project_screenshot_path(@project), class: "btn btn--primary" %>
 </div>
 
-<% screenshots = @project.screenshots.order(created_at: :desc) %>
-
-<% if screenshots.any? %>
+<% if @screenshots.any? %>
   <div class="screenshot-grid">
-    <% screenshots.each do |screenshot| %>
+    <% @screenshots.each do |screenshot| %>
       <%= link_to project_screenshot_path(@project, screenshot), class: "screenshot-card" do %>
         <div class="screenshot-card__image">
           <% if screenshot.image.attached? %>

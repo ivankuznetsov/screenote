@@ -1,0 +1,35 @@
+<div class="annotation-item annotation-item--<%= annotation.status %>" id="<%= dom_id(annotation) %>"
+  data-x-percent="<%= annotation.x_percent %>"
+  data-y-percent="<%= annotation.y_percent %>"
+  data-width-percent="<%= annotation.width_percent %>"
+  data-height-percent="<%= annotation.height_percent %>">
+  <div class="annotation-item__header">
+    <span class="annotation-item__number"><%= index %></span>
+    <span class="annotation-item__author"><%= annotation.user.email %></span>
+    <span class="annotation-item__time"><%= time_ago_in_words(annotation.created_at) %> ago</span>
+  </div>
+
+  <% if annotation.comment.present? %>
+    <div class="annotation-item__comment"><%= annotation.comment %></div>
+  <% end %>
+
+  <div class="annotation-item__meta">
+    <span class="annotation-item__type"><%= annotation.point? ? "Point" : "Region" %></span>
+    <span class="annotation-item__status annotation-item__status--<%= annotation.status %>"><%= annotation.status.capitalize %></span>
+  </div>
+
+  <div class="annotation-item__actions">
+    <% if annotation.open? %>
+      <%= button_to "Resolve",
+          project_screenshot_annotation_path(annotation.screenshot.project, annotation.screenshot, annotation),
+          method: :patch,
+          params: { annotation: { status: :resolved } },
+          class: "btn btn--small btn--secondary" %>
+    <% end %>
+    <%= button_to "Delete",
+        project_screenshot_annotation_path(annotation.screenshot.project, annotation.screenshot, annotation),
+        method: :delete,
+        class: "btn btn--small btn--danger",
+        data: { turbo_confirm: "Delete this annotation?" } %>
+  </div>
+</div>

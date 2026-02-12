@@ -1,0 +1,18 @@
+alice_screenshot:
+  title: "Homepage Design"
+  project: alice_project
+  width: 1920
+  height: 1080
+  status: 1
+
+alice_screenshot_pending:
+  title: "Pending Upload"
+  project: alice_project
+  status: 0
+
+bob_screenshot:
+  title: "Bob's Screenshot"
+  project: bob_project
+  width: 1440
+  height: 900
+  status: 1

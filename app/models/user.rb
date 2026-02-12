@@ -8,6 +8,7 @@ class User < ApplicationRecord
 
   has_many :sessions, dependent: :destroy
   has_many :projects, dependent: :destroy
+  has_many :annotations, dependent: :destroy
 
   def assign_oauth_attributes(auth_hash)
     self.oauth_provider = auth_hash["provider"]

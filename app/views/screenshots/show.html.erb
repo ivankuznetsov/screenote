@@ -1,0 +1,51 @@
+<% content_for :head do %>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@annotorious/annotorious@3.0.10/dist/annotorious.css">
+<% end %>
+
+<div class="screenshot-header">
+  <div class="screenshot-header__breadcrumb">
+    <%= link_to @project.name, project_path(@project) %> /
+    <span><%= @screenshot.title %></span>
+  </div>
+  <div class="screenshot-header__actions">
+    <%= link_to "Edit", edit_project_screenshot_path(@project, @screenshot), class: "btn btn--secondary btn--small" %>
+    <%= button_to "Delete", project_screenshot_path(@project, @screenshot), method: :delete,
+        class: "btn btn--danger btn--small",
+        data: { turbo_confirm: "Are you sure you want to delete this screenshot?" } %>
+  </div>
+</div>
+
+<div class="screenshot-workspace" data-controller="annotorious" data-annotorious-screenshot-id-value="<%= @screenshot.id %>" data-annotorious-project-id-value="<%= @project.id %>">
+  <div class="screenshot-canvas">
+    <% if @screenshot.image.attached? %>
+      <%= image_tag @screenshot.image, id: "screenshot-image", class: "screenshot-canvas__image", alt: @screenshot.title %>
+    <% end %>
+  </div>
+
+  <aside class="annotation-sidebar" id="annotations-panel">
+    <div class="annotation-sidebar__header">
+      <h2 class="annotation-sidebar__title">Annotations</h2>
+      <div class="annotation-sidebar__filters">
+        <%= link_to "All", project_screenshot_path(@project, @screenshot),
+            class: "annotation-filter #{'annotation-filter--active' unless params[:status]}" %>
+        <%= link_to "Open", project_screenshot_path(@project, @screenshot, status: :open),
+            class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'open'}" %>
+        <%= link_to "Resolved", project_screenshot_path(@project, @screenshot, status: :resolved),
+            class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'resolved'}" %>
+      </div>
+    </div>
+
+    <div class="annotation-sidebar__list" id="annotations-list">
+      <% filtered_annotations = params[:status].present? ? @annotations.where(status: params[:status]) : @annotations %>
+      <% filtered_annotations.each.with_index(1) do |annotation, index| %>
+        <%= render "annotations/annotation", annotation: annotation, index: index %>
+      <% end %>
+
+      <% if filtered_annotations.empty? %>
+        <div class="annotation-sidebar__empty">
+          No annotations yet. Click on the image to add one.
+        </div>
+      <% end %>
+    </div>
+  </aside>
+</div>
