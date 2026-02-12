@@ -198,6 +198,9 @@ GEM
       activesupport (>= 6.1)
     hashie (5.1.0)
       logger
+    honeybadger (6.3.0)
+      logger
+      ostruct
     httparty (0.24.2)
       csv
       mini_mime (>= 1.0.0)
@@ -348,6 +351,8 @@ GEM
     raabro (1.4.0)
     racc (1.8.1)
     rack (3.2.4)
+    rack-attack (6.8.0)
+      rack (>= 1.0, < 4)
     rack-protection (4.2.1)
       base64 (>= 0.1.0)
       logger (>= 1.6.0)
@@ -522,6 +527,7 @@ DEPENDENCIES
   debug
   dotenv-rails
   fast-mcp
+  honeybadger
   image_processing (~> 1.2)
   importmap-rails
   kamal
@@ -532,6 +538,7 @@ DEPENDENCIES
   pg (~> 1.1)
   propshaft
   puma (>= 5.0)
+  rack-attack
   rails (~> 8.1.2)
   rails_simple_auth (~> 1.1.0)
   resend

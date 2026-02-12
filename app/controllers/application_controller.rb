@@ -8,4 +8,16 @@ class ApplicationController < ActionController::Base
   stale_when_importmap_changes
 
   before_action :require_authentication
+
+  rescue_from ActiveRecord::RecordNotFound, with: :not_found
+  rescue_from ActionController::RoutingError, with: :not_found
+
+  private
+
+  def not_found
+    respond_to do |format|
+      format.html { render file: Rails.root.join("public/404.html"), layout: false, status: :not_found }
+      format.json { render json: { error: "Not found" }, status: :not_found }
+    end
+  end
 end
