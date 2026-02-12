@@ -41,12 +41,12 @@ class AuthTest < ApplicationSystemTestCase
     assert_auth_error
   end
 
-  test "sign out redirects to sign in" do
+  test "sign out redirects to landing page" do
     login_as_test_user
 
     logout
 
-    assert_on_sign_in_page
+    assert_selector ".landing-nav", wait: 10
     assert_no_selector SIGN_OUT_BUTTON, wait: 2
   end
 

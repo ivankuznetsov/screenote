@@ -44,7 +44,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   def logout
     click_button "Sign out"
-    assert_selector ".auth-card", wait: 10
+    assert_no_selector '[data-testid="sign-out-button"]', wait: 10
   end
 
   # --- Turbo helpers ---
