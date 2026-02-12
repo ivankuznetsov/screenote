@@ -8,16 +8,36 @@ class ApiKeyTest < ActiveSupport::TestCase
     @api_key = api_keys(:alice_key)
   end
 
-  test "generates token on create" do
+  test "generates token digest on create" do
     key = @project.api_keys.create!(name: "New Key")
-    assert key.token.present?, "Token should be generated"
-    assert key.token.start_with?("sk_proj_"), "Token should start with sk_proj_ prefix"
+    assert key.token_digest.present?, "Token digest should be generated"
+    assert key.token_prefix.present?, "Token prefix should be generated"
+    assert key.raw_token.start_with?("sk_proj_"), "Raw token should start with sk_proj_ prefix"
+    assert_equal Digest::SHA256.hexdigest(key.raw_token), key.token_digest
   end
 
-  test "does not overwrite existing token" do
-    key = @project.api_keys.build(name: "Custom", token: "sk_proj_custom_token")
-    key.save!
-    assert_equal "sk_proj_custom_token", key.token
+  test "raw_token is only available after create" do
+    key = @project.api_keys.create!(name: "New Key")
+    raw = key.raw_token
+    assert raw.present?, "Raw token should be available right after create"
+
+    reloaded = ApiKey.find(key.id)
+    assert_nil reloaded.raw_token, "Raw token should not be available after reload"
+  end
+
+  test "find_by_token returns correct key" do
+    token = "sk_proj_test_alice_key_000000000000000000000000"
+    found = ApiKey.find_by_token(token)
+    assert_equal @api_key, found
+  end
+
+  test "find_by_token returns nil for unknown token" do
+    assert_nil ApiKey.find_by_token("sk_proj_nonexistent")
+  end
+
+  test "find_by_token returns nil for blank token" do
+    assert_nil ApiKey.find_by_token("")
+    assert_nil ApiKey.find_by_token(nil)
   end
 
   test "requires name" do
@@ -26,10 +46,12 @@ class ApiKeyTest < ActiveSupport::TestCase
     assert key.errors[:name].any?
   end
 
-  test "token must be unique" do
-    duplicate = @project.api_keys.build(name: "Dupe", token: @api_key.token)
-    assert_not duplicate.valid?, "Duplicate token should be invalid"
-    assert duplicate.errors[:token].any?
+  test "token digest must be unique" do
+    existing_digest = @api_key.token_digest
+    duplicate = @project.api_keys.build(name: "Dupe")
+    duplicate.token_digest = existing_digest
+    assert_not duplicate.valid?, "Duplicate token digest should be invalid"
+    assert duplicate.errors[:token_digest].any?
   end
 
   test "active scope excludes revoked keys" do
@@ -55,6 +77,41 @@ class ApiKeyTest < ActiveSupport::TestCase
     old_time = @api_key.last_used_at
     @api_key.touch_last_used!
     assert @api_key.reload.last_used_at > old_time, "last_used_at should be updated"
+  end
+
+  test "touch_last_used! is throttled within 5 minutes" do
+    @api_key.update_column(:last_used_at, 2.minutes.ago)
+    timestamp_before = @api_key.reload.last_used_at
+
+    @api_key.touch_last_used!
+
+    assert_equal timestamp_before, @api_key.reload.last_used_at,
+      "Should not update last_used_at within 5 minute throttle window"
+  end
+
+  test "touch_last_used! updates when last_used_at is nil" do
+    @api_key.update_column(:last_used_at, nil)
+    @api_key.reload
+
+    @api_key.touch_last_used!
+
+    assert @api_key.reload.last_used_at.present?, "Should update last_used_at when nil"
+  end
+
+  test "revoke! is idempotent" do
+    @api_key.revoke!
+    first_revoked_at = @api_key.revoked_at
+
+    @api_key.revoke!
+
+    assert_equal first_revoked_at, @api_key.revoked_at,
+      "Revoking twice should not change revoked_at"
+  end
+
+  test "name cannot exceed 255 characters" do
+    key = @project.api_keys.build(name: "a" * 256)
+    assert_not key.valid?, "Name exceeding 255 chars should be invalid"
+    assert key.errors[:name].any?
   end
 
   test "belongs to project" do

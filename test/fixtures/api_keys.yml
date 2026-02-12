@@ -1,16 +1,19 @@
 alice_key:
-  token: sk_proj_test_alice_key_000000000000000000000000
+  token_digest: <%= Digest::SHA256.hexdigest("sk_proj_test_alice_key_000000000000000000000000") %>
+  token_prefix: "sk_proj_test"
   name: "Alice's CI Key"
   project: alice_project
   last_used_at: <%= 1.hour.ago %>
 
 alice_key_revoked:
-  token: sk_proj_test_alice_revoked_00000000000000000000
+  token_digest: <%= Digest::SHA256.hexdigest("sk_proj_test_alice_revoked_00000000000000000000") %>
+  token_prefix: "sk_proj_test"
   name: "Old Key"
   project: alice_project
   revoked_at: <%= 1.day.ago %>
 
 bob_key:
-  token: sk_proj_test_bob_key_0000000000000000000000000
+  token_digest: <%= Digest::SHA256.hexdigest("sk_proj_test_bob_key_0000000000000000000000000") %>
+  token_prefix: "sk_proj_test"
   name: "Bob's Key"
   project: bob_project

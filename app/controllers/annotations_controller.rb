@@ -17,7 +17,10 @@ class AnnotationsController < ApplicationController
   end
 
   def update
-    if @annotation.update(annotation_params)
+    @annotation.assign_attributes(annotation_params)
+    @annotation.resolved_by_user = Current.user if @annotation.status_changed? && @annotation.resolved?
+
+    if @annotation.save
       redirect_to project_screenshot_path(@project, @screenshot), notice: "Annotation updated."
     else
       redirect_to project_screenshot_path(@project, @screenshot), alert: "Could not update annotation."

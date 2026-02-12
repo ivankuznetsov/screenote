@@ -1,0 +1,23 @@
+<%= form_with model: [project, screenshot, Annotation.new],
+    id: "annotation-form",
+    class: "annotation-form",
+    data: { annotorious_target: "form" } do |f| %>
+  <%= f.hidden_field :x_percent, data: { annotorious_target: "xPercent" } %>
+  <%= f.hidden_field :y_percent, data: { annotorious_target: "yPercent" } %>
+  <%= f.hidden_field :width_percent, data: { annotorious_target: "widthPercent" } %>
+  <%= f.hidden_field :height_percent, data: { annotorious_target: "heightPercent" } %>
+
+  <div class="annotation-form__body">
+    <%= f.text_area :comment,
+        class: "annotation-form__textarea",
+        placeholder: "Add a comment...",
+        rows: 3,
+        data: { annotorious_target: "comment" } %>
+
+    <div class="annotation-form__actions">
+      <%= f.submit "Save", class: "btn btn--primary btn--small" %>
+      <button type="button" class="btn btn--secondary btn--small"
+              data-action="click->annotorious#cancelForm">Cancel</button>
+    </div>
+  </div>
+<% end %>

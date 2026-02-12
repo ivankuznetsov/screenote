@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# Run database migrations after deploy
+echo "Running database migrations..."
+kamal app exec --reuse 'bin/rails db:migrate'
+
+# Notify Honeybadger of deployment
+echo "Notifying Honeybadger of deployment..."
+kamal app exec --reuse "bundle exec honeybadger deploy --repository https://github.com/ivankuznetsov/screenote --revision ${KAMAL_VERSION} --environment production --user ${KAMAL_PERFORMER:-$(whoami)}"

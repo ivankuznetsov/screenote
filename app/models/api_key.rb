@@ -3,15 +3,27 @@
 class ApiKey < ApplicationRecord
   belongs_to :project
 
-  validates :token, presence: true, uniqueness: true
-  validates :name, presence: true
+  attr_accessor :raw_token
+
+  attr_readonly :token_digest, :token_prefix
+
+  validates :token_digest, presence: true, uniqueness: true
+  validates :name, presence: true, length: { maximum: 255 }
 
   scope :active, -> { where(revoked_at: nil) }
   scope :revoked, -> { where.not(revoked_at: nil) }
 
   before_validation :generate_token, on: :create
 
+  def self.find_by_token(token)
+    return nil if token.blank?
+
+    find_by(token_digest: Digest::SHA256.hexdigest(token))
+  end
+
   def revoke!
+    return if revoked?
+
     update!(revoked_at: Time.current)
   end
 
@@ -20,12 +32,18 @@ class ApiKey < ApplicationRecord
   end
 
   def touch_last_used!
+    return if last_used_at.present? && last_used_at > 5.minutes.ago
+
     update_column(:last_used_at, Time.current)
   end
 
   private
 
   def generate_token
-    self.token = "sk_proj_#{SecureRandom.hex(24)}" if token.blank?
+    return if token_digest.present?
+
+    self.raw_token = "sk_proj_#{SecureRandom.hex(24)}"
+    self.token_prefix = raw_token.first(12)
+    self.token_digest = Digest::SHA256.hexdigest(raw_token)
   end
 end

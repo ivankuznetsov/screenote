@@ -11,14 +11,14 @@ unless token
   exit 1
 end
 
-api_key = ApiKey.active.find_by(token: token)
+api_key = ApiKey.active.find_by_token(token)
 unless api_key
   warn "Error: Invalid or revoked API key"
   exit 1
 end
 
-Thread.current[:mcp_current_project] = api_key.project
-Thread.current[:mcp_current_api_key] = api_key
+Current.mcp_project = api_key.project
+Current.mcp_api_key = api_key
 
 server = FastMcp::Server.new(
   name: "screenote",
@@ -26,6 +26,7 @@ server = FastMcp::Server.new(
   logger: Logger.new($stderr)
 )
 
+Dir[Rails.root.join("app/tools/**/*.rb")].each { |f| require f }
 tool_classes = ApplicationTool.descendants
 server.register_tools(*tool_classes) if tool_classes.any?
 

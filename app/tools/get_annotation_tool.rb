@@ -2,38 +2,31 @@
 
 class GetAnnotationTool < ApplicationTool
   tool_name "get_annotation"
-  description "Get annotation details with a cropped image of the annotated region, optimized for AI vision."
+  description "Get annotation details with a cropped image of the annotated region (base64-encoded PNG)."
 
   arguments do
     required(:annotation_id).filled(:integer).description("The annotation ID")
   end
 
   def call(annotation_id:)
-    annotation = Annotation.joins(screenshot: :project)
-      .where(projects: { id: current_project.id })
-      .find(annotation_id)
+    with_error_handling do
+      annotation = project_annotations.find(annotation_id)
 
-    screenshot = annotation.screenshot
-    cropped_base64 = if screenshot.ready? && screenshot.image.attached?
-      AnnotationCropService.crop(screenshot, annotation)
+      screenshot = annotation.screenshot
+      cropped_base64 = nil
+      if screenshot.ready? && screenshot.image.attached?
+        begin
+          cropped_base64 = AnnotationCropService.crop(screenshot, annotation)
+        rescue => e
+          Honeybadger.notify(e, context: { annotation_id: annotation.id, screenshot_id: screenshot.id })
+        end
+      end
+
+      serialize_annotation(annotation).merge(
+        screenshot_status: screenshot.status,
+        cropped_image_base64: cropped_base64,
+        mime_type: "image/png"
+      ).to_json
     end
-
-    {
-      id: annotation.id,
-      screenshot_id: annotation.screenshot_id,
-      type: annotation.point? ? "point" : "region",
-      coordinates: {
-        x_percent: annotation.x_percent,
-        y_percent: annotation.y_percent,
-        width_percent: annotation.width_percent,
-        height_percent: annotation.height_percent
-      },
-      comment: annotation.comment,
-      status: annotation.status,
-      author: annotation.user.email,
-      cropped_image_base64: cropped_base64,
-      mime_type: "image/png",
-      created_at: annotation.created_at.iso8601
-    }.to_json
   end
 end

@@ -198,6 +198,9 @@ GEM
       activesupport (>= 6.1)
     hashie (5.1.0)
       logger
+    honeybadger (6.3.0)
+      logger
+      ostruct
     httparty (0.24.2)
       csv
       mini_mime (>= 1.0.0)
@@ -522,6 +525,7 @@ DEPENDENCIES
   debug
   dotenv-rails
   fast-mcp
+  honeybadger
   image_processing (~> 1.2)
   importmap-rails
   kamal
