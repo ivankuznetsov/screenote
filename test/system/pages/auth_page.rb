@@ -14,7 +14,6 @@ module Pages
     SIGN_UP_EMAIL = 'input[name="user[email]"]'
     SIGN_UP_PASSWORD = 'input[name="user[password]"]'
     SIGN_UP_BUTTON = 'input[type="submit"][value="Sign Up"]'
-    FLASH_NOTICE = '[data-testid="flash-notice"]'
     SIGN_OUT_BUTTON = '[data-testid="sign-out-button"]'
     USER_EMAIL = '[data-testid="user-email"]'
 
@@ -51,16 +50,8 @@ module Pages
       assert_selector SIGN_IN_TITLE, text: "Sign In"
     end
 
-    def assert_auth_error(text = nil)
-      if text
-        assert_selector AUTH_ERROR, text: text
-      else
-        assert_selector AUTH_ERROR
-      end
-    end
-
-    def assert_flash_notice(text)
-      assert_selector FLASH_NOTICE, text: text, wait: 10
+    def assert_auth_error
+      assert_selector AUTH_ERROR
     end
   end
 end

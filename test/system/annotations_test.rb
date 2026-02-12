@@ -13,7 +13,6 @@ class AnnotationsTest < ApplicationSystemTestCase
   include Pages::AnnotationsPage
 
   ANNOTORIOUS_OVERLAY = ".screenshot-canvas svg, .a9s-annotationlayer"
-  TEST_IMAGE_PATH = Rails.root.join("test/fixtures/files/test_image.png").to_s
 
   setup do
     login_as_test_user
@@ -95,9 +94,7 @@ class AnnotationsTest < ApplicationSystemTestCase
   private
 
   def create_screenshot_for_annotation
-    visit_projects
-    click_project("Demo Project")
-    assert_on_project_show("Demo Project")
+    navigate_to_demo_project
 
     click_link "Upload screenshot"
     fill_screenshot_form(title: "Annotation Test #{Time.now.to_i}", image_path: TEST_IMAGE_PATH)
@@ -129,6 +126,8 @@ class AnnotationsTest < ApplicationSystemTestCase
       start_y = box["y"] + (box["height"] * 0.3) + y_offset
 
       pw_page.mouse.click(start_x, start_y)
+      # Annotorious click-draw mode requires a pause between start-click and end-click.
+      # No observable DOM state change occurs between the two clicks.
       pw_page.wait_for_timeout(200)
       pw_page.mouse.click(start_x + 80, start_y + 60)
     end

@@ -15,6 +15,8 @@ Capybara.default_max_wait_time = 15
 Capybara.save_path = "tmp/capybara"
 
 class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
+  TEST_IMAGE_PATH = Rails.root.join("test/fixtures/files/test_image.png").to_s
+
   driven_by :playwright, screen_size: [ 1280, 720 ], options: {
     browser_type: ENV.fetch("PLAYWRIGHT_BROWSER", "chromium").to_sym,
     headless: ENV["HEADED"] != "true"
@@ -49,6 +51,14 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   def wait_for_turbo
     assert_no_selector ".turbo-progress-bar", wait: 10
+  end
+
+  # --- Flash helpers ---
+
+  FLASH_NOTICE = '[data-testid="flash-notice"]'
+
+  def assert_flash_notice(text)
+    assert_selector FLASH_NOTICE, text: text, wait: 10
   end
 
   # --- Playwright helpers ---

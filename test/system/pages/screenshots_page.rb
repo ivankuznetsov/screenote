@@ -4,6 +4,8 @@ module Pages
   module ScreenshotsPage
     # --- Selectors ---
 
+    SCREENSHOT_FORM = '[data-testid="screenshot-form"]'
+    SCREENSHOT_FORM_ERRORS = '[data-testid="screenshot-form-errors"]'
     BREADCRUMB = '[data-testid="breadcrumb"]'
     SCREENSHOT_WORKSPACE = '[data-testid="screenshot-workspace"]'
     SCREENSHOT_IMAGE = '[data-testid="screenshot-image"]'
@@ -36,8 +38,21 @@ module Pages
       assert_selector SIDEBAR_EMPTY, wait: 10
     end
 
+    def assert_screenshot_form_error
+      assert_selector SCREENSHOT_FORM_ERRORS, wait: 5
+    end
+
     def assert_screenshot_image_loaded
       assert_selector SCREENSHOT_IMAGE, wait: 10
+      # Verify image pixels are fully loaded, not just DOM element.
+      # Annotorious and coordinate calculations depend on actual pixel dimensions.
+      script = "(() => { const img = document.querySelector('[data-testid=\"screenshot-image\"]'); " \
+               "return img && img.complete && img.naturalWidth > 0 })()"
+      10.times do
+        break if page.evaluate_script(script)
+        sleep 0.5
+      end
+      assert page.evaluate_script(script), "Screenshot image failed to load - naturalWidth is 0"
     end
   end
 end

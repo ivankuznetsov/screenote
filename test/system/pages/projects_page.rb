@@ -7,8 +7,8 @@ module Pages
     PAGE_TITLE = '[data-testid="page-title"]'
     PROJECT_CARD = '[data-testid="project-card"]'
     PROJECT_CARD_NAME = '[data-testid="project-card-name"]'
-    FORM = '[data-testid="form"]'
-    FORM_ERRORS = '[data-testid="form-errors"]'
+    FORM = '[data-testid="project-form"]'
+    FORM_ERRORS = '[data-testid="project-form-errors"]'
     PROJECT_DETAIL_TITLE = '[data-testid="project-detail-title"]'
     PROJECT_DETAIL_DESCRIPTION = '[data-testid="project-detail-description"]'
     SCREENSHOT_CARD_TITLE = '[data-testid="screenshot-card-title"]'
@@ -17,7 +17,7 @@ module Pages
 
     def visit_projects
       visit "/projects"
-      assert_selector "body", wait: 10
+      assert_selector "#{PAGE_TITLE}, [data-testid='empty-state']", wait: 10
     end
 
     def visit_new_project
@@ -36,6 +36,12 @@ module Pages
 
     def click_project(name)
       find(PROJECT_CARD_NAME, text: name).click
+    end
+
+    def navigate_to_demo_project
+      visit_projects
+      click_project("Demo Project")
+      assert_on_project_show("Demo Project")
     end
 
     # --- Assertions ---

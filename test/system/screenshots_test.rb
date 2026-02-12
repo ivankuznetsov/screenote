@@ -10,8 +10,6 @@ class ScreenshotsTest < ApplicationSystemTestCase
   include Pages::ProjectsPage
   include Pages::ScreenshotsPage
 
-  TEST_IMAGE_PATH = Rails.root.join("test/fixtures/files/test_image.png").to_s
-
   setup do
     login_as_test_user
   end
@@ -73,7 +71,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
     fill_screenshot_form(title: "", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
 
-    assert_form_error
+    assert_screenshot_form_error
   end
 
   test "screenshot appears in project screenshot grid" do
@@ -87,12 +85,6 @@ class ScreenshotsTest < ApplicationSystemTestCase
   end
 
   private
-
-  def navigate_to_demo_project
-    visit_projects
-    click_project("Demo Project")
-    assert_on_project_show("Demo Project")
-  end
 
   def create_screenshot(title)
     navigate_to_demo_project

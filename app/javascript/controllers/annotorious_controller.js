@@ -7,11 +7,22 @@ export default class extends Controller {
   connect() {
     if (!this.hasImageTarget) return
 
-    this.initAnnotorious()
-    this.renderExistingPins()
+    this.disposed = false
+
+    if (this.imageTarget.complete && this.imageTarget.naturalWidth > 0) {
+      this.initAnnotorious()
+      this.renderExistingPins()
+    } else {
+      this.imageTarget.addEventListener("load", () => {
+        this.initAnnotorious()
+        this.renderExistingPins()
+      }, { once: true })
+    }
   }
 
   disconnect() {
+    this.disposed = true
+
     if (this.anno) {
       this.anno.destroy()
     }
@@ -40,6 +51,7 @@ export default class extends Controller {
   }
 
   handleCreate(annotation) {
+    if (this.disposed) return
     if (this.pendingAnnotationId === annotation.id) return
     this.pendingAnnotationId = annotation.id
 
@@ -83,6 +95,10 @@ export default class extends Controller {
   }
 
   showAnnotationForm(coords) {
+    if (this.hasFormTarget && this.commentTarget.value.trim() !== "") {
+      return
+    }
+
     this.cancelForm()
 
     const template = this.formTemplateTarget
@@ -101,6 +117,7 @@ export default class extends Controller {
     if (this.hasFormTarget) {
       this.formTarget.remove()
     }
+    this.pendingAnnotationId = null
   }
 
   renderExistingPins() {

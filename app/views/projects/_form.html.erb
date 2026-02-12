@@ -1,6 +1,6 @@
-<%= form_with(model: project, class: "form", data: { testid: "form" }) do |f| %>
+<%= form_with(model: project, class: "form", data: { testid: "project-form" }) do |f| %>
   <% if project.errors.any? %>
-    <div class="form__errors" data-testid="form-errors">
+    <div class="form__errors" data-testid="project-form-errors">
       <strong><%= pluralize(project.errors.count, "error") %> prevented this project from being saved:</strong>
       <ul>
         <% project.errors.full_messages.each do |message| %>
