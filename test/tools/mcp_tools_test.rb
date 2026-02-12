@@ -9,13 +9,12 @@ class McpToolsTest < ActiveSupport::TestCase
     @screenshot = screenshots(:alice_screenshot)
     @annotation = annotations(:point_annotation)
 
-    Thread.current[:mcp_current_project] = @project
-    Thread.current[:mcp_current_api_key] = @api_key
+    Current.mcp_project = @project
+    Current.mcp_api_key = @api_key
   end
 
   teardown do
-    Thread.current[:mcp_current_project] = nil
-    Thread.current[:mcp_current_api_key] = nil
+    Current.reset
   end
 
   # CreateScreenshotTool
@@ -96,10 +95,14 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal @annotation.x_percent, result["coordinates"]["x_percent"]
   end
 
-  test "get_annotation cannot access other projects annotation" do
-    assert_raises ActiveRecord::RecordNotFound do
-      GetAnnotationTool.new.call(annotation_id: annotations(:bob_annotation).id)
-    end
+  test "get_annotation returns screenshot_status in response" do
+    result = JSON.parse(GetAnnotationTool.new.call(annotation_id: @annotation.id))
+    assert result.key?("screenshot_status"), "Should include screenshot_status"
+  end
+
+  test "get_annotation returns not_found for other projects annotation" do
+    result = JSON.parse(GetAnnotationTool.new.call(annotation_id: annotations(:bob_annotation).id))
+    assert_equal "not_found", result["error"], "Should return structured not_found error"
   end
 
   # ResolveAnnotationTool
@@ -112,9 +115,17 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal @api_key.id, @annotation.resolved_by_api_key_id, "Should record which API key resolved it"
   end
 
-  test "resolve_annotation cannot resolve other projects annotation" do
-    assert_raises ActiveRecord::RecordNotFound do
-      ResolveAnnotationTool.new.call(annotation_id: annotations(:bob_annotation).id)
-    end
+  test "resolve_annotation returns not_found for other projects annotation" do
+    result = JSON.parse(ResolveAnnotationTool.new.call(annotation_id: annotations(:bob_annotation).id))
+    assert_equal "not_found", result["error"], "Should return structured not_found error"
+  end
+
+  # CreateScreenshotTool validations
+  test "create_screenshot rejects invalid mime type" do
+    tool = CreateScreenshotTool.new
+    image_data = Base64.strict_encode64("fake image data")
+
+    result = JSON.parse(tool.call(title: "Test", image_base64: image_data, mime_type: "text/html"))
+    assert_equal "invalid_mime_type", result["error"], "Should reject non-image mime types"
   end
 end

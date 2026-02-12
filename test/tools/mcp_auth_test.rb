@@ -12,8 +12,7 @@ class McpAuthTest < ActiveSupport::TestCase
   end
 
   teardown do
-    Thread.current[:mcp_current_project] = nil
-    Thread.current[:mcp_current_api_key] = nil
+    Current.reset
   end
 
   test "valid_token? accepts active API key" do
@@ -21,8 +20,8 @@ class McpAuthTest < ActiveSupport::TestCase
     result = transport.send(:valid_token?, ALICE_TOKEN)
 
     assert result, "Should accept valid active token"
-    assert_equal @api_key.project, Thread.current[:mcp_current_project]
-    assert_equal @api_key, Thread.current[:mcp_current_api_key]
+    assert_equal @api_key.project, Current.mcp_project
+    assert_equal @api_key, Current.mcp_api_key
   end
 
   test "valid_token? rejects revoked API key" do
@@ -30,7 +29,7 @@ class McpAuthTest < ActiveSupport::TestCase
     result = transport.send(:valid_token?, REVOKED_TOKEN)
 
     assert_not result, "Should reject revoked token"
-    assert_nil Thread.current[:mcp_current_project]
+    assert_nil Current.mcp_project
   end
 
   test "valid_token? rejects blank token" do

@@ -17,8 +17,8 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
     return false if rate_limited?(api_key)
 
     api_key.touch_last_used!
-    Thread.current[:mcp_current_project] = api_key.project
-    Thread.current[:mcp_current_api_key] = api_key
+    Current.mcp_project = api_key.project
+    Current.mcp_api_key = api_key
     true
   end
 

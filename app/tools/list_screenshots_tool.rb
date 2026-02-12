@@ -9,23 +9,25 @@ class ListScreenshotsTool < ApplicationTool
   end
 
   def call(status: nil)
-    screenshots = current_project.screenshots.order(created_at: :desc)
-    screenshots = screenshots.where(status: status) if status.present?
+    with_error_handling do
+      screenshots = current_project.screenshots.order(created_at: :desc)
+      screenshots = screenshots.where(status: status) if status.present?
 
-    screenshots.map do |s|
-      url = Rails.application.routes.url_helpers.project_screenshot_url(
-        current_project, s, host: ENV.fetch("APP_HOST", "localhost:3005")
-      )
+      screenshots.map do |s|
+        url = Rails.application.routes.url_helpers.project_screenshot_url(
+          current_project, s, host: ENV.fetch("APP_HOST", "localhost:3005")
+        )
 
-      {
-        id: s.id,
-        title: s.title,
-        status: s.status,
-        annotation_count: s.annotations.count,
-        unresolved_count: s.annotations.open.count,
-        annotate_url: url,
-        created_at: s.created_at.iso8601
-      }
-    end.to_json
+        {
+          id: s.id,
+          title: s.title,
+          status: s.status,
+          annotation_count: s.annotations.count,
+          unresolved_count: s.annotations.open.count,
+          annotate_url: url,
+          created_at: s.created_at.iso8601
+        }
+      end.to_json
+    end
   end
 end
