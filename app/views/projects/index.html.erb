@@ -9,7 +9,7 @@
       <%= link_to project_path(project), class: "project-card", data: { testid: "project-card" } do %>
         <div class="project-card__name" data-testid="project-card-name">
           <%= project.name %>
-          <% unless project.owner?(Current.user) %>
+          <% unless @memberships_by_project[project.id]&.owner? %>
             <span class="role-badge role-badge--member">Member</span>
           <% end %>
         </div>

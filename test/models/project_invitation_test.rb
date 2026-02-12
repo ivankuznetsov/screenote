@@ -32,11 +32,23 @@ class ProjectInvitationTest < ActiveSupport::TestCase
     assert_equal "someuser@example.com", invitation.email
   end
 
-  test "rejects duplicate email for same project" do
+  test "rejects duplicate pending email for same project" do
     @project.project_invitations.create!(inviter: @inviter, email: "dup@example.com")
     duplicate = @project.project_invitations.build(inviter: @inviter, email: "dup@example.com")
     assert_not duplicate.valid?
     assert duplicate.errors[:email].any?
+  end
+
+  test "allows re-invitation after member was removed" do
+    invitation = @project.project_invitations.create!(inviter: @inviter, email: "reinvite@example.com")
+    user = User.create!(email: "reinvite@example.com", password: "password123", confirmed_at: Time.current)
+    invitation.accept!(user)
+
+    # Remove the member
+    @project.project_memberships.find_by(user: user).destroy
+
+    new_invitation = @project.project_invitations.build(inviter: @inviter, email: "reinvite@example.com")
+    assert new_invitation.valid?, "Should allow re-invitation after member was removed"
   end
 
   test "allows same email for different projects" do
@@ -89,5 +101,22 @@ class ProjectInvitationTest < ActiveSupport::TestCase
     assert invitation.accepted?
     assert @project.member?(new_user)
     assert_equal :member, @project.role_for(new_user)
+  end
+
+  test "accept! is idempotent when already accepted" do
+    invitation = project_invitations(:pending_invitation)
+    new_user = User.create!(
+      email: invitation.email,
+      password: "password123",
+      confirmed_at: Time.current
+    )
+
+    invitation.accept!(new_user)
+    assert invitation.accepted?
+
+    # Second call should not raise or create duplicate membership
+    assert_no_difference "ProjectMembership.count" do
+      invitation.accept!(new_user)
+    end
   end
 end

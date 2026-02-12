@@ -20,7 +20,10 @@ class ProjectMembershipsController < ApplicationController
       return
     end
 
-    membership.destroy
-    redirect_to project_memberships_path(@project), notice: "Member removed."
+    if membership.destroy
+      redirect_to project_memberships_path(@project), notice: "Member removed."
+    else
+      redirect_to project_memberships_path(@project), alert: membership.errors.full_messages.to_sentence
+    end
   end
 end

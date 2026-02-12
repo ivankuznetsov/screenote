@@ -39,4 +39,15 @@ class ProjectMembershipTest < ActiveSupport::TestCase
     assert membership.member?
     assert_not membership.owner?
   end
+
+  test "cannot destroy sole owner membership" do
+    owner_membership = project_memberships(:alice_owns_alice_project)
+    assert_not owner_membership.destroy, "Should not destroy sole owner"
+    assert_includes owner_membership.errors[:base], "Cannot remove the only owner of a project"
+  end
+
+  test "can destroy member membership" do
+    member_membership = project_memberships(:bob_member_of_alice_project)
+    assert member_membership.destroy, "Should allow destroying member membership"
+  end
 end

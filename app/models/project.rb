@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Project < ApplicationRecord
-  belongs_to :creator, class_name: "User", foreign_key: :user_id
+  belongs_to :creator, class_name: "User", foreign_key: :user_id, inverse_of: :owned_projects
   has_many :project_memberships, dependent: :destroy
   has_many :members, through: :project_memberships, source: :user
   has_many :project_invitations, dependent: :destroy
@@ -10,7 +10,10 @@ class Project < ApplicationRecord
 
   validates :name, presence: true, length: { maximum: 255 }
 
+  before_destroy :flag_destroy_in_progress, prepend: true
   after_create :create_owner_membership
+
+  attr_accessor :_destroy_in_progress
 
   def member?(check_user)
     project_memberships.exists?(user_id: check_user.id)
@@ -28,5 +31,9 @@ class Project < ApplicationRecord
 
   def create_owner_membership
     project_memberships.create!(user: creator, role: :owner)
+  end
+
+  def flag_destroy_in_progress
+    self._destroy_in_progress = true
   end
 end

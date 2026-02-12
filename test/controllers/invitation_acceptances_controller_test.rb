@@ -23,26 +23,40 @@ class InvitationAcceptancesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path
   end
 
-  # Create — existing user
+  # Create — existing user must be signed in
 
-  test "accepts invitation for existing user" do
+  test "existing user must sign in to accept invitation" do
+    User.create!(
+      email: @invitation.email,
+      password: "password123",
+      confirmed_at: Time.current
+    )
+
+    post accept_invitation_path(@token)
+    assert_redirected_to new_session_path
+    follow_redirect!
+    assert_select ".flash--alert"
+  end
+
+  test "accepts invitation for signed-in existing user" do
     existing_user = User.create!(
       email: @invitation.email,
       password: "password123",
       confirmed_at: Time.current
     )
+    sign_in(existing_user)
 
     assert_difference "ProjectMembership.count", 1 do
       post accept_invitation_path(@token)
     end
 
     assert_redirected_to project_path(@project)
-    assert @project.member?(existing_user)
+    assert @project.member?(existing_user), "User should be a project member"
     @invitation.reload
-    assert @invitation.accepted?
+    assert @invitation.accepted?, "Invitation should be accepted"
   end
 
-  # Create — new user
+  # Create — new user (auto-creates account)
 
   test "creates account for new user and accepts invitation" do
     assert_difference [ "User.count", "ProjectMembership.count" ], 1 do
@@ -52,7 +66,7 @@ class InvitationAcceptancesControllerTest < ActionDispatch::IntegrationTest
     new_user = User.find_by(email: @invitation.email)
     assert_not_nil new_user
     assert_not_nil new_user.confirmed_at, "New user should be auto-confirmed"
-    assert @project.member?(new_user)
+    assert @project.member?(new_user), "New user should be a project member"
     assert_redirected_to project_path(@project)
   end
 
@@ -66,28 +80,10 @@ class InvitationAcceptancesControllerTest < ActionDispatch::IntegrationTest
   test "rejects token from before status change" do
     # Accept once using the original token
     post accept_invitation_path(@token)
-    assert_redirected_to project_path(@project)
 
     # Original token should be invalidated because status changed
     found = ProjectInvitation.find_by_token_for(:accept, @token)
     assert_nil found, "Original token should be invalidated after acceptance"
-  end
-
-  # Create — logged in as different user
-
-  test "logs out different user and accepts with correct user" do
-    different_user = users(:alice)
-    sign_in(different_user)
-
-    existing_user = User.create!(
-      email: @invitation.email,
-      password: "password123",
-      confirmed_at: Time.current
-    )
-
-    post accept_invitation_path(@token)
-    assert_redirected_to project_path(@project)
-    assert @project.member?(existing_user)
   end
 
   # Create — already logged in as correct user

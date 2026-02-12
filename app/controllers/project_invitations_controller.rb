@@ -19,9 +19,14 @@ class ProjectInvitationsController < ApplicationController
   end
 
   def destroy
-    @invitation = @project.project_invitations.pending.find(params[:id])
-    @invitation.destroy
-    redirect_to project_memberships_path(@project), notice: "Invitation cancelled."
+    @invitation = @project.project_invitations.find(params[:id])
+
+    if @invitation.pending?
+      @invitation.destroy
+      redirect_to project_memberships_path(@project), notice: "Invitation cancelled."
+    else
+      redirect_to project_memberships_path(@project), alert: "This invitation has already been accepted."
+    end
   end
 
   private

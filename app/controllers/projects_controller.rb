@@ -7,10 +7,12 @@ class ProjectsController < ApplicationController
   before_action :require_owner!, only: %i[edit update destroy]
 
   def index
+    @memberships_by_project = Current.user.project_memberships.includes(:project).index_by(&:project_id)
     @projects = Current.user.projects.order(updated_at: :desc)
   end
 
   def show
+    @is_owner = @project.owner?(Current.user)
     @screenshots = @project.screenshots
       .with_attached_image
       .left_joins(:annotations)

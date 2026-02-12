@@ -7,7 +7,7 @@ class ProjectInvitation < ApplicationRecord
   enum :status, { pending: 0, accepted: 1 }
 
   validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
-  validates :email, uniqueness: { scope: :project_id, message: "has already been invited" }
+  validates :email, uniqueness: { scope: :project_id, conditions: -> { where(status: :pending) }, message: "has already been invited" }
   validate :not_already_member
 
   normalizes :email, with: ->(email) { email.strip.downcase }
@@ -18,9 +18,13 @@ class ProjectInvitation < ApplicationRecord
   end
 
   def accept!(user)
-    transaction do
+    with_lock do
+      return if accepted?
+
       update!(status: :accepted)
-      project.project_memberships.create!(user: user, role: :member)
+      project.project_memberships.find_or_create_by!(user: user) do |m|
+        m.role = :member
+      end
     end
   end
 

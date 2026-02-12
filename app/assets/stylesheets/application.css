@@ -20,6 +20,8 @@
   --color-bg-secondary: #f9fafb;
   --color-flash-notice: #dcfce7;
   --color-flash-alert: #fee2e2;
+  --color-badge-owner-bg: #dbeafe;
+  --color-badge-owner-text: #1e40af;
   --radius: 6px;
   --max-width: 960px;
 }
@@ -850,8 +852,8 @@ a:hover {
 }
 
 .role-badge--owner {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--color-badge-owner-bg);
+  color: var(--color-badge-owner-text);
 }
 
 .role-badge--member {

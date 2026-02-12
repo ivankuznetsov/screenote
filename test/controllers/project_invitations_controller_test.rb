@@ -64,6 +64,14 @@ class ProjectInvitationsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_memberships_path(@project)
   end
 
+  test "owner cannot invite themselves" do
+    sign_in(@owner)
+    assert_no_difference "ProjectInvitation.count" do
+      post project_invitations_path(@project), params: { project_invitation: { email: @owner.email } }
+    end
+    assert_redirected_to project_memberships_path(@project)
+  end
+
   # Destroy
 
   test "owner can cancel pending invitation" do
@@ -72,5 +80,16 @@ class ProjectInvitationsControllerTest < ActionDispatch::IntegrationTest
       delete project_invitation_path(@project, @invitation)
     end
     assert_redirected_to project_memberships_path(@project)
+  end
+
+  test "cancel of already-accepted invitation shows alert" do
+    sign_in(@owner)
+    @invitation.update!(status: :accepted)
+    assert_no_difference "ProjectInvitation.count" do
+      delete project_invitation_path(@project, @invitation)
+    end
+    assert_redirected_to project_memberships_path(@project)
+    follow_redirect!
+    assert_select ".flash--alert"
   end
 end
