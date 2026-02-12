@@ -48,7 +48,7 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # --- Turbo helpers ---
 
   def wait_for_turbo
-    has_no_css?(".turbo-progress-bar", wait: 10)
+    assert_no_selector ".turbo-progress-bar", wait: 10
   end
 
   # --- Playwright helpers ---

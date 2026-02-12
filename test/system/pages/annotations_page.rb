@@ -17,7 +17,7 @@ module Pages
     # --- Actions ---
 
     def fill_annotation_comment(text)
-      find(COMMENT_FIELD).fill_in with: text
+      find(COMMENT_FIELD).set(text)
     end
 
     def submit_annotation
