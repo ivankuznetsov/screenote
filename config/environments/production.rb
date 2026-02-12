@@ -23,14 +23,10 @@ Rails.application.configure do
   # Store uploaded files on Rabata S3 (see config/storage.yml for options).
   config.active_storage.service = :rabata
 
-  # Assume all access to the app is happening through a SSL-terminating reverse proxy.
-  config.assume_ssl = true
-
-  # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  config.force_ssl = true
-
-  # Skip http-to-https redirect for the default health check endpoint.
-  config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
+  # SSL is terminated at Cloudflare (Flexible mode).
+  # Cloudflare connects to origin over HTTP, so we don't force SSL here.
+  # config.assume_ssl = true
+  # config.force_ssl = true
 
   # Log to STDOUT with the current request id as a default log tag.
   config.log_tags = [ :request_id ]
