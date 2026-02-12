@@ -55,7 +55,8 @@ class ApiKeysControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_api_keys_path(@project)
     key = ApiKey.last
     assert_equal "Deploy Key", key.name
-    assert key.token.start_with?("sk_proj_"), "Token should have correct prefix"
+    assert key.token_digest.present?, "Token digest should be generated"
+    assert key.token_prefix.start_with?("sk_proj_"), "Token prefix should have correct prefix"
   end
 
   test "create shows token in flash for one-time copy" do

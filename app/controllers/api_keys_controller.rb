@@ -16,7 +16,7 @@ class ApiKeysController < ApplicationController
     @api_key = @project.api_keys.build(api_key_params)
 
     if @api_key.save
-      flash[:api_key_token] = @api_key.token
+      flash[:api_key_token] = @api_key.raw_token
       redirect_to project_api_keys_path(@project), notice: "API key created. Copy it now — it won't be shown again."
     else
       render :new, status: :unprocessable_entity

@@ -4,18 +4,28 @@ require "fast_mcp"
 
 # Custom transport that resolves project from API key token
 class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
+  RATE_LIMIT = 60
+  RATE_PERIOD = 1.minute
+
   private
 
   def valid_token?(token)
     return false if token.blank?
 
-    api_key = ApiKey.active.find_by(token: token)
+    api_key = ApiKey.active.find_by_token(token)
     return false unless api_key
+    return false if rate_limited?(api_key)
 
     api_key.touch_last_used!
     Thread.current[:mcp_current_project] = api_key.project
     Thread.current[:mcp_current_api_key] = api_key
     true
+  end
+
+  def rate_limited?(api_key)
+    cache_key = "mcp_rate_limit/#{api_key.id}"
+    count = Rails.cache.increment(cache_key, 1, expires_in: RATE_PERIOD) || 1
+    count > RATE_LIMIT
   end
 end
 
@@ -30,7 +40,8 @@ FastMcp.mount_in_rails(
   localhost_only: false
 ) do |server|
   Rails.application.config.after_initialize do
-    tool_classes = ApplicationTool.descendants rescue [] # rubocop:disable Style/RescueModifier
+    Dir[Rails.root.join("app/tools/**/*.rb")].each { |f| require f }
+    tool_classes = ApplicationTool.descendants
     server.register_tools(*tool_classes) if tool_classes.any?
   end
 end

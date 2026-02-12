@@ -58,8 +58,6 @@ gem "fast-mcp"
 # Error monitoring
 gem "honeybadger"
 
-# Rate limiting for MCP endpoints
-gem "rack-attack"
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem

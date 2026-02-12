@@ -10,7 +10,6 @@ class ApplicationController < ActionController::Base
   before_action :require_authentication
 
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
-  rescue_from ActionController::RoutingError, with: :not_found
 
   private
 

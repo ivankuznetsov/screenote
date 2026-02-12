@@ -36,7 +36,7 @@
     </div>
 
     <div class="annotation-sidebar__list" id="annotations-list">
-      <% filtered_annotations = params[:status].present? ? @annotations.where(status: params[:status]) : @annotations %>
+      <% filtered_annotations = params[:status].in?(%w[open resolved]) ? @annotations.where(status: params[:status]) : @annotations %>
       <% filtered_annotations.each.with_index(1) do |annotation, index| %>
         <%= render "annotations/annotation", annotation: annotation, index: index %>
       <% end %>

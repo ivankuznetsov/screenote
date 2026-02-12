@@ -19,7 +19,7 @@
         <div class="api-key-item__info">
           <div class="api-key-item__name"><%= api_key.name %></div>
           <div class="api-key-item__meta">
-            <span>sk_proj_...<%=api_key.token.last(8) %></span>
+            <span><%= api_key.token_prefix %>...</span>
             <span class="api-key-item__separator">&middot;</span>
             <span>Created <%= time_ago_in_words(api_key.created_at) %> ago</span>
             <% if api_key.last_used_at %>

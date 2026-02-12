@@ -8,16 +8,36 @@ class ApiKeyTest < ActiveSupport::TestCase
     @api_key = api_keys(:alice_key)
   end
 
-  test "generates token on create" do
+  test "generates token digest on create" do
     key = @project.api_keys.create!(name: "New Key")
-    assert key.token.present?, "Token should be generated"
-    assert key.token.start_with?("sk_proj_"), "Token should start with sk_proj_ prefix"
+    assert key.token_digest.present?, "Token digest should be generated"
+    assert key.token_prefix.present?, "Token prefix should be generated"
+    assert key.raw_token.start_with?("sk_proj_"), "Raw token should start with sk_proj_ prefix"
+    assert_equal Digest::SHA256.hexdigest(key.raw_token), key.token_digest
   end
 
-  test "does not overwrite existing token" do
-    key = @project.api_keys.build(name: "Custom", token: "sk_proj_custom_token")
-    key.save!
-    assert_equal "sk_proj_custom_token", key.token
+  test "raw_token is only available after create" do
+    key = @project.api_keys.create!(name: "New Key")
+    raw = key.raw_token
+    assert raw.present?, "Raw token should be available right after create"
+
+    reloaded = ApiKey.find(key.id)
+    assert_nil reloaded.raw_token, "Raw token should not be available after reload"
+  end
+
+  test "find_by_token returns correct key" do
+    token = "sk_proj_test_alice_key_000000000000000000000000"
+    found = ApiKey.find_by_token(token)
+    assert_equal @api_key, found
+  end
+
+  test "find_by_token returns nil for unknown token" do
+    assert_nil ApiKey.find_by_token("sk_proj_nonexistent")
+  end
+
+  test "find_by_token returns nil for blank token" do
+    assert_nil ApiKey.find_by_token("")
+    assert_nil ApiKey.find_by_token(nil)
   end
 
   test "requires name" do
@@ -26,10 +46,12 @@ class ApiKeyTest < ActiveSupport::TestCase
     assert key.errors[:name].any?
   end
 
-  test "token must be unique" do
-    duplicate = @project.api_keys.build(name: "Dupe", token: @api_key.token)
-    assert_not duplicate.valid?, "Duplicate token should be invalid"
-    assert duplicate.errors[:token].any?
+  test "token digest must be unique" do
+    existing_digest = @api_key.token_digest
+    duplicate = @project.api_keys.build(name: "Dupe")
+    duplicate.token_digest = existing_digest
+    assert_not duplicate.valid?, "Duplicate token digest should be invalid"
+    assert duplicate.errors[:token_digest].any?
   end
 
   test "active scope excludes revoked keys" do

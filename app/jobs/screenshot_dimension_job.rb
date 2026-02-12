@@ -7,10 +7,13 @@ class ScreenshotDimensionJob < ApplicationJob
     screenshot.image.blob.analyze unless screenshot.image.blob.analyzed?
 
     metadata = screenshot.image.blob.metadata
-    screenshot.update!(
-      width: metadata["width"],
-      height: metadata["height"],
-      status: :ready
-    )
+    width = metadata["width"]
+    height = metadata["height"]
+
+    if width.present? && height.present?
+      screenshot.update!(width: width, height: height, status: :ready)
+    else
+      screenshot.update!(status: :failed)
+    end
   end
 end

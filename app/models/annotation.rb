@@ -21,14 +21,12 @@ class Annotation < ApplicationRecord
   private
 
   def region_within_bounds
-    return unless width_percent && x_percent
-
-    if x_percent + width_percent > 100.0
+    if width_percent && x_percent && x_percent + width_percent > 100.0
       errors.add(:width_percent, "annotation extends beyond image boundary")
     end
 
-    return unless height_percent && y_percent && y_percent + height_percent > 100.0
-
-    errors.add(:height_percent, "annotation extends beyond image boundary")
+    if height_percent && y_percent && y_percent + height_percent > 100.0
+      errors.add(:height_percent, "annotation extends beyond image boundary")
+    end
   end
 end

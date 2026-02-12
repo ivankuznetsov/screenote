@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_12_071517) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_12_151018) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -65,10 +65,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_12_071517) do
     t.string "name", null: false
     t.integer "project_id", null: false
     t.datetime "revoked_at"
-    t.string "token", null: false
+    t.string "token_digest", null: false
+    t.string "token_prefix"
     t.datetime "updated_at", null: false
     t.index ["project_id"], name: "index_api_keys_on_project_id"
-    t.index ["token"], name: "index_api_keys_on_token", unique: true
+    t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
   end
 
   create_table "projects", force: :cascade do |t|

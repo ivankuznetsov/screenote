@@ -3,6 +3,9 @@
 require "test_helper"
 
 class McpAuthTest < ActiveSupport::TestCase
+  ALICE_TOKEN = "sk_proj_test_alice_key_000000000000000000000000"
+  REVOKED_TOKEN = "sk_proj_test_alice_revoked_00000000000000000000"
+
   setup do
     @api_key = api_keys(:alice_key)
     @revoked_key = api_keys(:alice_key_revoked)
@@ -15,7 +18,7 @@ class McpAuthTest < ActiveSupport::TestCase
 
   test "valid_token? accepts active API key" do
     transport = build_transport
-    result = transport.send(:valid_token?, @api_key.token)
+    result = transport.send(:valid_token?, ALICE_TOKEN)
 
     assert result, "Should accept valid active token"
     assert_equal @api_key.project, Thread.current[:mcp_current_project]
@@ -24,7 +27,7 @@ class McpAuthTest < ActiveSupport::TestCase
 
   test "valid_token? rejects revoked API key" do
     transport = build_transport
-    result = transport.send(:valid_token?, @revoked_key.token)
+    result = transport.send(:valid_token?, REVOKED_TOKEN)
 
     assert_not result, "Should reject revoked token"
     assert_nil Thread.current[:mcp_current_project]
@@ -47,7 +50,7 @@ class McpAuthTest < ActiveSupport::TestCase
     transport = build_transport
     old_time = @api_key.last_used_at
 
-    transport.send(:valid_token?, @api_key.token)
+    transport.send(:valid_token?, ALICE_TOKEN)
 
     assert @api_key.reload.last_used_at > old_time, "Should update last_used_at"
   end
