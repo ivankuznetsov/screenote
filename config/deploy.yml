@@ -9,9 +9,9 @@ servers:
   web:
     - screenote
 
-# Cloudflare terminates SSL (Flexible mode), no TLS on origin
+# Enable SSL auto certification via Let's Encrypt (handled by Cloudflare)
 proxy:
-  ssl: false
+  ssl: true
   host: screenote.ai
 
 # Local Docker registry (Kamal will automatically start it)
