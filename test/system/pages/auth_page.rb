@@ -4,16 +4,16 @@ module Pages
   module AuthPage
     # --- Selectors ---
 
-    # Selectors below target rails_simple_auth gem markup (no data-testid available)
-    SIGN_IN_FORM = ".rsa-auth-form"
-    SIGN_IN_TITLE = ".rsa-auth-form__title"
+    # Selectors target custom auth views (app/views/rails_simple_auth/)
+    SIGN_IN_FORM = ".auth-card"
+    SIGN_IN_TITLE = ".auth-card__title"
     SIGN_UP_LINK = 'a[href="/sign_up"]'
     FORGOT_PASSWORD_LINK = 'a[href="/passwords/new"]'
-    MAGIC_LINK_BUTTON = ".rsa-auth-form__magic-link-button"
-    AUTH_ERROR = ".rsa-auth-form__error"
+    MAGIC_LINK_BUTTON = ".auth-card__magic-link"
+    AUTH_ERROR = ".auth-card__error"
     SIGN_UP_EMAIL = 'input[name="user[email]"]'
     SIGN_UP_PASSWORD = 'input[name="user[password]"]'
-    SIGN_UP_BUTTON = 'input[type="submit"][value="Sign Up"]'
+    SIGN_UP_BUTTON = 'input[type="submit"][value="Create Account"]'
     SIGN_OUT_BUTTON = '[data-testid="sign-out-button"]'
     USER_EMAIL = '[data-testid="user-email"]'
 
@@ -47,7 +47,7 @@ module Pages
 
     def assert_on_sign_in_page
       assert_selector SIGN_IN_FORM, wait: 10
-      assert_selector SIGN_IN_TITLE, text: "Sign In"
+      assert_selector SIGN_IN_TITLE, text: "Welcome back"
     end
 
     def assert_auth_error

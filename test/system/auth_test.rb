@@ -10,7 +10,7 @@ class AuthTest < ApplicationSystemTestCase
     visit_sign_in
 
     assert_on_sign_in_page
-    assert_selector SIGN_UP_LINK, text: "Sign Up"
+    assert_selector SIGN_UP_LINK, text: "Create an account"
     assert_selector FORGOT_PASSWORD_LINK
     assert_selector MAGIC_LINK_BUTTON
   end
@@ -59,7 +59,7 @@ class AuthTest < ApplicationSystemTestCase
   test "sign up page renders correctly" do
     visit_sign_up
 
-    assert_selector SIGN_IN_TITLE, text: "Sign Up"
+    assert_selector SIGN_IN_TITLE, text: "Create your account"
     assert_selector SIGN_UP_EMAIL
     assert_selector SIGN_UP_PASSWORD
     assert_selector SIGN_UP_BUTTON
@@ -67,9 +67,9 @@ class AuthTest < ApplicationSystemTestCase
 
   test "navigate from sign in to sign up" do
     visit_sign_in
-    click_link "Sign Up"
+    click_link "Create an account"
 
-    assert_selector SIGN_IN_TITLE, text: "Sign Up", wait: 10
+    assert_selector SIGN_IN_TITLE, text: "Create your account", wait: 10
   end
 
   test "navigate from sign in to forgot password" do
@@ -83,6 +83,6 @@ class AuthTest < ApplicationSystemTestCase
     visit_sign_in
     click_link "Sign in with Magic Link"
 
-    assert_selector SIGN_IN_TITLE, text: "Sign In with Magic Link", wait: 10
+    assert_selector SIGN_IN_TITLE, text: "Magic Link", wait: 10
   end
 end
