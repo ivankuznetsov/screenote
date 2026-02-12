@@ -12,18 +12,18 @@
         </div>
         <nav class="header__nav">
           <% if Current.user %>
-            <span class="header__email"><%= Current.user.email %></span>
-            <%= button_to "Sign out", session_path, method: :delete, class: "header__sign-out" %>
+            <span class="header__email" data-testid="user-email"><%= Current.user.email %></span>
+            <%= button_to "Sign out", session_path, method: :delete, class: "header__sign-out", data: { testid: "sign-out-button" } %>
           <% end %>
         </nav>
       </div>
     </header>
 
     <% if flash[:notice] %>
-      <div class="flash flash--notice"><%= flash[:notice] %></div>
+      <div class="flash flash--notice" data-testid="flash-notice"><%= flash[:notice] %></div>
     <% end %>
     <% if flash[:alert] %>
-      <div class="flash flash--alert"><%= flash[:alert] %></div>
+      <div class="flash flash--alert" data-testid="flash-alert"><%= flash[:alert] %></div>
     <% end %>
 
     <main class="main">

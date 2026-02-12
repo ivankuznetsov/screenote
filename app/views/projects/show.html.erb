@@ -1,8 +1,8 @@
 <div class="project-detail__header">
   <div>
-    <h1 class="project-detail__title"><%= @project.name %></h1>
+    <h1 class="project-detail__title" data-testid="project-detail-title"><%= @project.name %></h1>
     <% if @project.description.present? %>
-      <p class="project-detail__description"><%= @project.description %></p>
+      <p class="project-detail__description" data-testid="project-detail-description"><%= @project.description %></p>
     <% end %>
   </div>
   <div class="project-detail__actions">
@@ -10,7 +10,7 @@
     <%= link_to "API keys", project_api_keys_path(@project), class: "btn btn--secondary" %>
     <%= link_to "Edit", edit_project_path(@project), class: "btn btn--secondary" %>
     <%= button_to "Delete", project_path(@project), method: :delete, class: "btn btn--danger btn--small",
-        data: { turbo_confirm: "Are you sure you want to delete this project?" } %>
+        data: { turbo_confirm: "Are you sure you want to delete this project?", testid: "delete-project-button" } %>
   </div>
 </div>
 

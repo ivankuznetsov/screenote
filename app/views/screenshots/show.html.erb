@@ -3,7 +3,7 @@
 <% end %>
 
 <div class="screenshot-header">
-  <div class="screenshot-header__breadcrumb">
+  <div class="screenshot-header__breadcrumb" data-testid="breadcrumb">
     <%= link_to @project.name, project_path(@project) %> /
     <span><%= @screenshot.title %></span>
   </div>
@@ -11,21 +11,21 @@
     <%= link_to "Edit", edit_project_screenshot_path(@project, @screenshot), class: "btn btn--secondary btn--small" %>
     <%= button_to "Delete", project_screenshot_path(@project, @screenshot), method: :delete,
         class: "btn btn--danger btn--small",
-        data: { turbo_confirm: "Are you sure you want to delete this screenshot?" } %>
+        data: { turbo_confirm: "Are you sure you want to delete this screenshot?", testid: "delete-screenshot-button" } %>
   </div>
 </div>
 
-<div class="screenshot-workspace" data-controller="annotorious">
+<div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
   <div class="screenshot-canvas" data-annotorious-target="canvas">
     <% if @screenshot.image.attached? %>
       <%= image_tag @screenshot.image, class: "screenshot-canvas__image", alt: @screenshot.title,
-          data: { annotorious_target: "image" } %>
+          data: { annotorious_target: "image", testid: "screenshot-image" } %>
     <% end %>
   </div>
 
-  <aside class="annotation-sidebar">
+  <aside class="annotation-sidebar" data-testid="annotation-sidebar">
     <div class="annotation-sidebar__header">
-      <h2 class="annotation-sidebar__title">Annotations</h2>
+      <h2 class="annotation-sidebar__title" data-testid="sidebar-title">Annotations</h2>
       <div class="annotation-sidebar__filters">
         <%= link_to "All", project_screenshot_path(@project, @screenshot),
             class: "annotation-filter #{'annotation-filter--active' unless params[:status]}" %>
@@ -46,7 +46,7 @@
       <% end %>
 
       <% if @annotations.empty? %>
-        <div class="annotation-sidebar__empty">
+        <div class="annotation-sidebar__empty" data-testid="sidebar-empty">
           No annotations yet. Click on the image to add one.
         </div>
       <% end %>

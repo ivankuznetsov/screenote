@@ -11,10 +11,10 @@
 
   <body class="auth-body">
     <% if flash[:notice] %>
-      <div class="flash flash--notice"><%= flash[:notice] %></div>
+      <div class="flash flash--notice" data-testid="flash-notice"><%= flash[:notice] %></div>
     <% end %>
     <% if flash[:alert] %>
-      <div class="flash flash--alert"><%= flash[:alert] %></div>
+      <div class="flash flash--alert" data-testid="flash-alert"><%= flash[:alert] %></div>
     <% end %>
 
     <div class="auth-shell">

@@ -15,9 +15,9 @@
         data: { annotorious_target: "comment" } %>
 
     <div class="annotation-form__actions">
-      <%= f.submit "Save", class: "btn btn--primary btn--small" %>
+      <%= f.submit "Save", class: "btn btn--primary btn--small", data: { testid: "save-annotation-button" } %>
       <button type="button" class="btn btn--secondary btn--small"
-              data-action="click->annotorious#cancelForm">Cancel</button>
+              data-action="click->annotorious#cancelForm" data-testid="cancel-button">Cancel</button>
     </div>
   </div>
 <% end %>

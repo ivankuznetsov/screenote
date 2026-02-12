@@ -1,8 +1,8 @@
 <div class="page-header">
-  <h1 class="page-header__title">New API Key</h1>
+  <h1 class="page-header__title" data-testid="page-title">New API Key</h1>
 </div>
 
-<%= form_with(model: [@project, @api_key], class: "form") do |f| %>
+<%= form_with(model: [@project, @api_key], class: "form", data: { testid: "api-key-form" }) do |f| %>
   <% if @api_key.errors.any? %>
     <div class="form__errors">
       <strong><%= pluralize(@api_key.errors.count, "error") %> prevented this API key from being created:</strong>
