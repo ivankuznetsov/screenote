@@ -342,70 +342,6 @@ a:hover {
   gap: 0.5rem;
 }
 
-/* Auth page */
-.auth-page {
-  max-width: 400px;
-  margin: 3rem auto;
-}
-
-.auth-page__title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-.auth-page__divider {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin: 1.5rem 0;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-}
-
-.auth-page__divider::before,
-.auth-page__divider::after {
-  content: "";
-  flex: 1;
-  border-top: 1px solid var(--color-border);
-}
-
-.auth-page__links {
-  text-align: center;
-  margin-top: 1rem;
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
-}
-
-.auth-page__oauth {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.btn--oauth {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn--oauth:hover {
-  background: var(--color-bg-secondary);
-  text-decoration: none;
-}
-
 /* Screenshot grid */
 .screenshot-grid {
   display: grid;
@@ -826,3 +762,21 @@ a:hover {
   color: var(--color-danger);
   font-weight: 500;
 }
+
+/* Shared flash overrides for dark theme layouts */
+.landing-body .flash,
+.auth-body .flash {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  max-width: 480px;
+  width: calc(100% - 2rem);
+  border-radius: 8px;
+  top: 1rem;
+}
+
+.landing-body .flash {
+  top: 5rem;
+}
+

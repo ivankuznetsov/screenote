@@ -1,0 +1,39 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Create your account</h1>
+  <p class="auth-card__subtitle">Start giving visual feedback to AI agents</p>
+
+  <%= render "rails_simple_auth/shared/oauth_buttons" %>
+
+  <%= form_with model: @user, url: main_app.sign_up_path, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :email, "Email", class: "auth-card__label" %>
+      <%= form.email_field :email,
+            class: "auth-card__input #{'auth-card__input--error' if @user.errors[:email].any?}",
+            required: true,
+            autofocus: true,
+            placeholder: "you@company.com" %>
+      <% if @user.errors[:email].any? %>
+        <p class="auth-card__field-error"><%= @user.errors[:email].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password, class: "auth-card__label" %>
+      <%= form.password_field :password,
+            class: "auth-card__input #{'auth-card__input--error' if @user.errors[:password].any?}",
+            required: true,
+            placeholder: "Min. #{RailsSimpleAuth.configuration.password_minimum_length} characters" %>
+      <% if @user.errors[:password].any? %>
+        <p class="auth-card__field-error"><%= @user.errors[:password].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__actions">
+      <%= form.submit "Create Account", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+
+  <div class="auth-card__footer">
+    <%= link_to "Already have an account? Sign In", main_app.new_session_path, class: "auth-card__link" %>
+  </div>
+</div>

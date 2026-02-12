@@ -1,0 +1,119 @@
+<header class="landing-nav">
+  <div class="landing-nav__inner">
+    <div class="landing-nav__logo">Screenote</div>
+    <nav class="landing-nav__links">
+      <%= link_to "Sign In", new_session_path, class: "landing-nav__link" %>
+      <%= link_to "Get Started", sign_up_path, class: "landing-nav__cta" %>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero__grid"></div>
+  <div class="hero__glow"></div>
+  <div class="hero__content">
+    <p class="hero__eyebrow">Visual feedback for AI agents</p>
+    <h1 class="hero__title">
+      Your AI can't see<br>
+      what's <span class="hero__highlight">wrong</span>.<br>
+      Now it can.
+    </h1>
+    <p class="hero__subtitle">
+      Screenshot. Annotate. Your AI agent reads the feedback with the actual
+      cropped image region and fixes what you pointed at.
+    </p>
+    <div class="hero__actions">
+      <%= link_to "Start for Free", sign_up_path, class: "hero__btn hero__btn--primary" %>
+      <a href="#how-it-works" class="hero__btn hero__btn--ghost">See How It Works</a>
+    </div>
+  </div>
+</section>
+
+<section class="workflow" id="how-it-works">
+  <div class="workflow__inner">
+    <h2 class="workflow__heading">Three steps. Zero friction.</h2>
+    <div class="workflow__steps">
+      <div class="workflow__step">
+        <div class="workflow__step-number">01</div>
+        <div class="workflow__step-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <path d="m21 15-5-5L5 21"/>
+          </svg>
+        </div>
+        <h3 class="workflow__step-title">Upload</h3>
+        <p class="workflow__step-desc">Take a screenshot of the bug, the misalignment, the broken layout. Upload it to your project.</p>
+      </div>
+      <div class="workflow__step">
+        <div class="workflow__step-number">02</div>
+        <div class="workflow__step-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <h3 class="workflow__step-title">Annotate</h3>
+        <p class="workflow__step-desc">Pin comments directly on the image. Point annotations, region selections, and text notes.</p>
+      </div>
+      <div class="workflow__step">
+        <div class="workflow__step-number">03</div>
+        <div class="workflow__step-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a4 4 0 0 0-4 4c0 2 2 3 2 6h4c0-3 2-4 2-6a4 4 0 0 0-4-4z"/>
+            <path d="M10 18h4"/>
+            <path d="M10 22h4"/>
+            <path d="M12 22v-4"/>
+          </svg>
+        </div>
+        <h3 class="workflow__step-title">Agent Reads</h3>
+        <p class="workflow__step-desc">Your AI agent connects via MCP, reads annotations with cropped images, and fixes the issues.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="features__inner">
+    <div class="features__card features__card--wide">
+      <div class="features__card-label">MCP Protocol</div>
+      <h3 class="features__card-title">Built for AI agents, not dashboards</h3>
+      <p class="features__card-desc">
+        Agents connect through the Model Context Protocol. They see exactly
+        what you annotated — the cropped region, your comment, the coordinates.
+        No scraping, no guessing.
+      </p>
+    </div>
+    <div class="features__card">
+      <div class="features__card-label">Feedback Loop</div>
+      <h3 class="features__card-title">Agent screenshots localhost, you annotate, agent fixes</h3>
+      <p class="features__card-desc">
+        The killer workflow: your agent takes a screenshot of its own work,
+        uploads it, you mark what's wrong, and the agent reads your feedback
+        and iterates.
+      </p>
+    </div>
+    <div class="features__card">
+      <div class="features__card-label">Annotations</div>
+      <h3 class="features__card-title">Point and region annotations with resolution tracking</h3>
+      <p class="features__card-desc">
+        Pin-drop precision or box a whole section. Each annotation carries
+        status (open / resolved) so agents know what's left to fix.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="cta-section__inner">
+    <h2 class="cta-section__title">Close the loop between<br>humans and AI agents.</h2>
+    <p class="cta-section__subtitle">Free to start. No credit card required.</p>
+    <%= link_to "Create Your First Project", sign_up_path, class: "cta-section__btn" %>
+  </div>
+</section>
+
+<footer class="landing-footer">
+  <div class="landing-footer__inner">
+    <span class="landing-footer__brand">Screenote</span>
+    <span class="landing-footer__copy">&copy; <%= Date.current.year %></span>
+  </div>
+</footer>

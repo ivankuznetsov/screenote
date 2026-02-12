@@ -1,40 +1,14 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title><%= content_for(:title) || "Screenote" %></title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="Screenote">
-    <meta name="mobile-web-app-capable" content="yes">
-    <%= csrf_meta_tags %>
-    <%= csp_meta_tag %>
-
-    <%= yield :head %>
-
-    <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="icon" href="/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/icon.png">
-
-    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
-
-    <% if Rails.env.production? && ENV["HONEYBADGER_JS_API_KEY"].present? %>
-      <%= javascript_include_tag "https://js.honeybadger.io/v6.11/honeybadger.min.js", nonce: true %>
-      <%= javascript_tag nonce: true do %>
-        Honeybadger.configure({
-          apiKey: '<%= j(ENV["HONEYBADGER_JS_API_KEY"].to_s) %>',
-          environment: 'production',
-          revision: '<%= j(ENV.fetch("KAMAL_VERSION", "unknown")) %>'
-        });
-      <% end %>
-    <% end %>
+    <%= render "layouts/head" %>
   </head>
 
   <body>
     <header class="header">
       <div class="header__inner">
         <div class="header__logo">
-          <%= link_to "Screenote", root_path, class: "header__title" %>
+          <%= link_to "Screenote", dashboard_path, class: "header__title" %>
         </div>
         <nav class="header__nav">
           <% if Current.user %>

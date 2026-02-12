@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <%= render "layouts/head", default_title: "Screenote \u2014 Visual Feedback for AI Agents" %>
+    <meta name="description" content="Screenshot. Annotate. Let your AI agent see what you see. Visual feedback that bridges the gap between humans and AI.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <%= stylesheet_link_tag "landing", "data-turbo-track": "reload" %>
+  </head>
+
+  <body class="landing-body">
+    <% if flash[:notice] %>
+      <div class="flash flash--notice"><%= flash[:notice] %></div>
+    <% end %>
+    <% if flash[:alert] %>
+      <div class="flash flash--alert"><%= flash[:alert] %></div>
+    <% end %>
+
+    <%= yield %>
+  </body>
+</html>

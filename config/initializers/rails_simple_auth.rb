@@ -22,9 +22,9 @@ RailsSimpleAuth.configure do |config|
   }
 
   # Paths
-  config.after_sign_in_path = :root_path
-  config.after_sign_out_path = :new_session_path
-  config.after_sign_up_path = :root_path
+  config.after_sign_in_path = :dashboard_path
+  config.after_sign_out_path = :root_path
+  config.after_sign_up_path = :dashboard_path
   config.after_confirmation_path = :new_session_path
 
   # Layout — separate from application to avoid engine namespace issues

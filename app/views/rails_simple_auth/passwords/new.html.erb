@@ -1,0 +1,23 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Reset Password</h1>
+  <p class="auth-card__subtitle">Enter your email and we'll send reset instructions.</p>
+
+  <%= form_with url: main_app.passwords_path, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :email, "Email", class: "auth-card__label" %>
+      <%= form.email_field :email,
+            class: "auth-card__input",
+            required: true,
+            autofocus: true,
+            placeholder: "you@company.com" %>
+    </div>
+
+    <div class="auth-card__actions">
+      <%= form.submit "Send Reset Instructions", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+
+  <div class="auth-card__footer">
+    <%= link_to "Back to Sign In", main_app.new_session_path, class: "auth-card__link" %>
+  </div>
+</div>
