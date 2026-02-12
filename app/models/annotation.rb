@@ -8,6 +8,7 @@ class Annotation < ApplicationRecord
 
   enum :status, { open: 0, resolved: 1 }, default: :open
 
+  validates :comment, presence: true, length: { maximum: 5000 }
   validates :x_percent, :y_percent, presence: true,
     numericality: { greater_than_or_equal_to: 0.0, less_than_or_equal_to: 100.0 }
   validates :width_percent, :height_percent,

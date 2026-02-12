@@ -1,5 +1,5 @@
 <% content_for :head do %>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@annotorious/annotorious@3.0.10/dist/annotorious.css">
+  <%= stylesheet_link_tag "annotorious" %>
 <% end %>
 
 <div class="screenshot-header">
@@ -36,12 +36,11 @@
     </div>
 
     <div class="annotation-sidebar__list" id="annotations-list">
-      <% filtered_annotations = params[:status].in?(%w[open resolved]) ? @annotations.where(status: params[:status]) : @annotations %>
-      <% filtered_annotations.each.with_index(1) do |annotation, index| %>
+      <% @annotations.each.with_index(1) do |annotation, index| %>
         <%= render "annotations/annotation", annotation: annotation, index: index %>
       <% end %>
 
-      <% if filtered_annotations.empty? %>
+      <% if @annotations.empty? %>
         <div class="annotation-sidebar__empty">
           No annotations yet. Click on the image to add one.
         </div>

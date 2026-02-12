@@ -6,7 +6,7 @@ class ApiKey < ApplicationRecord
   attr_accessor :raw_token
 
   validates :token_digest, presence: true, uniqueness: true
-  validates :name, presence: true
+  validates :name, presence: true, length: { maximum: 255 }
 
   scope :active, -> { where(revoked_at: nil) }
   scope :revoked, -> { where.not(revoked_at: nil) }
@@ -28,6 +28,8 @@ class ApiKey < ApplicationRecord
   end
 
   def touch_last_used!
+    return if last_used_at.present? && last_used_at > 5.minutes.ago
+
     update_column(:last_used_at, Time.current)
   end
 

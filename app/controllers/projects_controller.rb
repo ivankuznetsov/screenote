@@ -8,6 +8,7 @@ class ProjectsController < ApplicationController
   end
 
   def show
+    @screenshots = @project.screenshots.with_attached_image.order(created_at: :desc)
   end
 
   def new

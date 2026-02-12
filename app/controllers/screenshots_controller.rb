@@ -5,11 +5,12 @@ class ScreenshotsController < ApplicationController
   before_action :set_screenshot, only: %i[show edit update destroy]
 
   def index
-    @screenshots = @project.screenshots.order(created_at: :desc)
+    @screenshots = @project.screenshots.with_attached_image.order(created_at: :desc)
   end
 
   def show
     @annotations = @screenshot.annotations.includes(:user).order(:created_at)
+    @annotations = @annotations.where(status: params[:status]) if params[:status].in?(%w[open resolved])
   end
 
   def new

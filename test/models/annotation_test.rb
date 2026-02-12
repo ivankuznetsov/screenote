@@ -51,6 +51,7 @@ class AnnotationTest < ActiveSupport::TestCase
     annotation = Annotation.new(
       screenshot: screenshots(:alice_screenshot),
       user: users(:alice),
+      comment: "Test",
       x_percent: -1.0,
       y_percent: 50.0
     )
@@ -166,6 +167,7 @@ class AnnotationTest < ActiveSupport::TestCase
     annotation = Annotation.new(
       screenshot: screenshots(:alice_screenshot),
       user: users(:alice),
+      comment: "Test",
       x_percent: 50.0,
       y_percent: 30.0
     )
