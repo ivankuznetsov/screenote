@@ -56,9 +56,9 @@ env:
     APP_HOST: screenote.ai
 
     # S3 configuration (Rabata.io)
-    RABATA_ENDPOINT: https://s3.eu-central-1.rabata.io
-    RABATA_REGION: eu-central-1
-    RABATA_BUCKET: screenote-production
+    RABATA_ENDPOINT: https://s3.us-east-1.rabata.io
+    RABATA_REGION: us-east-1
+    RABATA_BUCKET: screenote
 
 # Aliases for common commands
 aliases:
