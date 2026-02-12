@@ -1,25 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title><%= content_for(:title) || "Screenote" %></title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="Screenote">
-    <meta name="mobile-web-app-capable" content="yes">
-    <%= csrf_meta_tags %>
-    <%= csp_meta_tag %>
+    <%= render "layouts/head" %>
 
-    <%= yield :head %>
-
-    <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="icon" href="/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/icon.png">
-
-    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <%= stylesheet_link_tag "auth", "data-turbo-track": "reload" %>
   </head>
 
   <body class="auth-body">
+    <% if flash[:notice] %>
+      <div class="flash flash--notice"><%= flash[:notice] %></div>
+    <% end %>
+    <% if flash[:alert] %>
+      <div class="flash flash--alert"><%= flash[:alert] %></div>
+    <% end %>
+
     <div class="auth-shell">
       <div class="auth-shell__side">
         <div class="auth-shell__brand">
@@ -33,13 +30,6 @@
         </div>
       </div>
       <div class="auth-shell__main">
-        <% if flash[:notice] %>
-          <div class="flash flash--notice"><%= flash[:notice] %></div>
-        <% end %>
-        <% if flash[:alert] %>
-          <div class="flash flash--alert"><%= flash[:alert] %></div>
-        <% end %>
-
         <%= yield %>
       </div>
     </div>

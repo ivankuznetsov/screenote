@@ -2,20 +2,7 @@
   <h1 class="auth-card__title">Create your account</h1>
   <p class="auth-card__subtitle">Start giving visual feedback to AI agents</p>
 
-  <% if RailsSimpleAuth.configuration.oauth_enabled %>
-    <div class="auth-card__oauth">
-      <% RailsSimpleAuth.configuration.oauth_providers.each do |provider| %>
-        <%= button_to "/auth/#{provider}",
-              class: "auth-card__oauth-btn auth-card__oauth-btn--#{provider}",
-              data: { turbo: false } do %>
-          <span class="auth-card__oauth-icon auth-card__oauth-icon--<%= provider %>"></span>
-          Continue with <%= provider.to_s.titleize %>
-        <% end %>
-      <% end %>
-    </div>
-
-    <div class="auth-card__divider"><span>or</span></div>
-  <% end %>
+  <%= render "rails_simple_auth/shared/oauth_buttons" %>
 
   <%= form_with model: @user, url: main_app.sign_up_path, class: "auth-card__form" do |form| %>
     <div class="auth-card__field">

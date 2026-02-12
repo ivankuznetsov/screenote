@@ -1,0 +1,14 @@
+<% if RailsSimpleAuth.configuration.oauth_enabled %>
+  <div class="auth-card__oauth">
+    <% RailsSimpleAuth.configuration.oauth_providers.each do |provider| %>
+      <%= button_to "/auth/#{provider}",
+            class: "auth-card__oauth-btn",
+            data: { turbo: false } do %>
+        <span class="auth-card__oauth-icon auth-card__oauth-icon--<%= provider %>"></span>
+        Continue with <%= provider.to_s.titleize %>
+      <% end %>
+    <% end %>
+  </div>
+
+  <div class="auth-card__divider"><span>or</span></div>
+<% end %>

@@ -6,20 +6,7 @@
     <div class="auth-card__error"><%= @error_message %></div>
   <% end %>
 
-  <% if RailsSimpleAuth.configuration.oauth_enabled %>
-    <div class="auth-card__oauth">
-      <% RailsSimpleAuth.configuration.oauth_providers.each do |provider| %>
-        <%= button_to "/auth/#{provider}",
-              class: "auth-card__oauth-btn auth-card__oauth-btn--#{provider}",
-              data: { turbo: false } do %>
-          <span class="auth-card__oauth-icon auth-card__oauth-icon--<%= provider %>"></span>
-          Continue with <%= provider.to_s.titleize %>
-        <% end %>
-      <% end %>
-    </div>
-
-    <div class="auth-card__divider"><span>or</span></div>
-  <% end %>
+  <%= render "rails_simple_auth/shared/oauth_buttons" %>
 
   <%= form_with url: main_app.session_path, class: "auth-card__form" do |form| %>
     <div class="auth-card__field">
