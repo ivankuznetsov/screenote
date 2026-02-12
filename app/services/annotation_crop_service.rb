@@ -15,7 +15,7 @@ class AnnotationCropService
   end
 
   def crop
-    cache_key = "annotation_crop/#{@annotation.id}/#{@screenshot.image.blob.checksum}"
+    cache_key = "annotation_crop/#{@annotation.id}/#{@annotation.updated_at.to_i}/#{@screenshot.image.blob.checksum}"
 
     Rails.cache.fetch(cache_key, expires_in: 1.hour) do
       @screenshot.image.blob.open do |tempfile|

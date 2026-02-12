@@ -7,40 +7,11 @@
   </div>
   <div class="project-detail__actions">
     <%= link_to "Upload screenshot", new_project_screenshot_path(@project), class: "btn btn--primary" %>
+    <%= link_to "API keys", project_api_keys_path(@project), class: "btn btn--secondary" %>
     <%= link_to "Edit", edit_project_path(@project), class: "btn btn--secondary" %>
     <%= button_to "Delete", project_path(@project), method: :delete, class: "btn btn--danger btn--small",
         data: { turbo_confirm: "Are you sure you want to delete this project?" } %>
   </div>
 </div>
 
-<% screenshots = @project.screenshots.order(created_at: :desc) %>
-
-<% if screenshots.any? %>
-  <div class="screenshot-grid">
-    <% screenshots.each do |screenshot| %>
-      <%= link_to project_screenshot_path(@project, screenshot), class: "screenshot-card" do %>
-        <div class="screenshot-card__image">
-          <% if screenshot.image.attached? %>
-            <%= image_tag screenshot.image.variant(resize_to_limit: [400, 300]), alt: screenshot.title %>
-          <% else %>
-            <div class="screenshot-card__placeholder">No image</div>
-          <% end %>
-        </div>
-        <div class="screenshot-card__info">
-          <div class="screenshot-card__title"><%= screenshot.title %></div>
-          <div class="screenshot-card__meta">
-            <%= screenshot.annotations.open.count %> open
-            <span class="screenshot-card__separator">&middot;</span>
-            <%= screenshot.annotations.count %> total
-          </div>
-        </div>
-      <% end %>
-    <% end %>
-  </div>
-<% else %>
-  <div class="empty-state">
-    <div class="empty-state__title">No screenshots yet</div>
-    <div class="empty-state__description">Upload a screenshot to start collecting annotations.</div>
-    <%= link_to "Upload your first screenshot", new_project_screenshot_path(@project), class: "btn btn--primary" %>
-  </div>
-<% end %>
+<%= render "screenshots/screenshot_grid", screenshots: @screenshots, project: @project %>

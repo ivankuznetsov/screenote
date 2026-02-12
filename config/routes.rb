@@ -5,6 +5,7 @@ Rails.application.routes.draw do
     resources :screenshots do
       resources :annotations, only: %i[create update destroy]
     end
+    resources :api_keys, only: %i[index new create destroy]
   end
 
   # Health check for load balancers

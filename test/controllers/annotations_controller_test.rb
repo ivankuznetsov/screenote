@@ -77,7 +77,18 @@ class AnnotationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "resolved", @annotation.reload.status
   end
 
-  test "update annotation comment" do
+  test "update annotation status to resolved sets resolved_by_user" do
+    sign_in(@user)
+
+    patch project_screenshot_annotation_path(@project, @screenshot, @annotation), params: {
+      annotation: { status: :resolved }
+    }
+
+    @annotation.reload
+    assert_equal @user, @annotation.resolved_by_user, "Should record who resolved the annotation"
+  end
+
+  test "update annotation comment does not set resolved_by_user" do
     sign_in(@user)
 
     patch project_screenshot_annotation_path(@project, @screenshot, @annotation), params: {
@@ -86,6 +97,7 @@ class AnnotationsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to project_screenshot_path(@project, @screenshot)
     assert_equal "Updated comment", @annotation.reload.comment
+    assert_nil @annotation.resolved_by_user, "Should not set resolved_by_user when only updating comment"
   end
 
   # Destroy

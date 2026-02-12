@@ -1,5 +1,5 @@
 <% content_for :head do %>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@annotorious/annotorious@3.0.10/dist/annotorious.css">
+  <%= stylesheet_link_tag "annotorious" %>
 <% end %>
 
 <div class="screenshot-header">
@@ -15,14 +15,15 @@
   </div>
 </div>
 
-<div class="screenshot-workspace" data-controller="annotorious" data-annotorious-screenshot-id-value="<%= @screenshot.id %>" data-annotorious-project-id-value="<%= @project.id %>">
-  <div class="screenshot-canvas">
+<div class="screenshot-workspace" data-controller="annotorious">
+  <div class="screenshot-canvas" data-annotorious-target="canvas">
     <% if @screenshot.image.attached? %>
-      <%= image_tag @screenshot.image, id: "screenshot-image", class: "screenshot-canvas__image", alt: @screenshot.title %>
+      <%= image_tag @screenshot.image, class: "screenshot-canvas__image", alt: @screenshot.title,
+          data: { annotorious_target: "image" } %>
     <% end %>
   </div>
 
-  <aside class="annotation-sidebar" id="annotations-panel">
+  <aside class="annotation-sidebar">
     <div class="annotation-sidebar__header">
       <h2 class="annotation-sidebar__title">Annotations</h2>
       <div class="annotation-sidebar__filters">
@@ -35,13 +36,16 @@
       </div>
     </div>
 
-    <div class="annotation-sidebar__list" id="annotations-list">
-      <% filtered_annotations = params[:status].present? ? @annotations.where(status: params[:status]) : @annotations %>
-      <% filtered_annotations.each.with_index(1) do |annotation, index| %>
+    <div class="annotation-sidebar__list" data-annotorious-target="list">
+      <template data-annotorious-target="formTemplate">
+        <%= render "annotations/form", project: @project, screenshot: @screenshot %>
+      </template>
+
+      <% @annotations.each.with_index(1) do |annotation, index| %>
         <%= render "annotations/annotation", annotation: annotation, index: index %>
       <% end %>
 
-      <% if filtered_annotations.empty? %>
+      <% if @annotations.empty? %>
         <div class="annotation-sidebar__empty">
           No annotations yet. Click on the image to add one.
         </div>

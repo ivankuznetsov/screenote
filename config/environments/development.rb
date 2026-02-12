@@ -41,6 +41,9 @@ Rails.application.configure do
   config.action_mailer.default_url_options = { host: "localhost", port: 3005 }
   config.action_mailer.delivery_method = :letter_opener
 
+  # Set default URL options for routes (needed for MCP tools)
+  Rails.application.routes.default_url_options = { host: "localhost", port: 3005 }
+
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
 

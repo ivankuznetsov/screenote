@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_11_215914) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_12_164633) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -59,6 +59,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_11_215914) do
     t.index ["user_id"], name: "index_annotations_on_user_id"
   end
 
+  create_table "api_keys", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "last_used_at"
+    t.string "name", null: false
+    t.integer "project_id", null: false
+    t.datetime "revoked_at"
+    t.string "token_digest", null: false
+    t.string "token_prefix"
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_api_keys_on_project_id"
+    t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
+  end
+
   create_table "projects", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
@@ -76,6 +89,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_11_215914) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.integer "width"
+    t.index ["project_id", "created_at"], name: "index_screenshots_on_project_id_and_created_at"
     t.index ["project_id"], name: "index_screenshots_on_project_id"
   end
 
@@ -103,9 +117,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_11_215914) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "annotations", "api_keys", column: "resolved_by_api_key_id", on_delete: :nullify
   add_foreign_key "annotations", "screenshots"
   add_foreign_key "annotations", "users"
-  add_foreign_key "annotations", "users", column: "resolved_by_user_id"
+  add_foreign_key "annotations", "users", column: "resolved_by_user_id", on_delete: :nullify
+  add_foreign_key "api_keys", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "screenshots", "projects"
   add_foreign_key "sessions", "users"

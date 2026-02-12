@@ -1,0 +1,49 @@
+<div class="page-header">
+  <h1 class="page-header__title"><%= @project.name %> &mdash; API Keys</h1>
+  <%= link_to "New API key", new_project_api_key_path(@project), class: "btn btn--primary" %>
+</div>
+
+<%= link_to "&larr; Back to project".html_safe, project_path(@project), class: "breadcrumb-link" %>
+
+<% if flash[:api_key_token].present? %>
+  <div class="api-key-reveal">
+    <p class="api-key-reveal__label">Your new API key (copy it now — it won't be shown again):</p>
+    <code class="api-key-reveal__token"><%= flash[:api_key_token] %></code>
+  </div>
+<% end %>
+
+<% if @api_keys.any? %>
+  <div class="api-key-list">
+    <% @api_keys.each do |api_key| %>
+      <div class="api-key-item <%= 'api-key-item--revoked' if api_key.revoked? %>">
+        <div class="api-key-item__info">
+          <div class="api-key-item__name"><%= api_key.name %></div>
+          <div class="api-key-item__meta">
+            <span><%= api_key.token_prefix %>...</span>
+            <span class="api-key-item__separator">&middot;</span>
+            <span>Created <%= time_ago_in_words(api_key.created_at) %> ago</span>
+            <% if api_key.last_used_at %>
+              <span class="api-key-item__separator">&middot;</span>
+              <span>Last used <%= time_ago_in_words(api_key.last_used_at) %> ago</span>
+            <% end %>
+          </div>
+        </div>
+        <div class="api-key-item__actions">
+          <% if api_key.revoked? %>
+            <span class="api-key-item__badge api-key-item__badge--revoked">Revoked</span>
+          <% else %>
+            <%= button_to "Revoke", project_api_key_path(@project, api_key), method: :delete,
+                class: "btn btn--danger btn--small",
+                data: { turbo_confirm: "Revoke this API key? Agents using it will lose access." } %>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+<% else %>
+  <div class="empty-state">
+    <div class="empty-state__title">No API keys yet</div>
+    <div class="empty-state__description">Create an API key to let AI agents connect to this project via MCP.</div>
+    <%= link_to "Create your first API key", new_project_api_key_path(@project), class: "btn btn--primary" %>
+  </div>
+<% end %>
