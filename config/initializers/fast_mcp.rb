@@ -27,7 +27,8 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
 
   def rate_limited?(api_key)
     cache_key = "mcp_rate_limit/#{api_key.id}"
-    count = Rails.cache.increment(cache_key, 1, expires_in: RATE_PERIOD) || 1
+    Rails.cache.write(cache_key, 0, expires_in: RATE_PERIOD, unless_exist: true)
+    count = Rails.cache.increment(cache_key, 1, expires_in: RATE_PERIOD) || 0
     count > RATE_LIMIT
   end
 
