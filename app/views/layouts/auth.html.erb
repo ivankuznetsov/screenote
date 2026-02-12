@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <title><%= content_for(:title) || "Screenote" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -19,24 +19,29 @@
     <%= javascript_importmap_tags %>
   </head>
 
-  <body>
-    <header class="header">
-      <div class="header__inner">
-        <div class="header__logo">
-          <%= link_to "Screenote", main_app.root_path, class: "header__title" %>
+  <body class="auth-body">
+    <div class="auth-shell">
+      <div class="auth-shell__side">
+        <div class="auth-shell__brand">
+          <%= link_to "Screenote", main_app.root_path, class: "auth-shell__logo" %>
+        </div>
+        <div class="auth-shell__tagline">
+          <p class="auth-shell__tagline-text">Visual feedback<br>for AI agents</p>
+        </div>
+        <div class="auth-shell__decoration">
+          <div class="auth-shell__grid"></div>
         </div>
       </div>
-    </header>
+      <div class="auth-shell__main">
+        <% if flash[:notice] %>
+          <div class="flash flash--notice"><%= flash[:notice] %></div>
+        <% end %>
+        <% if flash[:alert] %>
+          <div class="flash flash--alert"><%= flash[:alert] %></div>
+        <% end %>
 
-    <% if flash[:notice] %>
-      <div class="flash flash--notice"><%= flash[:notice] %></div>
-    <% end %>
-    <% if flash[:alert] %>
-      <div class="flash flash--alert"><%= flash[:alert] %></div>
-    <% end %>
-
-    <main class="main">
-      <%= yield %>
-    </main>
+        <%= yield %>
+      </div>
+    </div>
   </body>
 </html>

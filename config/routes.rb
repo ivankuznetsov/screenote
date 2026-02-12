@@ -11,5 +11,7 @@ Rails.application.routes.draw do
   # Health check for load balancers
   get "up" => "rails/health#show", as: :rails_health_check
 
-  root "projects#index"
+  # Landing page for unauthenticated users, dashboard for authenticated
+  root "pages#landing"
+  get "dashboard", to: "projects#index", as: :dashboard
 end

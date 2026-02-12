@@ -1,0 +1,59 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Welcome back</h1>
+  <p class="auth-card__subtitle">Sign in to your account</p>
+
+  <% if @error_message.present? %>
+    <div class="auth-card__error"><%= @error_message %></div>
+  <% end %>
+
+  <% if RailsSimpleAuth.configuration.oauth_enabled %>
+    <div class="auth-card__oauth">
+      <% RailsSimpleAuth.configuration.oauth_providers.each do |provider| %>
+        <%= button_to "/auth/#{provider}",
+              class: "auth-card__oauth-btn auth-card__oauth-btn--#{provider}",
+              data: { turbo: false } do %>
+          <span class="auth-card__oauth-icon auth-card__oauth-icon--<%= provider %>"></span>
+          Continue with <%= provider.to_s.titleize %>
+        <% end %>
+      <% end %>
+    </div>
+
+    <div class="auth-card__divider"><span>or</span></div>
+  <% end %>
+
+  <%= form_with url: main_app.session_path, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :email, "Email", class: "auth-card__label" %>
+      <%= form.email_field :email,
+            class: "auth-card__input",
+            required: true,
+            autofocus: true,
+            placeholder: "you@company.com",
+            value: @previous_email %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password, class: "auth-card__label" %>
+      <%= form.password_field :password,
+            class: "auth-card__input",
+            required: true,
+            placeholder: "Your password" %>
+    </div>
+
+    <div class="auth-card__actions">
+      <%= form.submit "Sign In", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+
+  <% if RailsSimpleAuth.configuration.magic_link_enabled %>
+    <%= link_to main_app.magic_link_form_path, class: "auth-card__magic-link" do %>
+      Sign in with Magic Link
+    <% end %>
+  <% end %>
+
+  <div class="auth-card__footer">
+    <%= link_to "Forgot password?", main_app.new_password_path, class: "auth-card__link" %>
+    <span class="auth-card__footer-sep">&middot;</span>
+    <%= link_to "Create an account", main_app.sign_up_path, class: "auth-card__link" %>
+  </div>
+</div>

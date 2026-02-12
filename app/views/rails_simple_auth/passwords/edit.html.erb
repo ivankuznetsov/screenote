@@ -1,0 +1,32 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Set New Password</h1>
+
+  <%= form_with model: @user, url: main_app.password_path(token: params[:token]), method: :patch, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :password, "New Password", class: "auth-card__label" %>
+      <%= form.password_field :password,
+            class: "auth-card__input #{'auth-card__input--error' if @user.errors[:password].any?}",
+            required: true,
+            autofocus: true,
+            placeholder: "Min. #{RailsSimpleAuth.configuration.password_minimum_length} characters" %>
+      <% if @user.errors[:password].any? %>
+        <p class="auth-card__field-error"><%= @user.errors[:password].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password_confirmation, "Confirm Password", class: "auth-card__label" %>
+      <%= form.password_field :password_confirmation,
+            class: "auth-card__input #{'auth-card__input--error' if @user.errors[:password_confirmation].any?}",
+            required: true,
+            placeholder: "Repeat your new password" %>
+      <% if @user.errors[:password_confirmation].any? %>
+        <p class="auth-card__field-error"><%= @user.errors[:password_confirmation].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__actions">
+      <%= form.submit "Update Password", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+</div>
