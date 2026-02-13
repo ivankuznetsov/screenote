@@ -1,13 +1,111 @@
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <style>
-      /* Email styles need to be inline */
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
+    <title>Screenote</title>
+    <!--[if mso]>
+    <style type="text/css">
+      body, table, td { font-family: Segoe UI, Helvetica, Arial, sans-serif !important; }
+    </style>
+    <![endif]-->
+    <style type="text/css">
+      :root { color-scheme: dark; }
+      body { margin: 0; padding: 0; width: 100%; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+      table { border-spacing: 0; border-collapse: collapse; }
+      td { padding: 0; }
+      img { border: 0; display: block; outline: none; text-decoration: none; }
+      a { color: #e5a31e; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      @media only screen and (max-width: 600px) {
+        .email-container { width: 100% !important; max-width: 100% !important; }
+        .email-body-cell { padding: 24px 16px !important; }
+        .email-card { padding: 28px 20px !important; }
+        .email-header { padding: 24px 20px !important; }
+        .email-btn { padding: 14px 28px !important; }
+      }
     </style>
   </head>
 
-  <body>
-    <%= yield %>
+  <body style="margin: 0; padding: 0; background-color: #0a0a0f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #e8e8ed; -webkit-font-smoothing: antialiased;">
+
+    <!-- Preheader (hidden text for inbox preview) -->
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">
+      <%= yield :preheader if content_for?(:preheader) %>
+      &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
+    </div>
+
+    <!-- Outer wrapper -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a0a0f;">
+      <tr>
+        <td class="email-body-cell" style="padding: 40px 20px;">
+
+          <!-- Email container -->
+          <table role="presentation" class="email-container" width="520" cellpadding="0" cellspacing="0" align="center" style="max-width: 520px; margin: 0 auto;">
+
+            <!-- Header with brand -->
+            <tr>
+              <td class="email-header" style="padding: 0 0 32px 0; text-align: center;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="text-align: center; padding-bottom: 24px;">
+                      <!-- Gold accent line -->
+                      <div style="width: 48px; height: 3px; background-color: #e5a31e; margin: 0 auto; border-radius: 2px;"></div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="text-align: center; font-size: 22px; font-weight: 900; color: #e8e8ed; letter-spacing: -0.02em; font-family: Georgia, 'Times New Roman', serif;">
+                      Screenote
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Card body -->
+            <tr>
+              <td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #13131a; border: 1px solid #1e1e2a; border-radius: 12px;">
+                  <tr>
+                    <td class="email-card" style="padding: 36px 32px;">
+                      <%= yield %>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 28px 0 0 0; text-align: center;">
+                <!-- Subtle divider dots -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="text-align: center; padding-bottom: 20px;">
+                      <span style="color: #2a2a38; font-size: 18px; letter-spacing: 8px;">&#8226;&#8226;&#8226;</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="text-align: center; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
+                      <a href="<%= root_url %>" style="color: #8888a0; text-decoration: none;">Screenote</a>
+                      &mdash; Visual feedback for AI agents
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="text-align: center; font-size: 12px; color: #3a3a4a; padding-top: 8px;">
+                      &copy; <%= Date.current.year %> Screenote. All rights reserved.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+
   </body>
 </html>

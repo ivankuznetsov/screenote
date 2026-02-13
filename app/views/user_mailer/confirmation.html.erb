@@ -1,7 +1,23 @@
-<h1>Confirm your email</h1>
+<% content_for :preheader do %>Confirm your email to start using Screenote<% end %>
 
-<p>Click the link below to confirm your Screenote account:</p>
+<!-- Title -->
+<h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 900; color: #e8e8ed; font-family: Georgia, 'Times New Roman', serif; letter-spacing: -0.02em;">
+  Confirm your account
+</h1>
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #8888a0; line-height: 1.5;">
+  One last step before you're in.
+</p>
 
-<p><%= link_to "Confirm my account", main_app.confirmation_url(@confirmation_token) %></p>
+<!-- Body text -->
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #b0b0c0; line-height: 1.7;">
+  Thanks for signing up for Screenote. Please confirm your email address to activate your account and start giving visual feedback to your AI agents.
+</p>
 
-<p>This link will expire in 24 hours.</p>
+<%= render "user_mailer/email_cta_button", url: main_app.confirmation_url(@confirmation_token), label: "Confirm Email" %>
+
+<!-- Expiry note -->
+<p style="margin: 0 0 20px 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
+  This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
+</p>
+
+<%= render "user_mailer/email_fallback_url", url: main_app.confirmation_url(@confirmation_token) %>

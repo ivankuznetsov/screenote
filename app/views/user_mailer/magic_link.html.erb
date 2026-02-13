@@ -1,8 +1,23 @@
-<h1>Sign in to Screenote</h1>
+<% content_for :preheader do %>Your sign-in link for Screenote<% end %>
 
-<p>Click the link below to sign in:</p>
+<!-- Title -->
+<h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 900; color: #e8e8ed; font-family: Georgia, 'Times New Roman', serif; letter-spacing: -0.02em;">
+  Sign in to Screenote
+</h1>
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #8888a0; line-height: 1.5;">
+  No password needed.
+</p>
 
-<p><%= link_to "Sign in", main_app.magic_link_url(token: @token) %></p>
+<!-- Body text -->
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #b0b0c0; line-height: 1.7;">
+  Click the button below to sign in to your Screenote account. This magic link works instantly.
+</p>
 
+<%= render "user_mailer/email_cta_button", url: main_app.magic_link_url(token: @token), label: "Sign In" %>
 
-<p>This link will expire in 15 minutes.</p>
+<!-- Expiry note -->
+<p style="margin: 0 0 20px 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
+  This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
+</p>
+
+<%= render "user_mailer/email_fallback_url", url: main_app.magic_link_url(token: @token) %>
