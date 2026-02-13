@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_12_164633) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_13_090630) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -72,6 +72,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_12_164633) do
     t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
   end
 
+  create_table "project_invitations", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.integer "inviter_id", null: false
+    t.integer "project_id", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["inviter_id"], name: "index_project_invitations_on_inviter_id"
+    t.index ["project_id", "email", "status"], name: "index_project_invitations_on_project_id_and_email_and_status"
+    t.index ["project_id"], name: "index_project_invitations_on_project_id"
+  end
+
+  create_table "project_memberships", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "project_id", null: false
+    t.integer "role", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["project_id", "user_id"], name: "index_project_memberships_on_project_id_and_user_id", unique: true
+    t.index ["project_id"], name: "index_project_memberships_on_project_id"
+    t.index ["user_id"], name: "index_project_memberships_on_user_id"
+  end
+
   create_table "projects", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
@@ -122,6 +145,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_12_164633) do
   add_foreign_key "annotations", "users"
   add_foreign_key "annotations", "users", column: "resolved_by_user_id", on_delete: :nullify
   add_foreign_key "api_keys", "projects"
+  add_foreign_key "project_invitations", "projects"
+  add_foreign_key "project_invitations", "users", column: "inviter_id"
+  add_foreign_key "project_memberships", "projects"
+  add_foreign_key "project_memberships", "users"
   add_foreign_key "projects", "users"
   add_foreign_key "screenshots", "projects"
   add_foreign_key "sessions", "users"

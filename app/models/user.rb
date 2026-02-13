@@ -7,7 +7,9 @@ class User < ApplicationRecord
   include RailsSimpleAuth::Models::Concerns::OAuthConnectable
 
   has_many :sessions, dependent: :destroy
-  has_many :projects, dependent: :destroy
+  has_many :owned_projects, class_name: "Project", foreign_key: :user_id, inverse_of: :creator, dependent: :destroy
+  has_many :project_memberships, dependent: :destroy
+  has_many :projects, through: :project_memberships
   has_many :annotations, dependent: :destroy
 
   def assign_oauth_attributes(auth_hash)

@@ -1,0 +1,14 @@
+alice_owns_alice_project:
+  project: alice_project
+  user: alice
+  role: 1
+
+bob_owns_bob_project:
+  project: bob_project
+  user: bob
+  role: 1
+
+bob_member_of_alice_project:
+  project: alice_project
+  user: bob
+  role: 0

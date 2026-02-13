@@ -20,6 +20,8 @@
   --color-bg-secondary: #f9fafb;
   --color-flash-notice: #dcfce7;
   --color-flash-alert: #fee2e2;
+  --color-badge-owner-bg: #dbeafe;
+  --color-badge-owner-text: #1e40af;
   --radius: 6px;
   --max-width: 960px;
 }
@@ -780,3 +782,82 @@ a:hover {
   top: 5rem;
 }
 
+/* Project members page */
+.project-members__invite {
+  margin-bottom: 1.5rem;
+}
+
+.project-members__section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.project-members__invite-form {
+  margin-top: 0.5rem;
+}
+
+.project-members__invite-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.project-members__invite-input {
+  max-width: 320px;
+}
+
+.project-members__section {
+  margin-bottom: 1.5rem;
+}
+
+.project-members__list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.project-members__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+.project-members__info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.project-members__email {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.project-members__pending-label {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+/* Role badges */
+.role-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+}
+
+.role-badge--owner {
+  background: var(--color-badge-owner-bg);
+  color: var(--color-badge-owner-text);
+}
+
+.role-badge--member {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}

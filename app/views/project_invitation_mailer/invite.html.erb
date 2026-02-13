@@ -1,0 +1,7 @@
+<h1>You've been invited to collaborate</h1>
+
+<p><%= @inviter.email %> invited you to the project "<%= @project.name %>" on Screenote.</p>
+
+<p><%= link_to "Accept invitation", @accept_url %></p>
+
+<p>This link will expire in 7 days.</p>

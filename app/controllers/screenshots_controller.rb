@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class ScreenshotsController < ApplicationController
+  include ProjectAuthorization
+
   before_action :set_project
   before_action :set_screenshot, only: %i[show edit update destroy]
 
@@ -49,10 +51,6 @@ class ScreenshotsController < ApplicationController
   end
 
   private
-
-  def set_project
-    @project = Current.user.projects.find(params[:project_id])
-  end
 
   def set_screenshot
     @screenshot = @project.screenshots.find(params[:id])

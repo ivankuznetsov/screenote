@@ -1,0 +1,53 @@
+<%= link_to "← Back to project", project_path(@project), class: "breadcrumb-link" %>
+
+<div class="page-header">
+  <h1 class="page-header__title">Members</h1>
+</div>
+
+<% if @is_owner %>
+  <div class="card project-members__invite">
+    <h2 class="project-members__section-title">Invite a collaborator</h2>
+    <%= form_with model: ProjectInvitation.new, url: project_invitations_path(@project), class: "project-members__invite-form" do |f| %>
+      <div class="project-members__invite-row">
+        <%= f.email_field :email, placeholder: "colleague@example.com", class: "form__input project-members__invite-input", required: true %>
+        <%= f.submit "Invite", class: "btn btn--primary" %>
+      </div>
+    <% end %>
+  </div>
+<% end %>
+
+<div class="project-members__section">
+  <h2 class="project-members__section-title">Team (<%= @memberships.size %>)</h2>
+  <div class="project-members__list">
+    <% @memberships.each do |membership| %>
+      <div class="project-members__item">
+        <div class="project-members__info">
+          <span class="project-members__email"><%= membership.user.email %></span>
+          <span class="role-badge role-badge--<%= membership.role %>"><%= membership.role.capitalize %></span>
+        </div>
+        <% if @is_owner && membership.user != Current.user %>
+          <%= button_to "Remove", project_membership_path(@project, membership), method: :delete, class: "btn btn--danger btn--small", data: { turbo_confirm: "Remove #{membership.user.email} from this project?" } %>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<% if @pending_invitations.any? %>
+  <div class="project-members__section">
+    <h2 class="project-members__section-title">Pending invitations (<%= @pending_invitations.size %>)</h2>
+    <div class="project-members__list">
+      <% @pending_invitations.each do |invitation| %>
+        <div class="project-members__item">
+          <div class="project-members__info">
+            <span class="project-members__email"><%= invitation.email %></span>
+            <span class="project-members__pending-label">Invited <%= time_ago_in_words(invitation.created_at) %> ago</span>
+          </div>
+          <% if @is_owner %>
+            <%= button_to "Cancel", project_invitation_path(@project, invitation), method: :delete, class: "btn btn--secondary btn--small", data: { turbo_confirm: "Cancel invitation to #{invitation.email}?" } %>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+<% end %>

@@ -15,6 +15,28 @@ class ApiKeysControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_path
   end
 
+  # Authorization — member blocked
+  test "member cannot access API keys index" do
+    sign_in(users(:bob))
+    get project_api_keys_path(@project)
+    assert_redirected_to projects_path
+  end
+
+  test "member cannot create API keys" do
+    sign_in(users(:bob))
+    assert_no_difference "ApiKey.count" do
+      post project_api_keys_path(@project), params: { api_key: { name: "Hack Key" } }
+    end
+    assert_redirected_to projects_path
+  end
+
+  test "member cannot destroy API keys" do
+    sign_in(users(:bob))
+    delete project_api_key_path(@project, @api_key)
+    assert_redirected_to projects_path
+    assert_not @api_key.reload.revoked?, "Key should not be revoked by member"
+  end
+
   # Index
   test "index shows active API keys" do
     sign_in(@user)

@@ -1,13 +1,18 @@
 # frozen_string_literal: true
 
 class ProjectsController < ApplicationController
+  include ProjectAuthorization
+
   before_action :set_project, only: %i[show edit update destroy]
+  before_action :require_owner!, only: %i[edit update destroy]
 
   def index
+    @memberships_by_project = Current.user.project_memberships.includes(:project).index_by(&:project_id)
     @projects = Current.user.projects.order(updated_at: :desc)
   end
 
   def show
+    @is_owner = @project.owner?(Current.user)
     @screenshots = @project.screenshots
       .with_attached_image
       .left_joins(:annotations)
@@ -17,11 +22,11 @@ class ProjectsController < ApplicationController
   end
 
   def new
-    @project = Current.user.projects.build
+    @project = Current.user.owned_projects.build
   end
 
   def create
-    @project = Current.user.projects.build(project_params)
+    @project = Current.user.owned_projects.build(project_params)
 
     if @project.save
       redirect_to @project, notice: "Project created."
@@ -47,10 +52,6 @@ class ProjectsController < ApplicationController
   end
 
   private
-
-  def set_project
-    @project = Current.user.projects.find(params[:id])
-  end
 
   def project_params
     params.require(:project).permit(:name, :description)

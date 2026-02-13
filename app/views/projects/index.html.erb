@@ -7,7 +7,12 @@
   <div class="project-list" data-testid="project-list">
     <% @projects.each do |project| %>
       <%= link_to project_path(project), class: "project-card", data: { testid: "project-card" } do %>
-        <div class="project-card__name" data-testid="project-card-name"><%= project.name %></div>
+        <div class="project-card__name" data-testid="project-card-name">
+          <%= project.name %>
+          <% unless @memberships_by_project[project.id]&.owner? %>
+            <span class="role-badge role-badge--member">Member</span>
+          <% end %>
+        </div>
         <% if project.description.present? %>
           <div class="project-card__description"><%= truncate(project.description, length: 120) %></div>
         <% end %>
