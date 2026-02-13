@@ -102,4 +102,25 @@ class InvitationAcceptancesControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to project_path(@project)
   end
+
+  # Pending invitation token consumed after sign-in
+
+  test "pending invitation token is consumed after sign-in" do
+    existing_user = User.create!(
+      email: @invitation.email,
+      password: "password123",
+      confirmed_at: Time.current
+    )
+
+    # Simulate: existing user tries to accept without being signed in
+    post accept_invitation_path(@token)
+    assert_redirected_to new_session_path
+
+    # Sign in and visit any authenticated page — token should be consumed
+    sign_in(existing_user)
+    get projects_path
+
+    assert @invitation.reload.accepted?, "Invitation should be accepted after sign-in"
+    assert @project.member?(existing_user), "User should be a project member"
+  end
 end

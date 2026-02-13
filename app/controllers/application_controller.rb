@@ -8,10 +8,23 @@ class ApplicationController < ActionController::Base
   stale_when_importmap_changes
 
   before_action :require_authentication
+  before_action :handle_pending_invitation
 
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
 
   private
+
+  def handle_pending_invitation
+    return unless Current.user
+    token = session.delete(:pending_invitation_token)
+    return unless token
+
+    invitation = ProjectInvitation.find_by_token_for(:accept, token)
+    return unless invitation
+
+    invitation.accept!(Current.user)
+    redirect_to project_path(invitation.project), notice: "You've joined \"#{invitation.project.name}\"!"
+  end
 
   def not_found
     respond_to do |format|
