@@ -34,6 +34,13 @@ Rails.application.routes.draw do
     end
   end
 
+  # Billing
+  resource :subscription, only: :show do
+    post :checkout, on: :member
+    post :portal, on: :member
+  end
+  post "stripe/webhooks", to: "stripe_webhooks#create"
+
   # Health check for load balancers
   get "up" => "rails/health#show", as: :rails_health_check
 

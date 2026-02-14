@@ -14,8 +14,22 @@
 
 <div class="page-header">
   <h1 class="page-header__title" data-testid="page-title">Projects</h1>
-  <%= link_to "New project", new_project_path, class: "btn btn--primary" %>
+  <div class="page-header__actions">
+    <% unless Current.user.pro? %>
+      <%= link_to "Upgrade to Pro", subscription_path, class: "btn btn--secondary" %>
+    <% end %>
+    <%= link_to "New project", new_project_path, class: "btn btn--primary" %>
+  </div>
 </div>
+
+<% unless Current.user.pro? %>
+  <% if !Current.user.can_create_project? %>
+    <div class="upgrade-banner">
+      <div class="upgrade-banner__text">You've reached the free plan limit of 1 project.</div>
+      <%= link_to "Upgrade to Pro for $10/mo", subscription_path, class: "upgrade-banner__link" %>
+    </div>
+  <% end %>
+<% end %>
 
 <% if @projects.any? %>
   <div class="project-list" data-testid="project-list">

@@ -1,0 +1,13 @@
+alice_pro:
+  user: alice
+  stripe_customer_id: cus_alice_test_123
+  stripe_subscription_id: sub_alice_test_456
+  plan: 1
+  status: 1
+  current_period_end: <%= 30.days.from_now %>
+
+bob_free:
+  user: bob
+  stripe_customer_id: cus_bob_test_789
+  plan: 0
+  status: 0

@@ -11,6 +11,19 @@ class User < ApplicationRecord
   has_many :project_memberships, dependent: :destroy
   has_many :projects, through: :project_memberships
   has_many :annotations, dependent: :destroy
+  has_one :subscription, dependent: :destroy
+
+  def pro?
+    subscription&.active_pro? || false
+  end
+
+  def can_create_project?
+    pro? || owned_projects.count < Subscription::FREE_PROJECT_LIMIT
+  end
+
+  def can_invite_member?(project)
+    pro? || project.members.count < Subscription::FREE_MEMBER_LIMIT
+  end
 
   def assign_oauth_attributes(auth_hash)
     self.oauth_provider = auth_hash["provider"]

@@ -22,10 +22,20 @@ class ProjectsController < ApplicationController
   end
 
   def new
+    unless Current.user.can_create_project?
+      redirect_to subscription_path, alert: "You've reached the free plan limit of 1 project. Upgrade to Pro for unlimited projects."
+      return
+    end
+
     @project = Current.user.owned_projects.build
   end
 
   def create
+    unless Current.user.can_create_project?
+      redirect_to subscription_path, alert: "You've reached the free plan limit of 1 project. Upgrade to Pro for unlimited projects."
+      return
+    end
+
     @project = Current.user.owned_projects.build(project_params)
 
     if @project.save

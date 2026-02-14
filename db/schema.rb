@@ -175,6 +175,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_16_120000) do
     t.index ["user_id"], name: "index_sessions_on_user_id"
   end
 
+  create_table "subscriptions", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "current_period_end"
+    t.integer "plan", default: 0, null: false
+    t.integer "status", default: 0, null: false
+    t.string "stripe_customer_id", null: false
+    t.string "stripe_subscription_id"
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["stripe_customer_id"], name: "index_subscriptions_on_stripe_customer_id", unique: true
+    t.index ["stripe_subscription_id"], name: "index_subscriptions_on_stripe_subscription_id", unique: true
+    t.index ["user_id"], name: "index_subscriptions_on_user_id", unique: true
+  end
+
   create_table "users", force: :cascade do |t|
     t.datetime "confirmed_at"
     t.datetime "created_at", null: false
@@ -207,4 +221,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_16_120000) do
   add_foreign_key "projects", "users"
   add_foreign_key "screenshots", "projects"
   add_foreign_key "sessions", "users"
+  add_foreign_key "subscriptions", "users"
 end
