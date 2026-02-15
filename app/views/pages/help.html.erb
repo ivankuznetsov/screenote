@@ -1,0 +1,173 @@
+<div class="help-page">
+  <h1 class="help-page__title">MCP Integration Guide</h1>
+  <p class="help-page__subtitle">Connect your AI agent to Screenote for visual feedback loops.</p>
+
+  <%# ── Quick Start ── %>
+  <section class="help-section">
+    <h2 class="help-section__heading">Quick Start</h2>
+    <ol class="help-steps">
+      <li class="help-steps__item">
+        <strong>Create an API key</strong> — Go to any project, open <em>API Keys</em>, and generate a new key.
+      </li>
+      <li class="help-steps__item">
+        <strong>Register the MCP server</strong> — Run the command below in your terminal.
+      </li>
+      <li class="help-steps__item">
+        <strong>Use the tools</strong> — Your AI agent can now upload screenshots, read annotations, and resolve feedback.
+      </li>
+    </ol>
+  </section>
+
+  <%# ── Setup ── %>
+  <section class="help-section">
+    <h2 class="help-section__heading">Setup</h2>
+    <div class="help-setup">
+      <div class="help-setup__label">Claude Code (STDIO transport)</div>
+      <pre class="help-setup__code"><code>claude mcp add screenote -- /path/to/screenote/bin/mcp --token YOUR_API_KEY</code></pre>
+    </div>
+    <p class="help-setup__note">
+      Replace <code>/path/to/screenote</code> with the actual path to the Screenote repository on your machine,
+      and <code>YOUR_API_KEY</code> with the token from step 1.
+    </p>
+  </section>
+
+  <%# ── Tools Reference ── %>
+  <section class="help-section">
+    <h2 class="help-section__heading">Tools Reference</h2>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-card__name">create_screenshot</div>
+        <div class="tool-card__description">Upload a screenshot for human annotation. Returns a URL where users can leave Figma-style comments.</div>
+        <div class="tool-card__params">
+          <div class="tool-card__params-title">Parameters</div>
+          <ul class="tool-card__params-list">
+            <li><code>title</code> <span class="tool-card__required">required</span> — Title for the screenshot</li>
+            <li><code>image_base64</code> — Base64-encoded PNG or JPEG image data</li>
+            <li><code>image_path</code> — Absolute path to a local PNG or JPEG file</li>
+            <li><code>mime_type</code> — image/png or image/jpeg (auto-detected)</li>
+          </ul>
+        </div>
+        <div class="tool-card__example">
+          <div class="tool-card__example-title">Returns</div>
+          <pre class="tool-card__example-code"><code>{ "screenshot_id": 42, "annotate_url": "https://..." }</code></pre>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-card__name">list_screenshots</div>
+        <div class="tool-card__description">List screenshots in the project with annotation counts. Supports pagination.</div>
+        <div class="tool-card__params">
+          <div class="tool-card__params-title">Parameters</div>
+          <ul class="tool-card__params-list">
+            <li><code>status</code> — Filter: pending, ready, or failed</li>
+            <li><code>limit</code> — Max results (default 50, max 100)</li>
+            <li><code>offset</code> — Results to skip (default 0)</li>
+          </ul>
+        </div>
+        <div class="tool-card__example">
+          <div class="tool-card__example-title">Returns</div>
+          <pre class="tool-card__example-code"><code>{ "screenshots": [...], "pagination": { "total": 5, "limit": 50, "offset": 0 } }</code></pre>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-card__name">list_annotations</div>
+        <div class="tool-card__description">List annotations, optionally filtered by screenshot or status. Supports pagination.</div>
+        <div class="tool-card__params">
+          <div class="tool-card__params-title">Parameters</div>
+          <ul class="tool-card__params-list">
+            <li><code>screenshot_id</code> — Filter by screenshot ID</li>
+            <li><code>status</code> — Filter: open or resolved</li>
+            <li><code>limit</code> — Max results (default 50, max 100)</li>
+            <li><code>offset</code> — Results to skip (default 0)</li>
+          </ul>
+        </div>
+        <div class="tool-card__example">
+          <div class="tool-card__example-title">Returns</div>
+          <pre class="tool-card__example-code"><code>{ "annotations": [...], "pagination": { "total": 12, "limit": 50, "offset": 0 } }</code></pre>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-card__name">get_annotation</div>
+        <div class="tool-card__description">Get annotation details with a cropped image of the annotated region (base64-encoded PNG).</div>
+        <div class="tool-card__params">
+          <div class="tool-card__params-title">Parameters</div>
+          <ul class="tool-card__params-list">
+            <li><code>annotation_id</code> <span class="tool-card__required">required</span> — The annotation ID</li>
+          </ul>
+        </div>
+        <div class="tool-card__example">
+          <div class="tool-card__example-title">Returns</div>
+          <pre class="tool-card__example-code"><code>{ "id": 7, "comment": "Fix spacing here", "cropped_image_base64": "...", ... }</code></pre>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-card__name">create_annotation</div>
+        <div class="tool-card__description">Create an annotation on a screenshot. Coordinates are percentages (0.0&ndash;100.0).</div>
+        <div class="tool-card__params">
+          <div class="tool-card__params-title">Parameters</div>
+          <ul class="tool-card__params-list">
+            <li><code>screenshot_id</code> <span class="tool-card__required">required</span> — Screenshot ID to annotate</li>
+            <li><code>x_percent</code> <span class="tool-card__required">required</span> — X position (0.0&ndash;100.0)</li>
+            <li><code>y_percent</code> <span class="tool-card__required">required</span> — Y position (0.0&ndash;100.0)</li>
+            <li><code>comment</code> <span class="tool-card__required">required</span> — Annotation comment text</li>
+            <li><code>width_percent</code> — Region width (0.0&ndash;100.0)</li>
+            <li><code>height_percent</code> — Region height (0.0&ndash;100.0)</li>
+          </ul>
+        </div>
+        <div class="tool-card__example">
+          <div class="tool-card__example-title">Returns</div>
+          <pre class="tool-card__example-code"><code>{ "annotation": { "id": 8, "comment": "...", "status": "open", ... } }</code></pre>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <div class="tool-card__name">resolve_annotation</div>
+        <div class="tool-card__description">Mark an annotation as resolved.</div>
+        <div class="tool-card__params">
+          <div class="tool-card__params-title">Parameters</div>
+          <ul class="tool-card__params-list">
+            <li><code>annotation_id</code> <span class="tool-card__required">required</span> — The annotation ID to resolve</li>
+          </ul>
+        </div>
+        <div class="tool-card__example">
+          <div class="tool-card__example-title">Returns</div>
+          <pre class="tool-card__example-code"><code>{ "success": true, "annotation": { "id": 7, "status": "resolved" } }</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <%# ── Workflows ── %>
+  <section class="help-section">
+    <h2 class="help-section__heading">Workflows</h2>
+
+    <div class="workflow">
+      <h3 class="workflow__title">Capture &amp; Annotate</h3>
+      <p class="workflow__description">Human uploads a screenshot, annotates it, and the AI agent picks up the feedback.</p>
+      <ol class="workflow__steps">
+        <li>Human uploads a screenshot in the Screenote UI</li>
+        <li>Human draws annotations and leaves comments</li>
+        <li>Agent calls <code>list_screenshots</code> to discover new screenshots</li>
+        <li>Agent calls <code>list_annotations</code> to read feedback</li>
+        <li>Agent calls <code>get_annotation</code> to see the cropped visual context</li>
+        <li>Agent implements the fix and calls <code>resolve_annotation</code></li>
+      </ol>
+    </div>
+
+    <div class="workflow">
+      <h3 class="workflow__title">Agent Feedback Loop</h3>
+      <p class="workflow__description">The AI agent captures its own work, uploads it, and waits for human review.</p>
+      <ol class="workflow__steps">
+        <li>Agent takes a screenshot of localhost (e.g. with Playwright)</li>
+        <li>Agent calls <code>create_screenshot</code> to upload it</li>
+        <li>Human opens the annotate URL and leaves visual feedback</li>
+        <li>Agent polls <code>list_annotations</code> for new comments</li>
+        <li>Agent reads each annotation with <code>get_annotation</code></li>
+        <li>Agent fixes issues, re-screenshots, and repeats</li>
+      </ol>
+    </div>
+  </section>
+</div>

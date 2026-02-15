@@ -19,4 +19,5 @@ Rails.application.routes.draw do
   # Landing page for unauthenticated users, dashboard for authenticated
   root "pages#landing"
   get "dashboard", to: "projects#index", as: :dashboard
+  get "help", to: "pages#help"
 end

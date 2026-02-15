@@ -861,3 +861,302 @@ a:hover {
   color: var(--color-text-secondary);
   border: 1px solid var(--color-border);
 }
+
+/* Header link */
+.header__link {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.header__link:hover {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+/* MCP Banner */
+.mcp-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  background: linear-gradient(135deg, #eff6ff, #e0e7ff);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.mcp-banner__content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mcp-banner__icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--color-primary);
+  color: #ffffff;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.mcp-banner__title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+}
+
+.mcp-banner__description {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.125rem;
+}
+
+.mcp-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.mcp-banner__dismiss {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.mcp-banner__dismiss:hover {
+  color: var(--color-text);
+}
+
+/* Help Page */
+.help-page {
+  max-width: 800px;
+}
+
+.help-page__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.help-page__subtitle {
+  color: var(--color-text-secondary);
+  margin-bottom: 2rem;
+}
+
+.help-section {
+  margin-bottom: 2.5rem;
+}
+
+.help-section__heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Help Steps */
+.help-steps {
+  list-style: none;
+  counter-reset: help-step;
+}
+
+.help-steps__item {
+  counter-increment: help-step;
+  padding: 0.75rem 0 0.75rem 2.5rem;
+  position: relative;
+  font-size: 0.9375rem;
+}
+
+.help-steps__item::before {
+  content: counter(help-step);
+  position: absolute;
+  left: 0;
+  top: 0.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  background: var(--color-primary);
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Help Setup */
+.help-setup {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.help-setup__label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding: 0.5rem 1rem;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.help-setup__code {
+  padding: 1rem;
+  font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 0;
+  background: var(--color-bg);
+}
+
+.help-setup__note {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.help-setup__note code {
+  background: var(--color-bg-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.8125rem;
+}
+
+/* Tool Grid */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem;
+}
+
+.tool-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.tool-card__name {
+  font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: 0.5rem;
+}
+
+.tool-card__description {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.tool-card__params {
+  margin-bottom: 0.75rem;
+}
+
+.tool-card__params-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.375rem;
+}
+
+.tool-card__params-list {
+  list-style: none;
+  font-size: 0.8125rem;
+}
+
+.tool-card__params-list li {
+  padding: 0.25rem 0;
+}
+
+.tool-card__params-list code {
+  background: var(--color-bg-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.8125rem;
+}
+
+.tool-card__required {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-danger);
+  text-transform: uppercase;
+}
+
+.tool-card__example-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.375rem;
+}
+
+.tool-card__example-code {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  margin: 0;
+}
+
+/* Workflows */
+.workflow {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.workflow__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.workflow__description {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.workflow__steps {
+  padding-left: 1.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.workflow__steps li {
+  padding: 0.125rem 0;
+}
+
+.workflow__steps code {
+  background: var(--color-bg-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.8125rem;
+}
