@@ -22,9 +22,15 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
   # body for Streamable HTTP POSTs. Override send_message so the JSON-RPC
   # result propagates back as the Rack response body.
   def send_message(message)
-    super
     json = message.is_a?(String) ? message : JSON.generate(message)
+    super(json)
     [ json ]
+  end
+
+  def handle_internal_error(error)
+    logger.error("MCP internal error: #{error.message}")
+    Honeybadger.notify(error)
+    json_rpc_error_response(500, -32_603, "Internal error")
   end
 
   private
@@ -45,13 +51,8 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
 
   def rate_limited?(api_key)
     cache_key = "mcp_rate_limit/#{api_key.id}"
-    count = Rails.cache.increment(cache_key, 1, expires_in: RATE_PERIOD)
-
-    if count.nil?
-      Rails.cache.write(cache_key, 1, expires_in: RATE_PERIOD)
-      return false
-    end
-
+    Rails.cache.write(cache_key, 0, expires_in: RATE_PERIOD, unless_exist: true)
+    count = Rails.cache.increment(cache_key, 1)
     count > RATE_LIMIT
   end
 
@@ -64,7 +65,9 @@ FastMcp.mount_in_rails(
   version: "1.0.0",
   path_prefix: "/mcp",
   authenticate: true,
-  auth_token: "ignored",
+  # FastMcp requires a non-nil token to enable auth. ProjectAuthTransport
+  # overrides valid_token? to validate against the database instead.
+  auth_token: SecureRandom.hex(32),
   localhost_only: false
 ) do |server|
   Rails.application.config.after_initialize do
@@ -78,16 +81,26 @@ end
 # AuthenticatedRackTransport. Swap it with our custom transport so that
 # API key tokens are looked up in the database instead of compared to a
 # static string.
-Rails.application.config.middleware.swap(
-  FastMcp::Transports::AuthenticatedRackTransport,
-  ProjectAuthTransport,
-  FastMcp.server,
-  path_prefix: "/mcp",
-  messages_route: "messages",
-  sse_route: "sse",
-  auth_token: "ignored",
-  localhost_only: false,
-  logger: Rails.logger,
-  allowed_origins: FastMcp.default_rails_allowed_origins(Rails.application),
-  allowed_ips: FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
-)
+begin
+  Rails.application.config.middleware.swap(
+    FastMcp::Transports::AuthenticatedRackTransport,
+    ProjectAuthTransport,
+    FastMcp.server,
+    path_prefix: "/mcp",
+    messages_route: "messages",
+    sse_route: "sse",
+    # FastMcp requires a non-nil token to enable auth. ProjectAuthTransport
+    # overrides valid_token? to validate against the database instead.
+    auth_token: SecureRandom.hex(32),
+    localhost_only: false,
+    logger: Rails.logger,
+    allowed_origins: FastMcp.default_rails_allowed_origins(Rails.application),
+    allowed_ips: FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
+  )
+rescue RuntimeError => e
+  if e.message.include?("No such middleware")
+    Rails.logger.warn("FastMcp AuthenticatedRackTransport not found in middleware stack; skipping swap")
+  else
+    raise
+  end
+end

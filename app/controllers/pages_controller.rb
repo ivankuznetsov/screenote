@@ -10,5 +10,6 @@ class PagesController < ApplicationController
   end
 
   def help
+    @tools = ApplicationTool.descendants.sort_by(&:tool_name)
   end
 end

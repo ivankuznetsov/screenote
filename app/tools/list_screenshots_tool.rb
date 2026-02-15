@@ -19,7 +19,7 @@ class ListScreenshotsTool < ApplicationTool
       screenshots = screenshots.where(status: status) if status.present?
 
       total = screenshots.count
-      screenshots = screenshots.limit(limit).offset(offset)
+      screenshots = screenshots.includes(:annotations).limit(limit).offset(offset)
 
       {
         screenshots: screenshots.map do |s|
@@ -29,8 +29,8 @@ class ListScreenshotsTool < ApplicationTool
             id: s.id,
             title: s.title,
             status: s.status,
-            annotation_count: s.annotations.count,
-            unresolved_count: s.annotations.open.count,
+            annotation_count: s.annotations.size,
+            unresolved_count: s.annotations.select { |a| a.open? }.size,
             annotate_url: url,
             created_at: s.created_at.iso8601
           }
