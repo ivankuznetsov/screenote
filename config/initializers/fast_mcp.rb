@@ -18,6 +18,15 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
       [ { error: "rate_limited", message: "Too many requests. Retry after #{RATE_PERIOD.to_i} seconds." }.to_json ] ]
   end
 
+  # FastMcp 1.6.0 broadcasts responses via SSE only, returning an empty HTTP
+  # body for Streamable HTTP POSTs. Override send_message so the JSON-RPC
+  # result propagates back as the Rack response body.
+  def send_message(message)
+    super
+    json = message.is_a?(String) ? message : JSON.generate(message)
+    [ json ]
+  end
+
   private
 
   def valid_token?(token)
@@ -56,7 +65,6 @@ FastMcp.mount_in_rails(
   path_prefix: "/mcp",
   authenticate: true,
   auth_token: "ignored",
-  transport: ProjectAuthTransport,
   localhost_only: false
 ) do |server|
   Rails.application.config.after_initialize do
@@ -65,3 +73,21 @@ FastMcp.mount_in_rails(
     server.register_tools(*tool_classes) if tool_classes.any?
   end
 end
+
+# FastMcp.mount_in_rails ignores the transport: option and always inserts
+# AuthenticatedRackTransport. Swap it with our custom transport so that
+# API key tokens are looked up in the database instead of compared to a
+# static string.
+Rails.application.config.middleware.swap(
+  FastMcp::Transports::AuthenticatedRackTransport,
+  ProjectAuthTransport,
+  FastMcp.server,
+  path_prefix: "/mcp",
+  messages_route: "messages",
+  sse_route: "sse",
+  auth_token: "ignored",
+  localhost_only: false,
+  logger: Rails.logger,
+  allowed_origins: FastMcp.default_rails_allowed_origins(Rails.application),
+  allowed_ips: FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
+)
