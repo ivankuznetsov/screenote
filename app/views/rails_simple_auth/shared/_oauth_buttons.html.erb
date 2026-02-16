@@ -1,12 +1,11 @@
 <% if RailsSimpleAuth.configuration.oauth_enabled %>
-  <% provider_display_names = { "google_oauth2" => "Google", "github" => "GitHub" } %>
   <div class="auth-card__oauth">
     <% RailsSimpleAuth.configuration.oauth_providers.each do |provider| %>
       <%= button_to "/auth/#{provider}",
             class: "auth-card__oauth-btn",
             data: { turbo: false } do %>
         <span class="auth-card__oauth-icon auth-card__oauth-icon--<%= provider %>"></span>
-        Continue with <%= provider_display_names[provider.to_s] || provider.to_s.titleize %>
+        Continue with <%= RailsSimpleAuth.configuration.oauth_provider_display_name(provider) %>
       <% end %>
     <% end %>
   </div>
