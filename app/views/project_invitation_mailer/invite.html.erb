@@ -1,7 +1,20 @@
-<h1>You've been invited to collaborate</h1>
+<% content_for :preheader do %>You've been invited to collaborate on Screenote<% end %>
 
-<p><%= @inviter.email %> invited you to the project "<%= @project.name %>" on Screenote.</p>
+<!-- Title -->
+<h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 900; color: #e8e8ed; font-family: Georgia, 'Times New Roman', serif; letter-spacing: -0.02em;">
+  You've been invited to collaborate
+</h1>
 
-<p><%= link_to "Accept invitation", @accept_url %></p>
+<!-- Body text -->
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #b0b0c0; line-height: 1.7;">
+  <%= @inviter.email %> invited you to the project "<%= @project.name %>" on Screenote.
+</p>
 
-<p>This link will expire in 7 days.</p>
+<%= render "user_mailer/email_cta_button", url: @accept_url, label: "Accept Invitation" %>
+
+<!-- Expiry note -->
+<p style="margin: 0 0 20px 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
+  This link will expire in 7 days.
+</p>
+
+<%= render "user_mailer/email_fallback_url", url: @accept_url %>

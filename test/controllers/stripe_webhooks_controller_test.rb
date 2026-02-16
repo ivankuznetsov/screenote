@@ -191,6 +191,74 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert_equal "sub_out_of_order_123", @subscription.stripe_subscription_id
   end
 
+  test "customer.subscription.updated sends email when transitioning to active pro" do
+    # Simulate checkout completed first (sets plan to pro, status incomplete)
+    @subscription.update_columns(
+      plan: :pro,
+      status: :incomplete,
+      stripe_subscription_id: "sub_new_test",
+      current_period_end: 30.days.from_now
+    )
+
+    event = build_event("customer.subscription.updated", {
+      customer: @subscription.stripe_customer_id,
+      status: "active",
+      current_period_end: 60.days.from_now.to_i
+    })
+
+    assert_enqueued_emails 1 do
+      post_webhook(event)
+    end
+    assert_response :ok
+  end
+
+  test "customer.subscription.updated does not send email when already active pro" do
+    upgrade_bob_to_pro!
+
+    event = build_event("customer.subscription.updated", {
+      customer: @subscription.stripe_customer_id,
+      status: "active",
+      current_period_end: 60.days.from_now.to_i
+    })
+
+    assert_no_enqueued_emails do
+      post_webhook(event)
+    end
+    assert_response :ok
+  end
+
+  test "customer.subscription.updated does not send email when status is not active" do
+    @subscription.update_columns(
+      plan: :pro,
+      status: :incomplete,
+      stripe_subscription_id: "sub_new_test",
+      current_period_end: 30.days.from_now
+    )
+
+    event = build_event("customer.subscription.updated", {
+      customer: @subscription.stripe_customer_id,
+      status: "past_due",
+      current_period_end: 60.days.from_now.to_i
+    })
+
+    assert_no_enqueued_emails do
+      post_webhook(event)
+    end
+    assert_response :ok
+  end
+
+  test "checkout.session.completed does not send email" do
+    event = build_event("checkout.session.completed", {
+      customer: @subscription.stripe_customer_id,
+      subscription: "sub_no_email_test"
+    })
+
+    assert_no_enqueued_emails do
+      post_webhook(event)
+    end
+    assert_response :ok
+  end
+
   test "customer.subscription.deleted resets to free plan" do
     upgrade_bob_to_pro!
 

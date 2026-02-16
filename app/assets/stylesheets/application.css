@@ -1190,80 +1190,206 @@ a:hover {
   white-space: nowrap;
 }
 
+/* Billing hero */
+.billing-hero {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.billing-hero__title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+}
+
+.billing-hero__subtitle {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+}
+
 /* Billing plans */
 .billing-plans {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  gap: 1.25rem;
+  max-width: 680px;
+  margin: 0 auto 2rem;
+  align-items: start;
 }
 
 .billing-plan {
   background: var(--color-bg);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .billing-plan--current {
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .billing-plan--pro {
-  background: var(--color-plan-pro-bg);
+  background: #0b0f1a;
+  border-color: #1e293b;
+  color: #e2e8f0;
+}
+
+.billing-plan--pro.billing-plan--current {
+  border-color: #e5a31e;
+  box-shadow: 0 0 0 1px #e5a31e;
+}
+
+.billing-plan__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
 }
 
 .billing-plan__name {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
 }
 
-.billing-plan__price {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
+.billing-plan--pro .billing-plan__name {
+  color: #94a3b8;
+}
+
+.billing-plan__badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.billing-plan--pro .billing-plan__badge {
+  background: #e5a31e;
+  color: #0b0f1a;
+}
+
+.billing-plan__pricing {
+  margin-bottom: 1.5rem;
+}
+
+.billing-plan__amount {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.billing-plan--pro .billing-plan__amount {
+  color: #fff;
 }
 
 .billing-plan__period {
-  font-size: 1rem;
+  display: block;
+  font-size: 0.85rem;
   font-weight: 400;
   color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
+.billing-plan--pro .billing-plan__period {
+  color: #64748b;
+}
+
+.billing-plan__divider {
+  height: 1px;
+  background: var(--color-border);
+  margin-bottom: 1.25rem;
+}
+
+.billing-plan--pro .billing-plan__divider {
+  background: #1e293b;
 }
 
 .billing-plan__features {
   list-style: none;
-  margin-bottom: 1.5rem;
+  flex: 1;
 }
 
 .billing-plan__features li {
   font-size: 0.875rem;
-  padding: 0.25rem 0;
-  color: var(--color-text);
+  padding: 0.35rem 0;
+  padding-left: 1.5rem;
+  position: relative;
 }
 
 .billing-plan__features li::before {
-  content: "\2713 ";
+  content: "\2713";
+  position: absolute;
+  left: 0;
   color: var(--color-success);
-  font-weight: 600;
-  margin-right: 0.5rem;
+  font-weight: 700;
 }
 
-.billing-plan__badge {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  padding: 0.125rem 0.5rem;
-  border-radius: 999px;
-  background: var(--color-badge-owner-bg);
-  color: var(--color-badge-owner-text);
-  margin-bottom: 0.75rem;
+.billing-plan--pro .billing-plan__features li {
+  color: #cbd5e1;
 }
 
-/* Billing plan renewal */
-.billing-plan__renewal {
-  font-size: 0.875rem;
+.billing-plan--pro .billing-plan__features li::before {
+  color: #e5a31e;
+}
+
+.billing-plan__features li.billing-plan__features-intro {
+  padding-left: 0;
   color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.billing-plan__features li.billing-plan__features-intro::before {
+  display: none;
+}
+
+.billing-plan--pro .billing-plan__features li.billing-plan__features-intro {
+  color: #64748b;
+}
+
+.billing-plan__action {
+  margin-top: 1.5rem;
+}
+
+.billing-plan__upgrade-btn {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: #e5a31e;
+  color: #0b0f1a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-align: center;
+}
+
+.billing-plan__upgrade-btn:hover {
+  background: #d4901a;
+}
+
+.btn--full {
+  width: 100%;
+  text-align: center;
+}
+
+.billing-plan__renewal {
+  font-size: 0.85rem;
+  color: #94a3b8;
   margin-bottom: 0.75rem;
 }
 
@@ -1282,6 +1408,12 @@ a:hover {
 .billing-footer__link:hover {
   color: var(--color-text);
   text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .billing-plans {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Legal pages (Terms, Privacy) */
@@ -1341,6 +1473,34 @@ a:hover {
 
 .legal__content a:hover {
   opacity: 0.8;
+}
+
+/* Admin stats */
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.admin-stats__card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.admin-stats__value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  line-height: 1.2;
+  margin-bottom: 0.25rem;
+}
+
+.admin-stats__label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 768px) {

@@ -6,6 +6,8 @@ class User < ApplicationRecord
   include RailsSimpleAuth::Models::Concerns::MagicLinkable
   include RailsSimpleAuth::Models::Concerns::OAuthConnectable
 
+  ADMIN_EMAIL = "ivan@ikuznetsov.com"
+
   has_many :sessions, dependent: :destroy
   has_many :owned_projects, class_name: "Project", foreign_key: :user_id, inverse_of: :creator, dependent: :destroy
   has_many :project_memberships, dependent: :destroy
@@ -23,6 +25,10 @@ class User < ApplicationRecord
 
   def can_invite_member?(project)
     pro? || project.project_memberships.where(role: :member).count < Subscription::FREE_MEMBER_LIMIT
+  end
+
+  def admin?
+    email == ADMIN_EMAIL
   end
 
   def assign_oauth_attributes(auth_hash)

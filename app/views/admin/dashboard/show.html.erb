@@ -1,0 +1,22 @@
+<%= link_to "← Back to projects", dashboard_path, class: "breadcrumb-link" %>
+
+<div class="page-header">
+  <h1 class="page-header__title">Admin Dashboard</h1>
+</div>
+
+<div class="admin-stats">
+  <div class="admin-stats__card">
+    <div class="admin-stats__value" data-testid="verified-users-count"><%= @verified_users_count %></div>
+    <div class="admin-stats__label">Verified users</div>
+  </div>
+
+  <div class="admin-stats__card">
+    <div class="admin-stats__value" data-testid="users-with-content-count"><%= @users_with_projects_and_screenshots_count %></div>
+    <div class="admin-stats__label">Users with projects &amp; screenshots</div>
+  </div>
+
+  <div class="admin-stats__card">
+    <div class="admin-stats__value" data-testid="pro-users-count"><%= @pro_users_count %></div>
+    <div class="admin-stats__label">Pro subscribers</div>
+  </div>
+</div>
