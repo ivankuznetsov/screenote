@@ -1,5 +1,5 @@
 Rails.application.routes.draw do
-  rails_simple_auth_routes
+  rails_simple_auth_routes(omniauth_controller: "omniauth_callbacks")
 
   use_doorkeeper do
     controllers authorizations: "oauth/authorizations"

@@ -6,7 +6,11 @@ Doorkeeper.configure do
   # Authenticate the resource owner (user) via rails_simple_auth.
   # If the user isn't signed in, redirect to the login page.
   resource_owner_authenticator do
-    Current.user || redirect_to(new_session_path, alert: "Please sign in to authorize this application.")
+    Current.user || begin
+      # Store the full OAuth authorize URL so the user returns here after login
+      session[:return_to] = request.fullpath
+      redirect_to(new_session_path, alert: "Please sign in to authorize this application.")
+    end
   end
 
   # OAuth 2.1 mandates PKCE for all public clients
