@@ -1,0 +1,46 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Authorize Application</h1>
+  <p class="auth-card__subtitle">
+    <strong><%= @pre_auth.client.name %></strong> is requesting access to your Screenote account.
+  </p>
+  <p class="oauth-consent__explanation">
+    An AI agent is requesting access to read and write screenshots and annotations in your projects via the Model Context Protocol.
+  </p>
+
+  <% if @pre_auth.scopes.present? %>
+    <div class="oauth-consent__scopes">
+      <p class="oauth-consent__scopes-label">This application will be able to:</p>
+      <ul class="oauth-consent__scopes-list">
+        <% @pre_auth.scopes.each do |scope| %>
+          <li class="oauth-consent__scope-item">
+            <% if scope.to_s == "mcp_read" %>
+              Read your screenshots and annotations
+            <% elsif scope.to_s == "mcp_write" %>
+              Create screenshots, annotations, and projects
+            <% else %>
+              <%= scope %>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%= form_with url: oauth_authorization_path, method: :post, class: "oauth-consent__form", data: { turbo: false } do |f| %>
+    <%= f.hidden_field :client_id, value: @pre_auth.client.uid %>
+    <%= f.hidden_field :redirect_uri, value: @pre_auth.redirect_uri %>
+    <%= f.hidden_field :state, value: @pre_auth.state %>
+    <%= f.hidden_field :response_type, value: @pre_auth.response_type %>
+    <%= f.hidden_field :scope, value: @pre_auth.scope %>
+    <%= f.hidden_field :code_challenge, value: @pre_auth.code_challenge %>
+    <%= f.hidden_field :code_challenge_method, value: @pre_auth.code_challenge_method %>
+
+    <div class="oauth-consent__actions">
+      <%= f.submit "Authorize", class: "auth-card__submit", data: { testid: "oauth-authorize-btn" } %>
+    </div>
+
+    <div class="oauth-consent__deny">
+      <%= button_tag "Deny", type: "submit", name: "deny", value: "1", class: "auth-card__magic-link", data: { testid: "oauth-deny-btn" } %>
+    </div>
+  <% end %>
+</div>

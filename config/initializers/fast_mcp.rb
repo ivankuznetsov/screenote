@@ -2,8 +2,9 @@
 
 require "fast_mcp"
 
-# Custom transport that authenticates via API key token, resolves the current
-# project, and enforces per-key rate limiting (60 req/min).
+# Custom transport that authenticates via API key token or OAuth 2.1 bearer
+# token, resolves the current project, and enforces per-key rate limiting
+# (60 req/min).
 class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
   RATE_LIMIT = 60
   RATE_PERIOD = 1.minute
@@ -38,14 +39,76 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
   def valid_token?(token)
     return false if token.blank?
 
+    if token.start_with?("sk_proj_")
+      validate_api_key(token)
+    else
+      validate_oauth_token(token)
+    end
+  rescue RateLimitedError
+    raise
+  rescue StandardError => e
+    Rails.logger.error("Token validation error: #{e.class}: #{e.message}")
+    Honeybadger.notify(e, context: { token_prefix: token&.first(8) })
+    false
+  end
+
+  def validate_api_key(token)
     api_key = ApiKey.active.find_by_token(token)
-    return false unless api_key
+    unless api_key
+      Rails.logger.info("MCP auth: API key not found")
+      return false
+    end
 
     raise RateLimitedError if rate_limited?(api_key)
 
-    Current.mcp_project = api_key.project
+    project = api_key.project
+    unless project
+      Rails.logger.error("MCP auth: API key #{api_key.id} references missing project")
+      Honeybadger.notify("API key references deleted project", context: { api_key_id: api_key.id })
+      return false
+    end
+
+    Current.mcp_user = project.creator
+    Current.mcp_project = project
     Current.mcp_api_key = api_key
-    api_key.touch_last_used!
+
+    begin
+      api_key.touch_last_used!
+    rescue ActiveRecord::ActiveRecordError => e
+      Rails.logger.warn("Failed to update last_used_at for API key #{api_key.id}: #{e.message}")
+    end
+
+    true
+  end
+
+  def validate_oauth_token(token)
+    access_token = Doorkeeper::AccessToken.by_token(token)
+    unless access_token
+      Rails.logger.info("MCP auth: OAuth token not found")
+      return false
+    end
+
+    if access_token.revoked?
+      Rails.logger.info("MCP auth: OAuth token revoked (id=#{access_token.id})")
+      return false
+    end
+
+    if access_token.expired?
+      Rails.logger.info("MCP auth: OAuth token expired (id=#{access_token.id})")
+      return false
+    end
+
+    raise RateLimitedError if rate_limited_oauth?(access_token)
+
+    user = User.find_by(id: access_token.resource_owner_id)
+    unless user
+      Rails.logger.error("MCP auth: OAuth token #{access_token.id} references missing user (resource_owner_id=#{access_token.resource_owner_id})")
+      Honeybadger.notify("OAuth token references deleted user", context: { token_id: access_token.id, resource_owner_id: access_token.resource_owner_id })
+      return false
+    end
+
+    Current.mcp_user = user
+    Current.mcp_oauth_token = access_token
     true
   end
 
@@ -53,7 +116,40 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
     cache_key = "mcp_rate_limit/#{api_key.id}"
     Rails.cache.write(cache_key, 0, expires_in: RATE_PERIOD, unless_exist: true)
     count = Rails.cache.increment(cache_key, 1)
-    count > RATE_LIMIT
+    count.present? && count > RATE_LIMIT
+  rescue StandardError => e
+    Rails.logger.error("Rate limiting check failed: #{e.class}: #{e.message}")
+    Honeybadger.notify(e, context: { api_key_id: api_key.id })
+    false
+  end
+
+  def rate_limited_oauth?(access_token)
+    cache_key = "mcp_rate_limit/oauth/#{access_token.id}"
+    Rails.cache.write(cache_key, 0, expires_in: RATE_PERIOD, unless_exist: true)
+    count = Rails.cache.increment(cache_key, 1)
+    count.present? && count > RATE_LIMIT
+  rescue StandardError => e
+    Rails.logger.error("Rate limiting check failed: #{e.class}: #{e.message}")
+    Honeybadger.notify(e, context: { token_id: access_token.id })
+    false
+  end
+
+  def unauthorized_response(request)
+    rack_request = request.is_a?(Hash) ? Rack::Request.new(request) : request
+    base_url = "#{rack_request.scheme}://#{rack_request.host_with_port}"
+
+    body = JSON.generate(
+      jsonrpc: "2.0",
+      error: { code: -32_000, message: "Unauthorized: Valid API key or OAuth token required" },
+      id: extract_request_id(request)
+    )
+
+    [ 401,
+      {
+        "Content-Type" => "application/json",
+        "WWW-Authenticate" => "Bearer resource_metadata=\"#{base_url}/.well-known/oauth-protected-resource\", scope=\"mcp_read mcp_write\""
+      },
+      [ body ] ]
   end
 
   class RateLimitedError < StandardError; end
@@ -99,7 +195,8 @@ begin
   )
 rescue RuntimeError => e
   if e.message.include?("No such middleware")
-    Rails.logger.warn("FastMcp AuthenticatedRackTransport not found in middleware stack; skipping swap")
+    Rails.logger.error("CRITICAL: FastMcp ProjectAuthTransport middleware swap failed — MCP auth is broken")
+    Honeybadger.notify("FastMcp middleware swap failed - MCP auth broken", context: { error: e.message })
   else
     raise
   end

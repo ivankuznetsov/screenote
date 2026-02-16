@@ -1,0 +1,31 @@
+# frozen_string_literal: true
+
+Doorkeeper.configure do
+  orm :active_record
+
+  # Authenticate the resource owner (user) via rails_simple_auth.
+  # If the user isn't signed in, redirect to the login page.
+  resource_owner_authenticator do
+    Current.user || redirect_to(new_session_path, alert: "Please sign in to authorize this application.")
+  end
+
+  # OAuth 2.1 mandates PKCE for all public clients
+  force_pkce
+
+  default_scopes :mcp_read
+  optional_scopes :mcp_write
+
+  access_token_expires_in 1.hour
+  use_refresh_token
+
+  # Allow HTTP redirect URIs for localhost (needed for local MCP clients)
+  force_ssl_in_redirect_uri !Rails.env.local?
+
+  # Only authorization_code grant flow (OAuth 2.1)
+  grant_flows %w[authorization_code]
+
+  # Skip consent screen for previously-authorized client+scope combinations
+  skip_authorization do |resource_owner, client|
+    Doorkeeper::AccessToken.matching_token_for(client, resource_owner, client.scopes).present?
+  end
+end

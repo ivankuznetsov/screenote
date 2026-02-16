@@ -1,6 +1,7 @@
 ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
+require_relative "support/oauth_test_helper"
 
 module ActiveSupport
   class TestCase
@@ -17,4 +18,9 @@ end
 
 class ActionDispatch::IntegrationTest
   include SignInHelper
+  include OauthTestHelper
+end
+
+class ActiveSupport::TestCase
+  include OauthTestHelper
 end

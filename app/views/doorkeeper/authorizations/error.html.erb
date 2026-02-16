@@ -1,0 +1,9 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Authorization Error</h1>
+  <div class="auth-card__error">
+    <%= error_response.body[:error_description] || "An error occurred during authorization." %>
+  </div>
+  <div class="auth-card__footer">
+    <%= link_to "Back to Screenote", root_path, class: "auth-card__link" %>
+  </div>
+</div>

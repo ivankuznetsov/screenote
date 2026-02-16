@@ -5,14 +5,18 @@ class ResolveAnnotationTool < ApplicationTool
   description "Mark an annotation as resolved."
 
   arguments do
+    required(:project_id).filled(:integer).description("The project ID")
     required(:annotation_id).filled(:integer).description("The annotation ID to resolve")
   end
 
-  def call(annotation_id:)
-    with_error_handling do
-      annotation = project_annotations.find(annotation_id)
+  def call(project_id:, annotation_id:)
+    error = require_project(project_id)
+    return error if error
 
-      annotation.update!(status: :resolved, resolved_by_api_key: current_api_key)
+    with_error_handling do
+      annotation = project_annotations(current_project).find(annotation_id)
+
+      annotation.update!(status: :resolved)
 
       { success: true, annotation: { id: annotation.id, status: annotation.status } }.to_json
     end
