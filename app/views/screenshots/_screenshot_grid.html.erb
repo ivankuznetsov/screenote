@@ -4,7 +4,7 @@
       <%= link_to project_screenshot_path(project, screenshot), class: "screenshot-card" do %>
         <div class="screenshot-card__image">
           <% if screenshot.image.attached? %>
-            <%= image_tag screenshot.image.variant(resize_to_limit: [400, 300]), alt: screenshot.title %>
+            <%= image_tag screenshot.image.variant(resize_to_limit: [800, 600]), alt: screenshot.title %>
           <% else %>
             <div class="screenshot-card__placeholder">No image</div>
           <% end %>
