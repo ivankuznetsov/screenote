@@ -1,6 +1,17 @@
 Rails.application.routes.draw do
   rails_simple_auth_routes
 
+  use_doorkeeper do
+    controllers authorizations: "oauth/authorizations"
+  end
+
+  # OAuth 2.1 metadata endpoints (RFC 9728 / RFC 8414)
+  get ".well-known/oauth-protected-resource", to: "oauth_metadata#protected_resource"
+  get ".well-known/oauth-authorization-server", to: "oauth_metadata#authorization_server"
+
+  # Dynamic Client Registration (RFC 7591)
+  post "oauth/register", to: "oauth/registrations#create"
+
   resources :projects do
     resources :screenshots do
       resources :annotations, only: %i[create update destroy]

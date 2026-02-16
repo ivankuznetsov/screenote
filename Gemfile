@@ -55,6 +55,9 @@ gem "aws-sdk-s3", require: false
 # MCP server for AI agent integration
 gem "fast-mcp"
 
+# OAuth 2.1 provider for MCP authentication
+gem "doorkeeper"
+
 # Error monitoring
 gem "honeybadger"
 

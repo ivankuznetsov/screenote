@@ -9,6 +9,7 @@ class McpAuthTest < ActiveSupport::TestCase
   setup do
     @api_key = api_keys(:alice_key)
     @revoked_key = api_keys(:alice_key_revoked)
+    @project = projects(:alice_project)
     @original_cache = Rails.cache
     Rails.cache = ActiveSupport::Cache::MemoryStore.new
   end
@@ -17,6 +18,8 @@ class McpAuthTest < ActiveSupport::TestCase
     Current.reset
     Rails.cache = @original_cache
   end
+
+  # --- API key auth tests ---
 
   test "valid_token? accepts active API key" do
     transport = build_transport
@@ -57,7 +60,102 @@ class McpAuthTest < ActiveSupport::TestCase
     assert @api_key.reload.last_used_at > old_time, "Should update last_used_at"
   end
 
-  # Rate limiting tests
+  # --- OAuth token auth tests ---
+
+  test "valid_token? accepts valid OAuth access token" do
+    app = Doorkeeper::Application.create!(
+      name: "Test OAuth App",
+      redirect_uri: "http://localhost/callback",
+      confidential: false
+    )
+    access_token = Doorkeeper::AccessToken.create!(
+      application: app,
+      resource_owner_id: users(:alice).id,
+      project_id: @project.id,
+      scopes: "mcp_read",
+      expires_in: 1.hour
+    )
+
+    transport = build_transport
+    result = transport.send(:valid_token?, access_token.token)
+
+    assert result, "Should accept valid OAuth token"
+    assert_equal @project, Current.mcp_project
+    assert_equal access_token, Current.mcp_oauth_token
+    assert_nil Current.mcp_api_key, "Should not set mcp_api_key for OAuth tokens"
+  end
+
+  test "valid_token? rejects expired OAuth access token" do
+    app = Doorkeeper::Application.create!(
+      name: "Test OAuth App",
+      redirect_uri: "http://localhost/callback",
+      confidential: false
+    )
+    access_token = Doorkeeper::AccessToken.create!(
+      application: app,
+      resource_owner_id: users(:alice).id,
+      project_id: @project.id,
+      scopes: "mcp_read",
+      expires_in: -1
+    )
+
+    transport = build_transport
+    result = transport.send(:valid_token?, access_token.token)
+
+    assert_not result, "Should reject expired OAuth token"
+  end
+
+  test "valid_token? rejects revoked OAuth access token" do
+    app = Doorkeeper::Application.create!(
+      name: "Test OAuth App",
+      redirect_uri: "http://localhost/callback",
+      confidential: false
+    )
+    access_token = Doorkeeper::AccessToken.create!(
+      application: app,
+      resource_owner_id: users(:alice).id,
+      project_id: @project.id,
+      scopes: "mcp_read",
+      expires_in: 1.hour,
+      revoked_at: Time.current
+    )
+
+    transport = build_transport
+    result = transport.send(:valid_token?, access_token.token)
+
+    assert_not result, "Should reject revoked OAuth token"
+  end
+
+  test "valid_token? rejects OAuth token with missing project" do
+    app = Doorkeeper::Application.create!(
+      name: "Test OAuth App",
+      redirect_uri: "http://localhost/callback",
+      confidential: false
+    )
+    access_token = Doorkeeper::AccessToken.create!(
+      application: app,
+      resource_owner_id: users(:alice).id,
+      project_id: nil,
+      scopes: "mcp_read",
+      expires_in: 1.hour
+    )
+
+    transport = build_transport
+    result = transport.send(:valid_token?, access_token.token)
+
+    assert_not result, "Should reject OAuth token without project"
+  end
+
+  test "valid_token? routes sk_proj_ tokens to API key validation" do
+    transport = build_transport
+    transport.send(:valid_token?, ALICE_TOKEN)
+
+    assert_equal @api_key, Current.mcp_api_key, "sk_proj_ prefix should use API key path"
+    assert_nil Current.mcp_oauth_token
+  end
+
+  # --- Rate limiting tests ---
+
   test "rate_limited? returns false under limit" do
     transport = build_transport
     assert_not transport.send(:rate_limited?, @api_key), "Should not be rate limited on first request"

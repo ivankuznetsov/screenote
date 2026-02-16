@@ -2,8 +2,9 @@
 
 require "fast_mcp"
 
-# Custom transport that authenticates via API key token, resolves the current
-# project, and enforces per-key rate limiting (60 req/min).
+# Custom transport that authenticates via API key token or OAuth 2.1 bearer
+# token, resolves the current project, and enforces per-key rate limiting
+# (60 req/min).
 class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
   RATE_LIMIT = 60
   RATE_PERIOD = 1.minute
@@ -38,6 +39,14 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
   def valid_token?(token)
     return false if token.blank?
 
+    if token.start_with?("sk_proj_")
+      validate_api_key(token)
+    else
+      validate_oauth_token(token)
+    end
+  end
+
+  def validate_api_key(token)
     api_key = ApiKey.active.find_by_token(token)
     return false unless api_key
 
@@ -49,11 +58,39 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
     true
   end
 
+  def validate_oauth_token(token)
+    access_token = Doorkeeper::AccessToken.by_token(token)
+    return false unless access_token
+    return false if access_token.expired? || access_token.revoked?
+
+    project = Project.find_by(id: access_token.project_id)
+    return false unless project
+
+    Current.mcp_project = project
+    Current.mcp_oauth_token = access_token
+    true
+  end
+
   def rate_limited?(api_key)
     cache_key = "mcp_rate_limit/#{api_key.id}"
     Rails.cache.write(cache_key, 0, expires_in: RATE_PERIOD, unless_exist: true)
     count = Rails.cache.increment(cache_key, 1)
     count > RATE_LIMIT
+  end
+
+  def unauthorized_response(request)
+    body = JSON.generate(
+      jsonrpc: "2.0",
+      error: { code: -32_000, message: "Unauthorized: Valid API key or OAuth token required" },
+      id: extract_request_id(request)
+    )
+
+    [ 401,
+      {
+        "Content-Type" => "application/json",
+        "WWW-Authenticate" => "Bearer resource_metadata=\"/.well-known/oauth-protected-resource\""
+      },
+      [ body ] ]
   end
 
   class RateLimitedError < StandardError; end
