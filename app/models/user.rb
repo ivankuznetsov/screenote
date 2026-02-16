@@ -22,7 +22,7 @@ class User < ApplicationRecord
   end
 
   def can_invite_member?(project)
-    pro? || project.members.count < Subscription::FREE_MEMBER_LIMIT
+    pro? || project.project_memberships.where(role: :member).count < Subscription::FREE_MEMBER_LIMIT
   end
 
   def assign_oauth_attributes(auth_hash)

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-class StripeWebhooksController < ApplicationController
-  skip_before_action :require_authentication
+class StripeWebhooksController < ActionController::Base
   skip_forgery_protection
 
   def create
@@ -16,6 +15,8 @@ class StripeWebhooksController < ApplicationController
       return
     end
 
+    Rails.logger.info("Stripe webhook received: type=#{event.type} id=#{event.id}")
+
     case event.type
     when "checkout.session.completed"
       handle_checkout_completed(event.data.object)
@@ -23,16 +24,22 @@ class StripeWebhooksController < ApplicationController
       handle_subscription_updated(event.data.object)
     when "customer.subscription.deleted"
       handle_subscription_deleted(event.data.object)
+    else
+      Rails.logger.info("Stripe webhook: ignoring unhandled event type '#{event.type}'")
     end
 
     head :ok
+  rescue Stripe::StripeError, ActiveRecord::RecordInvalid => e
+    Honeybadger.notify(e, context: { event_type: event&.type, event_id: event&.id })
+    head :internal_server_error
   end
 
   private
 
   def handle_checkout_completed(session)
-    subscription = Subscription.find_by(stripe_customer_id: session.customer)
+    subscription = find_subscription(session.customer, "checkout.session.completed")
     return unless subscription
+    return unless session.subscription
 
     stripe_sub = Stripe::Subscription.retrieve(session.subscription)
     subscription.update!(
@@ -44,7 +51,7 @@ class StripeWebhooksController < ApplicationController
   end
 
   def handle_subscription_updated(stripe_sub)
-    subscription = Subscription.find_by(stripe_customer_id: stripe_sub.customer)
+    subscription = find_subscription(stripe_sub.customer, "customer.subscription.updated")
     return unless subscription
 
     status = case stripe_sub.status
@@ -61,9 +68,20 @@ class StripeWebhooksController < ApplicationController
   end
 
   def handle_subscription_deleted(stripe_sub)
-    subscription = Subscription.find_by(stripe_customer_id: stripe_sub.customer)
+    subscription = find_subscription(stripe_sub.customer, "customer.subscription.deleted")
     return unless subscription
 
     subscription.update!(plan: :free, status: :canceled, stripe_subscription_id: nil)
+  end
+
+  def find_subscription(stripe_customer_id, event_type)
+    subscription = Subscription.find_by(stripe_customer_id: stripe_customer_id)
+    unless subscription
+      Honeybadger.notify("Stripe webhook: no subscription found", context: {
+        stripe_customer_id: stripe_customer_id,
+        event_type: event_type
+      })
+    end
+    subscription
   end
 end

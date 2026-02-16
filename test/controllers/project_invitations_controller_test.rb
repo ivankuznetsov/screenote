@@ -92,4 +92,28 @@ class ProjectInvitationsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_select ".flash--alert"
   end
+
+  # Plan limit enforcement
+
+  test "free owner at member limit is redirected from create" do
+    free_owner = users(:bob)
+    free_project = projects(:bob_project)
+
+    # Add a member to reach the limit
+    free_project.project_memberships.create!(user: users(:unconfirmed), role: :member)
+
+    sign_in(free_owner)
+    assert_no_difference "ProjectInvitation.count" do
+      post project_invitations_path(free_project), params: { project_invitation: { email: "blocked@example.com" } }
+    end
+    assert_redirected_to subscription_path
+  end
+
+  test "pro owner can invite beyond free limit" do
+    sign_in(@owner) # alice is pro
+    assert_difference "ProjectInvitation.count", 1 do
+      post project_invitations_path(@project), params: { project_invitation: { email: "another-invitee@example.com" } }
+    end
+    assert_redirected_to project_memberships_path(@project)
+  end
 end

@@ -5,7 +5,11 @@
 </div>
 
 <% if params[:status] == "success" %>
-  <div class="flash flash--notice">Your subscription has been activated. Welcome to Pro!</div>
+  <% if Current.user.pro? %>
+    <div class="flash flash--notice">Your subscription has been activated. Welcome to Pro!</div>
+  <% else %>
+    <div class="flash flash--notice">Thank you for subscribing! Your Pro plan is being activated and should appear shortly. Please refresh this page in a moment.</div>
+  <% end %>
 <% elsif params[:status] == "canceled" %>
   <div class="flash flash--alert">Checkout was canceled. You can try again anytime.</div>
 <% end %>
@@ -28,7 +32,7 @@
 
   <div class="billing-plan billing-plan--pro <%= "billing-plan--current" if Current.user.pro? %>">
     <div class="billing-plan__name">Pro</div>
-    <div class="billing-plan__price">$10<span class="billing-plan__period">/month</span></div>
+    <div class="billing-plan__price">$<%= Subscription::PRO_PRICE_CENTS / 100 %><span class="billing-plan__period">/month</span></div>
     <ul class="billing-plan__features">
       <li>Unlimited projects</li>
       <li>Unlimited team members</li>

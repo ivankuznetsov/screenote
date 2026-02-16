@@ -24,6 +24,8 @@ class ApplicationController < ActionController::Base
 
     invitation.accept!(Current.user)
     redirect_to project_path(invitation.project), notice: "You've joined \"#{invitation.project.name}\"!"
+  rescue ProjectInvitation::MemberLimitExceeded
+    redirect_to root_path, alert: "This project has reached its member limit. Ask the project owner to upgrade their plan."
   end
 
   def not_found

@@ -26,6 +26,10 @@
   --color-banner-bg-end: #e0e7ff;
   --color-banner-border: #bfdbfe;
   --color-white: #ffffff;
+  --color-info-bg: #eff6ff;
+  --color-info-border: #bfdbfe;
+  --color-info-text: #1e40af;
+  --color-plan-pro-bg: #f0f5ff;
   --font-mono: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
   --radius: 6px;
   --max-width: 960px;
@@ -1152,8 +1156,8 @@ a:hover {
 
 /* Upgrade banner */
 .upgrade-banner {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
   border-radius: var(--radius);
   padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
@@ -1165,7 +1169,7 @@ a:hover {
 
 .upgrade-banner__text {
   font-size: 0.875rem;
-  color: #1e40af;
+  color: var(--color-info-text);
 }
 
 .upgrade-banner__link {
@@ -1195,7 +1199,7 @@ a:hover {
 }
 
 .billing-plan--pro {
-  background: #f0f5ff;
+  background: var(--color-plan-pro-bg);
 }
 
 .billing-plan__name {

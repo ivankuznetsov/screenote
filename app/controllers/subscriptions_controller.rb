@@ -6,6 +6,11 @@ class SubscriptionsController < ApplicationController
   end
 
   def checkout
+    if Current.user.pro?
+      redirect_to subscription_path, notice: "You're already on the Pro plan."
+      return
+    end
+
     subscription = find_or_create_subscription
 
     checkout_session = Stripe::Checkout::Session.create(
@@ -17,6 +22,9 @@ class SubscriptionsController < ApplicationController
     )
 
     redirect_to checkout_session.url, allow_other_host: true
+  rescue Stripe::StripeError => e
+    Honeybadger.notify(e)
+    redirect_to subscription_path, alert: "We couldn't connect to our payment provider. Please try again shortly."
   end
 
   def portal
@@ -32,19 +40,25 @@ class SubscriptionsController < ApplicationController
     )
 
     redirect_to portal_session.url, allow_other_host: true
+  rescue Stripe::StripeError => e
+    Honeybadger.notify(e)
+    redirect_to subscription_path, alert: "We couldn't connect to our payment provider. Please try again shortly."
   end
 
   private
 
   def find_or_create_subscription
-    Current.user.subscription || Current.user.create_subscription!(
-      stripe_customer_id: create_stripe_customer.id,
+    Current.user.subscription || create_subscription_with_stripe_customer
+  end
+
+  def create_subscription_with_stripe_customer
+    stripe_customer = Stripe::Customer.create(email: Current.user.email)
+    Current.user.create_subscription!(
+      stripe_customer_id: stripe_customer.id,
       plan: :free,
       status: :incomplete
     )
-  end
-
-  def create_stripe_customer
-    Stripe::Customer.create(email: Current.user.email)
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique
+    Current.user.reload.subscription || raise
   end
 end
