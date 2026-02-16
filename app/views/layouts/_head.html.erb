@@ -3,6 +3,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="Screenote">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta property="og:site_name" content="Screenote">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="<%= "#{request.protocol}#{request.host_with_port}/og-image.png" %>">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="<%= "#{request.protocol}#{request.host_with_port}/og-image.png" %>">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
