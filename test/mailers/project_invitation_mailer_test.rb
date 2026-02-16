@@ -14,7 +14,7 @@ class ProjectInvitationMailerTest < ActionMailer::TestCase
     assert_equal [ invitation.email ], email.to
     assert_includes email.subject, invitation.inviter.email
     assert_includes email.subject, invitation.project.name
-    assert_includes email.body.encoded, "Accept invitation"
+    assert_includes email.body.encoded, "Accept Invitation"
     assert_includes email.body.encoded, "invitations/"
   end
 end

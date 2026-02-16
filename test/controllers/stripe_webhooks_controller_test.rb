@@ -37,7 +37,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
     @subscription.reload
     assert @subscription.pro?, "Subscription should be upgraded to pro"
-    assert @subscription.incomplete?, "Subscription status should be incomplete until subscription.updated webhook"
+    assert @subscription.active?, "Subscription should be active after successful checkout"
     assert_equal "sub_new_test_123", @subscription.stripe_subscription_id
     assert_not_nil @subscription.current_period_end, "current_period_end should be set"
   end

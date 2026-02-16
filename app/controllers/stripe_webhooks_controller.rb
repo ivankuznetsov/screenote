@@ -44,12 +44,10 @@ class StripeWebhooksController < ActionController::Base
     return head(:service_unavailable) unless subscription
     return unless session.subscription
 
-    status = subscription.active? ? :active : :incomplete
-
     subscription.update!(
       stripe_subscription_id: session.subscription,
       plan: :pro,
-      status: status,
+      status: :active,
       current_period_end: subscription.current_period_end || 30.days.from_now
     )
   end

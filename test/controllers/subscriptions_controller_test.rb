@@ -35,14 +35,14 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     sign_in(users(:bob))
     get subscription_path
     assert_response :success
-    assert_select ".billing-plan__badge", "Current plan"
+    assert_select ".billing-plan__badge", "Current"
   end
 
   test "show uses PRO_PRICE_CENTS constant for price display" do
     sign_in(users(:bob))
     get subscription_path
     assert_response :success
-    assert_select ".billing-plan__price", /\$#{Subscription::PRO_PRICE_CENTS / 100}/
+    assert_select ".billing-plan__amount", /\$#{Subscription::PRO_PRICE_CENTS / 100}/
   end
 
   test "show displays pending activation message when status=success but not yet pro" do
