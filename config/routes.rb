@@ -13,6 +13,14 @@ Rails.application.routes.draw do
   get  "invitations/:token", to: "invitation_acceptances#show", as: :accept_invitation
   post "invitations/:token", to: "invitation_acceptances#create"
 
+  namespace :api do
+    namespace :v1 do
+      resources :screenshots, only: [ :create ] do
+        resources :annotations, only: [ :index ]
+      end
+    end
+  end
+
   # Health check for load balancers
   get "up" => "rails/health#show", as: :rails_health_check
 

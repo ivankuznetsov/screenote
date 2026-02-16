@@ -6,7 +6,7 @@
 <%= link_to "&larr; Back to project".html_safe, project_path(@project), class: "breadcrumb-link" %>
 
 <% if flash[:api_key_token].present? %>
-  <div class="api-key-reveal">
+  <div class="api-key-reveal" data-testid="api-key-token-reveal">
     <p class="api-key-reveal__label">Your new API key (copy it now — it won't be shown again):</p>
     <code class="api-key-reveal__token"><%= flash[:api_key_token] %></code>
   </div>
