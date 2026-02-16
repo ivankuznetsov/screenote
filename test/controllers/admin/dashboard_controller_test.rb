@@ -39,13 +39,16 @@ class Admin::DashboardControllerTest < ActionDispatch::IntegrationTest
     sign_in(@admin)
     get admin_dashboard_path
     assert_response :success
-    assert_select "[data-testid='pro-users-count']"
+    pro_count = Subscription.where(plan: :pro, status: :active)
+      .where("current_period_end > ?", Time.current).count
+    assert_select "[data-testid='pro-users-count']", text: pro_count.to_s
   end
 
   test "displays users with content count" do
     sign_in(@admin)
     get admin_dashboard_path
     assert_response :success
-    assert_select "[data-testid='users-with-content-count']"
+    content_count = User.joins(owned_projects: :screenshots).distinct.count
+    assert_select "[data-testid='users-with-content-count']", text: content_count.to_s
   end
 end

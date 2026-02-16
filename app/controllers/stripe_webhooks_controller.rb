@@ -46,21 +46,19 @@ class StripeWebhooksController < ActionController::Base
 
     status = subscription.active? ? :active : :incomplete
 
-    was_pro = subscription.pro? && subscription.active?
-
     subscription.update!(
       stripe_subscription_id: session.subscription,
       plan: :pro,
       status: status,
       current_period_end: subscription.current_period_end || 30.days.from_now
     )
-
-    AdminMailer.new_pro_subscriber(subscription.user).deliver_later if !was_pro && subscription.active?
   end
 
   def handle_subscription_updated(stripe_sub)
     subscription = find_subscription(stripe_sub.customer, "customer.subscription.updated")
     return head(:service_unavailable) unless subscription
+
+    was_active_pro = subscription.active_pro?
 
     status = case stripe_sub.status
     when "active" then :active
@@ -73,6 +71,8 @@ class StripeWebhooksController < ActionController::Base
     attrs[:plan] = :pro if subscription.stripe_subscription_id.present?
 
     subscription.update!(**attrs)
+
+    notify_new_pro_subscriber(subscription) if !was_active_pro && subscription.active_pro?
   end
 
   def handle_subscription_deleted(stripe_sub)
@@ -80,6 +80,12 @@ class StripeWebhooksController < ActionController::Base
     return head(:service_unavailable) unless subscription
 
     subscription.update!(plan: :free, status: :canceled, stripe_subscription_id: nil)
+  end
+
+  def notify_new_pro_subscriber(subscription)
+    AdminMailer.new_pro_subscriber(subscription.user).deliver_later
+  rescue StandardError => e
+    Honeybadger.notify(e, context: { user_id: subscription.user_id })
   end
 
   def find_subscription(stripe_customer_id, event_type)

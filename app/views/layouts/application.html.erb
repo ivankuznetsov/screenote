@@ -17,7 +17,7 @@
           <% if Current.user %>
             <%= link_to "Help", help_path, class: "header__link" %>
             <%= link_to "Billing", subscription_path, class: "header__link", data: { testid: "billing-link" } %>
-            <% if Current.user.email == Admin::DashboardController::ADMIN_EMAIL %>
+            <% if Current.user.admin? %>
               <%= link_to "Admin", admin_dashboard_path, class: "header__link" %>
             <% end %>
             <span class="header__email" data-testid="user-email"><%= Current.user.email %></span>

@@ -11,7 +11,7 @@ class AdminMailerTest < ActionMailer::TestCase
       email.deliver_now
     end
 
-    assert_equal [ AdminMailer::ADMIN_EMAIL ], email.to
+    assert_equal [ User::ADMIN_EMAIL ], email.to
     assert_includes email.subject, user.email
     assert_includes email.body.encoded, user.email
     assert_includes email.body.encoded, "Pro"

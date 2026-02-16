@@ -2,8 +2,6 @@
 
 module Admin
   class DashboardController < ApplicationController
-    ADMIN_EMAIL = "ivan@ikuznetsov.com"
-
     before_action :require_admin!
 
     def show
@@ -20,9 +18,9 @@ module Admin
     private
 
     def require_admin!
-      unless Current.user&.email == ADMIN_EMAIL
-        redirect_to dashboard_path, alert: "Not authorized."
-      end
+      return if Current.user&.admin?
+
+      redirect_to dashboard_path, alert: "Not authorized."
     end
   end
 end
