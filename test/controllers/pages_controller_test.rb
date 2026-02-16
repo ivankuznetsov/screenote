@@ -29,6 +29,6 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     get help_path
 
     assert_response :success, "Authenticated user should see the help page"
-    assert_select "h1", "MCP Integration Guide"
+    assert_select "h1", "Getting Started"
   end
 end

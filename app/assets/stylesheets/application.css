@@ -959,203 +959,281 @@ a:hover {
   color: var(--color-text);
 }
 
-/* Help page */
-.help-page {
-  max-width: 800px;
+/* ── Guide page ── */
+.guide {
+  max-width: 780px;
 }
 
-.help-page code {
+.guide code {
   background: var(--color-bg-secondary);
   padding: 0.125rem 0.375rem;
   border-radius: 3px;
   font-size: 0.8125rem;
+  font-family: var(--font-mono);
 }
 
-.help-page__title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin-bottom: 0.25rem;
-}
-
-.help-page__subtitle {
-  color: var(--color-text-secondary);
-  margin-bottom: 2rem;
-}
-
-.help-section {
+/* Hero */
+.guide__hero {
   margin-bottom: 2.5rem;
 }
 
-.help-section__heading {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
+.guide__title {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.375rem;
 }
 
-/* Help Steps */
-.help-steps {
-  list-style: none;
-  counter-reset: help-step;
+.guide__subtitle {
+  font-size: 1.0625rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
-.help-steps__item {
-  counter-increment: help-step;
-  padding: 0.75rem 0 0.75rem 2.5rem;
-  position: relative;
-  font-size: 0.9375rem;
+/* Steps */
+.guide__section {
+  margin-bottom: 2rem;
 }
 
-.help-steps__item::before {
-  content: counter(help-step);
-  position: absolute;
-  left: 0;
-  top: 0.75rem;
-  width: 1.75rem;
-  height: 1.75rem;
-  background: var(--color-primary);
-  color: var(--color-white);
+.guide__step {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.guide__step-number {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: #0b0f1a;
+  color: #e5a31e;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-top: 0.125rem;
 }
 
-/* Help Setup */
-.help-setup {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  overflow: hidden;
+.guide__step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.guide__step-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.guide__step-desc {
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
   margin-bottom: 0.75rem;
 }
 
-.help-setup__label {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  padding: 0.5rem 1rem;
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border);
+/* Terminal block */
+.guide__terminal {
+  background: #0b0f1a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #1e1e2a;
 }
 
-.help-setup__code {
-  padding: 1rem;
+.guide__terminal-bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #13131a;
+  border-bottom: 1px solid #1e1e2a;
+}
+
+.guide__terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2a2a3a;
+}
+
+.guide__terminal-body {
+  padding: 1rem 1.25rem;
+}
+
+.guide__terminal-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  padding: 0.1875rem 0;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
-  line-height: 1.6;
-  overflow-x: auto;
-  margin: 0;
-  background: var(--color-bg);
+  line-height: 1.7;
 }
 
-.help-setup__note {
+.guide__terminal-line code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: #e8e8ed;
   font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.guide__terminal-prompt {
+  color: #e5a31e;
+  font-weight: 600;
+  user-select: none;
+}
+
+.guide__terminal-comment {
+  color: #555570;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* Divider */
+.guide__divider {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 2.5rem 0;
+}
+
+/* Section headings (for workflows, reference) */
+.guide__section-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.375rem;
+  letter-spacing: -0.01em;
+}
+
+.guide__section-desc {
+  font-size: 0.875rem;
   color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
 }
 
-/* Tool Grid */
-.tool-grid {
+/* Workflow grid */
+.guide__workflow-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
+  margin-top: 1rem;
 }
 
-.tool-card {
+.guide__workflow {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.guide__workflow-icon {
+  color: #e5a31e;
+  margin-bottom: 0.75rem;
+}
+
+.guide__workflow-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.guide__workflow-desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+}
+
+.guide__workflow-steps {
+  padding-left: 1.125rem;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+}
+
+.guide__workflow-steps li {
+  padding: 0.125rem 0;
+}
+
+.guide__workflow-steps code {
+  font-size: 0.75rem;
+}
+
+/* Tools reference grid */
+.guide__tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 0.75rem;
+}
+
+.guide__tool {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
   padding: 1.25rem;
 }
 
-.tool-card__name {
+.guide__tool-name {
   font-family: var(--font-mono);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-primary);
-  margin-bottom: 0.5rem;
-}
-
-.tool-card__description {
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.75rem;
-  line-height: 1.4;
-}
-
-.tool-card__params {
-  margin-bottom: 0.75rem;
-}
-
-.tool-card__label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-secondary);
+  color: #0b0f1a;
   margin-bottom: 0.375rem;
 }
 
-.tool-card__params-list {
+.guide__tool-desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  margin-bottom: 0.75rem;
+}
+
+.guide__tool-params {
+  margin-bottom: 0.5rem;
+}
+
+.guide__tool-params-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.guide__tool-params-list {
   list-style: none;
   font-size: 0.8125rem;
 }
 
-.tool-card__params-list li {
-  padding: 0.25rem 0;
+.guide__tool-params-list li {
+  padding: 0.1875rem 0;
+  line-height: 1.4;
 }
 
-.tool-card__required {
+.guide__tool-required {
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--color-danger);
   text-transform: uppercase;
 }
 
-.tool-card__example-code {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 0.5rem 0.75rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  overflow-x: auto;
-  margin: 0;
-}
+/* Responsive */
+@media (max-width: 640px) {
+  .guide__workflow-grid {
+    grid-template-columns: 1fr;
+  }
 
-/* Workflows (help page) */
-.help-workflow {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 1.25rem;
-  margin-bottom: 1rem;
-}
+  .guide__tools-grid {
+    grid-template-columns: 1fr;
+  }
 
-.help-workflow__title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
-}
-
-.help-workflow__description {
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.75rem;
-}
-
-.help-workflow__steps {
-  padding-left: 1.25rem;
-  font-size: 0.8125rem;
-  line-height: 1.6;
-}
-
-.help-workflow__steps li {
-  padding: 0.125rem 0;
+  .guide__terminal-comment {
+    display: none;
+  }
 }
 
 /* Page header actions */

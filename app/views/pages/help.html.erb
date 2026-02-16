@@ -1,101 +1,163 @@
-<div class="help-page">
-  <h1 class="help-page__title" data-testid="page-title">MCP Integration Guide</h1>
-  <p class="help-page__subtitle">Connect your AI agent to Screenote for visual feedback loops.</p>
+<div class="guide">
 
-  <%# ── Quick Start ── %>
-  <section class="help-section">
-    <h2 class="help-section__heading">Quick Start</h2>
-    <ol class="help-steps">
-      <li class="help-steps__item">
-        <strong>Install the plugin</strong> — Run the commands below in Claude Code to add the Screenote plugin.
-      </li>
-      <li class="help-steps__item">
-        <strong>Authorize</strong> — On first use, a browser window opens to connect your Screenote account.
-      </li>
-      <li class="help-steps__item">
-        <strong>Use the tools</strong> — Your AI agent can now upload screenshots, read annotations, and resolve feedback.
-      </li>
-    </ol>
-  </section>
+  <%# ── Hero ── %>
+  <div class="guide__hero">
+    <h1 class="guide__title" data-testid="page-title">Getting Started</h1>
+    <p class="guide__subtitle">Set up Screenote in Claude Code and start getting visual feedback in under a minute.</p>
+  </div>
 
-  <%# ── Setup ── %>
-  <section class="help-section">
-    <h2 class="help-section__heading">Setup</h2>
-    <div class="help-setup">
-      <div class="help-setup__label">Claude Code Plugin</div>
-<pre class="help-setup__code"><code>/plugin marketplace add ivankuznetsov/claude-screenote
-/plugin install claude-screenote@screenote-marketplace</code></pre>
-    </div>
-    <p class="help-setup__note">
-      After installing, use <code>/screenote</code> to capture pages and <code>/screenote feedback</code> to retrieve annotations.
-    </p>
-    <div class="help-setup__label">Usage</div>
-<pre class="help-setup__code"><code>/screenote &lt;url&gt;              # desktop screenshot (1440x900)
-/screenote mobile &lt;url&gt;       # mobile screenshot (393x852)
-/screenote feedback            # retrieve annotations</code></pre>
-  </section>
-
-  <%# ── Tools Reference ── %>
-  <section class="help-section">
-    <h2 class="help-section__heading">Tools Reference</h2>
-    <div class="tool-grid">
-      <% @tools.each do |tool| %>
-        <% schema = tool.input_schema_to_json %>
-        <% properties = schema[:properties] || {} %>
-        <% required_params = schema[:required]&.map(&:to_s) || [] %>
-        <div class="tool-card" data-testid="tool-card">
-          <div class="tool-card__name"><%= tool.tool_name %></div>
-          <div class="tool-card__description"><%= tool.description %></div>
-          <% if properties.any? %>
-            <div class="tool-card__params">
-              <div class="tool-card__label">Parameters</div>
-              <ul class="tool-card__params-list">
-                <% properties.each do |param_name, param_meta| %>
-                  <li>
-                    <code><%= param_name %></code>
-                    <% if required_params.include?(param_name.to_s) %>
-                      <span class="tool-card__required">required</span>
-                    <% end %>
-                    &mdash; <%= param_meta[:description] %>
-                  </li>
-                <% end %>
-              </ul>
+  <%# ── Install ── %>
+  <section class="guide__section">
+    <div class="guide__step">
+      <span class="guide__step-number">1</span>
+      <div class="guide__step-content">
+        <h2 class="guide__step-title">Install the plugin</h2>
+        <p class="guide__step-desc">Run these two commands in Claude Code:</p>
+        <div class="guide__terminal">
+          <div class="guide__terminal-bar">
+            <span class="guide__terminal-dot"></span>
+            <span class="guide__terminal-dot"></span>
+            <span class="guide__terminal-dot"></span>
+          </div>
+          <div class="guide__terminal-body">
+            <div class="guide__terminal-line">
+              <span class="guide__terminal-prompt">$</span>
+              <code>/plugin marketplace add ivankuznetsov/claude-screenote</code>
             </div>
-          <% end %>
+            <div class="guide__terminal-line">
+              <span class="guide__terminal-prompt">$</span>
+              <code>/plugin install claude-screenote@screenote-marketplace</code>
+            </div>
+          </div>
         </div>
-      <% end %>
+      </div>
     </div>
   </section>
+
+  <%# ── Authorize ── %>
+  <section class="guide__section">
+    <div class="guide__step">
+      <span class="guide__step-number">2</span>
+      <div class="guide__step-content">
+        <h2 class="guide__step-title">Authorize</h2>
+        <p class="guide__step-desc">On first use, a browser window opens to connect your Screenote account. Sign in and grant access — this only happens once.</p>
+      </div>
+    </div>
+  </section>
+
+  <%# ── Use ── %>
+  <section class="guide__section">
+    <div class="guide__step">
+      <span class="guide__step-number">3</span>
+      <div class="guide__step-content">
+        <h2 class="guide__step-title">Use the commands</h2>
+        <p class="guide__step-desc">Your agent can now capture screenshots and read your visual feedback:</p>
+        <div class="guide__terminal">
+          <div class="guide__terminal-bar">
+            <span class="guide__terminal-dot"></span>
+            <span class="guide__terminal-dot"></span>
+            <span class="guide__terminal-dot"></span>
+          </div>
+          <div class="guide__terminal-body">
+            <div class="guide__terminal-line">
+              <span class="guide__terminal-prompt">$</span>
+              <code>/screenote &lt;url&gt;</code>
+              <span class="guide__terminal-comment"># desktop screenshot (1440&times;900)</span>
+            </div>
+            <div class="guide__terminal-line">
+              <span class="guide__terminal-prompt">$</span>
+              <code>/screenote mobile &lt;url&gt;</code>
+              <span class="guide__terminal-comment"># mobile screenshot (393&times;852)</span>
+            </div>
+            <div class="guide__terminal-line">
+              <span class="guide__terminal-prompt">$</span>
+              <code>/screenote feedback</code>
+              <span class="guide__terminal-comment"># retrieve annotations</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <%# ── Divider ── %>
+  <hr class="guide__divider">
 
   <%# ── Workflows ── %>
-  <section class="help-section">
-    <h2 class="help-section__heading">Workflows</h2>
+  <section class="guide__section">
+    <h2 class="guide__section-heading">Workflows</h2>
 
-    <div class="help-workflow">
-      <h3 class="help-workflow__title">Capture &amp; Annotate</h3>
-      <p class="help-workflow__description">Human uploads a screenshot, annotates it, and the AI agent picks up the feedback.</p>
-      <ol class="help-workflow__steps">
-        <li>Human uploads a screenshot in the Screenote UI</li>
-        <li>Human draws annotations and leaves comments</li>
-        <li>Agent calls <code>list_screenshots</code> to discover new screenshots</li>
-        <li>Agent calls <code>list_annotations</code> to read feedback</li>
-        <li>Agent calls <code>get_annotation</code> to see the cropped visual context</li>
-        <li>Agent implements the fix and calls <code>resolve_annotation</code></li>
-      </ol>
-    </div>
+    <div class="guide__workflow-grid">
+      <div class="guide__workflow">
+        <div class="guide__workflow-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <h3 class="guide__workflow-title">Capture &amp; Annotate</h3>
+        <p class="guide__workflow-desc">You upload a screenshot, mark what's wrong, and your AI agent picks up the feedback.</p>
+        <ol class="guide__workflow-steps">
+          <li>Upload a screenshot in the Screenote UI</li>
+          <li>Draw annotations and leave comments</li>
+          <li>Agent calls <code>list_screenshots</code> to discover new screenshots</li>
+          <li>Agent calls <code>get_annotation</code> to see the cropped region</li>
+          <li>Agent implements the fix and calls <code>resolve_annotation</code></li>
+        </ol>
+      </div>
 
-    <div class="help-workflow">
-      <h3 class="help-workflow__title">Agent Feedback Loop</h3>
-      <p class="help-workflow__description">The AI agent captures its own work, uploads it, and waits for human review.</p>
-      <ol class="help-workflow__steps">
-        <li>Agent takes a screenshot of localhost (e.g. with Playwright)</li>
-        <li>Agent calls <code>create_screenshot_upload</code> to get a signed upload URL</li>
-        <li>Agent uploads the image directly via the signed URL</li>
-        <li>Human opens the annotate URL and leaves visual feedback</li>
-        <li>Agent calls <code>list_annotations</code> to read comments</li>
-        <li>Agent reads each annotation with <code>get_annotation</code></li>
-        <li>Agent fixes issues, re-screenshots, and repeats</li>
-      </ol>
+      <div class="guide__workflow">
+        <div class="guide__workflow-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+          </svg>
+        </div>
+        <h3 class="guide__workflow-title">Agent Feedback Loop</h3>
+        <p class="guide__workflow-desc">The agent screenshots its own work, you review and annotate, agent reads feedback and iterates.</p>
+        <ol class="guide__workflow-steps">
+          <li>Type <code>/screenote</code> — agent captures localhost</li>
+          <li>Open the screenshot and mark what's wrong</li>
+          <li>Agent calls <code>list_annotations</code> to read your comments</li>
+          <li>Agent calls <code>get_annotation</code> for each cropped region</li>
+          <li>Agent fixes issues, re-screenshots, and repeats</li>
+        </ol>
+      </div>
     </div>
   </section>
+
+  <%# ── MCP Tools Reference ── %>
+  <% if @tools.any? %>
+    <section class="guide__section">
+      <h2 class="guide__section-heading">MCP Tools Reference</h2>
+      <p class="guide__section-desc">These are the MCP tools your AI agent uses under the hood. You don't need to call them directly — the <code>/screenote</code> commands handle everything.</p>
+
+      <div class="guide__tools-grid">
+        <% @tools.each do |tool| %>
+          <% schema = tool.input_schema_to_json %>
+          <% properties = schema[:properties] || {} %>
+          <% required_params = schema[:required]&.map(&:to_s) || [] %>
+          <div class="guide__tool" data-testid="tool-card">
+            <div class="guide__tool-name"><%= tool.tool_name %></div>
+            <div class="guide__tool-desc"><%= tool.description %></div>
+            <% if properties.any? %>
+              <div class="guide__tool-params">
+                <div class="guide__tool-params-label">Parameters</div>
+                <ul class="guide__tool-params-list">
+                  <% properties.each do |param_name, param_meta| %>
+                    <li>
+                      <code><%= param_name %></code>
+                      <% if required_params.include?(param_name.to_s) %>
+                        <span class="guide__tool-required">required</span>
+                      <% end %>
+                      &mdash; <%= param_meta[:description] %>
+                    </li>
+                  <% end %>
+                </ul>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+
 </div>
