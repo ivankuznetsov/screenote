@@ -7,12 +7,16 @@ class CreateScreenshotTool < ApplicationTool
   MAX_BASE64_SIZE = 28 * 1024 * 1024 # ~28MB base64 ≈ ~20MB decoded
 
   arguments do
+    required(:project_id).filled(:integer).description("The project ID")
     required(:title).filled(:string).description("Title for the screenshot")
     required(:image_base64).filled(:string).description("Base64-encoded PNG or JPEG image data")
     optional(:mime_type).filled(:string).description("Image MIME type: image/png or image/jpeg (default: image/png)")
   end
 
-  def call(title:, image_base64:, mime_type: "image/png")
+  def call(project_id:, title:, image_base64:, mime_type: "image/png")
+    error = require_project(project_id)
+    return error if error
+
     unless mime_type.in?(Screenshot::ALLOWED_CONTENT_TYPES)
       return { error: "invalid_mime_type", message: "Must be image/png or image/jpeg" }.to_json
     end

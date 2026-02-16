@@ -3,6 +3,9 @@
   <p class="auth-card__subtitle">
     <strong><%= @pre_auth.client.name %></strong> is requesting access to your Screenote account.
   </p>
+  <p class="oauth-consent__explanation">
+    An AI agent is requesting access to read and write screenshots and annotations in your projects via the Model Context Protocol.
+  </p>
 
   <% if @pre_auth.scopes.present? %>
     <div class="oauth-consent__scopes">
@@ -13,7 +16,7 @@
             <% if scope.to_s == "mcp_read" %>
               Read your screenshots and annotations
             <% elsif scope.to_s == "mcp_write" %>
-              Create screenshots and annotations
+              Create screenshots, annotations, and projects
             <% else %>
               <%= scope %>
             <% end %>
@@ -23,26 +26,17 @@
     </div>
   <% end %>
 
-  <%= form_tag oauth_authorization_path, method: :post, class: "oauth-consent__form" do %>
-    <%= hidden_field_tag :client_id, @pre_auth.client.uid %>
-    <%= hidden_field_tag :redirect_uri, @pre_auth.redirect_uri %>
-    <%= hidden_field_tag :state, @pre_auth.state %>
-    <%= hidden_field_tag :response_type, @pre_auth.response_type %>
-    <%= hidden_field_tag :scope, @pre_auth.scope %>
-    <%= hidden_field_tag :code_challenge, @pre_auth.code_challenge %>
-    <%= hidden_field_tag :code_challenge_method, @pre_auth.code_challenge_method %>
-
-    <div class="auth-card__field">
-      <label class="auth-card__label" for="project_id">Select a project</label>
-      <select name="project_id" id="project_id" class="auth-card__input" required>
-        <% @projects.each do |project| %>
-          <option value="<%= project.id %>"><%= project.name %></option>
-        <% end %>
-      </select>
-    </div>
+  <%= form_with url: oauth_authorization_path, method: :post, class: "oauth-consent__form" do |f| %>
+    <%= f.hidden_field :client_id, value: @pre_auth.client.uid %>
+    <%= f.hidden_field :redirect_uri, value: @pre_auth.redirect_uri %>
+    <%= f.hidden_field :state, value: @pre_auth.state %>
+    <%= f.hidden_field :response_type, value: @pre_auth.response_type %>
+    <%= f.hidden_field :scope, value: @pre_auth.scope %>
+    <%= f.hidden_field :code_challenge, value: @pre_auth.code_challenge %>
+    <%= f.hidden_field :code_challenge_method, value: @pre_auth.code_challenge_method %>
 
     <div class="oauth-consent__actions">
-      <%= submit_tag "Authorize", class: "auth-card__submit", data: { testid: "oauth-authorize-btn" } %>
+      <%= f.submit "Authorize", class: "auth-card__submit", data: { testid: "oauth-authorize-btn" } %>
     </div>
 
     <div class="oauth-consent__deny">

@@ -5,12 +5,16 @@ class GetAnnotationTool < ApplicationTool
   description "Get annotation details with a cropped image of the annotated region (base64-encoded PNG)."
 
   arguments do
+    required(:project_id).filled(:integer).description("The project ID")
     required(:annotation_id).filled(:integer).description("The annotation ID")
   end
 
-  def call(annotation_id:)
+  def call(project_id:, annotation_id:)
+    error = require_project(project_id)
+    return error if error
+
     with_error_handling do
-      annotation = project_annotations.find(annotation_id)
+      annotation = project_annotations(current_project).find(annotation_id)
 
       screenshot = annotation.screenshot
       cropped_base64 = nil

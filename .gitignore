@@ -36,3 +36,4 @@
 # Ignore Kamal secrets (contains real credentials).
 /.kamal/secrets
 
+.worktrees

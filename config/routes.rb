@@ -3,6 +3,7 @@ Rails.application.routes.draw do
 
   use_doorkeeper do
     controllers authorizations: "oauth/authorizations"
+    skip_controllers :applications, :authorized_applications, :token_info
   end
 
   # OAuth 2.1 metadata endpoints (RFC 9728 / RFC 8414)

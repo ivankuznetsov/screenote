@@ -24,19 +24,8 @@ Doorkeeper.configure do
   # Only authorization_code grant flow (OAuth 2.1)
   grant_flows %w[authorization_code]
 
-  # Store project_id on access tokens and grants
-  custom_access_token_attributes [ :project_id ]
-
-  # Allow public (non-confidential) clients created by DCR
-  allow_token_introspection false
-
-  # Skip authorization for previously authorized clients+scopes
-  skip_authorization do |_resource_owner, _client|
-    false
-  end
-
-  # Use the resource owner's ID (User#id) for the resource_owner_id column
-  resource_owner_from_credentials do |_routes|
-    nil # We don't support password grant
+  # Skip consent screen for previously-authorized client+scope combinations
+  skip_authorization do |resource_owner, client|
+    Doorkeeper::AccessToken.matching_token_for(client, resource_owner, client.scopes).present?
   end
 end
