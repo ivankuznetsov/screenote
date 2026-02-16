@@ -28,8 +28,11 @@ class StripeWebhooksController < ActionController::Base
       Rails.logger.info("Stripe webhook: ignoring unhandled event type '#{event.type}'")
     end
 
-    head :ok
-  rescue Stripe::StripeError, ActiveRecord::RecordInvalid => e
+    head :ok unless response.committed? || performed?
+  rescue ActiveRecord::RecordInvalid => e
+    Honeybadger.notify(e, context: { event_type: event&.type, event_id: event&.id })
+    head :ok # Stop retries for permanent validation failures
+  rescue Stripe::StripeError => e
     Honeybadger.notify(e, context: { event_type: event&.type, event_id: event&.id })
     head :internal_server_error
   end
@@ -38,21 +41,20 @@ class StripeWebhooksController < ActionController::Base
 
   def handle_checkout_completed(session)
     subscription = find_subscription(session.customer, "checkout.session.completed")
-    return unless subscription
+    return head(:service_unavailable) unless subscription
     return unless session.subscription
 
-    stripe_sub = Stripe::Subscription.retrieve(session.subscription)
     subscription.update!(
-      stripe_subscription_id: stripe_sub.id,
+      stripe_subscription_id: session.subscription,
       plan: :pro,
-      status: stripe_sub.status == "active" ? :active : :incomplete,
-      current_period_end: Time.at(stripe_sub.current_period_end).utc
+      status: :incomplete,
+      current_period_end: subscription.current_period_end || 30.days.from_now
     )
   end
 
   def handle_subscription_updated(stripe_sub)
     subscription = find_subscription(stripe_sub.customer, "customer.subscription.updated")
-    return unless subscription
+    return head(:service_unavailable) unless subscription
 
     status = case stripe_sub.status
     when "active" then :active
@@ -69,7 +71,7 @@ class StripeWebhooksController < ActionController::Base
 
   def handle_subscription_deleted(stripe_sub)
     subscription = find_subscription(stripe_sub.customer, "customer.subscription.deleted")
-    return unless subscription
+    return head(:service_unavailable) unless subscription
 
     subscription.update!(plan: :free, status: :canceled, stripe_subscription_id: nil)
   end

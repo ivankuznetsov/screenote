@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "ostruct"
 
 class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   WEBHOOK_SECRET = "whsec_test_secret"
@@ -33,33 +32,24 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
       subscription: "sub_new_test_123"
     })
 
-    stripe_sub_mock = OpenStruct.new(
-      id: "sub_new_test_123",
-      status: "active",
-      current_period_end: 30.days.from_now.to_i
-    )
-    original_method = Stripe::Subscription.method(:retrieve)
-    Stripe::Subscription.define_singleton_method(:retrieve) { |_id| stripe_sub_mock }
     post_webhook(event)
-  ensure
-    Stripe::Subscription.define_singleton_method(:retrieve, original_method)
 
     assert_response :ok
     @subscription.reload
     assert @subscription.pro?, "Subscription should be upgraded to pro"
-    assert @subscription.status_active?, "Subscription status should be active"
+    assert @subscription.incomplete?, "Subscription status should be incomplete until subscription.updated webhook"
     assert_equal "sub_new_test_123", @subscription.stripe_subscription_id
     assert_not_nil @subscription.current_period_end, "current_period_end should be set"
   end
 
-  test "checkout.session.completed with missing subscription record returns ok and notifies" do
+  test "checkout.session.completed with missing subscription record returns service_unavailable" do
     event = build_event("checkout.session.completed", {
       customer: "cus_nonexistent",
       subscription: "sub_orphan"
     })
 
     post_webhook(event)
-    assert_response :ok
+    assert_response :service_unavailable
   end
 
   test "checkout.session.completed with nil session.subscription skips retrieval" do
@@ -86,7 +76,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     post_webhook(event)
     assert_response :ok
     @subscription.reload
-    assert @subscription.status_active?, "Status should be active"
+    assert @subscription.active?, "Status should be active"
   end
 
   test "customer.subscription.updated sets past_due status" do
@@ -101,7 +91,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     post_webhook(event)
     assert_response :ok
     @subscription.reload
-    assert @subscription.status_past_due?, "Status should be past_due"
+    assert @subscription.past_due?, "Status should be past_due"
   end
 
   test "customer.subscription.updated maps canceled status" do
@@ -116,7 +106,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     post_webhook(event)
     assert_response :ok
     @subscription.reload
-    assert @subscription.status_canceled?, "Status should be canceled"
+    assert @subscription.canceled?, "Status should be canceled"
   end
 
   test "customer.subscription.updated maps unpaid to canceled" do
@@ -131,7 +121,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     post_webhook(event)
     assert_response :ok
     @subscription.reload
-    assert @subscription.status_canceled?, "Unpaid status should map to canceled"
+    assert @subscription.canceled?, "Unpaid status should map to canceled"
   end
 
   test "customer.subscription.updated maps unknown status to incomplete" do
@@ -146,7 +136,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     post_webhook(event)
     assert_response :ok
     @subscription.reload
-    assert @subscription.status_incomplete?, "Unknown status should map to incomplete"
+    assert @subscription.incomplete?, "Unknown status should map to incomplete"
   end
 
   test "customer.subscription.deleted resets to free plan" do
@@ -160,7 +150,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
     @subscription.reload
     assert @subscription.free?, "Plan should be reset to free"
-    assert @subscription.status_canceled?, "Status should be canceled"
+    assert @subscription.canceled?, "Status should be canceled"
     assert_nil @subscription.stripe_subscription_id, "stripe_subscription_id should be cleared"
   end
 

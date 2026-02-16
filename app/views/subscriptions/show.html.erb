@@ -4,13 +4,13 @@
   <h1 class="page-header__title">Billing</h1>
 </div>
 
-<% if params[:status] == "success" %>
+<% if @checkout_status == "success" %>
   <% if Current.user.pro? %>
     <div class="flash flash--notice">Your subscription has been activated. Welcome to Pro!</div>
   <% else %>
     <div class="flash flash--notice">Thank you for subscribing! Your Pro plan is being activated and should appear shortly. Please refresh this page in a moment.</div>
   <% end %>
-<% elsif params[:status] == "canceled" %>
+<% elsif @checkout_status == "canceled" %>
   <div class="flash flash--alert">Checkout was canceled. You can try again anytime.</div>
 <% end %>
 
@@ -42,18 +42,10 @@
     </ul>
     <% if Current.user.pro? %>
       <div class="billing-plan__badge">Current plan</div>
+      <p class="billing-plan__renewal">Renews on <strong><%= @subscription.current_period_end&.strftime("%B %d, %Y") %></strong></p>
       <%= button_to "Manage subscription", portal_subscription_path, method: :post, class: "btn btn--secondary" %>
     <% else %>
       <%= button_to "Upgrade to Pro", checkout_subscription_path, method: :post, class: "btn btn--primary" %>
     <% end %>
   </div>
 </div>
-
-<% if @subscription&.active_pro? %>
-  <div class="billing-info">
-    <p class="billing-info__text">
-      Your Pro subscription renews on <strong><%= @subscription.current_period_end&.strftime("%B %d, %Y") %></strong>.
-    </p>
-    <%= button_to "Manage billing", portal_subscription_path, method: :post, class: "btn btn--secondary" %>
-  </div>
-<% end %>

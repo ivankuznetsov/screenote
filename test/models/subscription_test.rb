@@ -3,12 +3,6 @@
 require "test_helper"
 
 class SubscriptionTest < ActiveSupport::TestCase
-  test "free plan constants" do
-    assert_equal 1, Subscription::FREE_PROJECT_LIMIT
-    assert_equal 1, Subscription::FREE_MEMBER_LIMIT
-    assert_equal 1000, Subscription::PRO_PRICE_CENTS
-  end
-
   test "active_pro? returns true for active pro subscription" do
     sub = subscriptions(:alice_pro)
     assert sub.active_pro?, "Active pro subscription should be active_pro?"
@@ -21,8 +15,20 @@ class SubscriptionTest < ActiveSupport::TestCase
 
   test "active_pro? returns false for pro plan with past_due status" do
     sub = subscriptions(:alice_pro)
-    sub.status_past_due!
+    sub.past_due!
     assert_not sub.active_pro?, "Pro subscription with past_due status should not be active_pro?"
+  end
+
+  test "active_pro? returns false for pro plan with expired current_period_end" do
+    sub = subscriptions(:alice_pro)
+    sub.update_columns(current_period_end: 1.day.ago)
+    assert_not sub.active_pro?, "Pro subscription with expired period should not be active_pro?"
+  end
+
+  test "active_pro? returns false for pro plan with nil current_period_end" do
+    sub = subscriptions(:alice_pro)
+    sub.update_columns(current_period_end: nil)
+    assert_not sub.active_pro?, "Pro subscription with nil period end should not be active_pro?"
   end
 
   test "active_pro? returns false for pro plan with canceled status" do

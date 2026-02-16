@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "ostruct"
 
 class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
   test "requires authentication" do
@@ -63,5 +64,77 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     get subscription_path(status: "canceled")
     assert_response :success
     assert_select ".flash--alert", /canceled/
+  end
+
+  # -- checkout action --
+
+  test "checkout redirects pro users back with notice" do
+    sign_in(users(:alice))
+    post checkout_subscription_path
+    assert_redirected_to subscription_path
+    assert_equal "You're already on the Pro plan.", flash[:notice]
+  end
+
+  test "checkout for free user creates Stripe session and redirects" do
+    sign_in(users(:bob))
+
+    original_create = Stripe::Checkout::Session.method(:create)
+    Stripe::Checkout::Session.define_singleton_method(:create) do |**_args|
+      OpenStruct.new(url: "https://checkout.stripe.com/test")
+    end
+
+    begin
+      ENV["STRIPE_PRO_PRICE_ID"] = "price_test_123"
+      post checkout_subscription_path
+      assert_redirected_to "https://checkout.stripe.com/test"
+    ensure
+      ENV.delete("STRIPE_PRO_PRICE_ID")
+      Stripe::Checkout::Session.define_singleton_method(:create, original_create)
+    end
+  end
+
+  test "checkout when Stripe raises error shows friendly alert" do
+    sign_in(users(:bob))
+
+    original_create = Stripe::Checkout::Session.method(:create)
+    Stripe::Checkout::Session.define_singleton_method(:create) do |**_args|
+      raise Stripe::StripeError.new("test")
+    end
+
+    begin
+      ENV["STRIPE_PRO_PRICE_ID"] = "price_test_123"
+      post checkout_subscription_path
+      assert_redirected_to subscription_path
+      assert_match(/payment provider/, flash[:alert])
+    ensure
+      ENV.delete("STRIPE_PRO_PRICE_ID")
+      Stripe::Checkout::Session.define_singleton_method(:create, original_create)
+    end
+  end
+
+  # -- portal action --
+
+  test "portal with no subscription shows alert" do
+    user = User.create!(email: "nosub@example.com", password: "password123", confirmed_at: Time.current)
+    sign_in(user)
+    post portal_subscription_path
+    assert_redirected_to subscription_path
+    assert_equal "No billing account found.", flash[:alert]
+  end
+
+  test "portal with subscription redirects to Stripe portal" do
+    sign_in(users(:alice))
+
+    original_create = Stripe::BillingPortal::Session.method(:create)
+    Stripe::BillingPortal::Session.define_singleton_method(:create) do |**_args|
+      OpenStruct.new(url: "https://billing.stripe.com/test")
+    end
+
+    begin
+      post portal_subscription_path
+      assert_redirected_to "https://billing.stripe.com/test"
+    ensure
+      Stripe::BillingPortal::Session.define_singleton_method(:create, original_create)
+    end
   end
 end

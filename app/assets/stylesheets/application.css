@@ -1249,6 +1249,7 @@ a:hover {
   margin-bottom: 0.75rem;
 }
 
+/* Billing plan renewal */
 .billing-plan__renewal {
   font-size: 0.875rem;
   color: var(--color-text-secondary);

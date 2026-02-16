@@ -9,10 +9,15 @@ class ApplicationController < ActionController::Base
 
   before_action :require_authentication
   before_action :handle_pending_invitation
+  before_action :preload_subscription
 
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
 
   private
+
+  def preload_subscription
+    Current.user&.subscription # triggers load, cached by ActiveRecord for rest of request
+  end
 
   def handle_pending_invitation
     return unless Current.user

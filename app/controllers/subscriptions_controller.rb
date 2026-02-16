@@ -1,8 +1,14 @@
 # frozen_string_literal: true
 
 class SubscriptionsController < ApplicationController
+  rescue_from Stripe::StripeError do |e|
+    Honeybadger.notify(e)
+    redirect_to subscription_path, alert: "We couldn't connect to our payment provider. Please try again shortly."
+  end
+
   def show
     @subscription = Current.user.subscription
+    @checkout_status = params[:status]
   end
 
   def checkout
@@ -22,9 +28,6 @@ class SubscriptionsController < ApplicationController
     )
 
     redirect_to checkout_session.url, allow_other_host: true
-  rescue Stripe::StripeError => e
-    Honeybadger.notify(e)
-    redirect_to subscription_path, alert: "We couldn't connect to our payment provider. Please try again shortly."
   end
 
   def portal
@@ -40,15 +43,14 @@ class SubscriptionsController < ApplicationController
     )
 
     redirect_to portal_session.url, allow_other_host: true
-  rescue Stripe::StripeError => e
-    Honeybadger.notify(e)
-    redirect_to subscription_path, alert: "We couldn't connect to our payment provider. Please try again shortly."
   end
 
   private
 
   def find_or_create_subscription
-    Current.user.subscription || create_subscription_with_stripe_customer
+    Current.user.with_lock do
+      Current.user.subscription || create_subscription_with_stripe_customer
+    end
   end
 
   def create_subscription_with_stripe_customer

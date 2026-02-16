@@ -18,7 +18,7 @@
   <% else %>
     <div class="upgrade-banner">
       <div class="upgrade-banner__text">You've reached the free plan limit of 1 team member. Upgrade to invite more collaborators.</div>
-      <%= link_to "Upgrade to Pro for $10/mo", subscription_path, class: "upgrade-banner__link" %>
+      <%= link_to "Upgrade to Pro for $#{Subscription::PRO_PRICE_CENTS / 100}/mo", subscription_path, class: "upgrade-banner__link" %>
     </div>
   <% end %>
 <% end %>

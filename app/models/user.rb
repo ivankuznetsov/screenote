@@ -14,7 +14,7 @@ class User < ApplicationRecord
   has_one :subscription, dependent: :destroy
 
   def pro?
-    subscription&.active_pro? || false
+    subscription&.active_pro?
   end
 
   def can_create_project?

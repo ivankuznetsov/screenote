@@ -22,13 +22,11 @@
   </div>
 </div>
 
-<% unless Current.user.pro? %>
-  <% if !Current.user.can_create_project? %>
-    <div class="upgrade-banner">
-      <div class="upgrade-banner__text">You've reached the free plan limit of 1 project.</div>
-      <%= link_to "Upgrade to Pro for $10/mo", subscription_path, class: "upgrade-banner__link" %>
-    </div>
-  <% end %>
+<% unless Current.user.can_create_project? %>
+  <div class="upgrade-banner">
+    <div class="upgrade-banner__text">You've reached the free plan limit of 1 project.</div>
+    <%= link_to "Upgrade to Pro for $#{Subscription::PRO_PRICE_CENTS / 100}/mo", subscription_path, class: "upgrade-banner__link" %>
+  </div>
 <% end %>
 
 <% if @projects.any? %>
