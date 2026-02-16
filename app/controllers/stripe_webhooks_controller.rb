@@ -55,7 +55,7 @@ class StripeWebhooksController < ActionController::Base
       current_period_end: subscription.current_period_end || 30.days.from_now
     )
 
-    AdminMailer.new_pro_subscriber(subscription.user).deliver_later unless was_pro
+    AdminMailer.new_pro_subscriber(subscription.user).deliver_later if !was_pro && subscription.active?
   end
 
   def handle_subscription_updated(stripe_sub)
