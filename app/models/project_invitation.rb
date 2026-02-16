@@ -20,8 +20,8 @@ class ProjectInvitation < ApplicationRecord
   class MemberLimitExceeded < StandardError; end
 
   def accept!(user)
-    with_lock do
-      return if accepted?
+    project.with_lock do
+      return if reload.accepted?
 
       unless project.creator.can_invite_member?(project)
         raise MemberLimitExceeded, "Project has reached its member limit"

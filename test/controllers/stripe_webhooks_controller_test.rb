@@ -64,7 +64,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert @subscription.free?, "Subscription should remain free when session.subscription is nil"
   end
 
-  test "customer.subscription.updated sets active status" do
+  test "customer.subscription.updated sets active status and plan pro" do
     upgrade_bob_to_pro!
 
     event = build_event("customer.subscription.updated", {
@@ -77,6 +77,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
     @subscription.reload
     assert @subscription.active?, "Status should be active"
+    assert @subscription.pro?, "Plan should remain pro when stripe_subscription_id is present"
   end
 
   test "customer.subscription.updated sets past_due status" do
@@ -137,6 +138,57 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
     @subscription.reload
     assert @subscription.incomplete?, "Unknown status should map to incomplete"
+  end
+
+  test "checkout.session.completed preserves active status when subscription.updated arrived first" do
+    # Simulate subscription.updated arriving first and setting active status
+    @subscription.update_columns(
+      plan: :free,
+      status: :active,
+      stripe_subscription_id: nil,
+      current_period_end: 60.days.from_now
+    )
+
+    event = build_event("checkout.session.completed", {
+      customer: @subscription.stripe_customer_id,
+      subscription: "sub_new_test_456"
+    })
+
+    post_webhook(event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.pro?, "Plan should be upgraded to pro"
+    assert @subscription.active?, "Status should remain active, not be downgraded to incomplete"
+    assert_equal "sub_new_test_456", @subscription.stripe_subscription_id
+  end
+
+  test "out-of-order webhooks: subscription.updated then checkout.session.completed does not strand user" do
+    # Step 1: subscription.updated arrives first with active status
+    # At this point, no stripe_subscription_id is set, so plan should NOT be set to pro
+    sub_updated_event = build_event("customer.subscription.updated", {
+      customer: @subscription.stripe_customer_id,
+      status: "active",
+      current_period_end: 60.days.from_now.to_i
+    })
+
+    post_webhook(sub_updated_event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.active?, "Status should be active after subscription.updated"
+    assert @subscription.free?, "Plan should remain free since stripe_subscription_id was not yet set"
+
+    # Step 2: checkout.session.completed arrives second
+    checkout_event = build_event("checkout.session.completed", {
+      customer: @subscription.stripe_customer_id,
+      subscription: "sub_out_of_order_123"
+    })
+
+    post_webhook(checkout_event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.pro?, "Plan should be pro after checkout"
+    assert @subscription.active?, "Status should remain active, not be downgraded to incomplete"
+    assert_equal "sub_out_of_order_123", @subscription.stripe_subscription_id
   end
 
   test "customer.subscription.deleted resets to free plan" do

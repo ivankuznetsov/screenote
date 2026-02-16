@@ -44,10 +44,12 @@ class StripeWebhooksController < ActionController::Base
     return head(:service_unavailable) unless subscription
     return unless session.subscription
 
+    status = subscription.active? ? :active : :incomplete
+
     subscription.update!(
       stripe_subscription_id: session.subscription,
       plan: :pro,
-      status: :incomplete,
+      status: status,
       current_period_end: subscription.current_period_end || 30.days.from_now
     )
   end
@@ -63,10 +65,10 @@ class StripeWebhooksController < ActionController::Base
     else :incomplete
     end
 
-    subscription.update!(
-      status: status,
-      current_period_end: Time.at(stripe_sub.current_period_end).utc
-    )
+    attrs = { status: status, current_period_end: Time.at(stripe_sub.current_period_end).utc }
+    attrs[:plan] = :pro if subscription.stripe_subscription_id.present?
+
+    subscription.update!(**attrs)
   end
 
   def handle_subscription_deleted(stripe_sub)
