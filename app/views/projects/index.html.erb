@@ -1,3 +1,17 @@
+<div class="mcp-banner" hidden data-controller="dismissible" data-dismissible-key-value="mcp-banner-dismissed" data-testid="mcp-banner">
+  <div class="mcp-banner__content">
+    <div class="mcp-banner__icon">&#9654;</div>
+    <div>
+      <div class="mcp-banner__title">Connect your AI agent via MCP</div>
+      <div class="mcp-banner__description">Let your AI agent capture screenshots, read annotations, and iterate on feedback — all through the MCP protocol.</div>
+    </div>
+  </div>
+  <div class="mcp-banner__actions">
+    <%= link_to "Learn how", help_path, class: "btn btn--secondary btn--small", data: { testid: "mcp-banner-cta" } %>
+    <button class="mcp-banner__dismiss" data-action="dismissible#dismiss" aria-label="Dismiss" data-testid="mcp-banner-dismiss">&times;</button>
+  </div>
+</div>
+
 <div class="page-header">
   <h1 class="page-header__title" data-testid="page-title">Projects</h1>
   <%= link_to "New project", new_project_path, class: "btn btn--primary" %>
