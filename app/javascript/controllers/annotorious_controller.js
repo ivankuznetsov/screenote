@@ -34,7 +34,7 @@ export default class extends Controller {
 
     this.anno = createImageAnnotator(this.imageTarget, {
       drawingEnabled: true,
-      drawingMode: "click"
+      drawingMode: "drag"
     })
 
     this.anno.on("createAnnotation", (annotation) => {
