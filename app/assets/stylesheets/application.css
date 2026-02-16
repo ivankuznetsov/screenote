@@ -1221,6 +1221,26 @@ a:hover {
   text-transform: uppercase;
 }
 
+/* App footer */
+.app-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 1.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.app-footer__link {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.app-footer__link:hover {
+  color: var(--color-text);
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .guide__workflow-grid {
