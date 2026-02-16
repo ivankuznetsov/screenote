@@ -48,4 +48,6 @@ Rails.application.routes.draw do
   root "pages#landing"
   get "dashboard", to: "projects#index", as: :dashboard
   get "help", to: "pages#help"
+  get "terms", to: "pages#terms"
+  get "privacy", to: "pages#privacy"
 end

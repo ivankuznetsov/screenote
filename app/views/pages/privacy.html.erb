@@ -1,0 +1,109 @@
+<% content_for(:title, "Privacy Policy - Screenote") %>
+
+<div class="legal">
+  <header class="legal__header">
+    <h1 class="legal__title">Privacy Policy</h1>
+    <p class="legal__updated">Last updated: <%= Date.current.strftime("%B %d, %Y") %></p>
+  </header>
+
+  <div class="legal__content">
+    <section class="legal__section">
+      <h2 class="legal__heading">Who we are</h2>
+      <p>Screenote is operated by Future Spin LTD, a company registered in England and Wales (Company No. 17006460).</p>
+      <p>Registered address: 86-90 Paul Street, London, EC2A 4NE, United Kingdom.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">What data we collect</h2>
+      <p>We collect the minimum data necessary to provide the service:</p>
+      <ul class="legal__list">
+        <li><strong>Account information</strong> — email address, name (if provided), and authentication credentials.</li>
+        <li><strong>Content</strong> — screenshots, annotations, and project data you create within Screenote.</li>
+        <li><strong>Usage data</strong> — project and screenshot counts to manage your subscription.</li>
+        <li><strong>Payment information</strong> — processed securely by Stripe. We do not store your card details.</li>
+      </ul>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">How we use your data</h2>
+      <p>Your data is used solely to provide and improve the Screenote service:</p>
+      <ul class="legal__list">
+        <li>To authenticate your account and manage your subscription.</li>
+        <li>To store and serve your screenshots and annotations.</li>
+        <li>To provide MCP access so authorised AI agents can read your annotations.</li>
+        <li>To send transactional emails (account confirmation, billing notifications).</li>
+        <li>To monitor and fix errors in the service.</li>
+      </ul>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Third-party services</h2>
+      <p>We use the following categories of third-party services to operate Screenote:</p>
+      <ul class="legal__list">
+        <li><strong>Cloud storage</strong> — screenshots are stored using S3-compatible cloud storage.</li>
+        <li><strong>Payment processing</strong> — payment information is handled securely by Stripe. We do not store your card details.</li>
+        <li><strong>Authentication providers</strong> — if you sign in with Google or GitHub, we receive your email and name from the respective provider.</li>
+        <li><strong>Email delivery</strong> — we use a third-party service to deliver transactional emails such as account confirmations and billing alerts.</li>
+        <li><strong>Error monitoring</strong> — we use Honeybadger to track and resolve application errors. Error reports may include request metadata but not your content.</li>
+      </ul>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">MCP and AI agent access</h2>
+      <p>When you connect an AI agent via the Model Context Protocol, that agent can read your project data, screenshots, and annotations within the scope you authorise. The AI agent's provider may process this data according to their own privacy policy.</p>
+      <p>We do not control how connected AI agents use the data they retrieve from Screenote.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Cookies</h2>
+      <p>We use a single essential cookie to keep you signed in. We do not use any third-party tracking cookies or analytics cookies.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">What we don't do</h2>
+      <ul class="legal__list">
+        <li>We do <strong>not</strong> use Google Analytics or any other external analytics tools.</li>
+        <li>We do <strong>not</strong> sell, rent, or share your personal data with advertisers or data brokers.</li>
+        <li>We do <strong>not</strong> use your screenshots or annotations to train AI models.</li>
+      </ul>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Data storage and security</h2>
+      <p>Your data is stored on servers in the United States. We use encryption in transit (HTTPS) and follow industry-standard security practices to protect your data.</p>
+      <p>Screenshots are stored using S3-compatible cloud storage in the United States.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Data retention and deletion</h2>
+      <p>Your data is retained for as long as your account is active. You can delete your account at any time from your account settings, which will permanently remove all your data including projects, screenshots, and annotations.</p>
+      <p>We may retain anonymised, aggregated data (such as total screenshot counts) for internal analytics after account deletion.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Your rights</h2>
+      <p>You have the right to:</p>
+      <ul class="legal__list">
+        <li>Access the personal data we hold about you.</li>
+        <li>Request correction of inaccurate data.</li>
+        <li>Delete your account and all associated data.</li>
+      </ul>
+      <p>To exercise these rights, use the relevant features in your account settings or contact us at the address below.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Age requirement</h2>
+      <p>Screenote is not intended for users under 16 years of age. By using the service, you confirm that you are at least 16 years old.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Changes to this policy</h2>
+      <p>We may update this policy from time to time. We will notify you of material changes by email or through the service.</p>
+    </section>
+
+    <section class="legal__section">
+      <h2 class="legal__heading">Contact</h2>
+      <p>If you have questions about this privacy policy, contact us at <a href="mailto:support@screenote.ai">support@screenote.ai</a>.</p>
+    </section>
+  </div>
+</div>

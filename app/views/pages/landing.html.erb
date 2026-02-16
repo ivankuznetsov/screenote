@@ -114,6 +114,10 @@
 <footer class="landing-footer">
   <div class="landing-footer__inner">
     <span class="landing-footer__brand">Screenote</span>
+    <nav class="landing-footer__links">
+      <%= link_to "Terms", terms_path %>
+      <%= link_to "Privacy", privacy_path %>
+    </nav>
     <span class="landing-footer__copy">&copy; <%= Date.current.year %></span>
   </div>
 </footer>

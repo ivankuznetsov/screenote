@@ -428,6 +428,21 @@
   color: var(--landing-text-dim);
 }
 
+.landing-footer__links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.landing-footer__links a {
+  font-size: 0.8125rem;
+  color: var(--landing-text-dim);
+  text-decoration: none;
+}
+
+.landing-footer__links a:hover {
+  color: var(--landing-text);
+}
+
 .landing-footer__copy {
   font-size: 0.8125rem;
   color: var(--landing-text-dim);
