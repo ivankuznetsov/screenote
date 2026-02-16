@@ -61,12 +61,12 @@
           <div class="guide__terminal-body">
             <div class="guide__terminal-line">
               <span class="guide__terminal-prompt">$</span>
-              <code>/screenote &lt;url&gt;</code>
+              <code>/screenote &lt;page&gt;</code>
               <span class="guide__terminal-comment"># desktop screenshot (1440&times;900)</span>
             </div>
             <div class="guide__terminal-line">
               <span class="guide__terminal-prompt">$</span>
-              <code>/screenote mobile &lt;url&gt;</code>
+              <code>/screenote mobile &lt;page&gt;</code>
               <span class="guide__terminal-comment"># mobile screenshot (393&times;852)</span>
             </div>
             <div class="guide__terminal-line">
@@ -98,10 +98,9 @@
         <p class="guide__workflow-desc">You upload a screenshot, mark what's wrong, and your AI agent picks up the feedback.</p>
         <ol class="guide__workflow-steps">
           <li>Upload a screenshot in the Screenote UI</li>
-          <li>Draw annotations and leave comments</li>
-          <li>Agent calls <code>list_screenshots</code> to discover new screenshots</li>
-          <li>Agent calls <code>get_annotation</code> to see the cropped region</li>
-          <li>Agent implements the fix and calls <code>resolve_annotation</code></li>
+          <li>Draw rectangles around problems and write comments</li>
+          <li>Your agent reads the annotations with the cropped image</li>
+          <li>Agent fixes the issue and marks it resolved</li>
         </ol>
       </div>
 
@@ -112,13 +111,12 @@
           </svg>
         </div>
         <h3 class="guide__workflow-title">Agent Feedback Loop</h3>
-        <p class="guide__workflow-desc">The agent screenshots its own work, you review and annotate, agent reads feedback and iterates.</p>
+        <p class="guide__workflow-desc">The agent screenshots its own work, you review and annotate, it reads your feedback and iterates.</p>
         <ol class="guide__workflow-steps">
-          <li>Type <code>/screenote</code> — agent captures localhost</li>
+          <li>Type <code>/screenote login</code> — agent captures the page</li>
           <li>Open the screenshot and mark what's wrong</li>
-          <li>Agent calls <code>list_annotations</code> to read your comments</li>
-          <li>Agent calls <code>get_annotation</code> for each cropped region</li>
-          <li>Agent fixes issues, re-screenshots, and repeats</li>
+          <li>Agent reads your annotations with the cropped images</li>
+          <li>Agent fixes the issues, re-screenshots, and repeats</li>
         </ol>
       </div>
     </div>
