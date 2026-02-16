@@ -18,8 +18,9 @@ Doorkeeper.configure do
   access_token_expires_in 1.hour
   use_refresh_token
 
-  # Allow HTTP redirect URIs for localhost (needed for local MCP clients)
-  force_ssl_in_redirect_uri !Rails.env.local?
+  # Allow HTTP redirect URIs for localhost (RFC 8252 loopback redirect).
+  # Native OAuth clients like Claude Code use http://localhost callbacks.
+  force_ssl_in_redirect_uri { |uri| !uri.host.in?(%w[localhost 127.0.0.1]) }
 
   # Only authorization_code grant flow (OAuth 2.1)
   grant_flows %w[authorization_code]
