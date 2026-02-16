@@ -37,3 +37,4 @@
 /.kamal/secrets
 
 .worktrees
+.mcp.json
