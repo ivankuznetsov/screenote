@@ -112,8 +112,7 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_annotation_visible(comment_text)
   end
 
-  # Click on the image to draw an annotation rectangle using Annotorious.
-  # Uses Playwright mouse API: first click sets start point, second click completes.
+  # Draw an annotation rectangle on the image using click-drag via Playwright mouse API.
   def click_on_image_to_annotate(x_offset: 0, y_offset: 0)
     assert_selector ANNOTORIOUS_OVERLAY, wait: 15
 
@@ -125,11 +124,10 @@ class AnnotationsTest < ApplicationSystemTestCase
       start_x = box["x"] + (box["width"] * 0.3) + x_offset
       start_y = box["y"] + (box["height"] * 0.3) + y_offset
 
-      pw_page.mouse.click(start_x, start_y)
-      # Annotorious click-draw mode requires a pause between start-click and end-click.
-      # No observable DOM state change occurs between the two clicks.
-      pw_page.wait_for_timeout(200)
-      pw_page.mouse.click(start_x + 80, start_y + 60)
+      pw_page.mouse.move(start_x, start_y)
+      pw_page.mouse.down
+      pw_page.mouse.move(start_x + 80, start_y + 60)
+      pw_page.mouse.up
     end
   end
 end
