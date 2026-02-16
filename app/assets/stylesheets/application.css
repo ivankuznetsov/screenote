@@ -1267,6 +1267,23 @@ a:hover {
   margin-bottom: 0.75rem;
 }
 
+.billing-footer {
+  text-align: center;
+  margin-top: 2rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.billing-footer__link {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.billing-footer__link:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
 /* Legal pages (Terms, Privacy) */
 .legal {
   padding: 2rem 1rem;
