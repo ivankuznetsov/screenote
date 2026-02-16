@@ -393,3 +393,74 @@
 .oauth-consent__deny {
   text-align: center;
 }
+
+/* ============================================================
+   OAUTH COMPLETE — Post-authorization success state
+   ============================================================ */
+
+.oauth-complete {
+  text-align: center;
+}
+
+.oauth-complete__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin-bottom: 1.75rem;
+  color: var(--dark-accent);
+  filter: drop-shadow(0 0 20px var(--dark-accent-glow));
+  animation: oauth-complete-fade-in 0.6s ease-out;
+}
+
+.oauth-complete__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.oauth-complete__circle {
+  stroke-dasharray: 145;
+  stroke-dashoffset: 145;
+  animation: oauth-complete-draw-circle 0.6s ease-out 0.2s forwards;
+}
+
+.oauth-complete__check {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: oauth-complete-draw-check 0.4s ease-out 0.7s forwards;
+}
+
+.oauth-complete__title {
+  animation: oauth-complete-fade-up 0.5s ease-out 0.3s both;
+}
+
+.oauth-complete__subtitle {
+  max-width: 28ch;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+  animation: oauth-complete-fade-up 0.5s ease-out 0.45s both;
+}
+
+.oauth-complete .auth-card__footer {
+  animation: oauth-complete-fade-up 0.5s ease-out 0.55s both;
+}
+
+@keyframes oauth-complete-fade-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes oauth-complete-draw-circle {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes oauth-complete-draw-check {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes oauth-complete-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

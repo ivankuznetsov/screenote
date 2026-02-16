@@ -1,0 +1,17 @@
+<div class="auth-card oauth-complete">
+  <div class="oauth-complete__icon">
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="24" cy="24" r="23" stroke="currentColor" stroke-width="2" class="oauth-complete__circle"/>
+      <path d="M14 24.5L21 31.5L34 18.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="oauth-complete__check"/>
+    </svg>
+  </div>
+
+  <h1 class="auth-card__title oauth-complete__title">Authorization Complete</h1>
+  <p class="auth-card__subtitle oauth-complete__subtitle">
+    The agent has been connected to your Screenote account. You can safely close this tab.
+  </p>
+
+  <div class="auth-card__footer">
+    <%= link_to "Go to dashboard", dashboard_path, class: "auth-card__link" %>
+  </div>
+</div>
