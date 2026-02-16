@@ -54,10 +54,18 @@
   font-size: 1.5rem;
   color: var(--dark-text);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .auth-shell__logo:hover {
   text-decoration: none;
+}
+
+.auth-shell__logo .logo-icon {
+  width: 2em;
+  height: 2em;
 }
 
 .auth-shell__tagline {

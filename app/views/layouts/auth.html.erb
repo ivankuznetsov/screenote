@@ -20,7 +20,10 @@
     <div class="auth-shell">
       <div class="auth-shell__side">
         <div class="auth-shell__brand">
-          <%= link_to "Screenote", main_app.root_path, class: "auth-shell__logo" %>
+          <%= link_to main_app.root_path, class: "auth-shell__logo" do %>
+            <%= render "shared/logo_icon" %>
+            Screenote
+          <% end %>
         </div>
         <div class="auth-shell__tagline">
           <p class="auth-shell__tagline-text">Visual feedback<br>for AI agents</p>

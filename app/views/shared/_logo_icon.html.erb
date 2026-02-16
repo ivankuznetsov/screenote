@@ -1,19 +1,15 @@
-<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<svg class="logo-icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <defs>
-    <linearGradient id="pin" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="logo-pin" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#f0b92e"/>
       <stop offset="100%" stop-color="#d4901a"/>
     </linearGradient>
-    <clipPath id="bounds">
+    <clipPath id="logo-bounds">
       <rect width="512" height="512" rx="108"/>
     </clipPath>
   </defs>
-
-  <!-- Dark background -->
   <rect width="512" height="512" rx="108" fill="#0a0a0f"/>
-
-  <g clip-path="url(#bounds)">
-    <!-- Subtle grid texture (matches landing page aesthetic) -->
+  <g clip-path="url(#logo-bounds)">
     <g opacity="0.12" stroke="#e5a31e" stroke-width="1">
       <line x1="171" y1="0" x2="171" y2="512"/>
       <line x1="256" y1="0" x2="256" y2="512"/>
@@ -22,15 +18,9 @@
       <line x1="0" y1="256" x2="512" y2="256"/>
       <line x1="0" y1="341" x2="512" y2="341"/>
     </g>
-
-    <!-- Selection region outline -->
     <rect x="164" y="188" width="236" height="192" rx="8"
           fill="rgba(229,163,30,0.06)" stroke="#e5a31e" stroke-width="8"/>
-
-    <!-- Glow behind pin -->
     <circle cx="164" cy="188" r="88" fill="rgba(229,163,30,0.08)"/>
-
-    <!-- Annotation pin -->
-    <circle cx="164" cy="188" r="64" fill="url(#pin)"/>
+    <circle cx="164" cy="188" r="64" fill="url(#logo-pin)"/>
   </g>
 </svg>

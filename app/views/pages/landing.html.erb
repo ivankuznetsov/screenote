@@ -1,6 +1,9 @@
 <header class="landing-nav">
   <div class="landing-nav__inner">
-    <div class="landing-nav__logo">Screenote</div>
+    <div class="landing-nav__logo">
+      <%= render "shared/logo_icon" %>
+      Screenote
+    </div>
     <nav class="landing-nav__links">
       <%= link_to "Sign In", new_session_path, class: "landing-nav__link" %>
       <%= link_to "Get Started", sign_up_path, class: "landing-nav__cta" %>

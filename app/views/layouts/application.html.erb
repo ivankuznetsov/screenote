@@ -8,7 +8,10 @@
     <header class="header">
       <div class="header__inner">
         <div class="header__logo">
-          <%= link_to "Screenote", dashboard_path, class: "header__title" %>
+          <%= link_to dashboard_path, class: "header__title" do %>
+            <%= render "shared/logo_icon" %>
+            Screenote
+          <% end %>
         </div>
         <nav class="header__nav">
           <% if Current.user %>

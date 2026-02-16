@@ -47,6 +47,14 @@
   font-size: 1.375rem;
   color: var(--landing-text);
   letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.landing-nav__logo .logo-icon {
+  width: 1.75em;
+  height: 1.75em;
 }
 
 .landing-nav__links {
