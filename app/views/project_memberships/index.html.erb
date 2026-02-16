@@ -5,15 +5,22 @@
 </div>
 
 <% if @is_owner %>
-  <div class="card project-members__invite">
-    <h2 class="project-members__section-title">Invite a collaborator</h2>
-    <%= form_with model: ProjectInvitation.new, url: project_invitations_path(@project), class: "project-members__invite-form" do |f| %>
-      <div class="project-members__invite-row">
-        <%= f.email_field :email, placeholder: "colleague@example.com", class: "form__input project-members__invite-input", required: true %>
-        <%= f.submit "Invite", class: "btn btn--primary" %>
-      </div>
-    <% end %>
-  </div>
+  <% if Current.user.can_invite_member?(@project) %>
+    <div class="card project-members__invite">
+      <h2 class="project-members__section-title">Invite a collaborator</h2>
+      <%= form_with model: ProjectInvitation.new, url: project_invitations_path(@project), class: "project-members__invite-form" do |f| %>
+        <div class="project-members__invite-row">
+          <%= f.email_field :email, placeholder: "colleague@example.com", class: "form__input project-members__invite-input", required: true %>
+          <%= f.submit "Invite", class: "btn btn--primary" %>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="upgrade-banner">
+      <div class="upgrade-banner__text">You've reached the free plan limit of 1 team member. Upgrade to invite more collaborators.</div>
+      <%= link_to "Upgrade to Pro for $#{Subscription::PRO_PRICE_CENTS / 100}/mo", subscription_path, class: "upgrade-banner__link" %>
+    </div>
+  <% end %>
 <% end %>
 
 <div class="project-members__section">

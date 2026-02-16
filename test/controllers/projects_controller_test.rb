@@ -135,4 +135,31 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to projects_path
   end
+
+  # Plan limit enforcement
+
+  test "free user at project limit is redirected from new" do
+    sign_in(users(:bob))
+    assert_equal 1, users(:bob).owned_projects.count, "Precondition: Bob owns 1 project"
+    get new_project_path
+    assert_redirected_to subscription_path
+    follow_redirect!
+    assert_select ".flash--alert"
+  end
+
+  test "free user at project limit is redirected from create" do
+    sign_in(users(:bob))
+    assert_no_difference "Project.count" do
+      post projects_path, params: { project: { name: "Blocked Project", description: "Nope" } }
+    end
+    assert_redirected_to subscription_path
+  end
+
+  test "pro user can create projects beyond free limit" do
+    sign_in(users(:alice))
+    assert_difference "Project.count", 1 do
+      post projects_path, params: { project: { name: "Another Pro Project", description: "Yes" } }
+    end
+    assert_redirected_to project_path(Project.last)
+  end
 end

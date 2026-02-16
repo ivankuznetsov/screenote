@@ -1,0 +1,51 @@
+<%= link_to "← Back to projects", dashboard_path, class: "breadcrumb-link" %>
+
+<div class="page-header">
+  <h1 class="page-header__title" data-testid="billing-title">Billing</h1>
+</div>
+
+<% if @checkout_status == "success" %>
+  <% if Current.user.pro? %>
+    <div class="flash flash--notice" data-testid="checkout-success">Your subscription has been activated. Welcome to Pro!</div>
+  <% else %>
+    <div class="flash flash--notice" data-testid="checkout-pending">Thank you for subscribing! Your Pro plan is being activated and should appear shortly. Please refresh this page in a moment.</div>
+  <% end %>
+<% elsif @checkout_status == "canceled" %>
+  <div class="flash flash--alert" data-testid="checkout-canceled">Checkout was canceled. You can try again anytime.</div>
+<% end %>
+
+<div class="billing-plans" data-testid="billing-plans">
+  <div class="billing-plan <%= "billing-plan--current" unless Current.user.pro? %>" data-testid="free-plan">
+    <div class="billing-plan__name">Free</div>
+    <div class="billing-plan__price">$0<span class="billing-plan__period">/month</span></div>
+    <ul class="billing-plan__features">
+      <li>1 project</li>
+      <li>1 team member</li>
+      <li>Unlimited screenshots</li>
+      <li>Unlimited annotations</li>
+      <li>MCP access</li>
+    </ul>
+    <% unless Current.user.pro? %>
+      <div class="billing-plan__badge" data-testid="free-plan-badge">Current plan</div>
+    <% end %>
+  </div>
+
+  <div class="billing-plan billing-plan--pro <%= "billing-plan--current" if Current.user.pro? %>" data-testid="pro-plan">
+    <div class="billing-plan__name">Pro</div>
+    <div class="billing-plan__price">$<%= Subscription::PRO_PRICE_CENTS / 100 %><span class="billing-plan__period">/month</span></div>
+    <ul class="billing-plan__features">
+      <li>Unlimited projects</li>
+      <li>Unlimited team members</li>
+      <li>Unlimited screenshots</li>
+      <li>Unlimited annotations</li>
+      <li>MCP access</li>
+    </ul>
+    <% if Current.user.pro? %>
+      <div class="billing-plan__badge" data-testid="pro-plan-badge">Current plan</div>
+      <p class="billing-plan__renewal" data-testid="renewal-date">Renews on <strong><%= @subscription.current_period_end&.strftime("%B %d, %Y") %></strong></p>
+      <%= button_to "Manage subscription", portal_subscription_path, method: :post, class: "btn btn--secondary", data: { testid: "manage-subscription-btn", turbo: false } %>
+    <% else %>
+      <%= button_to "Upgrade to Pro", checkout_subscription_path, method: :post, class: "btn btn--primary", data: { testid: "upgrade-btn", turbo: false } %>
+    <% end %>
+  </div>
+</div>

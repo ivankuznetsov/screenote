@@ -7,6 +7,11 @@ class ProjectInvitationsController < ApplicationController
   before_action :require_owner!
 
   def create
+    unless Current.user.can_invite_member?(@project)
+      redirect_to subscription_path, alert: "You've reached the free plan limit of 1 team member. Upgrade to Pro for unlimited team members."
+      return
+    end
+
     @invitation = @project.project_invitations.build(invitation_params)
     @invitation.inviter = Current.user
 

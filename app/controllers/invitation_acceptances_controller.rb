@@ -30,6 +30,8 @@ class InvitationAcceptancesController < ApplicationController
       @invitation.accept!(user)
       redirect_to project_path(@invitation.project), notice: "You've joined \"#{@invitation.project.name}\"!"
     end
+  rescue ProjectInvitation::MemberLimitExceeded
+    redirect_to root_path, alert: "This project has reached its member limit. Ask the project owner to upgrade their plan."
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
     Honeybadger.notify(e, context: { invitation_id: @invitation.id, email: @invitation.email })
     redirect_to root_path, alert: "Something went wrong accepting this invitation. Please try again or contact support."

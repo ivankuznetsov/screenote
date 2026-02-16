@@ -5,6 +5,7 @@ class ProjectsController < ApplicationController
 
   before_action :set_project, only: %i[show edit update destroy]
   before_action :require_owner!, only: %i[edit update destroy]
+  before_action :require_project_quota!, only: %i[new create]
 
   def index
     @memberships_by_project = Current.user.project_memberships.includes(:project).index_by(&:project_id)
@@ -26,12 +27,20 @@ class ProjectsController < ApplicationController
   end
 
   def create
-    @project = Current.user.owned_projects.build(project_params)
+    Current.user.with_lock do
+      unless Current.user.can_create_project?
+        redirect_to subscription_path,
+          alert: "You've reached the free plan limit of 1 project. Upgrade to Pro for unlimited projects."
+        return
+      end
 
-    if @project.save
-      redirect_to @project, notice: "Project created."
-    else
-      render :new, status: :unprocessable_entity
+      @project = Current.user.owned_projects.build(project_params)
+
+      if @project.save
+        redirect_to @project, notice: "Project created."
+      else
+        render :new, status: :unprocessable_entity
+      end
     end
   end
 
@@ -52,6 +61,13 @@ class ProjectsController < ApplicationController
   end
 
   private
+
+  def require_project_quota!
+    return if Current.user.can_create_project?
+
+    redirect_to subscription_path,
+      alert: "You've reached the free plan limit of 1 project. Upgrade to Pro for unlimited projects."
+  end
 
   def project_params
     params.require(:project).permit(:name, :description)

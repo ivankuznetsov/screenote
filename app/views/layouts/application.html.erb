@@ -13,6 +13,7 @@
         <nav class="header__nav">
           <% if Current.user %>
             <%= link_to "Help", help_path, class: "header__link" %>
+            <%= link_to "Billing", subscription_path, class: "header__link", data: { testid: "billing-link" } %>
             <span class="header__email" data-testid="user-email"><%= Current.user.email %></span>
             <%= button_to "Sign out", session_path, method: :delete, class: "header__sign-out", data: { testid: "sign-out-button" } %>
           <% end %>
