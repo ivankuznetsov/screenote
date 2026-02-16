@@ -128,9 +128,161 @@
   pointer-events: none;
 }
 
+/* --- Hero annotation background animation --- */
+.hero__annotations {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hero__anno {
+  position: absolute;
+  opacity: 0;
+}
+
+/* Annotation rectangles — dashed borders that draw in and fade */
+.hero__anno--rect {
+  border: 2px dashed var(--landing-accent);
+  border-radius: 3px;
+  background: var(--landing-accent-glow);
+}
+
+.hero__anno--1 {
+  width: 140px;
+  height: 80px;
+  top: 18%;
+  left: 8%;
+  animation: anno-rect 8s ease-in-out 0.5s infinite;
+}
+
+.hero__anno--2 {
+  width: 100px;
+  height: 60px;
+  top: 65%;
+  right: 12%;
+  animation: anno-rect 8s ease-in-out 3s infinite;
+}
+
+.hero__anno--3 {
+  width: 180px;
+  height: 50px;
+  bottom: 20%;
+  left: 15%;
+  animation: anno-rect 8s ease-in-out 5.5s infinite;
+}
+
+/* Annotation pins — numbered circles */
+.hero__anno--pin {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--landing-accent);
+  color: var(--landing-bg);
+  font-size: 0.7rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 12px var(--landing-accent-glow);
+}
+
+.hero__anno--4 {
+  top: 22%;
+  right: 18%;
+  animation: anno-pin 7s ease-in-out 1.5s infinite;
+}
+
+.hero__anno--5 {
+  top: 45%;
+  left: 6%;
+  animation: anno-pin 7s ease-in-out 4s infinite;
+}
+
+.hero__anno--6 {
+  bottom: 28%;
+  right: 8%;
+  animation: anno-pin 7s ease-in-out 6s infinite;
+}
+
+/* Cursor element */
+.hero__anno--cursor {
+  color: var(--landing-text);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.hero__anno--7 {
+  top: 35%;
+  right: 22%;
+  animation: anno-cursor 10s ease-in-out 2s infinite;
+}
+
+/* Comment labels */
+.hero__anno--comment {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  background: var(--landing-surface);
+  border: 1px solid var(--landing-accent);
+  border-radius: 4px;
+  color: var(--landing-accent);
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.hero__anno--8 {
+  top: 20%;
+  left: 18%;
+  animation: anno-comment 9s ease-in-out 1s infinite;
+}
+
+.hero__anno--9 {
+  top: 60%;
+  right: 20%;
+  animation: anno-comment 9s ease-in-out 3.5s infinite;
+}
+
+.hero__anno--10 {
+  bottom: 22%;
+  left: 22%;
+  animation: anno-comment 9s ease-in-out 6s infinite;
+}
+
+@keyframes anno-rect {
+  0%, 100% { opacity: 0; transform: scale(0.8); }
+  10% { opacity: 0.25; transform: scale(1); }
+  40% { opacity: 0.25; transform: scale(1); }
+  55% { opacity: 0; transform: scale(1.02); }
+}
+
+@keyframes anno-pin {
+  0%, 100% { opacity: 0; transform: scale(0); }
+  8% { opacity: 0.4; transform: scale(1.2); }
+  14% { opacity: 0.35; transform: scale(1); }
+  45% { opacity: 0.35; transform: scale(1); }
+  58% { opacity: 0; transform: scale(0.8); }
+}
+
+@keyframes anno-comment {
+  0%, 100% { opacity: 0; transform: translateY(6px); }
+  8% { opacity: 0.35; transform: translateY(0); }
+  42% { opacity: 0.35; transform: translateY(0); }
+  55% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes anno-cursor {
+  0%, 100% { opacity: 0; transform: translate(0, 0); }
+  5% { opacity: 0.4; }
+  25% { opacity: 0.4; transform: translate(-60px, 40px); }
+  50% { opacity: 0.4; transform: translate(-120px, 20px); }
+  70% { opacity: 0.4; transform: translate(-40px, -30px); }
+  85% { opacity: 0; transform: translate(20px, -10px); }
+}
+
 @media (max-width: 768px) {
   .hero__grid,
-  .hero__glow {
+  .hero__glow,
+  .hero__annotations {
     display: none;
   }
 }
@@ -454,6 +606,17 @@
 .landing-footer__copy {
   font-size: 0.8125rem;
   color: var(--landing-text-dim);
+}
+
+/* --- Inline code styling --- */
+.landing-body code {
+  font-family: 'DM Mono', 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  background: rgba(229, 163, 30, 0.1);
+  border: 1px solid rgba(229, 163, 30, 0.2);
+  border-radius: 4px;
+  color: var(--landing-accent);
 }
 
 /* --- Landing flash override --- */

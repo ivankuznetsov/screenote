@@ -14,16 +14,32 @@
 <section class="hero">
   <div class="hero__grid"></div>
   <div class="hero__glow"></div>
+
+  <div class="hero__annotations">
+    <div class="hero__anno hero__anno--rect hero__anno--1"></div>
+    <div class="hero__anno hero__anno--rect hero__anno--2"></div>
+    <div class="hero__anno hero__anno--rect hero__anno--3"></div>
+    <div class="hero__anno hero__anno--pin hero__anno--4">1</div>
+    <div class="hero__anno hero__anno--pin hero__anno--5">2</div>
+    <div class="hero__anno hero__anno--pin hero__anno--6">3</div>
+    <div class="hero__anno hero__anno--cursor hero__anno--7">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M5.65 3.15l13.2 7.6-5.4 1.8-2.4 5.4z"/></svg>
+    </div>
+    <div class="hero__anno hero__anno--comment hero__anno--8">Fix this padding</div>
+    <div class="hero__anno hero__anno--comment hero__anno--9">Wrong color</div>
+    <div class="hero__anno hero__anno--comment hero__anno--10">Align to grid</div>
+  </div>
+
   <div class="hero__content">
-    <p class="hero__eyebrow">Visual feedback for AI agents</p>
+    <p class="hero__eyebrow">UI review for AI agents</p>
     <h1 class="hero__title">
-      Your AI can't see<br>
-      what's <span class="hero__highlight">wrong</span>.<br>
-      Now it can.
+      Point at the bug.<br>
+      <span class="hero__highlight">Claude</span> fixes it.
     </h1>
     <p class="hero__subtitle">
-      Screenshot. Annotate. Your AI agent reads the feedback with the actual
-      cropped image region and fixes what you pointed at.
+      Mark areas on your screen, write what's wrong. Your AI agent reads
+      the annotations with the actual cropped image and fixes what you pointed at.
+      No more describing UI issues in words.
     </p>
     <div class="hero__actions">
       <%= link_to "Start for Free", sign_up_path, class: "hero__btn hero__btn--primary" %>
@@ -34,7 +50,7 @@
 
 <section class="workflow" id="how-it-works">
   <div class="workflow__inner">
-    <h2 class="workflow__heading">Three steps. Zero friction.</h2>
+    <h2 class="workflow__heading">How it works</h2>
     <div class="workflow__steps">
       <div class="workflow__step">
         <div class="workflow__step-number">01</div>
@@ -45,8 +61,8 @@
             <path d="m21 15-5-5L5 21"/>
           </svg>
         </div>
-        <h3 class="workflow__step-title">Upload</h3>
-        <p class="workflow__step-desc">Take a screenshot of the bug, the misalignment, the broken layout. Upload it to your project.</p>
+        <h3 class="workflow__step-title">Screenshot</h3>
+        <p class="workflow__step-desc">Upload a screenshot yourself, or type <code>/screenote</code> in Claude Code and it takes one for you automatically.</p>
       </div>
       <div class="workflow__step">
         <div class="workflow__step-number">02</div>
@@ -55,8 +71,8 @@
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
         </div>
-        <h3 class="workflow__step-title">Annotate</h3>
-        <p class="workflow__step-desc">Pin comments directly on the image. Point annotations, region selections, and text notes.</p>
+        <h3 class="workflow__step-title">Mark &amp; Comment</h3>
+        <p class="workflow__step-desc">Draw a rectangle around the problem area, write what's wrong. Like Figma comments but for AI agents.</p>
       </div>
       <div class="workflow__step">
         <div class="workflow__step-number">03</div>
@@ -68,8 +84,8 @@
             <path d="M12 22v-4"/>
           </svg>
         </div>
-        <h3 class="workflow__step-title">Agent Reads</h3>
-        <p class="workflow__step-desc">Your AI agent connects via MCP, reads annotations with cropped images, and fixes the issues.</p>
+        <h3 class="workflow__step-title">Agent Fixes</h3>
+        <p class="workflow__step-desc">Your AI reads each annotation with the cropped image region. It sees exactly what you see and fixes it.</p>
       </div>
     </div>
   </div>
@@ -78,29 +94,30 @@
 <section class="features">
   <div class="features__inner">
     <div class="features__card features__card--wide">
-      <div class="features__card-label">MCP Protocol</div>
-      <h3 class="features__card-title">Built for AI agents, not dashboards</h3>
+      <div class="features__card-label">The Problem</div>
+      <h3 class="features__card-title">Describing UI bugs in words is painful. Pointing at them is natural.</h3>
       <p class="features__card-desc">
-        Agents connect through the Model Context Protocol. They see exactly
-        what you annotated — the cropped region, your comment, the coordinates.
-        No scraping, no guessing.
+        You know what's wrong — the padding is off, the color is wrong, the layout broke.
+        Instead of writing a paragraph explaining where the issue is, just draw a box around it
+        and type "fix this". Your AI agent gets the cropped image region and your comment.
       </p>
     </div>
     <div class="features__card">
-      <div class="features__card-label">Feedback Loop</div>
-      <h3 class="features__card-title">Agent screenshots localhost, you annotate, agent fixes</h3>
+      <div class="features__card-label">Killer Feature</div>
+      <h3 class="features__card-title">Agent screenshots its own work, you review, agent iterates</h3>
       <p class="features__card-desc">
-        The killer workflow: your agent takes a screenshot of its own work,
-        uploads it, you mark what's wrong, and the agent reads your feedback
-        and iterates.
+        Type <code>/screenote</code> in Claude Code. The agent screenshots localhost,
+        uploads it, you mark what's wrong, then the agent reads your feedback
+        and fixes it. Repeat until it's perfect.
       </p>
     </div>
     <div class="features__card">
-      <div class="features__card-label">Annotations</div>
-      <h3 class="features__card-title">Point and region annotations with resolution tracking</h3>
+      <div class="features__card-label">How It Connects</div>
+      <h3 class="features__card-title">MCP protocol — your agent reads annotations natively</h3>
       <p class="features__card-desc">
-        Pin-drop precision or box a whole section. Each annotation carries
-        status (open / resolved) so agents know what's left to fix.
+        No copy-pasting feedback. Your AI agent connects via Model Context Protocol
+        and gets each annotation with the actual cropped screenshot region.
+        It sees what you see.
       </p>
     </div>
   </div>
