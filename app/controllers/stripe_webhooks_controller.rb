@@ -46,12 +46,16 @@ class StripeWebhooksController < ActionController::Base
 
     status = subscription.active? ? :active : :incomplete
 
+    was_pro = subscription.pro? && subscription.active?
+
     subscription.update!(
       stripe_subscription_id: session.subscription,
       plan: :pro,
       status: status,
       current_period_end: subscription.current_period_end || 30.days.from_now
     )
+
+    AdminMailer.new_pro_subscriber(subscription.user).deliver_later unless was_pro
   end
 
   def handle_subscription_updated(stripe_sub)

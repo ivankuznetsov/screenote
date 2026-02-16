@@ -41,6 +41,11 @@ Rails.application.routes.draw do
   end
   post "stripe/webhooks", to: "stripe_webhooks#create"
 
+  # Admin
+  namespace :admin do
+    resource :dashboard, only: :show, controller: "dashboard"
+  end
+
   # Health check for load balancers
   get "up" => "rails/health#show", as: :rails_health_check
 
