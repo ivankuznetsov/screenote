@@ -26,6 +26,7 @@ Rails.application.routes.draw do
   post "invitations/:token", to: "invitation_acceptances#create"
 
   namespace :api do
+    put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
     namespace :v1 do
       resources :screenshots, only: [ :create ] do
         resources :annotations, only: [ :index ]

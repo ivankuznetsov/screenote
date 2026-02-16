@@ -203,6 +203,30 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal "validation_failed", result["error"], "Should return validation error for out-of-range coordinates"
   end
 
+  # CreateScreenshotUploadTool
+  test "create_screenshot_upload creates screenshot and returns upload URL" do
+    tool = CreateScreenshotUploadTool.new
+
+    result = JSON.parse(tool.call(project_id: @project.id, title: "Signed Upload"))
+
+    assert result["screenshot_id"].present?, "Should return screenshot ID"
+    assert result["upload_url"].present?, "Should return upload URL"
+    assert result["annotate_url"].present?, "Should return annotate URL"
+    assert_match(/token=/, result["upload_url"], "Upload URL should contain a token")
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_equal "Signed Upload", screenshot.title
+    assert_equal @project.id, screenshot.project_id
+    assert_not screenshot.image.attached?, "Image should NOT be attached yet"
+  end
+
+  test "create_screenshot_upload rejects invalid mime type" do
+    tool = CreateScreenshotUploadTool.new
+
+    result = JSON.parse(tool.call(project_id: @project.id, title: "Bad MIME", mime_type: "text/html"))
+    assert_equal "invalid_mime_type", result["error"], "Should reject non-image mime types"
+  end
+
   # CreateScreenshotTool validations
   test "create_screenshot rejects invalid mime type" do
     tool = CreateScreenshotTool.new

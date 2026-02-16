@@ -10,6 +10,10 @@ class Screenshot < ApplicationRecord
 
   enum :status, { pending: 0, ready: 1, failed: 2 }, default: :pending
 
+  generates_token_for :upload, expires_in: 5.minutes do
+    image.attached?.to_s
+  end
+
   validates :title, presence: true, length: { maximum: 255 }
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :acceptable_image

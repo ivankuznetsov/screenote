@@ -64,6 +64,29 @@ class ScreenshotTest < ActiveSupport::TestCase
     assert_equal 2, Screenshot.statuses[:failed]
   end
 
+  test "generates upload token before image is attached" do
+    screenshot = Screenshot.create!(title: "Token test", project: projects(:alice_project))
+    token = screenshot.generate_token_for(:upload)
+
+    assert token.present?, "Should generate a token"
+    found = Screenshot.find_by_token_for(:upload, token)
+    assert_equal screenshot, found, "Token should resolve to the screenshot"
+  end
+
+  test "upload token invalidates after image is attached" do
+    screenshot = Screenshot.create!(title: "Token invalidation", project: projects(:alice_project))
+    token = screenshot.generate_token_for(:upload)
+
+    screenshot.image.attach(
+      io: StringIO.new(File.binread(Rails.root.join("test/fixtures/files/test_image.png"))),
+      filename: "test.png",
+      content_type: "image/png"
+    )
+
+    found = Screenshot.find_by_token_for(:upload, token)
+    assert_nil found, "Token should be invalid after image is attached"
+  end
+
   test "destroying screenshot destroys annotations" do
     screenshot = screenshots(:alice_screenshot)
     annotation_count = screenshot.annotations.count
