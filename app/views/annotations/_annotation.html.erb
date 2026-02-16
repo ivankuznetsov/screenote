@@ -15,10 +15,11 @@
     <div class="annotation-item__comment" data-testid="annotation-comment"><%= annotation.comment %></div>
   <% end %>
 
-  <div class="annotation-item__meta">
-    <span class="annotation-item__type"><%= annotation.point? ? "Point" : "Region" %></span>
-    <span class="annotation-item__status annotation-item__status--<%= annotation.status %>"><%= annotation.status.capitalize %></span>
-  </div>
+  <% if annotation.resolved? %>
+    <div class="annotation-item__meta">
+      <span class="annotation-item__status annotation-item__status--resolved">Resolved</span>
+    </div>
+  <% end %>
 
   <div class="annotation-item__actions">
     <% if annotation.open? %>

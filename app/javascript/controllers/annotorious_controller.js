@@ -61,8 +61,6 @@ export default class extends Controller {
     const coords = this.parseSelector(selector)
     if (!coords) return
 
-    this.anno.removeAnnotation(annotation.id)
-
     this.showAnnotationForm(coords)
   }
 
@@ -116,6 +114,9 @@ export default class extends Controller {
   cancelForm() {
     if (this.hasFormTarget) {
       this.formTarget.remove()
+    }
+    if (this.pendingAnnotationId && this.anno) {
+      this.anno.removeAnnotation(this.pendingAnnotationId)
     }
     this.pendingAnnotationId = null
   }
