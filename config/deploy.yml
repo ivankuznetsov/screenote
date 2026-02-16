@@ -37,6 +37,9 @@ env:
     - HONEYBADGER_API_KEY
     - HONEYBADGER_JS_API_KEY
     - RESEND_API_KEY
+    - STRIPE_SECRET_KEY
+    - STRIPE_WEBHOOK_SECRET
+    - STRIPE_PRO_PRICE_ID
   clear:
     # Run Solid Queue Supervisor inside Puma for single-server deployment
     SOLID_QUEUE_IN_PUMA: true
