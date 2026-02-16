@@ -67,10 +67,10 @@
   <section class="help-section">
     <h2 class="help-section__heading">Workflows</h2>
 
-    <div class="workflow">
-      <h3 class="workflow__title">Capture &amp; Annotate</h3>
-      <p class="workflow__description">Human uploads a screenshot, annotates it, and the AI agent picks up the feedback.</p>
-      <ol class="workflow__steps">
+    <div class="help-workflow">
+      <h3 class="help-workflow__title">Capture &amp; Annotate</h3>
+      <p class="help-workflow__description">Human uploads a screenshot, annotates it, and the AI agent picks up the feedback.</p>
+      <ol class="help-workflow__steps">
         <li>Human uploads a screenshot in the Screenote UI</li>
         <li>Human draws annotations and leaves comments</li>
         <li>Agent calls <code>list_screenshots</code> to discover new screenshots</li>
@@ -80,10 +80,10 @@
       </ol>
     </div>
 
-    <div class="workflow">
-      <h3 class="workflow__title">Agent Feedback Loop</h3>
-      <p class="workflow__description">The AI agent captures its own work, uploads it, and waits for human review.</p>
-      <ol class="workflow__steps">
+    <div class="help-workflow">
+      <h3 class="help-workflow__title">Agent Feedback Loop</h3>
+      <p class="help-workflow__description">The AI agent captures its own work, uploads it, and waits for human review.</p>
+      <ol class="help-workflow__steps">
         <li>Agent takes a screenshot of localhost (e.g. with Playwright)</li>
         <li>Agent calls <code>create_screenshot</code> to upload it</li>
         <li>Human opens the annotate URL and leaves visual feedback</li>

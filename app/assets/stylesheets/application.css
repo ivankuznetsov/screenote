@@ -1112,8 +1112,8 @@ a:hover {
   margin: 0;
 }
 
-/* Workflows */
-.workflow {
+/* Workflows (help page) */
+.help-workflow {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -1121,24 +1121,24 @@ a:hover {
   margin-bottom: 1rem;
 }
 
-.workflow__title {
+.help-workflow__title {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 0.25rem;
 }
 
-.workflow__description {
+.help-workflow__description {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   margin-bottom: 0.75rem;
 }
 
-.workflow__steps {
+.help-workflow__steps {
   padding-left: 1.25rem;
   font-size: 0.8125rem;
   line-height: 1.6;
 }
 
-.workflow__steps li {
+.help-workflow__steps li {
   padding: 0.125rem 0;
 }
