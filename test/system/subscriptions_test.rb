@@ -35,13 +35,13 @@ class SubscriptionsFreeUserTest < ApplicationSystemTestCase
     within(FREE_PLAN) do
       assert_text "1 project"
       assert_text "1 team member"
-      assert_text "MCP access"
+      assert_text "Claude Code plugin"
     end
 
     within(PRO_PLAN) do
+      assert_text "Everything in Free"
       assert_text "Unlimited projects"
       assert_text "Unlimited team members"
-      assert_text "MCP access"
     end
   end
 

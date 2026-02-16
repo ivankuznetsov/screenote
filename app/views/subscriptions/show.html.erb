@@ -19,11 +19,11 @@
     <div class="billing-plan__name">Free</div>
     <div class="billing-plan__price">$0<span class="billing-plan__period">/month</span></div>
     <ul class="billing-plan__features">
-      <li>1 project</li>
-      <li>1 team member</li>
       <li>Unlimited screenshots</li>
       <li>Unlimited annotations</li>
-      <li>MCP access</li>
+      <li>Claude Code plugin</li>
+      <li>1 project</li>
+      <li>1 team member</li>
     </ul>
     <% unless Current.user.pro? %>
       <div class="billing-plan__badge" data-testid="free-plan-badge">Current plan</div>
@@ -34,11 +34,9 @@
     <div class="billing-plan__name">Pro</div>
     <div class="billing-plan__price">$<%= Subscription::PRO_PRICE_CENTS / 100 %><span class="billing-plan__period">/month</span></div>
     <ul class="billing-plan__features">
+      <li>Everything in Free</li>
       <li>Unlimited projects</li>
       <li>Unlimited team members</li>
-      <li>Unlimited screenshots</li>
-      <li>Unlimited annotations</li>
-      <li>MCP access</li>
     </ul>
     <% if Current.user.pro? %>
       <div class="billing-plan__badge" data-testid="pro-plan-badge">Current plan</div>
