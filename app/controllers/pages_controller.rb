@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class PagesController < ApplicationController
-  skip_before_action :require_authentication, only: [ :landing, :terms, :privacy ]
+  skip_before_action :require_authentication
 
   layout "landing", only: [ :landing ]
 

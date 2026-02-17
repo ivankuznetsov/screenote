@@ -894,6 +894,11 @@ a:hover {
   text-decoration: none;
 }
 
+.header__link--cta {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 /* MCP Banner */
 .mcp-banner {
   display: flex;
@@ -1160,6 +1165,47 @@ a:hover {
 
 .guide__workflow-steps code {
   font-size: 0.75rem;
+}
+
+/* MCP connection section */
+.guide__mcp-block {
+  margin-bottom: 1.5rem;
+}
+
+.guide__mcp-label {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.guide__mcp-method {
+  margin-bottom: 1.25rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--color-border);
+}
+
+.guide__mcp-method-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-bottom: 0.375rem;
+}
+
+.guide__mcp-method-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-bottom: 0.625rem;
+}
+
+.guide__mcp-list {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  padding-left: 1.25rem;
+  margin-bottom: 0.625rem;
+}
+
+.guide__mcp-list li {
+  padding: 0.125rem 0;
 }
 
 /* Tools reference grid */
