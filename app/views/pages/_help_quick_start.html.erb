@@ -1,0 +1,73 @@
+<%# ── Quick Start with Claude Code ── %>
+<section class="guide__section" id="quick-start">
+
+  <%# Step 1: Install %>
+  <div class="guide__step">
+    <span class="guide__step-number">1</span>
+    <div class="guide__step-content">
+      <h2 class="guide__step-title">Install the plugin</h2>
+      <p class="guide__step-desc">Run these two commands in Claude Code:</p>
+      <div class="guide__terminal">
+        <div class="guide__terminal-bar">
+          <span class="guide__terminal-dot"></span>
+          <span class="guide__terminal-dot"></span>
+          <span class="guide__terminal-dot"></span>
+        </div>
+        <div class="guide__terminal-body">
+          <div class="guide__terminal-line">
+            <span class="guide__terminal-prompt">$</span>
+            <code>/plugin marketplace add ivankuznetsov/claude-screenote</code>
+          </div>
+          <div class="guide__terminal-line">
+            <span class="guide__terminal-prompt">$</span>
+            <code>/plugin install claude-screenote@screenote-marketplace</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%# Step 2: Authorize %>
+  <div class="guide__step">
+    <span class="guide__step-number">2</span>
+    <div class="guide__step-content">
+      <h2 class="guide__step-title">Authorize</h2>
+      <p class="guide__step-desc">On first use, a browser window opens to connect your Screenote account. Sign in and grant access &mdash; this only happens once.</p>
+    </div>
+  </div>
+
+  <%# Step 3: Capture & Review %>
+  <div class="guide__step">
+    <span class="guide__step-number">3</span>
+    <div class="guide__step-content">
+      <h2 class="guide__step-title">Capture &amp; review</h2>
+      <p class="guide__step-desc">Your agent can now capture screenshots and read your visual feedback:</p>
+      <div class="guide__terminal">
+        <div class="guide__terminal-bar">
+          <span class="guide__terminal-dot"></span>
+          <span class="guide__terminal-dot"></span>
+          <span class="guide__terminal-dot"></span>
+        </div>
+        <div class="guide__terminal-body">
+          <div class="guide__terminal-line">
+            <span class="guide__terminal-prompt">$</span>
+            <code>/screenote &lt;url&gt;</code>
+            <span class="guide__terminal-comment"># desktop screenshot (1440&times;900)</span>
+          </div>
+          <div class="guide__terminal-line">
+            <span class="guide__terminal-prompt">$</span>
+            <code>/screenote mobile &lt;url&gt;</code>
+            <span class="guide__terminal-comment"># mobile screenshot (393&times;852)</span>
+          </div>
+          <div class="guide__terminal-line">
+            <span class="guide__terminal-prompt">$</span>
+            <code>/screenote feedback</code>
+            <span class="guide__terminal-comment"># retrieve your annotations</span>
+          </div>
+        </div>
+      </div>
+      <p class="guide__step-desc">The agent captures a page, you annotate it in Screenote, then the agent reads your feedback with the cropped image regions and fixes what you pointed at.</p>
+    </div>
+  </div>
+
+</section>

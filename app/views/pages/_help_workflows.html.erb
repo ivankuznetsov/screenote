@@ -1,0 +1,38 @@
+<%# ── Workflows ── %>
+<section class="guide__section" id="workflows">
+  <h2 class="guide__section-heading">Workflows</h2>
+
+  <div class="guide__workflow-grid">
+    <div class="guide__workflow">
+      <div class="guide__workflow-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+        </svg>
+      </div>
+      <h3 class="guide__workflow-title">Agent Feedback Loop</h3>
+      <p class="guide__workflow-desc">The agent screenshots its own work, you review and annotate, it reads your feedback and iterates.</p>
+      <ol class="guide__workflow-steps">
+        <li>Type <code>/screenote &lt;url&gt;</code> &mdash; agent captures the page</li>
+        <li>Open the screenshot and mark what's wrong</li>
+        <li>Type <code>/screenote feedback</code> &mdash; agent reads your annotations with the cropped images</li>
+        <li>Agent fixes the issues, re-screenshots, and repeats</li>
+      </ol>
+    </div>
+
+    <div class="guide__workflow">
+      <div class="guide__workflow-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
+      <h3 class="guide__workflow-title">Capture &amp; Annotate</h3>
+      <p class="guide__workflow-desc">You upload a screenshot, mark what's wrong, and your AI agent picks up the feedback.</p>
+      <ol class="guide__workflow-steps">
+        <li>Upload a screenshot in the Screenote UI</li>
+        <li>Draw rectangles around problems and write comments</li>
+        <li>Your agent reads the annotations with the cropped image</li>
+        <li>Agent fixes the issue and marks it resolved</li>
+      </ol>
+    </div>
+  </div>
+</section>
