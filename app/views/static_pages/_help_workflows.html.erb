@@ -10,12 +10,12 @@
         </svg>
       </div>
       <h3 class="guide__workflow-title">Agent Feedback Loop</h3>
-      <p class="guide__workflow-desc">The agent screenshots its own work, you review and annotate, it reads your feedback and iterates.</p>
+      <p class="guide__workflow-desc">The agent screenshots its own work, you review and annotate, it reads your feedback and iterates. Each iteration is saved as a new version under the same page.</p>
       <ol class="guide__workflow-steps">
         <li>Type <code>/screenote &lt;url&gt;</code> &mdash; agent captures the page</li>
         <li>Open the screenshot and mark what's wrong</li>
         <li>Type <code>/screenote feedback</code> &mdash; agent reads your annotations with the cropped images</li>
-        <li>Agent fixes the issues, re-screenshots, and repeats</li>
+        <li>Agent fixes the issues, re-screenshots to the same page, and repeats</li>
       </ol>
     </div>
 
@@ -34,5 +34,23 @@
         <li>Agent fixes the issue and marks it resolved</li>
       </ol>
     </div>
+  </div>
+
+  <%# ── How It's Organized ── %>
+  <div class="guide__concepts">
+    <h3 class="guide__concepts-title">How screenshots are organized</h3>
+    <p class="guide__concepts-desc">Screenote uses a three-level hierarchy to keep your feedback organized:</p>
+    <div class="guide__concepts-list">
+      <div class="guide__concept">
+        <strong>Project</strong> &mdash; your app or product (e.g., &ldquo;Screenote&rdquo;)
+      </div>
+      <div class="guide__concept">
+        <strong>Page</strong> &mdash; a screen or view you're iterating on (e.g., &ldquo;Login&rdquo;, &ldquo;Dashboard&rdquo;)
+      </div>
+      <div class="guide__concept">
+        <strong>Version</strong> &mdash; each screenshot upload, so you can track iterations over time
+      </div>
+    </div>
+    <p class="guide__concepts-desc">When an agent uploads a screenshot, it's automatically grouped under a page. Multiple uploads to the same page become versions, giving you a visual history of changes.</p>
   </div>
 </section>

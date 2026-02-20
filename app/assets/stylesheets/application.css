@@ -1229,6 +1229,40 @@ a:hover {
   font-size: 0.75rem;
 }
 
+/* Concepts section */
+.guide__concepts {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.guide__concepts-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.guide__concepts-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.guide__concepts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.guide__concept {
+  font-size: 0.875rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--color-primary);
+}
+
 /* MCP connection section */
 .guide__mcp-block {
   margin-bottom: 1.5rem;
