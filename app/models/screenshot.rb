@@ -4,7 +4,8 @@ class Screenshot < ApplicationRecord
   ALLOWED_CONTENT_TYPES = %w[image/png image/jpeg].freeze
   MAX_FILE_SIZE = 20.megabytes
 
-  belongs_to :project
+  belongs_to :page
+  has_one :project, through: :page
   has_many :annotations, dependent: :destroy
   has_one_attached :image
 

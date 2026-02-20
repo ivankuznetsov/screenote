@@ -51,7 +51,7 @@ class ApplicationTool < FastMcp::Tool
   end
 
   def project_annotations(project)
-    Annotation.joins(screenshot: :project)
+    Annotation.joins(screenshot: { page: :project })
       .where(projects: { id: project.id })
       .includes(:user, :screenshot)
   end

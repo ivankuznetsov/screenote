@@ -5,7 +5,8 @@ class Project < ApplicationRecord
   has_many :project_memberships, dependent: :destroy
   has_many :members, through: :project_memberships, source: :user
   has_many :project_invitations, dependent: :destroy
-  has_many :screenshots, dependent: :destroy
+  has_many :pages, dependent: :destroy
+  has_many :screenshots, through: :pages
   has_many :api_keys, dependent: :destroy
 
   validates :name, presence: true, length: { maximum: 255 }

@@ -8,12 +8,13 @@ class CreateScreenshotTool < ApplicationTool
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
-    required(:title).filled(:string).description("Title for the screenshot")
+    required(:title).filled(:string).description("Title/version label for the screenshot")
     required(:image_base64).filled(:string).description("Base64-encoded PNG or JPEG image data")
+    optional(:page_name).filled(:string).description("Page to group this screenshot under (default: same as title)")
     optional(:mime_type).filled(:string).description("Image MIME type: image/png or image/jpeg (default: image/png)")
   end
 
-  def call(project_id:, title:, image_base64:, mime_type: "image/png")
+  def call(project_id:, title:, image_base64:, page_name: nil, mime_type: "image/png")
     error = require_project(project_id)
     return error if error
 
@@ -29,16 +30,17 @@ class CreateScreenshotTool < ApplicationTool
       project = current_project
       image_data = Base64.decode64(image_base64)
 
-      screenshot = project.screenshots.create!(title: title)
+      page = project.pages.find_or_create_by!(name: page_name || title)
+      screenshot = page.screenshots.create!(title: title)
       screenshot.image.attach(
         io: StringIO.new(image_data),
         filename: "screenshot.#{mime_type == 'image/jpeg' ? 'jpg' : 'png'}",
         content_type: mime_type
       )
 
-      url = Rails.application.routes.url_helpers.project_screenshot_url(project, screenshot)
+      url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
 
-      { screenshot_id: screenshot.id, annotate_url: url }.to_json
+      { screenshot_id: screenshot.id, page_id: page.id, annotate_url: url }.to_json
     end
   end
 end

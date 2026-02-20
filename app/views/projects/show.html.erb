@@ -6,7 +6,7 @@
     <% end %>
   </div>
   <div class="project-detail__actions">
-    <%= link_to "Upload screenshot", new_project_screenshot_path(@project), class: "btn btn--primary" %>
+    <%= link_to "New page", new_project_page_path(@project), class: "btn btn--primary" %>
     <%= link_to "Members", project_memberships_path(@project), class: "btn btn--secondary" %>
     <% if @is_owner %>
       <%= link_to "Edit", edit_project_path(@project), class: "btn btn--secondary" %>
@@ -16,4 +16,23 @@
   </div>
 </div>
 
-<%= render "screenshots/screenshot_grid", screenshots: @screenshots, project: @project %>
+<% if @pages.any? %>
+  <div class="page-grid">
+    <% @pages.each do |page| %>
+      <%= link_to page_path(page), class: "page-card", data: { testid: "page-card" } do %>
+        <div class="page-card__info">
+          <div class="page-card__name" data-testid="page-card-name"><%= page.name %></div>
+          <div class="page-card__meta">
+            <%= page.screenshots.count %> <%= "version".pluralize(page.screenshots.count) %>
+          </div>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+<% else %>
+  <div class="empty-state" data-testid="empty-state">
+    <div class="empty-state__title">No pages yet</div>
+    <div class="empty-state__description">Create a page to start organizing screenshots.</div>
+    <%= link_to "Create first page", new_project_page_path(@project), class: "btn btn--primary" %>
+  </div>
+<% end %>

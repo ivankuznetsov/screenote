@@ -1,0 +1,22 @@
+<%= form_with(model: [@project, page], url: page.new_record? ? project_pages_path(@project) : page_path(page), class: "form", data: { testid: "page-form" }) do |f| %>
+  <% if page.errors.any? %>
+    <div class="form__errors" data-testid="page-form-errors">
+      <strong><%= pluralize(page.errors.count, "error") %> prevented this page from being saved:</strong>
+      <ul>
+        <% page.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="form__group">
+    <%= f.label :name, class: "form__label" %>
+    <%= f.text_field :name, class: "form__input", autofocus: true, placeholder: "e.g. Login, Dashboard, Settings" %>
+  </div>
+
+  <div class="form__actions">
+    <%= f.submit class: "btn btn--primary" %>
+    <%= link_to "Cancel", page.new_record? ? project_path(@project) : page_path(page), class: "btn btn--secondary" %>
+  </div>
+<% end %>

@@ -9,9 +9,9 @@ module Api
           return
         end
 
-        screenshot = current_project.screenshots.build(
-          title: params[:title].presence || "Untitled"
-        )
+        title = params[:title].presence || "Untitled"
+        page = current_project.pages.find_or_create_by!(name: title)
+        screenshot = page.screenshots.build(title: title)
         screenshot.image.attach(params[:image])
 
         if screenshot.save
@@ -27,8 +27,8 @@ module Api
       private
 
       def screenshot_url(screenshot)
-        Rails.application.routes.url_helpers.project_screenshot_url(
-          current_project, screenshot,
+        Rails.application.routes.url_helpers.screenshot_url(
+          screenshot,
           host: request.host, port: request.port, protocol: request.protocol
         )
       end

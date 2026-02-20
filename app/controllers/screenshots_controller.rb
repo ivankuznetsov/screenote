@@ -1,19 +1,8 @@
 # frozen_string_literal: true
 
 class ScreenshotsController < ApplicationController
-  include ProjectAuthorization
-
-  before_action :set_project
+  before_action :set_page, only: %i[new create]
   before_action :set_screenshot, only: %i[show edit update destroy]
-
-  def index
-    @screenshots = @project.screenshots
-      .with_attached_image
-      .left_joins(:annotations)
-      .select("screenshots.*, COUNT(annotations.id) AS annotations_count_cache, COUNT(CASE WHEN annotations.status = 0 THEN 1 END) AS open_annotations_count_cache")
-      .group("screenshots.id")
-      .order(created_at: :desc)
-  end
 
   def show
     @annotations = @screenshot.annotations.includes(:user).order(:created_at)
@@ -21,14 +10,14 @@ class ScreenshotsController < ApplicationController
   end
 
   def new
-    @screenshot = @project.screenshots.build
+    @screenshot = @page.screenshots.build
   end
 
   def create
-    @screenshot = @project.screenshots.build(screenshot_params)
+    @screenshot = @page.screenshots.build(screenshot_params)
 
     if @screenshot.save
-      redirect_to project_screenshot_path(@project, @screenshot), notice: "Screenshot uploaded."
+      redirect_to screenshot_path(@screenshot), notice: "Screenshot uploaded."
     else
       render :new, status: :unprocessable_entity
     end
@@ -39,21 +28,29 @@ class ScreenshotsController < ApplicationController
 
   def update
     if @screenshot.update(screenshot_params)
-      redirect_to project_screenshot_path(@project, @screenshot), notice: "Screenshot updated."
+      redirect_to screenshot_path(@screenshot), notice: "Screenshot updated."
     else
       render :edit, status: :unprocessable_entity
     end
   end
 
   def destroy
+    page = @page
     @screenshot.destroy
-    redirect_to project_screenshots_path(@project), notice: "Screenshot deleted."
+    redirect_to page_path(page), notice: "Screenshot deleted."
   end
 
   private
 
+  def set_page
+    @page = Page.find(params[:page_id])
+    @project = Current.user.projects.find(@page.project_id)
+  end
+
   def set_screenshot
-    @screenshot = @project.screenshots.find(params[:id])
+    @screenshot = Screenshot.find(params[:id])
+    @page = @screenshot.page
+    @project = Current.user.projects.find(@page.project_id)
   end
 
   def screenshot_params

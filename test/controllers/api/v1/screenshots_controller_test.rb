@@ -29,7 +29,7 @@ module Api
         screenshot = Screenshot.find(body["screenshot_id"])
         assert_equal "Homepage", screenshot.title
         assert screenshot.image.attached?, "Image should be attached"
-        assert_equal @project.id, screenshot.project_id
+        assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
       end
 
       test "returns 401 without authorization header" do

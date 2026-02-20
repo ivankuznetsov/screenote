@@ -1,0 +1,11 @@
+alice_page:
+  name: "Homepage Design"
+  project: alice_project
+
+alice_page_pending:
+  name: "Pending Upload"
+  project: alice_project
+
+bob_page:
+  name: "Bob's Screenshot"
+  project: bob_project

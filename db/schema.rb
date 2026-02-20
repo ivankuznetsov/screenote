@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_16_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_20_215350) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -121,6 +121,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_16_120000) do
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
   end
 
+  create_table "pages", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.integer "project_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id", "name"], name: "index_pages_on_project_id_and_name", unique: true
+    t.index ["project_id"], name: "index_pages_on_project_id"
+  end
+
   create_table "project_invitations", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -156,13 +165,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_16_120000) do
   create_table "screenshots", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "height"
-    t.integer "project_id", null: false
+    t.integer "page_id", null: false
     t.integer "status", default: 0, null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.integer "width"
-    t.index ["project_id", "created_at"], name: "index_screenshots_on_project_id_and_created_at"
-    t.index ["project_id"], name: "index_screenshots_on_project_id"
+    t.index ["created_at"], name: "index_screenshots_on_project_id_and_created_at"
+    t.index ["page_id"], name: "index_screenshots_on_page_id"
   end
 
   create_table "sessions", force: :cascade do |t|
@@ -214,12 +223,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_16_120000) do
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id", on_delete: :cascade
   add_foreign_key "oauth_access_tokens", "projects", on_delete: :nullify
   add_foreign_key "oauth_access_tokens", "users", column: "resource_owner_id", on_delete: :cascade
+  add_foreign_key "pages", "projects"
   add_foreign_key "project_invitations", "projects"
   add_foreign_key "project_invitations", "users", column: "inviter_id"
   add_foreign_key "project_memberships", "projects"
   add_foreign_key "project_memberships", "users"
   add_foreign_key "projects", "users"
-  add_foreign_key "screenshots", "projects"
+  add_foreign_key "screenshots", "pages"
   add_foreign_key "sessions", "users"
   add_foreign_key "subscriptions", "users"
 end

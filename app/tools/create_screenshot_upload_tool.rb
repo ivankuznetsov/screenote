@@ -6,11 +6,12 @@ class CreateScreenshotUploadTool < ApplicationTool
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
-    required(:title).filled(:string).description("Title for the screenshot")
+    required(:title).filled(:string).description("Title/version label for the screenshot")
+    optional(:page_name).filled(:string).description("Page to group this screenshot under (default: same as title)")
     optional(:mime_type).filled(:string).description("Image MIME type: image/png or image/jpeg (default: image/png)")
   end
 
-  def call(project_id:, title:, mime_type: "image/png")
+  def call(project_id:, title:, page_name: nil, mime_type: "image/png")
     error = require_project(project_id)
     return error if error
 
@@ -20,7 +21,8 @@ class CreateScreenshotUploadTool < ApplicationTool
 
     with_error_handling do
       project = current_project
-      screenshot = project.screenshots.create!(title: title)
+      page = project.pages.find_or_create_by!(name: page_name || title)
+      screenshot = page.screenshots.create!(title: title)
       token = screenshot.generate_token_for(:upload)
 
       upload_url = Rails.application.routes.url_helpers.api_screenshot_upload_url(
@@ -29,10 +31,11 @@ class CreateScreenshotUploadTool < ApplicationTool
         mime_type: mime_type
       )
 
-      annotate_url = Rails.application.routes.url_helpers.project_screenshot_url(project, screenshot)
+      annotate_url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
 
       {
         screenshot_id: screenshot.id,
+        page_id: page.id,
         upload_url: upload_url,
         annotate_url: annotate_url
       }.to_json

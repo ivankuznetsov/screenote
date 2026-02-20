@@ -1,0 +1,16 @@
+<div class="page-detail__header">
+  <div>
+    <div class="page-detail__breadcrumb" data-testid="breadcrumb">
+      <%= link_to @project.name, project_path(@project) %>
+    </div>
+    <h1 class="page-detail__title" data-testid="page-detail-title"><%= @page.name %></h1>
+  </div>
+  <div class="page-detail__actions">
+    <%= link_to "Upload version", new_page_screenshot_path(@page), class: "btn btn--primary" %>
+    <%= link_to "Edit", edit_page_path(@page), class: "btn btn--secondary" %>
+    <%= button_to "Delete", page_path(@page), method: :delete, class: "btn btn--danger",
+        data: { turbo_confirm: "Are you sure you want to delete this page and all its versions?", testid: "delete-page-button" } %>
+  </div>
+</div>
+
+<%= render "screenshots/screenshot_grid", screenshots: @screenshots, page: @page %>

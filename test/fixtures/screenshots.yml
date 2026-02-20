@@ -1,18 +1,18 @@
 alice_screenshot:
   title: "Homepage Design"
-  project: alice_project
+  page: alice_page
   width: 1920
   height: 1080
   status: 1
 
 alice_screenshot_pending:
   title: "Pending Upload"
-  project: alice_project
+  page: alice_page_pending
   status: 0
 
 bob_screenshot:
   title: "Bob's Screenshot"
-  project: bob_project
+  page: bob_page
   width: 1440
   height: 900
   status: 1
