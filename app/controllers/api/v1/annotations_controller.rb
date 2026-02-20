@@ -18,7 +18,7 @@ module Api
       def project_annotations
         Annotation.joins(screenshot: :project)
           .where(projects: { id: current_project.id })
-          .includes(:user, :screenshot)
+          .includes(:user, :screenshot, :annotation_comments)
       end
 
       def serialize(annotation)
@@ -35,6 +35,7 @@ module Api
           comment: annotation.comment,
           status: annotation.status,
           author: annotation.user&.email,
+          comments_count: annotation.annotation_comments.size,
           created_at: annotation.created_at.iso8601
         }
       end

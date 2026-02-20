@@ -16,13 +16,17 @@ class AnnotationsController < ApplicationController
   end
 
   def update
-    @annotation.assign_attributes(annotation_params)
-    @annotation.resolved_by_user = Current.user if @annotation.status_changed? && @annotation.resolved?
-
-    if @annotation.save
+    if resolving?
+      @annotation.resolve!(user: Current.user, body: "Marked as resolved")
       redirect_to screenshot_path(@screenshot), notice: "Annotation updated."
     else
-      redirect_to screenshot_path(@screenshot), alert: "Could not update annotation."
+      @annotation.assign_attributes(annotation_params)
+
+      if @annotation.save
+        redirect_to screenshot_path(@screenshot), notice: "Annotation updated."
+      else
+        redirect_to screenshot_path(@screenshot), alert: "Could not update annotation."
+      end
     end
   end
 
@@ -44,5 +48,9 @@ class AnnotationsController < ApplicationController
 
   def annotation_params
     params.require(:annotation).permit(:x_percent, :y_percent, :width_percent, :height_percent, :comment, :status)
+  end
+
+  def resolving?
+    params.dig(:annotation, :status)&.to_s == "resolved" && @annotation.open?
   end
 end

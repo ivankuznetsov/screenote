@@ -25,7 +25,9 @@ Rails.application.routes.draw do
   end
 
   resources :screenshots, only: %i[show edit update destroy] do
-    resources :annotations, only: %i[create update destroy]
+    resources :annotations, only: %i[create update destroy] do
+      resources :annotation_comments, only: %i[create]
+    end
   end
 
   get  "invitations/:token", to: "invitation_acceptances#show", as: :accept_invitation

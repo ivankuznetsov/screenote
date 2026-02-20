@@ -197,4 +197,57 @@ class AnnotationTest < ActiveSupport::TestCase
     )
     assert annotation.valid?, "Should be valid without resolved_by_user"
   end
+
+  test "resolve! sets status and creates comment" do
+    annotation = annotations(:point_annotation)
+    user = users(:alice)
+
+    assert_difference "AnnotationComment.count", 1 do
+      annotation.resolve!(user: user, body: "Fixed the issue")
+    end
+
+    annotation.reload
+    assert annotation.resolved?
+    assert_equal user, annotation.resolved_by_user
+
+    comment = annotation.annotation_comments.last
+    assert_equal "resolved", comment.action
+    assert_equal "Fixed the issue", comment.body
+    assert_equal user, comment.user
+  end
+
+  test "resolve! with api_key sets resolved_by_api_key" do
+    annotation = annotations(:point_annotation)
+    api_key = api_keys(:alice_key)
+
+    annotation.resolve!(api_key: api_key, body: "AI fixed it")
+
+    annotation.reload
+    assert annotation.resolved?
+    assert_equal api_key, annotation.resolved_by_api_key
+  end
+
+  test "reopen! sets status to open and creates comment" do
+    annotation = annotations(:resolved_annotation)
+    user = users(:alice)
+
+    assert_difference "AnnotationComment.count", 1 do
+      annotation.reopen!(user: user, body: "This is not actually fixed")
+    end
+
+    annotation.reload
+    assert annotation.open?
+    assert_nil annotation.resolved_by_user
+    assert_nil annotation.resolved_by_api_key
+
+    comment = annotation.annotation_comments.last
+    assert_equal "reopened", comment.action
+    assert_equal "This is not actually fixed", comment.body
+    assert_equal user, comment.user
+  end
+
+  test "has_many annotation_comments" do
+    annotation = annotations(:resolved_annotation)
+    assert_respond_to annotation, :annotation_comments
+  end
 end

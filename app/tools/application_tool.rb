@@ -70,6 +70,7 @@ class ApplicationTool < FastMcp::Tool
       comment: annotation.comment,
       status: annotation.status,
       author: annotation.user&.email,
+      comments_count: annotation.annotation_comments.size,
       created_at: annotation.created_at.iso8601
     }
   end

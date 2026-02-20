@@ -88,6 +88,20 @@ class AnnotationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal @user, @annotation.resolved_by_user, "Should record who resolved the annotation"
   end
 
+  test "resolving annotation creates a resolved comment" do
+    sign_in(@user)
+
+    assert_difference "AnnotationComment.count", 1 do
+      patch screenshot_annotation_path(@screenshot, @annotation), params: {
+        annotation: { status: :resolved }
+      }
+    end
+
+    comment = @annotation.annotation_comments.last
+    assert_equal "resolved", comment.action
+    assert_equal @user, comment.user
+  end
+
   test "update annotation comment does not set resolved_by_user" do
     sign_in(@user)
 
