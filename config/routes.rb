@@ -28,8 +28,17 @@ Rails.application.routes.draw do
   namespace :api do
     put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
     namespace :v1 do
+      # API-key authenticated endpoints (MCP / agent use)
       resources :screenshots, only: [ :create ] do
         resources :annotations, only: [ :index ]
+      end
+
+      # OAuth-authenticated endpoints (Chrome extension / user apps)
+      resource :me, only: :show, controller: "me"
+      resources :projects, only: %i[index create] do
+        resources :screenshots, only: %i[index create], controller: "project_screenshots" do
+          resources :annotations, only: %i[index create update], controller: "screenshot_annotations"
+        end
       end
     end
   end

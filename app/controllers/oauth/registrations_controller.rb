@@ -24,8 +24,10 @@ module Oauth
 
       redirect_uris.each do |uri|
         parsed = URI.parse(uri)
-        unless parsed.host&.in?(%w[localhost 127.0.0.1 ::1])
-          return render json: { error: "invalid_client_metadata", error_description: "Only localhost redirect URIs are allowed" }, status: :bad_request
+        is_localhost = parsed.host&.in?(%w[localhost 127.0.0.1 ::1])
+        is_chrome_extension = parsed.host&.end_with?(".chromiumapp.org")
+        unless is_localhost || is_chrome_extension
+          return render json: { error: "invalid_client_metadata", error_description: "Only localhost and Chrome extension redirect URIs are allowed" }, status: :bad_request
         end
       end
 

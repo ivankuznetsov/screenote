@@ -22,9 +22,11 @@ Doorkeeper.configure do
   access_token_expires_in 1.hour
   use_refresh_token
 
-  # Allow HTTP redirect URIs for localhost (RFC 8252 loopback redirect).
-  # Native OAuth clients like Claude Code use http://localhost callbacks.
-  force_ssl_in_redirect_uri { |uri| !uri.host.in?(%w[localhost 127.0.0.1]) }
+  # Allow HTTP redirect URIs for localhost (RFC 8252 loopback redirect)
+  # and Chrome extension callbacks (https://*.chromiumapp.org).
+  force_ssl_in_redirect_uri do |uri|
+    !uri.host.in?(%w[localhost 127.0.0.1]) && !uri.host&.end_with?(".chromiumapp.org")
+  end
 
   # Only authorization_code grant flow (OAuth 2.1)
   grant_flows %w[authorization_code]

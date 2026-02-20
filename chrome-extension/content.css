@@ -1,0 +1,377 @@
+/* ── Screenote Content Script Styles ──
+ *
+ * Reuses the same visual language as Screenote's web UI:
+ * - Same blue (#2563eb) for pins and regions
+ * - Same green (#16a34a) for resolved state
+ * - Same BEM-style naming convention (sn- prefix to avoid conflicts)
+ * - Same percentage-based coordinate positioning
+ */
+
+/* ── Overlay container ── */
+#screenote-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2147483647; /* max z-index */
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto 1fr;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1f2937;
+}
+
+/* ── Toolbar ── */
+#screenote-toolbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  background: #ffffff;
+  border-bottom: 1px solid #d1d5db;
+  z-index: 2;
+}
+
+.sn-toolbar__left,
+.sn-toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sn-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0;
+}
+
+.sn-toolbar__btn:hover {
+  background: #f9fafb;
+  color: #1f2937;
+}
+
+.sn-toolbar__btn--active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+.sn-toolbar__btn--active:hover {
+  background: #1d4ed8;
+}
+
+.sn-toolbar__btn--close {
+  width: auto;
+  padding: 0 0.75rem;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+.sn-toolbar__btn--close:hover {
+  color: #dc2626;
+}
+
+.sn-toolbar__link {
+  font-size: 0.8125rem;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.sn-toolbar__link:hover {
+  text-decoration: underline;
+}
+
+/* ── Canvas (screenshot + pins) ── */
+#screenote-canvas {
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  background: #1f2937;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+/* ── Selection rectangle (while drawing) ── */
+.sn-selection {
+  position: absolute;
+  border: 2px dashed #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ── Annotation pins ──
+ * Same visual style as Screenote's .annotation-pin classes */
+
+.sn-pin {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.sn-pin--point {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.sn-pin--region {
+  border: 2px solid #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  border-radius: 2px;
+}
+
+.sn-pin--resolved.sn-pin--point {
+  background: #16a34a;
+}
+
+.sn-pin--resolved.sn-pin--region {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+}
+
+.sn-pin--resolved {
+  opacity: 0.4;
+}
+
+.sn-pin--preview {
+  opacity: 0.6;
+  animation: sn-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes sn-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.sn-pin__label {
+  position: absolute;
+  top: -0.75rem;
+  left: -0.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.sn-pin--resolved .sn-pin__label {
+  background: #16a34a;
+}
+
+/* ── Annotation form (appears on canvas) ── */
+.sn-form {
+  position: absolute;
+  z-index: 20;
+  background: #ffffff;
+  border: 2px solid #2563eb;
+  border-radius: 6px;
+  padding: 0.75rem;
+  width: 260px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  pointer-events: auto;
+}
+
+.sn-form__textarea {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2937;
+  resize: vertical;
+  min-height: 60px;
+  margin-bottom: 0.5rem;
+  box-sizing: border-box;
+}
+
+.sn-form__textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.sn-form__actions {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.sn-form__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+
+.sn-form__btn--primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.sn-form__btn--primary:hover {
+  background: #1d4ed8;
+}
+
+.sn-form__btn--primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sn-form__btn--cancel {
+  background: #ffffff;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.sn-form__btn--cancel:hover {
+  background: #f9fafb;
+}
+
+/* ── Sidebar ── */
+#screenote-sidebar {
+  grid-column: 2;
+  grid-row: 2;
+  background: #ffffff;
+  border-left: 1px solid #d1d5db;
+  overflow-y: auto;
+}
+
+.sn-sidebar__header {
+  padding: 1rem;
+  border-bottom: 1px solid #d1d5db;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+}
+
+.sn-sidebar__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.sn-sidebar__list {
+  padding: 0.5rem;
+}
+
+.sn-sidebar__empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+/* ── Annotation item (sidebar) ──
+ * Same visual style as Screenote's .annotation-item classes */
+
+.sn-item {
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  margin-bottom: 0.5rem;
+}
+
+.sn-item--resolved {
+  opacity: 0.6;
+}
+
+.sn-item__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+}
+
+.sn-item__number {
+  background: #2563eb;
+  color: #ffffff;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sn-item--resolved .sn-item__number {
+  background: #16a34a;
+}
+
+.sn-item__author {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sn-item__comment {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sn-item__actions {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.sn-item__btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #6b7280;
+  font-family: inherit;
+}
+
+.sn-item__btn:hover {
+  background: #f9fafb;
+  color: #1f2937;
+}
