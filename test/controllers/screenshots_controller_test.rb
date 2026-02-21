@@ -6,48 +6,34 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @user = users(:alice)
     @project = projects(:alice_project)
+    @page = pages(:alice_page)
     @screenshot = screenshots(:alice_screenshot)
   end
 
   # Authentication
   test "redirects to sign in when not authenticated" do
-    get project_screenshots_path(@project)
+    get screenshot_path(@screenshot)
     assert_redirected_to new_session_path
-  end
-
-  # Index
-  test "index shows project screenshots" do
-    sign_in(@user)
-    get project_screenshots_path(@project)
-    assert_response :success
-    assert_select ".screenshot-card__title", @screenshot.title
-  end
-
-  test "index does not show other users screenshots" do
-    sign_in(@user)
-    get project_screenshots_path(@project)
-    assert_response :success
-    assert_select ".screenshot-card__title", { text: screenshots(:bob_screenshot).title, count: 0 }
   end
 
   # Show
   test "show displays screenshot" do
     sign_in(@user)
-    get project_screenshot_path(@project, @screenshot)
+    get screenshot_path(@screenshot)
     assert_response :success
     assert_select ".screenshot-header__breadcrumb", /#{@screenshot.title}/
   end
 
   test "show returns not found for other users screenshot" do
     sign_in(@user)
-    get project_screenshot_path(projects(:bob_project), screenshots(:bob_screenshot))
+    get screenshot_path(screenshots(:bob_screenshot))
     assert_response :not_found
   end
 
   # New
   test "new renders form" do
     sign_in(@user)
-    get new_project_screenshot_path(@project)
+    get new_page_screenshot_path(@page)
     assert_response :success
     assert_select "form"
   end
@@ -58,11 +44,11 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     image = fixture_file_upload("test_image.png", "image/png")
 
     assert_difference "Screenshot.count", 1 do
-      post project_screenshots_path(@project), params: { screenshot: { title: "New Screenshot", image: image } }
+      post page_screenshots_path(@page), params: { screenshot: { title: "New Screenshot", image: image } }
     end
 
     screenshot = Screenshot.last
-    assert_redirected_to project_screenshot_path(@project, screenshot)
+    assert_redirected_to screenshot_path(screenshot)
     assert_equal "New Screenshot", screenshot.title
     assert screenshot.image.attached?, "Image should be attached"
   end
@@ -71,17 +57,17 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
 
     assert_difference "Screenshot.count", 1 do
-      post project_screenshots_path(@project), params: { screenshot: { title: "No Image Screenshot" } }
+      post page_screenshots_path(@page), params: { screenshot: { title: "No Image Screenshot" } }
     end
 
-    assert_redirected_to project_screenshot_path(@project, Screenshot.last)
+    assert_redirected_to screenshot_path(Screenshot.last)
   end
 
   test "create with invalid params renders form" do
     sign_in(@user)
 
     assert_no_difference "Screenshot.count" do
-      post project_screenshots_path(@project), params: { screenshot: { title: "" } }
+      post page_screenshots_path(@page), params: { screenshot: { title: "" } }
     end
     assert_response :unprocessable_entity
   end
@@ -89,7 +75,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
   # Edit
   test "edit renders form" do
     sign_in(@user)
-    get edit_project_screenshot_path(@project, @screenshot)
+    get edit_screenshot_path(@screenshot)
     assert_response :success
     assert_select "form"
   end
@@ -97,14 +83,14 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
   # Update
   test "update with valid params" do
     sign_in(@user)
-    patch project_screenshot_path(@project, @screenshot), params: { screenshot: { title: "Updated Title" } }
-    assert_redirected_to project_screenshot_path(@project, @screenshot)
+    patch screenshot_path(@screenshot), params: { screenshot: { title: "Updated Title" } }
+    assert_redirected_to screenshot_path(@screenshot)
     assert_equal "Updated Title", @screenshot.reload.title
   end
 
   test "update with invalid params renders form" do
     sign_in(@user)
-    patch project_screenshot_path(@project, @screenshot), params: { screenshot: { title: "" } }
+    patch screenshot_path(@screenshot), params: { screenshot: { title: "" } }
     assert_response :unprocessable_entity
   end
 
@@ -113,8 +99,8 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
 
     assert_difference "Screenshot.count", -1 do
-      delete project_screenshot_path(@project, @screenshot)
+      delete screenshot_path(@screenshot)
     end
-    assert_redirected_to project_screenshots_path(@project)
+    assert_redirected_to page_path(@page)
   end
 end

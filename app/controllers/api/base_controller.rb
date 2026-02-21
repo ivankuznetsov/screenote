@@ -4,6 +4,14 @@ module Api
   class BaseController < ActionController::API
     before_action :authenticate_api_key!
 
+    rescue_from ActiveRecord::RecordInvalid do |e|
+      render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
+
+    rescue_from ActiveRecord::RecordNotFound do |e|
+      render json: { error: e.message }, status: :not_found
+    end
+
     private
 
     def authenticate_api_key!

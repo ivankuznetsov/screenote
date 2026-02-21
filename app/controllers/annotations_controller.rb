@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 class AnnotationsController < ApplicationController
-  include ProjectAuthorization
-
-  before_action :set_project
   before_action :set_screenshot
   before_action :set_annotation, only: %i[update destroy]
 
@@ -12,9 +9,9 @@ class AnnotationsController < ApplicationController
     @annotation.user = Current.user
 
     if @annotation.save
-      redirect_to project_screenshot_path(@project, @screenshot), notice: "Annotation added."
+      redirect_to screenshot_path(@screenshot), notice: "Annotation added."
     else
-      redirect_to project_screenshot_path(@project, @screenshot), alert: "Could not save annotation."
+      redirect_to screenshot_path(@screenshot), alert: "Could not save annotation."
     end
   end
 
@@ -23,21 +20,22 @@ class AnnotationsController < ApplicationController
     @annotation.resolved_by_user = Current.user if @annotation.status_changed? && @annotation.resolved?
 
     if @annotation.save
-      redirect_to project_screenshot_path(@project, @screenshot), notice: "Annotation updated."
+      redirect_to screenshot_path(@screenshot), notice: "Annotation updated."
     else
-      redirect_to project_screenshot_path(@project, @screenshot), alert: "Could not update annotation."
+      redirect_to screenshot_path(@screenshot), alert: "Could not update annotation."
     end
   end
 
   def destroy
     @annotation.destroy
-    redirect_to project_screenshot_path(@project, @screenshot), notice: "Annotation deleted."
+    redirect_to screenshot_path(@screenshot), notice: "Annotation deleted."
   end
 
   private
 
   def set_screenshot
-    @screenshot = @project.screenshots.find(params[:screenshot_id])
+    @screenshot = Screenshot.find(params[:screenshot_id])
+    @project = Current.user.projects.find(@screenshot.page.project_id)
   end
 
   def set_annotation

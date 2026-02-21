@@ -18,7 +18,10 @@ module Pages
       visit_projects
       click_project(project_name)
       assert_on_project_show(project_name)
-      click_link "API keys"
+
+      # Navigate directly — the API keys link was removed from the project show page
+      project_id = current_url.split("/").last
+      visit "/projects/#{project_id}/api_keys"
       assert_selector '[data-testid="page-title"]', text: "API Keys", wait: 10
     end
 

@@ -100,7 +100,7 @@ class TeamworkTest < ApplicationSystemTestCase
 
     assert_selector "a", text: "Edit"
     assert_selector "button", text: "Delete"
-    assert_selector "a", text: "API keys"
+    assert_selector "a", text: "Members"
   end
 
   # --- Invitation shows as pending ---

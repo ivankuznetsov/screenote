@@ -14,12 +14,18 @@ Rails.application.routes.draw do
   post "oauth/register", to: "oauth/registrations#create"
 
   resources :projects do
-    resources :screenshots do
-      resources :annotations, only: %i[create update destroy]
-    end
+    resources :pages, only: %i[new create]
     resources :api_keys, only: %i[index new create destroy]
     resources :invitations, controller: "project_invitations", only: %i[create destroy]
     resources :memberships, controller: "project_memberships", only: %i[index destroy]
+  end
+
+  resources :pages, only: %i[show edit update destroy] do
+    resources :screenshots, only: %i[new create]
+  end
+
+  resources :screenshots, only: %i[show edit update destroy] do
+    resources :annotations, only: %i[create update destroy]
   end
 
   get  "invitations/:token", to: "invitation_acceptances#show", as: :accept_invitation
@@ -50,9 +56,9 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
   # Landing page for unauthenticated users, dashboard for authenticated
-  root "pages#landing"
+  root "static_pages#landing"
   get "dashboard", to: "projects#index", as: :dashboard
-  get "help", to: "pages#help"
-  get "terms", to: "pages#terms"
-  get "privacy", to: "pages#privacy"
+  get "help", to: "static_pages#help"
+  get "terms", to: "static_pages#terms"
+  get "privacy", to: "static_pages#privacy"
 end

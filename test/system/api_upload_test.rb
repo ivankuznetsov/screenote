@@ -26,6 +26,10 @@ class ApiUploadTest < ApplicationSystemTestCase
 
     navigate_to_demo_project
 
+    # API upload creates a page from the title — click into it to see the screenshot
+    assert_selector '[data-testid="page-card"]', minimum: 1, wait: 10
+    find('[data-testid="page-card-name"]', text: screenshot_title).click
+
     assert_selector '[data-testid="screenshot-card-title"]', text: screenshot_title, wait: 10
   end
 

@@ -6,11 +6,12 @@ module Api
   class ScreenshotUploadsControllerTest < ActionDispatch::IntegrationTest
     setup do
       @project = projects(:alice_project)
+      @page = pages(:alice_page)
       @image_data = File.binread(Rails.root.join("test/fixtures/files/test_image.png"))
     end
 
     test "upload with valid token attaches image" do
-      screenshot = @project.screenshots.create!(title: "Upload test")
+      screenshot = @page.screenshots.create!(title: "Upload test")
       token = screenshot.generate_token_for(:upload)
 
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
@@ -26,7 +27,7 @@ module Api
     end
 
     test "rejects expired token" do
-      screenshot = @project.screenshots.create!(title: "Expired token")
+      screenshot = @page.screenshots.create!(title: "Expired token")
       token = screenshot.generate_token_for(:upload)
 
       travel 6.minutes do
@@ -40,7 +41,7 @@ module Api
     end
 
     test "rejects reused token after image already attached" do
-      screenshot = @project.screenshots.create!(title: "Reuse test")
+      screenshot = @page.screenshots.create!(title: "Reuse test")
       token = screenshot.generate_token_for(:upload)
 
       # First upload succeeds
@@ -57,7 +58,7 @@ module Api
     end
 
     test "rejects invalid token" do
-      screenshot = @project.screenshots.create!(title: "Invalid token")
+      screenshot = @page.screenshots.create!(title: "Invalid token")
 
       put api_screenshot_upload_path(screenshot, token: "bogus-token", mime_type: "image/png"),
         headers: { "Content-Type" => "image/png" },
@@ -68,7 +69,7 @@ module Api
     end
 
     test "rejects empty body" do
-      screenshot = @project.screenshots.create!(title: "Empty body")
+      screenshot = @page.screenshots.create!(title: "Empty body")
       token = screenshot.generate_token_for(:upload)
 
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
@@ -88,7 +89,7 @@ module Api
     end
 
     test "rejects invalid mime type" do
-      screenshot = @project.screenshots.create!(title: "Bad MIME")
+      screenshot = @page.screenshots.create!(title: "Bad MIME")
       token = screenshot.generate_token_for(:upload)
 
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "text/html"),
@@ -100,7 +101,7 @@ module Api
     end
 
     test "enqueues dimension job after upload" do
-      screenshot = @project.screenshots.create!(title: "Dimension job")
+      screenshot = @page.screenshots.create!(title: "Dimension job")
       token = screenshot.generate_token_for(:upload)
 
       assert_enqueued_with(job: ScreenshotDimensionJob) do

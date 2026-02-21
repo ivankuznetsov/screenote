@@ -364,6 +364,68 @@ a:hover {
   gap: 0.5rem;
 }
 
+/* Page grid */
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.page-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  display: block;
+  color: var(--color-text);
+  transition: border-color 0.15s;
+}
+
+.page-card:hover {
+  border-color: var(--color-primary);
+  text-decoration: none;
+}
+
+.page-card__name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.page-card__meta {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+}
+
+/* Page detail */
+.page-detail__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.page-detail__breadcrumb {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.page-detail__breadcrumb a {
+  color: var(--color-primary);
+}
+
+.page-detail__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.page-detail__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 /* Screenshot grid */
 .screenshot-grid {
   display: grid;
@@ -1165,6 +1227,40 @@ a:hover {
 
 .guide__workflow-steps code {
   font-size: 0.75rem;
+}
+
+/* Concepts section */
+.guide__concepts {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.guide__concepts-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.guide__concepts-desc {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.guide__concepts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.guide__concept {
+  font-size: 0.875rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--color-primary);
 }
 
 /* MCP connection section */

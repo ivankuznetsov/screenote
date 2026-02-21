@@ -1,7 +1,7 @@
 <% if screenshots.any? %>
   <div class="screenshot-grid">
     <% screenshots.each do |screenshot| %>
-      <%= link_to project_screenshot_path(project, screenshot), class: "screenshot-card" do %>
+      <%= link_to screenshot_path(screenshot), class: "screenshot-card" do %>
         <div class="screenshot-card__image">
           <% if screenshot.image.attached? %>
             <%= image_tag screenshot.image.variant(resize_to_limit: [800, 600]), alt: screenshot.title %>
@@ -22,8 +22,8 @@
   </div>
 <% else %>
   <div class="empty-state" data-testid="empty-state">
-    <div class="empty-state__title">No screenshots yet</div>
+    <div class="empty-state__title">No versions yet</div>
     <div class="empty-state__description">Upload a screenshot to start collecting annotations.</div>
-    <%= link_to "Upload your first screenshot", new_project_screenshot_path(project), class: "btn btn--primary" %>
+    <%= link_to "Upload first version", new_page_screenshot_path(page), class: "btn btn--primary" %>
   </div>
 <% end %>

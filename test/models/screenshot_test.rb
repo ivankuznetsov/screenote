@@ -4,23 +4,23 @@ require "test_helper"
 
 class ScreenshotTest < ActiveSupport::TestCase
   test "valid screenshot with title and project" do
-    screenshot = Screenshot.new(title: "Test", project: projects(:alice_project))
+    screenshot = Screenshot.new(title: "Test", page: pages(:alice_page))
     assert screenshot.valid?, "Screenshot should be valid with title and project"
   end
 
   test "requires title" do
-    screenshot = Screenshot.new(project: projects(:alice_project))
+    screenshot = Screenshot.new(page: pages(:alice_page))
     assert_not screenshot.valid?, "Screenshot should be invalid without title"
     assert screenshot.errors[:title].any?, "Should have title error"
   end
 
-  test "requires project" do
+  test "requires page" do
     screenshot = Screenshot.new(title: "Test")
-    assert_not screenshot.valid?, "Screenshot should be invalid without project"
+    assert_not screenshot.valid?, "Screenshot should be invalid without page"
   end
 
   test "width must be positive integer" do
-    screenshot = Screenshot.new(title: "Test", project: projects(:alice_project), width: -1)
+    screenshot = Screenshot.new(title: "Test", page: pages(:alice_page), width: -1)
     assert_not screenshot.valid?, "Screenshot should be invalid with negative width"
 
     screenshot.width = 0
@@ -31,7 +31,7 @@ class ScreenshotTest < ActiveSupport::TestCase
   end
 
   test "height must be positive integer" do
-    screenshot = Screenshot.new(title: "Test", project: projects(:alice_project), height: -1)
+    screenshot = Screenshot.new(title: "Test", page: pages(:alice_page), height: -1)
     assert_not screenshot.valid?, "Screenshot should be invalid with negative height"
 
     screenshot.height = 1080
@@ -39,7 +39,7 @@ class ScreenshotTest < ActiveSupport::TestCase
   end
 
   test "width and height are optional" do
-    screenshot = Screenshot.new(title: "Test", project: projects(:alice_project))
+    screenshot = Screenshot.new(title: "Test", page: pages(:alice_page))
     assert screenshot.valid?, "Screenshot should be valid without dimensions"
   end
 
@@ -65,7 +65,7 @@ class ScreenshotTest < ActiveSupport::TestCase
   end
 
   test "generates upload token before image is attached" do
-    screenshot = Screenshot.create!(title: "Token test", project: projects(:alice_project))
+    screenshot = Screenshot.create!(title: "Token test", page: pages(:alice_page))
     token = screenshot.generate_token_for(:upload)
 
     assert token.present?, "Should generate a token"
@@ -74,7 +74,7 @@ class ScreenshotTest < ActiveSupport::TestCase
   end
 
   test "upload token invalidates after image is attached" do
-    screenshot = Screenshot.create!(title: "Token invalidation", project: projects(:alice_project))
+    screenshot = Screenshot.create!(title: "Token invalidation", page: pages(:alice_page))
     token = screenshot.generate_token_for(:upload)
 
     screenshot.image.attach(

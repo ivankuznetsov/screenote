@@ -24,14 +24,14 @@
   <div class="annotation-item__actions">
     <% if annotation.open? %>
       <%= button_to "Resolve",
-          project_screenshot_annotation_path(annotation.screenshot.project, annotation.screenshot, annotation),
+          screenshot_annotation_path(annotation.screenshot, annotation),
           method: :patch,
           params: { annotation: { status: :resolved } },
           class: "btn btn--small btn--secondary",
           data: { testid: "resolve-annotation-button" } %>
     <% end %>
     <%= button_to "Delete",
-        project_screenshot_annotation_path(annotation.screenshot.project, annotation.screenshot, annotation),
+        screenshot_annotation_path(annotation.screenshot, annotation),
         method: :delete,
         class: "btn btn--small btn--danger",
         data: { turbo_confirm: "Delete this annotation?", testid: "delete-annotation-button" } %>

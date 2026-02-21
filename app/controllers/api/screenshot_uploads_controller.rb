@@ -47,9 +47,7 @@ module Api
 
       ScreenshotDimensionJob.perform_later(screenshot)
 
-      annotate_url = Rails.application.routes.url_helpers.project_screenshot_url(
-        screenshot.project, screenshot
-      )
+      annotate_url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
 
       render json: { success: true, screenshot_id: screenshot.id, annotate_url: annotate_url }, status: :ok
     rescue ActiveRecord::RecordNotUnique

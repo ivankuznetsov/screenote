@@ -4,11 +4,11 @@ require "test_helper"
 
 class ScreenshotDimensionJobTest < ActiveSupport::TestCase
   setup do
-    @project = projects(:alice_project)
+    @page = pages(:alice_page)
   end
 
   test "sets dimensions and status to ready for valid image" do
-    screenshot = @project.screenshots.create!(title: "Dimension Test")
+    screenshot = @page.screenshots.create!(title: "Dimension Test")
     screenshot.image.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
       filename: "test.png",

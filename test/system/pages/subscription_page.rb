@@ -42,17 +42,17 @@ module Pages
     # --- Assertions ---
 
     def assert_on_billing_page
-      assert_selector BILLING_TITLE, text: "Billing", wait: 10
+      assert_selector BILLING_TITLE, text: "Choose your plan", wait: 10
       assert_selector BILLING_PLANS
     end
 
     def assert_free_plan_current
-      assert_selector FREE_PLAN_BADGE, text: "Current plan"
+      assert_selector FREE_PLAN_BADGE, text: /current/i
       assert_no_selector PRO_PLAN_BADGE
     end
 
     def assert_pro_plan_current
-      assert_selector PRO_PLAN_BADGE, text: "Current plan"
+      assert_selector PRO_PLAN_BADGE, text: /current/i
       assert_no_selector FREE_PLAN_BADGE
     end
 

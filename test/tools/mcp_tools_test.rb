@@ -31,7 +31,7 @@ class McpToolsTest < ActiveSupport::TestCase
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal "MCP Upload", screenshot.title
-    assert_equal @project.id, screenshot.project_id
+    assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
     assert screenshot.image.attached?, "Image should be attached"
   end
 
@@ -216,7 +216,7 @@ class McpToolsTest < ActiveSupport::TestCase
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal "Signed Upload", screenshot.title
-    assert_equal @project.id, screenshot.project_id
+    assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
     assert_not screenshot.image.attached?, "Image should NOT be attached yet"
   end
 
@@ -283,5 +283,70 @@ class McpToolsTest < ActiveSupport::TestCase
     project = Project.find(project_data["id"])
     assert_equal @user, project.creator, "User should be the project creator"
     assert project.member?(@user), "User should be a member"
+  end
+
+  # ListPagesTool
+  test "list_pages returns project pages with version counts" do
+    result = JSON.parse(ListPagesTool.new.call(project_id: @project.id))
+
+    assert result["pages"].is_a?(Array), "Should return pages array"
+    page_names = result["pages"].map { |p| p["name"] }
+    assert_includes page_names, pages(:alice_page).name
+
+    page_data = result["pages"].find { |p| p["name"] == pages(:alice_page).name }
+    assert page_data["id"].present?, "Should include page ID"
+    assert page_data["version_count"].is_a?(Integer), "Should include version count"
+    assert page_data["url"].present?, "Should include page URL"
+  end
+
+  # CreateScreenshotTool with page_name
+  test "create_screenshot groups under specified page_name" do
+    tool = CreateScreenshotTool.new
+    image_data = Base64.strict_encode64(File.binread(Rails.root.join("test/fixtures/files/test_image.png")))
+
+    result = JSON.parse(tool.call(
+      project_id: @project.id,
+      title: "v2",
+      page_name: "Login",
+      image_base64: image_data
+    ))
+
+    assert result["page_id"].present?, "Should return page ID"
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_equal "Login", screenshot.page.name, "Screenshot should be grouped under specified page"
+    assert_equal "v2", screenshot.title, "Screenshot title should be the version label"
+  end
+
+  # CreateScreenshotUploadTool with page_name
+  test "create_screenshot_upload groups under specified page_name" do
+    tool = CreateScreenshotUploadTool.new
+
+    result = JSON.parse(tool.call(
+      project_id: @project.id,
+      title: "v1",
+      page_name: "Dashboard"
+    ))
+
+    assert result["page_id"].present?, "Should return page ID"
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_equal "Dashboard", screenshot.page.name, "Screenshot should be grouped under specified page"
+    assert_equal "v1", screenshot.title
+  end
+
+  # ListScreenshotsTool with page_id filter
+  test "list_screenshots includes page info" do
+    result = JSON.parse(ListScreenshotsTool.new.call(project_id: @project.id))
+
+    screenshot_data = result["screenshots"].find { |s| s["id"] == @screenshot.id }
+    assert screenshot_data["page_id"].present?, "Should include page_id"
+    assert screenshot_data["page_name"].present?, "Should include page_name"
+  end
+
+  test "list_screenshots filters by page_id" do
+    page = pages(:alice_page)
+    result = JSON.parse(ListScreenshotsTool.new.call(project_id: @project.id, page_id: page.id))
+
+    page_ids = result["screenshots"].map { |s| s["page_id"] }.uniq
+    assert_equal [ page.id ], page_ids, "All screenshots should belong to the filtered page"
   end
 end

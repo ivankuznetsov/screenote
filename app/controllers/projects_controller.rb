@@ -14,12 +14,10 @@ class ProjectsController < ApplicationController
 
   def show
     @is_owner = @project.owner?(Current.user)
-    @screenshots = @project.screenshots
-      .with_attached_image
-      .left_joins(:annotations)
-      .select("screenshots.*, COUNT(annotations.id) AS annotations_count_cache, COUNT(CASE WHEN annotations.status = 0 THEN 1 END) AS open_annotations_count_cache")
-      .group("screenshots.id")
-      .order(created_at: :desc)
+    @pages = @project.pages.ordered
+              .left_joins(:screenshots)
+              .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
+              .group("pages.id")
   end
 
   def new
