@@ -4,6 +4,7 @@ require_relative "application_system_test_case"
 require_relative "pages/auth_page"
 require_relative "pages/projects_page"
 require_relative "pages/api_keys_page"
+require_relative "pages/pages_page"
 require_relative "pages/screenshots_page"
 require_relative "pages/annotations_page"
 
@@ -15,6 +16,7 @@ class McpToolsTest < ApplicationSystemTestCase
   include Pages::AuthPage
   include Pages::ProjectsPage
   include Pages::ApiKeysPage
+  include Pages::PagesPage
   include Pages::ScreenshotsPage
   include Pages::AnnotationsPage
 
@@ -23,25 +25,28 @@ class McpToolsTest < ApplicationSystemTestCase
   end
 
   test "create_screenshot via MCP and verify in UI" do
-    token = create_api_key("Demo Project", "MCP Create #{Time.now.to_i}")
+    token, project_id = create_api_key_with_project("Demo Project", "MCP Create #{Time.now.to_i}")
     title = "MCP Screenshot #{Time.now.to_i}"
 
-    result = mcp_create_screenshot(token, title)
+    result = mcp_create_screenshot(token, project_id, title)
 
     assert result["screenshot_id"].present?, "Response should include screenshot_id"
     assert result["annotate_url"].present?, "Response should include annotate_url"
 
+    # MCP creates a page from the title — navigate to the project and then the page
     navigate_to_demo_project
-    assert_selector SCREENSHOT_CARD_TITLE, text: title, wait: 10
+    click_page(title)
+    assert_on_page_show(title)
+    assert_selector SCREENSHOT_CARD_TITLE, minimum: 1, wait: 10
   end
 
   test "list_screenshots returns project screenshots" do
-    token = create_api_key("Demo Project", "MCP List #{Time.now.to_i}")
+    token, project_id = create_api_key_with_project("Demo Project", "MCP List #{Time.now.to_i}")
     title = "MCP Listed #{Time.now.to_i}"
 
-    mcp_create_screenshot(token, title)
+    mcp_create_screenshot(token, project_id, title)
 
-    response = call_mcp_tool(token: token, tool_name: "list_screenshots", arguments: {})
+    response = call_mcp_tool(token: token, tool_name: "list_screenshots", arguments: { project_id: project_id })
     assert_equal "200", response.code, "list_screenshots should return 200"
 
     result = parse_mcp_result(response)
@@ -54,17 +59,18 @@ class McpToolsTest < ApplicationSystemTestCase
   end
 
   test "create_annotation via MCP and verify in sidebar" do
-    token = create_api_key("Demo Project", "MCP Annotate #{Time.now.to_i}")
+    token, project_id = create_api_key_with_project("Demo Project", "MCP Annotate #{Time.now.to_i}")
     title = "MCP Annot Screenshot #{Time.now.to_i}"
     comment = "Fix this button alignment #{Time.now.to_i}"
 
-    screenshot_result = mcp_create_screenshot(token, title)
+    screenshot_result = mcp_create_screenshot(token, project_id, title)
     screenshot_id = screenshot_result["screenshot_id"]
 
     response = call_mcp_tool(
       token: token,
       tool_name: "create_annotation",
       arguments: {
+        project_id: project_id,
         screenshot_id: screenshot_id,
         x_percent: 25.0,
         y_percent: 50.0,
@@ -84,23 +90,23 @@ class McpToolsTest < ApplicationSystemTestCase
   end
 
   test "list_annotations returns annotations for screenshot" do
-    token = create_api_key("Demo Project", "MCP ListAnn #{Time.now.to_i}")
+    token, project_id = create_api_key_with_project("Demo Project", "MCP ListAnn #{Time.now.to_i}")
     title = "MCP ListAnn Screenshot #{Time.now.to_i}"
     comment = "Check spacing #{Time.now.to_i}"
 
-    screenshot_result = mcp_create_screenshot(token, title)
+    screenshot_result = mcp_create_screenshot(token, project_id, title)
     screenshot_id = screenshot_result["screenshot_id"]
 
     call_mcp_tool(
       token: token,
       tool_name: "create_annotation",
-      arguments: { screenshot_id: screenshot_id, x_percent: 10.0, y_percent: 20.0, comment: comment }
+      arguments: { project_id: project_id, screenshot_id: screenshot_id, x_percent: 10.0, y_percent: 20.0, comment: comment }
     )
 
     response = call_mcp_tool(
       token: token,
       tool_name: "list_annotations",
-      arguments: { screenshot_id: screenshot_id }
+      arguments: { project_id: project_id, screenshot_id: screenshot_id }
     )
     assert_equal "200", response.code, "list_annotations should return 200"
 
@@ -114,23 +120,23 @@ class McpToolsTest < ApplicationSystemTestCase
   end
 
   test "resolve_annotation marks annotation resolved" do
-    token = create_api_key("Demo Project", "MCP Resolve #{Time.now.to_i}")
+    token, project_id = create_api_key_with_project("Demo Project", "MCP Resolve #{Time.now.to_i}")
     title = "MCP Resolve Screenshot #{Time.now.to_i}"
 
-    screenshot_result = mcp_create_screenshot(token, title)
+    screenshot_result = mcp_create_screenshot(token, project_id, title)
     screenshot_id = screenshot_result["screenshot_id"]
 
     ann_response = call_mcp_tool(
       token: token,
       tool_name: "create_annotation",
-      arguments: { screenshot_id: screenshot_id, x_percent: 50.0, y_percent: 50.0, comment: "Resolve me" }
+      arguments: { project_id: project_id, screenshot_id: screenshot_id, x_percent: 50.0, y_percent: 50.0, comment: "Resolve me" }
     )
     annotation_id = parse_mcp_result(ann_response).dig("annotation", "id")
 
     response = call_mcp_tool(
       token: token,
       tool_name: "resolve_annotation",
-      arguments: { annotation_id: annotation_id }
+      arguments: { project_id: project_id, annotation_id: annotation_id }
     )
     assert_equal "200", response.code, "resolve_annotation should return 200"
 
@@ -142,24 +148,25 @@ class McpToolsTest < ApplicationSystemTestCase
     list_response = call_mcp_tool(
       token: token,
       tool_name: "list_annotations",
-      arguments: { screenshot_id: screenshot_id, status: "resolved" }
+      arguments: { project_id: project_id, screenshot_id: screenshot_id, status: "resolved" }
     )
     list_result = parse_mcp_result(list_response)
     assert_equal 1, list_result["annotations"].size, "Should find 1 resolved annotation"
   end
 
   test "get_annotation returns annotation with coordinates" do
-    token = create_api_key("Demo Project", "MCP GetAnn #{Time.now.to_i}")
+    token, project_id = create_api_key_with_project("Demo Project", "MCP GetAnn #{Time.now.to_i}")
     title = "MCP GetAnn Screenshot #{Time.now.to_i}"
     comment = "Check this region #{Time.now.to_i}"
 
-    screenshot_result = mcp_create_screenshot(token, title)
+    screenshot_result = mcp_create_screenshot(token, project_id, title)
     screenshot_id = screenshot_result["screenshot_id"]
 
     ann_response = call_mcp_tool(
       token: token,
       tool_name: "create_annotation",
       arguments: {
+        project_id: project_id,
         screenshot_id: screenshot_id,
         x_percent: 30.0,
         y_percent: 40.0,
@@ -173,7 +180,7 @@ class McpToolsTest < ApplicationSystemTestCase
     response = call_mcp_tool(
       token: token,
       tool_name: "get_annotation",
-      arguments: { annotation_id: annotation_id }
+      arguments: { project_id: project_id, annotation_id: annotation_id }
     )
     assert_equal "200", response.code, "get_annotation should return 200"
 
@@ -192,16 +199,16 @@ class McpToolsTest < ApplicationSystemTestCase
   end
 
   test "MCP rejects request without auth" do
-    response = call_mcp_tool(token: nil, tool_name: "list_screenshots", arguments: {})
+    response = call_mcp_tool(token: nil, tool_name: "list_screenshots", arguments: { project_id: 1 })
     assert_equal "401", response.code, "MCP should reject unauthenticated requests with 401"
   end
 
   test "MCP rejects revoked API key" do
     key_name = "MCP Revoke #{Time.now.to_i}"
-    token = create_api_key("Demo Project", key_name)
+    token, project_id = create_api_key_with_project("Demo Project", key_name)
 
     # Verify it works before revoking
-    response = call_mcp_tool(token: token, tool_name: "list_screenshots", arguments: {})
+    response = call_mcp_tool(token: token, tool_name: "list_screenshots", arguments: { project_id: project_id })
     assert_equal "200", response.code, "Token should work before revoking"
 
     # Revoke via UI
@@ -209,11 +216,17 @@ class McpToolsTest < ApplicationSystemTestCase
     revoke_api_key(key_name)
 
     # Verify the revoked token is rejected
-    response = call_mcp_tool(token: token, tool_name: "list_screenshots", arguments: {})
+    response = call_mcp_tool(token: token, tool_name: "list_screenshots", arguments: { project_id: project_id })
     assert_equal "401", response.code, "Revoked token should be rejected with 401"
   end
 
   private
+
+  def create_api_key_with_project(project_name, key_name)
+    token = create_api_key(project_name, key_name)
+    project_id = current_url.match(%r{/projects/(\d+)})[1].to_i
+    [ token, project_id ]
+  end
 
   def call_mcp_tool(token:, tool_name:, arguments: {})
     uri = URI("#{Capybara.app_host}/mcp/messages")
@@ -235,12 +248,12 @@ class McpToolsTest < ApplicationSystemTestCase
     JSON.parse(body.dig("result", "content", 0, "text"))
   end
 
-  def mcp_create_screenshot(token, title)
+  def mcp_create_screenshot(token, project_id, title)
     image_base64 = Base64.strict_encode64(File.binread(TEST_IMAGE_PATH))
     response = call_mcp_tool(
       token: token,
       tool_name: "create_screenshot",
-      arguments: { title: title, image_base64: image_base64 }
+      arguments: { project_id: project_id, title: title, image_base64: image_base64 }
     )
     assert_equal "200", response.code, "MCP create_screenshot should return 200"
     parse_mcp_result(response)
