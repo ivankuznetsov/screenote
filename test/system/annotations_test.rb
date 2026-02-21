@@ -64,13 +64,28 @@ class AnnotationsTest < ApplicationSystemTestCase
   test "resolve an annotation" do
     create_annotation("Will be resolved")
 
-    within find(ANNOTATION_ITEM, text: "Will be resolved") do
-      click_button "Resolve"
-    end
+    resolve_annotation("Will be resolved")
     wait_for_turbo
 
     assert_flash_notice "Annotation updated."
     assert_annotation_resolved("Will be resolved")
+  end
+
+  test "unresolve a resolved annotation" do
+    create_annotation("Will be unresolved")
+
+    resolve_annotation("Will be unresolved")
+    wait_for_turbo
+    assert_annotation_resolved("Will be unresolved")
+
+    unresolve_annotation("Will be unresolved", reason: "Still broken on mobile")
+    wait_for_turbo
+
+    assert_flash_notice "Annotation unresolved."
+    assert_annotation_open("Will be unresolved")
+    assert_thread_has_resolved_badge("Will be unresolved")
+    assert_thread_has_reopened_badge("Will be unresolved")
+    assert_thread_body("Will be unresolved", "Still broken on mobile")
   end
 
   test "delete an annotation" do
