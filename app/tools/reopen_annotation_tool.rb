@@ -16,7 +16,7 @@ class ReopenAnnotationTool < ApplicationTool
 
     with_error_handling do
       annotation = project_annotations(current_project).find(annotation_id)
-      annotation.reopen!(api_key: Current.mcp_api_key, body: reason)
+      annotation.reopen!(user: Current.mcp_user, body: reason)
 
       { success: true, annotation: { id: annotation.id, status: annotation.status } }.to_json
     end

@@ -30,7 +30,7 @@ class ReopenAnnotationToolTest < ActiveSupport::TestCase
     assert_equal "open", @resolved_annotation.reload.status, "Annotation should be open in the database"
   end
 
-  test "creates a reopened comment attributed to the API key" do
+  test "creates a reopened comment attributed to the user" do
     assert_difference -> { @resolved_annotation.annotation_comments.count }, 1 do
       ReopenAnnotationTool.new.call(
         project_id: @project.id,
@@ -42,8 +42,8 @@ class ReopenAnnotationToolTest < ActiveSupport::TestCase
     comment = @resolved_annotation.annotation_comments.last
     assert_equal "reopened", comment.action, "Comment action should be reopened"
     assert_equal "Still broken on Safari", comment.body
-    assert_equal @api_key.id, comment.api_key_id, "Comment should be attributed to the API key"
-    assert_nil comment.user_id, "Comment should not have a user"
+    assert_equal @user.id, comment.user_id, "Comment should be attributed to the user"
+    assert_nil comment.api_key_id, "Comment should not have an API key"
   end
 
   test "returns error when annotation is already open" do

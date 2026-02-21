@@ -30,11 +30,11 @@ class AddAnnotationCommentToolTest < ActiveSupport::TestCase
     assert_equal @annotation.id, result["comment"]["annotation_id"]
     assert_equal "comment", result["comment"]["action"]
     assert_equal "Looking into this issue now", result["comment"]["body"]
-    assert_equal @api_key.name, result["comment"]["author"]
+    assert_equal @user.email, result["comment"]["author"]
     assert result["comment"]["created_at"].present?, "Should include created_at timestamp"
   end
 
-  test "comment is attributed to the API key" do
+  test "comment is attributed to the user" do
     assert_difference "AnnotationComment.count", 1 do
       AddAnnotationCommentTool.new.call(
         project_id: @project.id,
@@ -44,8 +44,8 @@ class AddAnnotationCommentToolTest < ActiveSupport::TestCase
     end
 
     comment = AnnotationComment.last
-    assert_equal @api_key.id, comment.api_key_id, "Comment should be attributed to the API key"
-    assert_nil comment.user_id, "Comment should not have a user author"
+    assert_equal @user.id, comment.user_id, "Comment should be attributed to the user"
+    assert_nil comment.api_key_id, "Comment should not have an API key author"
     assert_equal "comment", comment.action, "Action should be comment"
   end
 

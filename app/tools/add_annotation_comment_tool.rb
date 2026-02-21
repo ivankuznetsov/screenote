@@ -17,7 +17,7 @@ class AddAnnotationCommentTool < ApplicationTool
     with_error_handling do
       annotation = project_annotations(current_project).find(annotation_id)
       comment = annotation.annotation_comments.create!(
-        api_key: Current.mcp_api_key,
+        user: Current.mcp_user,
         body: body,
         action: :comment
       )
@@ -29,7 +29,7 @@ class AddAnnotationCommentTool < ApplicationTool
           annotation_id: annotation.id,
           action: comment.action,
           body: comment.body,
-          author: Current.mcp_api_key.name,
+          author: Current.mcp_user&.email,
           created_at: comment.created_at.iso8601
         }
       }.to_json

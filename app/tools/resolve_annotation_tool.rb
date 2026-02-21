@@ -18,7 +18,7 @@ class ResolveAnnotationTool < ApplicationTool
       annotation = project_annotations(current_project).find(annotation_id)
 
       body = comment.presence || "Marked as resolved"
-      annotation.resolve!(api_key: Current.mcp_api_key, body: body)
+      annotation.resolve!(user: Current.mcp_user, body: body)
 
       { success: true, annotation: { id: annotation.id, status: annotation.status } }.to_json
     end
