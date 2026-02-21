@@ -4,6 +4,7 @@ module Pages
   module ScreenshotsPage
     # --- Selectors ---
 
+    SCREENSHOT_CARD_TITLE = '[data-testid="screenshot-card-title"]'
     SCREENSHOT_FORM = '[data-testid="screenshot-form"]'
     SCREENSHOT_FORM_ERRORS = '[data-testid="screenshot-form-errors"]'
     BREADCRUMB = '[data-testid="breadcrumb"]'

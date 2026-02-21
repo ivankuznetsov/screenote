@@ -11,7 +11,7 @@ module Pages
     FORM_ERRORS = '[data-testid="project-form-errors"]'
     PROJECT_DETAIL_TITLE = '[data-testid="project-detail-title"]'
     PROJECT_DETAIL_DESCRIPTION = '[data-testid="project-detail-description"]'
-    SCREENSHOT_CARD_TITLE = '[data-testid="screenshot-card-title"]'
+    EMPTY_STATE = '[data-testid="empty-state"]'
 
     # --- Actions ---
 

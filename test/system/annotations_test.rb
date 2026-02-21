@@ -3,12 +3,14 @@
 require_relative "application_system_test_case"
 require_relative "pages/auth_page"
 require_relative "pages/projects_page"
+require_relative "pages/pages_page"
 require_relative "pages/screenshots_page"
 require_relative "pages/annotations_page"
 
 class AnnotationsTest < ApplicationSystemTestCase
   include Pages::AuthPage
   include Pages::ProjectsPage
+  include Pages::PagesPage
   include Pages::ScreenshotsPage
   include Pages::AnnotationsPage
 
@@ -95,8 +97,9 @@ class AnnotationsTest < ApplicationSystemTestCase
 
   def create_screenshot_for_annotation
     navigate_to_demo_project
+    navigate_to_first_page
 
-    click_link "Upload screenshot"
+    click_link "Upload version"
     fill_screenshot_form(title: "Annotation Test #{Time.now.to_i}", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show

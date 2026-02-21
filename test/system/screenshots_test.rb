@@ -3,21 +3,24 @@
 require_relative "application_system_test_case"
 require_relative "pages/auth_page"
 require_relative "pages/projects_page"
+require_relative "pages/pages_page"
 require_relative "pages/screenshots_page"
 
 class ScreenshotsTest < ApplicationSystemTestCase
   include Pages::AuthPage
   include Pages::ProjectsPage
+  include Pages::PagesPage
   include Pages::ScreenshotsPage
 
   setup do
     login_as_test_user
   end
 
-  test "upload a screenshot to a project" do
-    navigate_to_demo_project
-    click_link "Upload screenshot"
-    assert_selector PAGE_TITLE, text: "Upload screenshot", wait: 10
+  test "upload a screenshot to a page" do
+    navigate_to_demo_page
+
+    click_link "Upload version"
+    assert_selector PAGE_TITLE, text: "Upload version", wait: 10
 
     screenshot_title = "E2E Screenshot #{Time.now.to_i}"
     fill_screenshot_form(title: screenshot_title, image_path: TEST_IMAGE_PATH)
@@ -43,7 +46,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
     create_screenshot(original_title)
 
     click_link "Edit"
-    assert_selector PAGE_TITLE, text: "Edit screenshot", wait: 10
+    assert_selector PAGE_TITLE, text: "Edit version", wait: 10
 
     updated_title = "Updated Title #{Time.now.to_i}"
     fill_in "screenshot[title]", with: updated_title
@@ -61,12 +64,13 @@ class ScreenshotsTest < ApplicationSystemTestCase
     end
 
     assert_flash_notice "Screenshot deleted."
-    assert_selector PAGE_TITLE, wait: 10
+    assert_on_page_show
   end
 
   test "upload screenshot without title shows validation error" do
-    navigate_to_demo_project
-    click_link "Upload screenshot"
+    navigate_to_demo_page
+
+    click_link "Upload version"
 
     fill_screenshot_form(title: "", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
@@ -74,21 +78,37 @@ class ScreenshotsTest < ApplicationSystemTestCase
     assert_screenshot_form_error
   end
 
-  test "screenshot appears in project screenshot grid" do
+  test "screenshot appears in page version grid" do
     screenshot_title = "Grid Test #{Time.now.to_i}"
     create_screenshot(screenshot_title)
 
-    find(BREADCRUMB).find("a", match: :first).click
+    # Navigate back to page via breadcrumb
+    within find(BREADCRUMB) do
+      all("a").last.click
+    end
     wait_for_turbo
 
     assert_selector SCREENSHOT_CARD_TITLE, text: screenshot_title, wait: 10
   end
 
+  test "screenshot breadcrumb shows project, page, and version" do
+    create_screenshot("Breadcrumb Test #{Time.now.to_i}")
+
+    breadcrumb = find(BREADCRUMB)
+    assert breadcrumb.has_text?("Demo Project"), "Breadcrumb should include project name"
+    assert breadcrumb.has_text?("Breadcrumb Test"), "Breadcrumb should include screenshot title"
+  end
+
   private
 
-  def create_screenshot(title)
+  def navigate_to_demo_page
     navigate_to_demo_project
-    click_link "Upload screenshot"
+    navigate_to_first_page
+  end
+
+  def create_screenshot(title)
+    navigate_to_demo_page
+    click_link "Upload version"
     fill_screenshot_form(title: title, image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show
