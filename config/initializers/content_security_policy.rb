@@ -7,8 +7,8 @@ Rails.application.configure do
     policy.img_src     :self, :data, :blob, "https://s3.us-east-1.rabata.io"
     policy.object_src  :none
     policy.script_src  :self, "https://js.honeybadger.io", "https://cdn.jsdelivr.net"
-    policy.style_src   :self, "https://fonts.googleapis.com"
-    policy.connect_src :self
+    policy.style_src   :self, :unsafe_inline, "https://fonts.googleapis.com"
+    policy.connect_src :self, "https://cdn.jsdelivr.net"
     policy.frame_src   :none
   end
 
