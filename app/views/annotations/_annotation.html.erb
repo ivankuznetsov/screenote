@@ -24,7 +24,7 @@
             <% if ac.resolved? %>
               <span class="annotation-thread__badge annotation-thread__badge--resolved">Resolved</span>
             <% elsif ac.reopened? %>
-              <span class="annotation-thread__badge annotation-thread__badge--reopened">Not fixed</span>
+              <span class="annotation-thread__badge annotation-thread__badge--reopened">Unresolved</span>
             <% end %>
             <span class="annotation-thread__author"><%= ac.user&.email || "AI Agent" %></span>
             <span class="annotation-thread__time"><%= time_ago_in_words(ac.created_at) %> ago</span>
@@ -53,7 +53,7 @@
     <% if annotation.resolved? %>
       <button type="button" class="btn btn--small btn--warning"
               data-action="click->annotation-thread#toggleForm"
-              data-testid="not-fixed-button">Not Fixed</button>
+              data-testid="unresolve-button">Unresolve</button>
     <% end %>
     <%= button_to "Delete",
         screenshot_annotation_path(annotation.screenshot, annotation),
@@ -71,10 +71,10 @@
         <%= f.hidden_field :reopen, name: "annotation_comment[reopen]", value: "1" %>
         <%= f.text_area :body, name: "annotation_comment[body]",
             class: "annotation-thread__textarea",
-            placeholder: "Explain why this isn't fixed...",
+            placeholder: "Explain why you're unresolving this...",
             rows: 2 %>
         <div class="annotation-thread__form-actions">
-          <%= f.submit "Mark Not Fixed", class: "btn btn--small btn--warning", data: { testid: "submit-not-fixed-button" } %>
+          <%= f.submit "Unresolve", class: "btn btn--small btn--warning", data: { testid: "submit-unresolve-button" } %>
           <button type="button" class="btn btn--small btn--secondary"
                   data-action="click->annotation-thread#toggleForm">Cancel</button>
         </div>

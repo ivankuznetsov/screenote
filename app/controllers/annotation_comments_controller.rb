@@ -7,7 +7,7 @@ class AnnotationCommentsController < ApplicationController
   def create
     if reopen_action?
       @annotation.reopen!(user: Current.user, body: comment_body)
-      redirect_to screenshot_path(@screenshot), notice: "Annotation reopened."
+      redirect_to screenshot_path(@screenshot), notice: "Annotation unresolved."
     else
       @annotation.annotation_comments.create!(
         user: Current.user,
