@@ -39,6 +39,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_21_064533) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "annotation_comments", force: :cascade do |t|
+    t.integer "action", default: 0, null: false
+    t.integer "annotation_id", null: false
+    t.integer "api_key_id"
+    t.text "body", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id"
+    t.index ["annotation_id", "created_at"], name: "index_annotation_comments_on_annotation_id_and_created_at"
+    t.index ["annotation_id"], name: "index_annotation_comments_on_annotation_id"
+    t.index ["api_key_id"], name: "index_annotation_comments_on_api_key_id"
+    t.index ["user_id"], name: "index_annotation_comments_on_user_id"
+  end
+
   create_table "annotations", force: :cascade do |t|
     t.text "comment"
     t.datetime "created_at", null: false
@@ -212,6 +226,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_21_064533) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "annotation_comments", "annotations", on_delete: :cascade
+  add_foreign_key "annotation_comments", "api_keys", on_delete: :nullify
+  add_foreign_key "annotation_comments", "users", on_delete: :nullify
   add_foreign_key "annotations", "api_keys", column: "resolved_by_api_key_id", on_delete: :nullify
   add_foreign_key "annotations", "screenshots"
   add_foreign_key "annotations", "users"

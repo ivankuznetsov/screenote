@@ -197,4 +197,86 @@ class AnnotationTest < ActiveSupport::TestCase
     )
     assert annotation.valid?, "Should be valid without resolved_by_user"
   end
+
+  test "resolve! sets status and creates comment" do
+    annotation = annotations(:point_annotation)
+    user = users(:alice)
+
+    assert_difference "AnnotationComment.count", 1 do
+      annotation.resolve!(user: user, body: "Fixed the issue")
+    end
+
+    annotation.reload
+    assert annotation.resolved?
+    assert_equal user, annotation.resolved_by_user
+
+    comment = annotation.annotation_comments.last
+    assert_equal "resolved", comment.action
+    assert_equal "Fixed the issue", comment.body
+    assert_equal user, comment.user
+  end
+
+  test "resolve! with api_key sets resolved_by_api_key" do
+    annotation = annotations(:point_annotation)
+    api_key = api_keys(:alice_key)
+
+    annotation.resolve!(api_key: api_key, body: "AI fixed it")
+
+    annotation.reload
+    assert annotation.resolved?
+    assert_equal api_key, annotation.resolved_by_api_key
+  end
+
+  test "reopen! sets status to open and creates comment" do
+    annotation = annotations(:resolved_annotation)
+    user = users(:alice)
+
+    assert_difference "AnnotationComment.count", 1 do
+      annotation.reopen!(user: user, body: "This is not actually fixed")
+    end
+
+    annotation.reload
+    assert annotation.open?
+    assert_nil annotation.resolved_by_user
+    assert_nil annotation.resolved_by_api_key
+
+    comment = annotation.annotation_comments.last
+    assert_equal "reopened", comment.action
+    assert_equal "This is not actually fixed", comment.body
+    assert_equal user, comment.user
+  end
+
+  test "reopen! with api_key creates reopened comment attributed to api_key" do
+    annotation = annotations(:resolved_annotation)
+    api_key = api_keys(:alice_key)
+
+    annotation.reopen!(api_key: api_key, body: "Agent reopening")
+
+    assert annotation.open?
+    comment = annotation.annotation_comments.last
+    assert_equal "reopened", comment.action
+    assert_equal api_key, comment.api_key
+    assert_nil comment.user
+  end
+
+  test "reopen! raises when annotation is already open" do
+    annotation = annotations(:point_annotation)
+    assert annotation.open?
+    assert_raises(ActiveRecord::RecordNotFound) do
+      annotation.reopen!(user: users(:alice), body: "Should fail")
+    end
+  end
+
+  test "resolve! raises when annotation is already resolved" do
+    annotation = annotations(:resolved_annotation)
+    assert annotation.resolved?
+    assert_raises(ActiveRecord::RecordNotFound) do
+      annotation.resolve!(user: users(:alice))
+    end
+  end
+
+  test "has_many annotation_comments" do
+    annotation = annotations(:resolved_annotation)
+    assert_respond_to annotation, :annotation_comments
+  end
 end

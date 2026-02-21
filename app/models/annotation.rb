@@ -5,6 +5,7 @@ class Annotation < ApplicationRecord
   belongs_to :user
   belongs_to :resolved_by_user, class_name: "User", optional: true
   belongs_to :resolved_by_api_key, class_name: "ApiKey", optional: true
+  has_many :annotation_comments, -> { order(:created_at) }, dependent: :destroy
 
   enum :status, { open: 0, resolved: 1 }, default: :open
 
@@ -17,6 +18,43 @@ class Annotation < ApplicationRecord
 
   def point?
     width_percent.nil?
+  end
+
+  def as_api_json
+    {
+      id: id,
+      screenshot_id: screenshot_id,
+      type: point? ? "point" : "region",
+      coordinates: {
+        x_percent: x_percent,
+        y_percent: y_percent,
+        width_percent: width_percent,
+        height_percent: height_percent
+      },
+      comment: comment,
+      status: status,
+      author: user&.email,
+      comments_count: annotation_comments.size,
+      created_at: created_at.iso8601
+    }
+  end
+
+  def reopen!(user: nil, api_key: nil, body:)
+    raise ActiveRecord::RecordNotFound, "Annotation is not resolved" unless resolved?
+
+    transaction do
+      update!(status: :open, resolved_by_user: nil, resolved_by_api_key: nil)
+      annotation_comments.create!(user: user, api_key: api_key, body: body, action: :reopened)
+    end
+  end
+
+  def resolve!(user: nil, api_key: nil, body: "Marked as resolved")
+    raise ActiveRecord::RecordNotFound, "Annotation is not open" unless open?
+
+    transaction do
+      update!(status: :resolved, resolved_by_user: user, resolved_by_api_key: api_key)
+      annotation_comments.create!(user: user, api_key: api_key, body: body, action: :resolved)
+    end
   end
 
   private

@@ -18,25 +18,11 @@ module Api
       def project_annotations
         Annotation.joins(screenshot: :project)
           .where(projects: { id: current_project.id })
-          .includes(:user, :screenshot)
+          .includes(:user, :screenshot, :annotation_comments)
       end
 
       def serialize(annotation)
-        {
-          id: annotation.id,
-          screenshot_id: annotation.screenshot_id,
-          type: annotation.point? ? "point" : "region",
-          coordinates: {
-            x_percent: annotation.x_percent,
-            y_percent: annotation.y_percent,
-            width_percent: annotation.width_percent,
-            height_percent: annotation.height_percent
-          },
-          comment: annotation.comment,
-          status: annotation.status,
-          author: annotation.user&.email,
-          created_at: annotation.created_at.iso8601
-        }
+        annotation.as_api_json
       end
     end
   end

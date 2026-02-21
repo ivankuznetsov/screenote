@@ -26,10 +26,21 @@ class GetAnnotationTool < ApplicationTool
         end
       end
 
+      comments = annotation.annotation_comments.includes(:user, :api_key).order(:created_at).map do |ac|
+        {
+          id: ac.id,
+          action: ac.action,
+          body: ac.body,
+          author: ac.user&.email || ac.api_key&.name || "Unknown",
+          created_at: ac.created_at.iso8601
+        }
+      end
+
       serialize_annotation(annotation).merge(
         screenshot_status: screenshot.status,
         cropped_image_base64: cropped_base64,
-        mime_type: "image/png"
+        mime_type: "image/png",
+        comments: comments
       ).to_json
     end
   end

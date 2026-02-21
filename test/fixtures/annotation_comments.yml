@@ -1,0 +1,6 @@
+resolved_comment:
+  annotation: resolved_annotation
+  user: bob
+  body: "Fixed the alignment issue"
+  action: resolved
+  created_at: <%= 1.hour.ago %>

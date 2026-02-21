@@ -5,7 +5,7 @@ class ScreenshotsController < ApplicationController
   before_action :set_screenshot, only: %i[show edit update destroy]
 
   def show
-    @annotations = @screenshot.annotations.includes(:user).order(:created_at)
+    @annotations = @screenshot.annotations.includes(:user, annotation_comments: [:user, :api_key]).order(:created_at)
     @annotations = @annotations.where(status: params[:status]) if params[:status].in?(%w[open resolved])
   end
 

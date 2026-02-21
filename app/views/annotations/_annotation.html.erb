@@ -4,7 +4,8 @@
   data-x-percent="<%= annotation.x_percent %>"
   data-y-percent="<%= annotation.y_percent %>"
   data-width-percent="<%= annotation.width_percent %>"
-  data-height-percent="<%= annotation.height_percent %>">
+  data-height-percent="<%= annotation.height_percent %>"
+  >
   <div class="annotation-item__header">
     <span class="annotation-item__number"><%= index %></span>
     <span class="annotation-item__author"><%= annotation.user.email %></span>
@@ -13,6 +14,25 @@
 
   <% if annotation.comment.present? %>
     <div class="annotation-item__comment" data-testid="annotation-comment"><%= annotation.comment %></div>
+  <% end %>
+
+  <% if annotation.annotation_comments.any? %>
+    <div class="annotation-thread">
+      <% annotation.annotation_comments.each do |ac| %>
+        <div class="annotation-thread__entry annotation-thread__entry--<%= ac.action %>">
+          <div class="annotation-thread__meta">
+            <% if ac.resolved? %>
+              <span class="annotation-thread__badge annotation-thread__badge--resolved">Resolved</span>
+            <% elsif ac.reopened? %>
+              <span class="annotation-thread__badge annotation-thread__badge--reopened">Unresolved</span>
+            <% end %>
+            <span class="annotation-thread__author"><%= ac.user&.email || ac.api_key&.name || "AI Agent" %></span>
+            <span class="annotation-thread__time"><%= time_ago_in_words(ac.created_at) %> ago</span>
+          </div>
+          <div class="annotation-thread__body"><%= ac.body %></div>
+        </div>
+      <% end %>
+    </div>
   <% end %>
 
   <% if annotation.resolved? %>
@@ -36,4 +56,23 @@
         class: "btn btn--small btn--danger",
         data: { turbo_confirm: "Delete this annotation?", testid: "delete-annotation-button" } %>
   </div>
+
+  <% if annotation.resolved? %>
+    <details class="annotation-thread__form-wrapper" data-testid="unresolve-form">
+      <summary class="btn btn--small btn--warning" data-testid="unresolve-button">Unresolve</summary>
+      <%= form_with url: screenshot_annotation_annotation_comments_path(
+            annotation.screenshot, annotation),
+          method: :post,
+          class: "annotation-thread__form" do |f| %>
+        <%= f.hidden_field :reopen, name: "annotation_comment[reopen]", value: "1" %>
+        <%= f.text_area :body, name: "annotation_comment[body]",
+            class: "annotation-thread__textarea",
+            placeholder: "Explain why you're unresolving this...",
+            rows: 2 %>
+        <div class="annotation-thread__form-actions">
+          <%= f.submit "Unresolve", class: "btn btn--small btn--warning", data: { testid: "submit-unresolve-button" } %>
+        </div>
+      <% end %>
+    </details>
+  <% end %>
 </div>
