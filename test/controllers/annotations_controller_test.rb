@@ -102,6 +102,24 @@ class AnnotationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal @user, comment.user
   end
 
+  test "update with status open does not reopen resolved annotation" do
+    sign_in(@user)
+
+    # First resolve the annotation
+    patch screenshot_annotation_path(@screenshot, @annotation), params: {
+      annotation: { status: :resolved }
+    }
+    assert_equal "resolved", @annotation.reload.status
+
+    # Try to reopen via status param (should be ignored)
+    patch screenshot_annotation_path(@screenshot, @annotation), params: {
+      annotation: { status: :open }
+    }
+
+    # Should still be resolved because :status is not in permitted params
+    assert_equal "resolved", @annotation.reload.status
+  end
+
   test "update annotation comment does not set resolved_by_user" do
     sign_in(@user)
 

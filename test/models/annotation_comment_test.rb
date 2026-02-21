@@ -61,6 +61,18 @@ class AnnotationCommentTest < ActiveSupport::TestCase
     assert_equal 2, AnnotationComment.actions[:reopened]
   end
 
+  test "invalid with both user and api_key" do
+    comment = AnnotationComment.new(
+      annotation: annotations(:point_annotation),
+      user: users(:alice),
+      api_key: api_keys(:alice_key),
+      body: "Both authors",
+      action: :comment
+    )
+    assert_not comment.valid?, "Should not allow both user and api_key"
+    assert_includes comment.errors[:base], "cannot have both user and api_key"
+  end
+
   test "belongs to annotation" do
     comment = annotation_comments(:resolved_comment)
     assert_equal annotations(:resolved_annotation), comment.annotation

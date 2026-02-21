@@ -58,6 +58,20 @@ class AnnotationCommentsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Additional feedback", comment.body
   end
 
+  test "reopen on already open annotation returns not found" do
+    sign_in(@user)
+
+    assert @annotation.open?
+    assert_no_difference "AnnotationComment.count" do
+      post screenshot_annotation_annotation_comments_path(
+        @screenshot, @annotation
+      ), params: {
+        annotation_comment: { body: "Already open", reopen: "1" }
+      }
+    end
+    assert_response :not_found
+  end
+
   test "reopen on other users project returns not found" do
     sign_in(@user)
 

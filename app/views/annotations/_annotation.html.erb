@@ -5,7 +5,7 @@
   data-y-percent="<%= annotation.y_percent %>"
   data-width-percent="<%= annotation.width_percent %>"
   data-height-percent="<%= annotation.height_percent %>"
-  data-controller="annotation-thread">
+  >
   <div class="annotation-item__header">
     <span class="annotation-item__number"><%= index %></span>
     <span class="annotation-item__author"><%= annotation.user.email %></span>
@@ -18,7 +18,7 @@
 
   <% if annotation.annotation_comments.any? %>
     <div class="annotation-thread">
-      <% annotation.annotation_comments.sort_by(&:created_at).each do |ac| %>
+      <% annotation.annotation_comments.each do |ac| %>
         <div class="annotation-thread__entry annotation-thread__entry--<%= ac.action %>">
           <div class="annotation-thread__meta">
             <% if ac.resolved? %>
@@ -50,11 +50,6 @@
           class: "btn btn--small btn--secondary",
           data: { testid: "resolve-annotation-button" } %>
     <% end %>
-    <% if annotation.resolved? %>
-      <button type="button" class="btn btn--small btn--warning"
-              data-action="click->annotation-thread#toggleForm"
-              data-testid="unresolve-button">Unresolve</button>
-    <% end %>
     <%= button_to "Delete",
         screenshot_annotation_path(annotation.screenshot, annotation),
         method: :delete,
@@ -63,7 +58,8 @@
   </div>
 
   <% if annotation.resolved? %>
-    <div class="annotation-thread__form-wrapper" data-annotation-thread-target="formWrapper" style="display: none;">
+    <details class="annotation-thread__form-wrapper" data-testid="unresolve-form">
+      <summary class="btn btn--small btn--warning" data-testid="unresolve-button">Unresolve</summary>
       <%= form_with url: screenshot_annotation_annotation_comments_path(
             annotation.screenshot, annotation),
           method: :post,
@@ -75,10 +71,8 @@
             rows: 2 %>
         <div class="annotation-thread__form-actions">
           <%= f.submit "Unresolve", class: "btn btn--small btn--warning", data: { testid: "submit-unresolve-button" } %>
-          <button type="button" class="btn btn--small btn--secondary"
-                  data-action="click->annotation-thread#toggleForm">Cancel</button>
         </div>
       <% end %>
-    </div>
+    </details>
   <% end %>
 </div>

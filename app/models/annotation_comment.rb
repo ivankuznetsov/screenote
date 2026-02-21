@@ -15,6 +15,8 @@ class AnnotationComment < ApplicationRecord
   def has_author
     if user_id.blank? && api_key_id.blank?
       errors.add(:base, "must have a user or api_key")
+    elsif user_id.present? && api_key_id.present?
+      errors.add(:base, "cannot have both user and api_key")
     end
   end
 end

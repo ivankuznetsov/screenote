@@ -246,6 +246,35 @@ class AnnotationTest < ActiveSupport::TestCase
     assert_equal user, comment.user
   end
 
+  test "reopen! with api_key creates reopened comment attributed to api_key" do
+    annotation = annotations(:resolved_annotation)
+    api_key = api_keys(:alice_key)
+
+    annotation.reopen!(api_key: api_key, body: "Agent reopening")
+
+    assert annotation.open?
+    comment = annotation.annotation_comments.last
+    assert_equal "reopened", comment.action
+    assert_equal api_key, comment.api_key
+    assert_nil comment.user
+  end
+
+  test "reopen! raises when annotation is already open" do
+    annotation = annotations(:point_annotation)
+    assert annotation.open?
+    assert_raises(ActiveRecord::RecordNotFound) do
+      annotation.reopen!(user: users(:alice), body: "Should fail")
+    end
+  end
+
+  test "resolve! raises when annotation is already resolved" do
+    annotation = annotations(:resolved_annotation)
+    assert annotation.resolved?
+    assert_raises(ActiveRecord::RecordNotFound) do
+      annotation.resolve!(user: users(:alice))
+    end
+  end
+
   test "has_many annotation_comments" do
     annotation = annotations(:resolved_annotation)
     assert_respond_to annotation, :annotation_comments

@@ -742,6 +742,15 @@ a:hover {
   margin-top: 0.5rem;
 }
 
+.annotation-thread__form-wrapper summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.annotation-thread__form-wrapper summary::-webkit-details-marker {
+  display: none;
+}
+
 .annotation-thread__form {
   padding: 0.5rem;
   border-radius: var(--radius);

@@ -26,12 +26,12 @@ class GetAnnotationTool < ApplicationTool
         end
       end
 
-      comments = annotation.annotation_comments.includes(:user).order(:created_at).map do |ac|
+      comments = annotation.annotation_comments.includes(:user, :api_key).order(:created_at).map do |ac|
         {
           id: ac.id,
           action: ac.action,
           body: ac.body,
-          author: ac.user&.email || "AI Agent",
+          author: ac.user&.email || ac.api_key&.name || "Unknown",
           created_at: ac.created_at.iso8601
         }
       end

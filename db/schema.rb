@@ -226,9 +226,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_21_064533) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "annotation_comments", "annotations"
-  add_foreign_key "annotation_comments", "api_keys"
-  add_foreign_key "annotation_comments", "users"
+  add_foreign_key "annotation_comments", "annotations", on_delete: :cascade
+  add_foreign_key "annotation_comments", "api_keys", on_delete: :nullify
+  add_foreign_key "annotation_comments", "users", on_delete: :nullify
   add_foreign_key "annotations", "api_keys", column: "resolved_by_api_key_id", on_delete: :nullify
   add_foreign_key "annotations", "screenshots"
   add_foreign_key "annotations", "users"
