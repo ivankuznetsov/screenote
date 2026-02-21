@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_20_215350) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_21_064533) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -126,7 +126,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_20_215350) do
     t.string "name", null: false
     t.integer "project_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["project_id", "name"], name: "index_pages_on_project_id_and_name", unique: true
+    t.index "project_id, LOWER(name)", name: "index_pages_on_project_id_and_lower_name", unique: true
     t.index ["project_id"], name: "index_pages_on_project_id"
   end
 

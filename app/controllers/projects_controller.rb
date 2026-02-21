@@ -15,6 +15,9 @@ class ProjectsController < ApplicationController
   def show
     @is_owner = @project.owner?(Current.user)
     @pages = @project.pages.ordered
+              .left_joins(:screenshots)
+              .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
+              .group("pages.id")
   end
 
   def new

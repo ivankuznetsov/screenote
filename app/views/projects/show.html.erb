@@ -23,7 +23,8 @@
         <div class="page-card__info">
           <div class="page-card__name" data-testid="page-card-name"><%= page.name %></div>
           <div class="page-card__meta">
-            <%= page.screenshots.count %> <%= "version".pluralize(page.screenshots.count) %>
+            <% count = page.screenshots_count_cache %>
+            <%= count %> <%= "version".pluralize(count) %>
           </div>
         </div>
       <% end %>
