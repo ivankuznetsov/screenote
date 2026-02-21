@@ -28,6 +28,8 @@ class AnnotationsController < ApplicationController
         redirect_to screenshot_path(@screenshot), alert: "Could not update annotation."
       end
     end
+  rescue ActiveRecord::RecordInvalid
+    redirect_to screenshot_path(@screenshot), alert: "Could not update annotation."
   end
 
   def destroy

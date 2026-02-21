@@ -26,7 +26,7 @@
             <% elsif ac.reopened? %>
               <span class="annotation-thread__badge annotation-thread__badge--reopened">Unresolved</span>
             <% end %>
-            <span class="annotation-thread__author"><%= ac.user&.email || "AI Agent" %></span>
+            <span class="annotation-thread__author"><%= ac.user&.email || ac.api_key&.name || "AI Agent" %></span>
             <span class="annotation-thread__time"><%= time_ago_in_words(ac.created_at) %> ago</span>
           </div>
           <div class="annotation-thread__body"><%= ac.body %></div>
