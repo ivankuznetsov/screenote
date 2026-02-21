@@ -21,7 +21,7 @@ class CreateScreenshotUploadTool < ApplicationTool
 
     with_error_handling do
       project = current_project
-      page = project.pages.find_or_create_by!(name: page_name || title)
+      page = Page.find_or_create_by_name!(project, page_name || title)
       screenshot = page.screenshots.create!(title: title)
       token = screenshot.generate_token_for(:upload)
 

@@ -63,4 +63,19 @@ class PageTest < ActiveSupport::TestCase
     pages = project.pages.ordered
     assert_equal pages.sort_by(&:created_at), pages.to_a
   end
+
+  test "find_or_create_by_name! finds existing page case-insensitively" do
+    existing = pages(:alice_page)
+    found = Page.find_or_create_by_name!(existing.project, existing.name.upcase)
+    assert_equal existing, found, "Should find existing page regardless of case"
+  end
+
+  test "find_or_create_by_name! creates page when not found" do
+    project = projects(:alice_project)
+    assert_difference "Page.count", 1 do
+      page = Page.find_or_create_by_name!(project, "Brand New Page")
+      assert_equal "Brand New Page", page.name
+      assert_equal project, page.project
+    end
+  end
 end

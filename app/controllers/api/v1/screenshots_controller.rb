@@ -10,7 +10,7 @@ module Api
         end
 
         title = params[:title].presence || "Untitled"
-        page = current_project.pages.find_or_create_by!(name: title)
+        page = Page.find_or_create_by_name!(current_project, title)
         screenshot = page.screenshots.build(title: title)
         screenshot.image.attach(params[:image])
 

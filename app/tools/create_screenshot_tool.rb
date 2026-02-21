@@ -30,7 +30,7 @@ class CreateScreenshotTool < ApplicationTool
       project = current_project
       image_data = Base64.decode64(image_base64)
 
-      page = project.pages.find_or_create_by!(name: page_name || title)
+      page = Page.find_or_create_by_name!(project, page_name || title)
       screenshot = page.screenshots.create!(title: title)
       screenshot.image.attach(
         io: StringIO.new(image_data),
