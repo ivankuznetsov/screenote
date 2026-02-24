@@ -10,6 +10,13 @@ class ProjectsController < ApplicationController
   def index
     @memberships_by_project = Current.user.project_memberships.includes(:project).index_by(&:project_id)
     @projects = Current.user.projects.order(updated_at: :desc)
+
+    project_ids = @projects.map(&:id)
+    @screenshots_by_project = Screenshot.joins(:page)
+      .where(pages: { project_id: project_ids }, status: :ready)
+      .includes(:page, image_attachment: :blob)
+      .order(created_at: :desc)
+      .group_by { |s| s.page.project_id }
   end
 
   def show
