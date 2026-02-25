@@ -4,11 +4,13 @@ require_relative "application_system_test_case"
 require_relative "pages/auth_page"
 require_relative "pages/projects_page"
 require_relative "pages/pages_page"
+require_relative "pages/screenshots_page"
 
 class PagesTest < ApplicationSystemTestCase
   include Pages::AuthPage
   include Pages::ProjectsPage
   include Pages::PagesPage
+  include Pages::ScreenshotsPage
 
   setup do
     login_as_test_user
@@ -147,5 +149,87 @@ class PagesTest < ApplicationSystemTestCase
     submit_page_form
 
     assert_page_form_error
+  end
+
+  test "page card shows placeholder when no screenshots uploaded" do
+    navigate_to_demo_project
+
+    page_name = "No Screenshots #{Time.now.to_i}"
+    click_new_page
+    fill_page_form(name: page_name)
+    submit_page_form
+    assert_on_page_show(page_name)
+
+    # Navigate back to project show
+    within '[data-testid="breadcrumb"]' do
+      click_link "Demo Project"
+    end
+    wait_for_turbo
+
+    assert_page_card_has_placeholder(page_name)
+    assert_page_version_count(page_name, 0)
+  end
+
+  test "page card shows thumbnail after uploading screenshot" do
+    navigate_to_demo_project
+
+    # Create a new page
+    page_name = "Thumbnail Test #{Time.now.to_i}"
+    click_new_page
+    fill_page_form(name: page_name)
+    submit_page_form
+    assert_on_page_show(page_name)
+
+    # Upload a screenshot to this page
+    click_link "Upload version"
+    fill_screenshot_form(title: "Version 1", image_path: TEST_IMAGE_PATH)
+    submit_screenshot_form
+    assert_on_screenshot_show
+
+    # Navigate back to project show via breadcrumb
+    within find('[data-testid="breadcrumb"]') do
+      click_link "Demo Project"
+    end
+    wait_for_turbo
+
+    assert_page_card_has_thumbnail(page_name)
+    assert_page_version_count(page_name, 1)
+  end
+
+  test "page card thumbnail updates after uploading second screenshot" do
+    navigate_to_demo_project
+
+    # Create a page and upload first screenshot
+    page_name = "Multi Version #{Time.now.to_i}"
+    click_new_page
+    fill_page_form(name: page_name)
+    submit_page_form
+    assert_on_page_show(page_name)
+
+    click_link "Upload version"
+    fill_screenshot_form(title: "V1", image_path: TEST_IMAGE_PATH)
+    submit_screenshot_form
+    assert_on_screenshot_show
+
+    # Navigate back to page show via breadcrumb
+    within find('[data-testid="breadcrumb"]') do
+      all("a").last.click
+    end
+    wait_for_turbo
+
+    # Upload a second screenshot
+    click_link "Upload version"
+    fill_screenshot_form(title: "V2", image_path: TEST_IMAGE_PATH)
+    submit_screenshot_form
+    assert_on_screenshot_show
+
+    # Navigate back to project show
+    within find('[data-testid="breadcrumb"]') do
+      click_link "Demo Project"
+    end
+    wait_for_turbo
+
+    assert_page_card_has_thumbnail(page_name)
+    assert_page_version_count(page_name, 2)
   end
 end
