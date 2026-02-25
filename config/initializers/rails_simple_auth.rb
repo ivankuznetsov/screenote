@@ -34,6 +34,11 @@ RailsSimpleAuth.configure do |config|
   config.mailer_sender = ENV.fetch("MAILER_FROM", "noreply@screenote.ai")
   config.mailer_class = "UserMailer"
 
+  # Callbacks
+  config.after_confirmation_callback = ->(user, _controller) {
+    UserMailer.welcome(user).deliver_later if user.confirmed_at_previously_changed? && user.confirmed_at_previously_was.nil?
+  }
+
   # Models
   config.user_class_name = "User"
   config.session_class_name = "Session"

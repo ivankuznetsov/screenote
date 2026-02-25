@@ -108,6 +108,81 @@ class UserMailerTest < ActionMailer::TestCase
     assert_includes text_body, "safely ignore", "Text body should have safety note"
   end
 
+  # --- Welcome email ---
+
+  test "welcome email is sent to user" do
+    email = UserMailer.welcome(@user)
+    assert_emails 1 do
+      email.deliver_now
+    end
+  end
+
+  test "welcome email has correct headers" do
+    email = UserMailer.welcome(@user)
+    assert_equal [ "alice@example.com" ], email.to
+    assert_equal "Welcome to Screenote", email.subject
+    assert_equal [ ApplicationMailer.default[:from] ], email.from
+  end
+
+  test "welcome email HTML body contains getting started steps" do
+    email = UserMailer.welcome(@user)
+    html_body = email.html_part.body.to_s
+
+    assert_includes html_body, "Welcome to Screenote", "HTML body should contain the title"
+    assert_includes html_body, "Create a project", "HTML body should contain step 1"
+    assert_includes html_body, "Upload screenshots", "HTML body should contain step 2"
+    assert_includes html_body, "Annotate with feedback", "HTML body should contain step 3"
+    assert_includes html_body, "Connect your AI agent", "HTML body should contain step 4"
+    assert_includes html_body, "Go to Dashboard", "HTML body should contain the CTA text"
+  end
+
+  test "welcome email HTML body contains dashboard and help links" do
+    email = UserMailer.welcome(@user)
+    html_body = email.html_part.body.to_s
+
+    assert_match %r{href="[^"]*dashboard"}, html_body, "HTML body should contain dashboard URL"
+    assert_match %r{href="[^"]*help"}, html_body, "HTML body should contain help URL"
+  end
+
+  test "welcome email text body contains getting started steps" do
+    email = UserMailer.welcome(@user)
+    text_body = email.text_part.body.to_s
+
+    assert_includes text_body, "Welcome to Screenote", "Text body should contain the heading"
+    assert_includes text_body, "Create a project", "Text body should contain step 1"
+    assert_includes text_body, "Upload screenshots", "Text body should contain step 2"
+    assert_includes text_body, "Annotate with feedback", "Text body should contain step 3"
+    assert_includes text_body, "Connect your AI agent", "Text body should contain step 4"
+    assert_match %r{https?://.*dashboard}, text_body, "Text body should contain dashboard URL"
+    assert_match %r{https?://.*help}, text_body, "Text body should contain help URL"
+  end
+
+  # --- Welcome email callback integration ---
+
+  test "after_confirmation_callback sends welcome email on first confirmation" do
+    user = users(:unconfirmed)
+    callback = RailsSimpleAuth.configuration.after_confirmation_callback
+
+    assert_nil user.confirmed_at, "Precondition: user should be unconfirmed"
+
+    user.confirm!
+
+    assert_enqueued_emails 1 do
+      callback.call(user, nil)
+    end
+  end
+
+  test "after_confirmation_callback does not send welcome email on reconfirmation" do
+    user = users(:alice)
+    callback = RailsSimpleAuth.configuration.after_confirmation_callback
+
+    assert_not_nil user.confirmed_at, "Precondition: user should already be confirmed"
+
+    assert_no_enqueued_emails do
+      callback.call(user, nil)
+    end
+  end
+
   # --- Shared design consistency ---
 
   test "all emails are multipart with HTML and text parts" do
@@ -133,7 +208,8 @@ class UserMailerTest < ActionMailer::TestCase
     emails = {
       UserMailer.confirmation(@user, "token") => "Confirm your email",
       UserMailer.magic_link(@user, "token") => "sign-in link",
-      UserMailer.password_reset(@user, "token") => "Reset your Screenote password"
+      UserMailer.password_reset(@user, "token") => "Reset your Screenote password",
+      UserMailer.welcome(@user) => "get started with Screenote"
     }
 
     emails.each do |email, expected_preheader|
@@ -164,10 +240,16 @@ class UserMailerTest < ActionMailer::TestCase
     end
   end
 
-  test "all emails have fallback URL section" do
-    all_emails.each do |email|
+  test "token emails have fallback URL section" do
+    token_emails = [
+      UserMailer.confirmation(@user, "token"),
+      UserMailer.magic_link(@user, "token"),
+      UserMailer.password_reset(@user, "token")
+    ]
+
+    token_emails.each do |email|
       html_body = email.html_part.body.to_s
-      assert_includes html_body, "Button not working?", "Email should have fallback URL section"
+      assert_includes html_body, "Button not working?", "#{email.subject} should have fallback URL section"
     end
   end
 
@@ -177,7 +259,8 @@ class UserMailerTest < ActionMailer::TestCase
     [
       UserMailer.confirmation(@user, "token"),
       UserMailer.magic_link(@user, "token"),
-      UserMailer.password_reset(@user, "token")
+      UserMailer.password_reset(@user, "token"),
+      UserMailer.welcome(@user)
     ]
   end
 end
