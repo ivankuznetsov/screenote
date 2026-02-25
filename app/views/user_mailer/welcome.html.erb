@@ -1,0 +1,85 @@
+<% content_for :preheader do %>You're in! Here's how to get started with Screenote<% end %>
+
+<!-- Title -->
+<h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 900; color: #e8e8ed; font-family: Georgia, 'Times New Roman', serif; letter-spacing: -0.02em;">
+  Welcome to Screenote
+</h1>
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #8888a0; line-height: 1.5;">
+  Your account is ready. Let's get you started.
+</p>
+
+<!-- Body text -->
+<p style="margin: 0 0 24px 0; font-size: 15px; color: #b0b0c0; line-height: 1.7;">
+  Screenote is a visual feedback tool for AI agents. Upload screenshots, annotate them, and let your AI agent read the feedback directly via MCP.
+</p>
+
+<!-- Steps -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+  <tr>
+    <td style="padding: 14px 0; border-bottom: 1px solid #1e1e2a;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td width="36" valign="top" style="padding-right: 12px;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background-color: #e5a31e; color: #0a0a0f; font-size: 14px; font-weight: 700; text-align: center; line-height: 28px;">1</div>
+          </td>
+          <td valign="top">
+            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Create a project</p>
+            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Group your screenshots by project, feature, or sprint.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 14px 0; border-bottom: 1px solid #1e1e2a;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td width="36" valign="top" style="padding-right: 12px;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background-color: #e5a31e; color: #0a0a0f; font-size: 14px; font-weight: 700; text-align: center; line-height: 28px;">2</div>
+          </td>
+          <td valign="top">
+            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Upload screenshots</p>
+            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Upload manually or let your AI agent capture them via MCP.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 14px 0; border-bottom: 1px solid #1e1e2a;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td width="36" valign="top" style="padding-right: 12px;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background-color: #e5a31e; color: #0a0a0f; font-size: 14px; font-weight: 700; text-align: center; line-height: 28px;">3</div>
+          </td>
+          <td valign="top">
+            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Annotate with feedback</p>
+            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Click anywhere on a screenshot to pin visual feedback.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 14px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td width="36" valign="top" style="padding-right: 12px;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background-color: #e5a31e; color: #0a0a0f; font-size: 14px; font-weight: 700; text-align: center; line-height: 28px;">4</div>
+          </td>
+          <td valign="top">
+            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Connect your AI agent</p>
+            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Your agent reads annotations with cropped image context via MCP.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<%= render "user_mailer/email_cta_button", url: main_app.dashboard_url, label: "Go to Dashboard" %>
+
+<!-- Help note -->
+<p style="margin: 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
+  Need help connecting your AI agent? Check our <a href="<%= main_app.help_url %>" style="color: #e5a31e; text-decoration: none;">setup guide</a> for step-by-step instructions.
+</p>

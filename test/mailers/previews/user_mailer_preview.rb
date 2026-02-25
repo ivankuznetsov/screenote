@@ -14,6 +14,10 @@ class UserMailerPreview < ActionMailer::Preview
     UserMailer.password_reset(preview_user, "preview-password-reset-token-def456")
   end
 
+  def welcome
+    UserMailer.welcome(preview_user)
+  end
+
   private
 
   def preview_user

@@ -18,4 +18,9 @@ class UserMailer < ApplicationMailer
     @password_reset_token = password_reset_token
     mail to: @user.email, subject: "Reset your Screenote password"
   end
+
+  def welcome(user)
+    @user = user
+    mail to: @user.email, subject: "Welcome to Screenote"
+  end
 end
