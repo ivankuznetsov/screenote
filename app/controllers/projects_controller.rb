@@ -18,15 +18,7 @@ class ProjectsController < ApplicationController
               .left_joins(:screenshots)
               .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
               .group("pages.id")
-
-    latest_screenshot_ids = Screenshot.where(page_id: @pages.map(&:id))
-                              .group(:page_id)
-                              .maximum(:id)
-                              .values
-
-    @latest_screenshots_by_page = Screenshot.where(id: latest_screenshot_ids)
-                                    .with_attached_image
-                                    .index_by(&:page_id)
+              .includes(latest_screenshot: { image_attachment: :blob })
   end
 
   def new

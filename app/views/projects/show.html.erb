@@ -19,11 +19,10 @@
 <% if @pages.any? %>
   <div class="page-grid">
     <% @pages.each do |page| %>
-      <% latest_screenshot = @latest_screenshots_by_page[page.id] %>
       <%= link_to page_path(page), class: "page-card", data: { testid: "page-card" } do %>
         <div class="page-card__thumbnail">
-          <% if latest_screenshot&.image&.attached? %>
-            <%= image_tag latest_screenshot.image.variant(resize_to_limit: [800, 600]), alt: page.name %>
+          <% if page.latest_screenshot&.image&.attached? %>
+            <%= image_tag page.latest_screenshot.image.variant(resize_to_limit: [480, 360]), alt: page.name, loading: "lazy" %>
           <% else %>
             <div class="page-card__placeholder">No screenshots yet</div>
           <% end %>

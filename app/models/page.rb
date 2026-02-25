@@ -3,6 +3,7 @@
 class Page < ApplicationRecord
   belongs_to :project
   has_many :screenshots, dependent: :destroy
+  has_one :latest_screenshot, -> { order(id: :desc) }, class_name: "Screenshot"
 
   validates :name, presence: true, length: { maximum: 255 }
   validates :name, uniqueness: { scope: :project_id, case_sensitive: false }
