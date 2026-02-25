@@ -33,6 +33,15 @@
   <div class="project-list" data-testid="project-list">
     <% @projects.each do |project| %>
       <%= link_to project_path(project), class: "project-card", data: { testid: "project-card" } do %>
+        <% thumbnails = project.pages.filter_map { |p| p.latest_screenshot if p.latest_screenshot&.image&.attached? }.first(4) %>
+        <% if thumbnails.any? %>
+          <div class="project-card__thumbnails">
+            <% thumbnails.each do |screenshot| %>
+              <%= image_tag screenshot.image.variant(resize_to_limit: [240, 160]),
+                    class: "project-card__thumbnail", loading: "lazy", alt: screenshot.title %>
+            <% end %>
+          </div>
+        <% end %>
         <div class="project-card__name" data-testid="project-card-name">
           <%= project.name %>
           <% unless @memberships_by_project[project.id]&.owner? %>

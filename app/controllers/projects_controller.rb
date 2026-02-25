@@ -10,6 +10,7 @@ class ProjectsController < ApplicationController
   def index
     @memberships_by_project = Current.user.project_memberships.includes(:project).index_by(&:project_id)
     @projects = Current.user.projects.order(updated_at: :desc)
+                  .includes(pages: { latest_screenshot: { image_attachment: :blob } })
   end
 
   def show
