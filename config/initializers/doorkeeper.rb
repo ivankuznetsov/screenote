@@ -19,7 +19,9 @@ Doorkeeper.configure do
   default_scopes :mcp_read
   optional_scopes :mcp_write
 
-  access_token_expires_in 1.hour
+  # MCP clients (e.g. Claude Code) don't implement refresh token flows,
+  # so access tokens need a long lifetime to avoid breaking connections.
+  access_token_expires_in 1.year
   use_refresh_token
 
   # Allow HTTP redirect URIs for localhost (RFC 8252 loopback redirect).

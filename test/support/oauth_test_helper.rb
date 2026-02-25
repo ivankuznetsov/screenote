@@ -9,7 +9,7 @@ module OauthTestHelper
     )
   end
 
-  def create_oauth_token(application:, user:, project: nil, scopes: "mcp_read", expires_in: 1.hour, revoked_at: nil)
+  def create_oauth_token(application:, user:, project: nil, scopes: "mcp_read", expires_in: 1.year, revoked_at: nil)
     Doorkeeper::AccessToken.create!(
       application: application,
       resource_owner_id: user.id,
