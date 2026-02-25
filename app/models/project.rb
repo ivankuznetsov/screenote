@@ -28,6 +28,10 @@ class Project < ApplicationRecord
     project_memberships.exists?(user_id: check_user.id, role: :owner)
   end
 
+  def thumbnail_screenshots(limit = 4)
+    pages.lazy.filter_map { |p| p.latest_screenshot if p.latest_screenshot&.image&.attached? }.first(limit)
+  end
+
   private
 
   def create_owner_membership
