@@ -20,6 +20,13 @@
   <div class="page-grid">
     <% @pages.each do |page| %>
       <%= link_to page_path(page), class: "page-card", data: { testid: "page-card" } do %>
+        <div class="page-card__thumbnail">
+          <% if page.latest_screenshot&.image&.attached? %>
+            <%= image_tag page.latest_screenshot.image.variant(resize_to_limit: [480, 360]), alt: page.name, loading: "lazy" %>
+          <% else %>
+            <div class="page-card__placeholder">No screenshots yet</div>
+          <% end %>
+        </div>
         <div class="page-card__info">
           <div class="page-card__name" data-testid="page-card-name"><%= page.name %></div>
           <div class="page-card__meta">

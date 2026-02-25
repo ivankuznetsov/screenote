@@ -6,6 +6,9 @@ module Pages
 
     PAGE_CARD = '[data-testid="page-card"]'
     PAGE_CARD_NAME = '[data-testid="page-card-name"]'
+    PAGE_CARD_THUMBNAIL = ".page-card__thumbnail"
+    PAGE_CARD_THUMBNAIL_IMG = ".page-card__thumbnail img"
+    PAGE_CARD_PLACEHOLDER = ".page-card__placeholder"
     PAGE_FORM = '[data-testid="page-form"]'
     PAGE_FORM_ERRORS = '[data-testid="page-form-errors"]'
     PAGE_DETAIL_TITLE = '[data-testid="page-detail-title"]'
@@ -60,6 +63,18 @@ module Pages
     def assert_page_version_count(name, count)
       card = find(PAGE_CARD, text: name)
       assert card.has_text?("#{count} version"), "Expected page '#{name}' to show #{count} version(s)"
+    end
+
+    def assert_page_card_has_thumbnail(name)
+      card = find(PAGE_CARD, text: name)
+      assert card.has_css?(PAGE_CARD_THUMBNAIL_IMG), "Page '#{name}' should display a thumbnail image"
+      assert card.has_no_css?(PAGE_CARD_PLACEHOLDER), "Page '#{name}' should not show placeholder when image exists"
+    end
+
+    def assert_page_card_has_placeholder(name)
+      card = find(PAGE_CARD, text: name)
+      assert card.has_css?(PAGE_CARD_PLACEHOLDER), "Page '#{name}' should display placeholder when no screenshots"
+      assert card.has_no_css?(PAGE_CARD_THUMBNAIL_IMG), "Page '#{name}' should not display thumbnail image when no screenshots"
     end
   end
 end
