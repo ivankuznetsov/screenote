@@ -33,7 +33,7 @@
   <div class="project-list" data-testid="project-list">
     <% @projects.each do |project| %>
       <%= link_to project_path(project), class: "project-card", data: { testid: "project-card" } do %>
-        <% thumbnails = project.pages.filter_map { |p| p.latest_screenshot if p.latest_screenshot&.image&.attached? }.first(4) %>
+        <% thumbnails = project.thumbnail_screenshots %>
         <% if thumbnails.any? %>
           <div class="project-card__thumbnails">
             <% thumbnails.each do |screenshot| %>
