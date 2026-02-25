@@ -34,10 +34,16 @@ RailsSimpleAuth.configure do |config|
   config.mailer_sender = ENV.fetch("MAILER_FROM", "noreply@screenote.ai")
   config.mailer_class = "UserMailer"
 
-  # Callbacks
-  config.after_confirmation_callback = ->(user, _controller) {
-    UserMailer.welcome(user).deliver_later if user.confirmed_at_previously_changed? && user.confirmed_at_previously_was.nil?
-  }
+  # Send welcome email on first-ever email confirmation.
+  # Dirty tracking: confirmed_at_previously_was is nil only on first confirmation,
+  # because the gem calls this callback immediately after confirm! (which calls update).
+  config.after_confirmation_callback = lambda do |user, _controller|
+    if user.confirmed_at_previously_changed? && user.confirmed_at_previously_was.nil?
+      UserMailer.welcome(user).deliver_later
+    end
+  rescue StandardError => e
+    Honeybadger.notify(e, context: { user_id: user.id })
+  end
 
   # Models
   config.user_class_name = "User"

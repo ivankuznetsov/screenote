@@ -134,12 +134,6 @@ class UserMailerTest < ActionMailer::TestCase
     assert_includes html_body, "Annotate with feedback", "HTML body should contain step 3"
     assert_includes html_body, "Connect your AI agent", "HTML body should contain step 4"
     assert_includes html_body, "Go to Dashboard", "HTML body should contain the CTA text"
-  end
-
-  test "welcome email HTML body contains dashboard and help links" do
-    email = UserMailer.welcome(@user)
-    html_body = email.html_part.body.to_s
-
     assert_match %r{href="[^"]*dashboard"}, html_body, "HTML body should contain dashboard URL"
     assert_match %r{href="[^"]*help"}, html_body, "HTML body should contain help URL"
   end
