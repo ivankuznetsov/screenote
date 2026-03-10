@@ -42,21 +42,27 @@ class SendDigestNotificationsJobTest < ActiveSupport::TestCase
     end
   end
 
-  test "skips self-resolutions where resolver is the annotation author" do
-    create_resolution(@annotation, resolver: @author) # alice resolves her own
+  test "skips self-resolutions but still marks them as notified" do
+    resolution = create_resolution(@annotation, resolver: @author) # alice resolves her own
 
     assert_no_emails do
       SendDigestNotificationsJob.perform_now
     end
+
+    resolution.reload
+    assert resolution.notified_at.present?, "Self-resolution should still be marked as notified"
   end
 
-  test "skips annotations where author has blank email" do
+  test "skips blank email authors but still marks comments as notified" do
     @author.update_column(:email, "")
-    create_resolution(@annotation, resolver: @resolver)
+    resolution = create_resolution(@annotation, resolver: @resolver)
 
     assert_no_emails do
       SendDigestNotificationsJob.perform_now
     end
+
+    resolution.reload
+    assert resolution.notified_at.present?, "Comment for blank-email author should still be marked as notified"
   end
 
   test "does not re-send already notified resolutions" do
