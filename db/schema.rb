@@ -48,6 +48,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_182720) do
     t.datetime "notified_at"
     t.datetime "updated_at", null: false
     t.integer "user_id"
+    t.index ["action", "notified_at"], name: "index_annotation_comments_on_action_notified_at"
     t.index ["annotation_id", "created_at"], name: "index_annotation_comments_on_annotation_id_and_created_at"
     t.index ["annotation_id"], name: "index_annotation_comments_on_annotation_id"
     t.index ["api_key_id"], name: "index_annotation_comments_on_api_key_id"

@@ -21,14 +21,13 @@ class SendDigestNotificationsJob < ApplicationJob
   def unnotified_resolutions
     AnnotationComment
       .where(action: :resolved, notified_at: nil)
-      .includes(:user, annotation: [ :user, { screenshot: { page: :project } } ])
+      .joins(annotation: { screenshot: { page: :project } })
+      .includes(:user, annotation: [ :user, :annotation_comments, { screenshot: { page: :project } } ])
   end
 
   def send_digest(recipient, comments)
     NotificationMailer.resolution_digest(recipient, comments).deliver_now
 
     AnnotationComment.where(id: comments.map(&:id)).update_all(notified_at: Time.current)
-  rescue => e
-    Rails.logger.error("Digest notification failed for user #{recipient.id}: #{e.message}")
   end
 end

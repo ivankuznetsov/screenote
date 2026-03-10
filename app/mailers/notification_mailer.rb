@@ -15,8 +15,8 @@ class NotificationMailer < ApplicationMailer
 
   def subject_line(comments)
     count = comments.size
-    projects = comments.map { |c| c.annotation.screenshot.page.project.name }.uniq
-    project_label = projects.size == 1 ? projects.first : "#{projects.size} projects"
+    project_names = comments.filter_map { |c| c.annotation&.screenshot&.page&.project&.name }.uniq
+    project_label = project_names.size == 1 ? project_names.first : "#{project_names.size} projects"
     "[Screenote] #{count} annotation#{'s' if count > 1} resolved in #{project_label}"
   end
 
@@ -32,10 +32,8 @@ class NotificationMailer < ApplicationMailer
 
   def build_item(resolution_comment)
     reply = resolution_comment.annotation.annotation_comments
-      .where(action: :comment)
-      .where("created_at <= ?", resolution_comment.created_at)
-      .order(created_at: :desc)
-      .first
+      .select { |c| c.comment? && c.created_at <= resolution_comment.created_at }
+      .max_by(&:created_at)
 
     {
       annotation_text: resolution_comment.annotation.comment,
