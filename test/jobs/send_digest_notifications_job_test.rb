@@ -74,6 +74,26 @@ class SendDigestNotificationsJobTest < ActiveSupport::TestCase
     end
   end
 
+  test "marks comments as notified per-author so delivery failure does not cause duplicates" do
+    bob_annotation = annotations(:bob_annotation)
+    alice_resolution = create_resolution(@annotation, resolver: @resolver)
+    bob_resolution = create_resolution(bob_annotation, resolver: @author)
+
+    # First run: sends both emails
+    assert_emails 2 do
+      SendDigestNotificationsJob.perform_now
+    end
+
+    # Both should be marked notified
+    assert alice_resolution.reload.notified_at.present?, "Alice's resolution should be marked notified"
+    assert bob_resolution.reload.notified_at.present?, "Bob's resolution should be marked notified"
+
+    # Second run: no duplicates
+    assert_no_emails do
+      SendDigestNotificationsJob.perform_now
+    end
+  end
+
   test "does not send for non-resolved comments" do
     @annotation.annotation_comments.create!(
       user: @resolver,
