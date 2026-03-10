@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_21_064533) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_10_182720) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -45,6 +45,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_21_064533) do
     t.integer "api_key_id"
     t.text "body", null: false
     t.datetime "created_at", null: false
+    t.datetime "notified_at"
     t.datetime "updated_at", null: false
     t.integer "user_id"
     t.index ["annotation_id", "created_at"], name: "index_annotation_comments_on_annotation_id_and_created_at"

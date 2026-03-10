@@ -1,0 +1,52 @@
+<% content_for :preheader do %>Your feedback was addressed<% end %>
+
+<!-- Title -->
+<h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 900; color: #e8e8ed; font-family: Georgia, 'Times New Roman', serif; letter-spacing: -0.02em;">
+  Feedback Resolved
+</h1>
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #8888a0; line-height: 1.5;">
+  <%= @grouped.sum { |g| g[:items].size } %> annotation<%= @grouped.sum { |g| g[:items].size } == 1 ? ' was' : 's were' %> resolved in your project.
+</p>
+
+<% @grouped.each do |group| %>
+  <!-- Screenshot group -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+    <tr>
+      <td style="padding-bottom: 12px;">
+        <p style="margin: 0; font-size: 14px; font-weight: 700; color: #e5a31e; text-transform: uppercase; letter-spacing: 0.05em;">
+          <%= group[:page_name] %>
+        </p>
+        <p style="margin: 2px 0 0 0; font-size: 13px; color: #5a5a6e;">
+          <%= group[:screenshot_title] %>
+        </p>
+      </td>
+    </tr>
+
+    <% group[:items].each do |item| %>
+      <tr>
+        <td style="padding-bottom: 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td width="3" style="background-color: #e5a31e; border-radius: 2px;"></td>
+              <td style="padding-left: 14px;">
+                <p style="margin: 0 0 6px 0; font-size: 14px; color: #b0b0c0; line-height: 1.6;">
+                  <strong style="color: #8888a0;">Your annotation:</strong> <%= truncate(item[:annotation_text], length: 200) %>
+                </p>
+                <% if item[:reply_text] %>
+                  <p style="margin: 0 0 6px 0; font-size: 14px; color: #b0b0c0; line-height: 1.6;">
+                    <strong style="color: #8888a0;">Reply:</strong> <%= truncate(item[:reply_text], length: 500) %>
+                  </p>
+                <% end %>
+                <p style="margin: 0; font-size: 12px; color: #5a5a6e;">
+                  Resolved by <%= item[:resolver] %>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    <% end %>
+  </table>
+<% end %>
+
+<%= render "user_mailer/email_cta_button", url: root_url, label: "View in Screenote" %>
