@@ -10,15 +10,20 @@ class SendDigestNotificationsJob < ApplicationJob
     resolutions
       .group_by { |c| c.annotation.user }
       .each do |author, comments|
-        next if author.nil? || author.email.blank?
+        if author.nil? || author.email.blank?
+          mark_notified(comments)
+          next
+        end
 
         non_self = comments.reject { |c| c.user.present? && c.user == author }
-        next if non_self.empty?
+        if non_self.empty?
+          mark_notified(comments)
+          next
+        end
 
         NotificationMailer.resolution_digest(author, non_self).deliver_now
+        mark_notified(comments)
       end
-
-    mark_all_notified(resolutions)
   end
 
   private
@@ -30,7 +35,7 @@ class SendDigestNotificationsJob < ApplicationJob
       .includes(:user, annotation: [ :user, :annotation_comments, { screenshot: { page: :project } } ])
   end
 
-  def mark_all_notified(comments)
+  def mark_notified(comments)
     AnnotationComment.where(id: comments.map(&:id)).update_all(notified_at: Time.current)
   end
 end
