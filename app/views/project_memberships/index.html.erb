@@ -9,9 +9,12 @@
     <div class="card project-members__invite">
       <h2 class="project-members__section-title">Invite a collaborator</h2>
       <%= form_with model: ProjectInvitation.new, url: project_invitations_path(@project), class: "project-members__invite-form" do |f| %>
-        <div class="project-members__invite-row">
-          <%= f.email_field :email, placeholder: "colleague@example.com", class: "form__input project-members__invite-input", required: true %>
+        <div class="project-members__invite-row"
+             data-controller="email-autocomplete"
+             data-email-autocomplete-url-value="<%= project_collaborator_suggestions_path(@project) %>">
+          <%= f.email_field :email, placeholder: "colleague@example.com", class: "form__input project-members__invite-input", required: true, data: { email_autocomplete_target: "input", action: "input->email-autocomplete#search keydown->email-autocomplete#navigate" }, autocomplete: "off" %>
           <%= f.submit "Invite", class: "btn btn--primary" %>
+          <ul class="autocomplete-suggestions" data-email-autocomplete-target="results" role="listbox" hidden></ul>
         </div>
       <% end %>
     </div>

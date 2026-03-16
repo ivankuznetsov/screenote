@@ -18,6 +18,7 @@ Rails.application.routes.draw do
     resources :api_keys, only: %i[index new create destroy]
     resources :invitations, controller: "project_invitations", only: %i[create destroy]
     resources :memberships, controller: "project_memberships", only: %i[index destroy]
+    get "collaborator_suggestions", to: "collaborator_suggestions#index"
   end
 
   resources :pages, only: %i[show edit update destroy] do

@@ -1061,6 +1061,7 @@ a:hover {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  position: relative;
 }
 
 .project-members__invite-input {
@@ -1100,6 +1101,39 @@ a:hover {
 .project-members__pending-label {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
+}
+
+/* Autocomplete suggestions dropdown */
+.autocomplete-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+}
+
+.autocomplete-suggestions__item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.autocomplete-suggestions__item:hover,
+.autocomplete-suggestions__item[aria-selected="true"] {
+  background: var(--color-bg-secondary);
+}
+
+.autocomplete-suggestions__email {
+  font-size: 0.875rem;
 }
 
 /* Role badges */
