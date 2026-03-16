@@ -19,7 +19,7 @@
                 autocomplete: "off",
                 role: "combobox",
                 aria: { expanded: false, autocomplete: "list", owns: "autocomplete-results" },
-                data: { email_autocomplete_target: "input", action: "input->email-autocomplete#search keydown->email-autocomplete#navigate" } %>
+                data: { "1p-ignore": "", email_autocomplete_target: "input", action: "input->email-autocomplete#search keydown->email-autocomplete#navigate" } %>
           <%= f.submit "Invite", class: "btn btn--primary" %>
           <ul id="autocomplete-results" class="autocomplete-suggestions" data-email-autocomplete-target="results" role="listbox" hidden></ul>
         </div>
