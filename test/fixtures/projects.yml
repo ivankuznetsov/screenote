@@ -3,6 +3,11 @@ alice_project:
   description: "A test project for Alice"
   user_id: <%= ActiveRecord::FixtureSet.identify(:alice) %>
 
+alice_second_project:
+  name: "Alice's Second Project"
+  description: "Another project for Alice"
+  user_id: <%= ActiveRecord::FixtureSet.identify(:alice) %>
+
 bob_project:
   name: "Bob's Project"
   description: "A test project for Bob"

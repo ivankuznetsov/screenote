@@ -15,6 +15,8 @@ module Pages
     ROLE_BADGE_MEMBER = ".role-badge--member"
     PENDING_LABEL = ".project-members__pending-label"
     SECTION_TITLE = ".project-members__section-title"
+    AUTOCOMPLETE_DROPDOWN = ".autocomplete-suggestions"
+    AUTOCOMPLETE_ITEM = ".autocomplete-suggestions__item"
 
     # --- Actions ---
 
@@ -26,6 +28,12 @@ module Pages
     def invite_email(email)
       fill_in "project_invitation[email]", with: email
       find(INVITE_BUTTON).click
+    end
+
+    def type_in_invite_field(text)
+      field = find(INVITE_INPUT)
+      field.fill_in with: ""
+      field.send_keys(text)
     end
 
     # --- Assertions ---
@@ -58,6 +66,18 @@ module Pages
 
     def assert_no_pending_invitation(email)
       assert_no_selector "#{PENDING_LABEL}", text: email, wait: 5
+    end
+
+    def assert_autocomplete_visible
+      assert_selector AUTOCOMPLETE_ITEM, wait: 10
+    end
+
+    def assert_autocomplete_hidden
+      assert_no_selector AUTOCOMPLETE_ITEM, wait: 5
+    end
+
+    def assert_autocomplete_suggests(email)
+      assert_selector AUTOCOMPLETE_ITEM, text: email, wait: 10
     end
 
     def assert_owner_badge_for(email)
