@@ -58,4 +58,48 @@ class CollaboratorSuggestionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert response.body.scan("autocomplete-suggestions__item").size <= 8
   end
+
+  test "sanitizes wildcard characters in query" do
+    sign_in(@owner)
+    get project_collaborator_suggestions_path(@second_project), params: { q: "%bo" }
+    assert_response :success
+    # The % should be escaped by sanitize_sql_like, not act as a wildcard
+    refute_includes response.body, users(:bob).email
+  end
+
+  test "excludes current user from suggestions" do
+    sign_in(@owner)
+    get project_collaborator_suggestions_path(@second_project), params: { q: "alice" }
+    assert_response :success
+    refute_includes response.body, @owner.email, "Current user should not appear in suggestions"
+  end
+
+  test "excludes pending invitation recipients" do
+    sign_in(@owner)
+    # Bob is a member of alice_project, so he'd normally appear when querying second_project.
+    # Create a pending invitation for bob on second_project to verify exclusion.
+    @second_project.project_invitations.create!(email: @member.email, inviter: @owner)
+    get project_collaborator_suggestions_path(@second_project), params: { q: "bob" }
+    assert_response :success
+    refute_includes response.body, @member.email, "Pending invitees should not appear in suggestions"
+  end
+
+  test "returns no content for missing query parameter" do
+    sign_in(@owner)
+    get project_collaborator_suggestions_path(@project)
+    assert_response :no_content
+  end
+
+  test "returns no content for whitespace-only query" do
+    sign_in(@owner)
+    get project_collaborator_suggestions_path(@project), params: { q: "   " }
+    assert_response :no_content
+  end
+
+  test "matches case-insensitively" do
+    sign_in(@owner)
+    get project_collaborator_suggestions_path(@second_project), params: { q: "BOB" }
+    assert_response :success
+    assert_includes response.body, users(:bob).email, "Search should be case-insensitive"
+  end
 end
