@@ -349,4 +349,107 @@ class McpToolsTest < ActiveSupport::TestCase
     page_ids = result["screenshots"].map { |s| s["page_id"] }.uniq
     assert_equal [ page.id ], page_ids, "All screenshots should belong to the filtered page"
   end
+
+  # InviteCollaboratorTool
+  test "invite_collaborator sends invitation" do
+    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "new@example.com"))
+
+    assert result["invitation"].present?, "Should return invitation data"
+    assert_equal "new@example.com", result["invitation"]["email"]
+    assert_equal "pending", result["invitation"]["status"]
+  end
+
+  test "invite_collaborator rejects duplicate pending invitation" do
+    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "newuser@example.com"))
+
+    assert_equal "validation_failed", result["error"], "Should reject duplicate invitation"
+  end
+
+  test "invite_collaborator rejects existing member" do
+    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "bob@example.com"))
+
+    assert_equal "validation_failed", result["error"], "Should reject inviting existing member"
+  end
+
+  test "invite_collaborator requires owner role" do
+    Current.mcp_user = users(:bob)
+    Current.mcp_project = @project
+
+    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "someone@example.com"))
+
+    assert_equal "forbidden", result["error"], "Non-owner should not be able to invite"
+  end
+
+  # ListProjectMembersTool
+  test "list_project_members returns members and pending invitations" do
+    result = JSON.parse(ListProjectMembersTool.new.call(project_id: @project.id))
+
+    assert result["members"].is_a?(Array), "Should return members array"
+    assert result["pending_invitations"].is_a?(Array), "Should return pending invitations array"
+
+    emails = result["members"].map { |m| m["email"] }
+    assert_includes emails, "alice@example.com"
+    assert_includes emails, "bob@example.com"
+
+    pending_emails = result["pending_invitations"].map { |i| i["email"] }
+    assert_includes pending_emails, "newuser@example.com"
+  end
+
+  test "list_project_members includes role info" do
+    result = JSON.parse(ListProjectMembersTool.new.call(project_id: @project.id))
+
+    alice_member = result["members"].find { |m| m["email"] == "alice@example.com" }
+    assert_equal "owner", alice_member["role"], "Alice should be owner"
+
+    bob_member = result["members"].find { |m| m["email"] == "bob@example.com" }
+    assert_equal "member", bob_member["role"], "Bob should be member"
+  end
+
+  # CancelInvitationTool
+  test "cancel_invitation cancels pending invitation" do
+    invitation = project_invitations(:pending_invitation)
+
+    result = JSON.parse(CancelInvitationTool.new.call(project_id: @project.id, invitation_id: invitation.id))
+
+    assert result["success"], "Should return success"
+    assert_raises(ActiveRecord::RecordNotFound) { invitation.reload }
+  end
+
+  test "cancel_invitation requires owner role" do
+    Current.mcp_user = users(:bob)
+    Current.mcp_project = @project
+    invitation = project_invitations(:pending_invitation)
+
+    result = JSON.parse(CancelInvitationTool.new.call(project_id: @project.id, invitation_id: invitation.id))
+
+    assert_equal "forbidden", result["error"], "Non-owner should not be able to cancel invitations"
+  end
+
+  # RemoveProjectMemberTool
+  test "remove_project_member removes member" do
+    membership = project_memberships(:bob_member_of_alice_project)
+
+    result = JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+
+    assert result["success"], "Should return success"
+    assert_raises(ActiveRecord::RecordNotFound) { membership.reload }
+  end
+
+  test "remove_project_member cannot remove self" do
+    membership = project_memberships(:alice_owns_alice_project)
+
+    result = JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+
+    assert_equal "cannot_remove_self", result["error"], "Should not allow removing yourself"
+  end
+
+  test "remove_project_member requires owner role" do
+    Current.mcp_user = users(:bob)
+    Current.mcp_project = @project
+    membership = project_memberships(:alice_owns_alice_project)
+
+    result = JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+
+    assert_equal "forbidden", result["error"], "Non-owner should not be able to remove members"
+  end
 end

@@ -76,10 +76,12 @@ class CollaboratorSuggestionsControllerTest < ActionDispatch::IntegrationTest
 
   test "excludes pending invitation recipients" do
     sign_in(@owner)
-    # newuser@example.com has a pending invitation on alice_project
-    get project_collaborator_suggestions_path(@second_project), params: { q: "newuser" }
+    # Bob is a member of alice_project, so he'd normally appear when querying second_project.
+    # Create a pending invitation for bob on second_project to verify exclusion.
+    @second_project.project_invitations.create!(email: @member.email, inviter: @owner)
+    get project_collaborator_suggestions_path(@second_project), params: { q: "bob" }
     assert_response :success
-    refute_includes response.body, "newuser@example.com", "Pending invitees should not appear in suggestions"
+    refute_includes response.body, @member.email, "Pending invitees should not appear in suggestions"
   end
 
   test "returns no content for missing query parameter" do
