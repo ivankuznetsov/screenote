@@ -1,6 +1,7 @@
-<% @suggestions.each do |user| %>
+<% suggestions.each do |user| %>
   <li class="autocomplete-suggestions__item" role="option"
-      data-email="<%= user.email %>">
+      data-email="<%= user.email %>"
+      data-action="click->email-autocomplete#selectItem">
     <span class="autocomplete-suggestions__email"><%= user.email %></span>
   </li>
 <% end %>

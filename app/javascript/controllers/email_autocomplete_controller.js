@@ -34,9 +34,13 @@ export default class extends Controller {
       const url = `${this.urlValue}?q=${encodeURIComponent(query)}`
       const response = await fetch(url, {
         signal: this.abortController.signal,
-        headers: { "Accept": "text/html" }
+        headers: { "Accept": "text/html" },
+        redirect: "error"
       })
-      if (!response.ok) return this.close()
+      if (!response.ok) {
+        if (response.status === 429) console.warn("Autocomplete rate limited")
+        return this.close()
+      }
 
       const html = await response.text()
       this.resultsTarget.replaceChildren()
@@ -47,14 +51,15 @@ export default class extends Controller {
 
       if (this.resultsTarget.children.length > 0) {
         this.resultsTarget.hidden = false
-        this.resultsTarget.querySelectorAll("li").forEach(li => {
-          li.addEventListener("click", (e) => this.select(e.currentTarget))
-        })
+        this.inputTarget.setAttribute("aria-expanded", "true")
       } else {
         this.close()
       }
     } catch (e) {
-      if (e.name !== "AbortError") this.close()
+      if (e.name !== "AbortError") {
+        console.error("Autocomplete fetch failed:", e)
+        this.close()
+      }
     }
   }
 
@@ -84,7 +89,15 @@ export default class extends Controller {
   }
 
   highlight(items) {
-    items.forEach((li, i) => li.setAttribute("aria-selected", i === this.selectedIndex))
+    items.forEach((li, i) => {
+      const selected = i === this.selectedIndex
+      li.setAttribute("aria-selected", selected)
+      if (selected) this.inputTarget.setAttribute("aria-activedescendant", li.id || "")
+    })
+  }
+
+  selectItem(event) {
+    this.select(event.currentTarget)
   }
 
   select(item) {
@@ -97,6 +110,8 @@ export default class extends Controller {
     this.resultsTarget.hidden = true
     this.resultsTarget.replaceChildren()
     this.selectedIndex = -1
+    this.inputTarget.setAttribute("aria-expanded", "false")
+    this.inputTarget.removeAttribute("aria-activedescendant")
   }
 
   disconnect() {
