@@ -66,28 +66,23 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
 
   test "customer.subscription.updated sets active status and plan pro" do
     upgrade_bob_to_pro!
+    period_end = 60.days.from_now.to_i
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "active",
-      current_period_end: 60.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "active", current_period_end: period_end)
 
     post_webhook(event)
     assert_response :ok
     @subscription.reload
     assert @subscription.active?, "Status should be active"
     assert @subscription.pro?, "Plan should remain pro when stripe_subscription_id is present"
+    assert_equal Time.at(period_end).utc.to_i, @subscription.current_period_end.to_i,
+      "current_period_end should be read from items.data[0]"
   end
 
   test "customer.subscription.updated sets past_due status" do
     upgrade_bob_to_pro!
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "past_due",
-      current_period_end: 30.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "past_due", current_period_end: 30.days.from_now.to_i)
 
     post_webhook(event)
     assert_response :ok
@@ -98,11 +93,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   test "customer.subscription.updated maps canceled status" do
     upgrade_bob_to_pro!
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "canceled",
-      current_period_end: 30.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "canceled", current_period_end: 30.days.from_now.to_i)
 
     post_webhook(event)
     assert_response :ok
@@ -113,11 +104,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   test "customer.subscription.updated maps unpaid to canceled" do
     upgrade_bob_to_pro!
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "unpaid",
-      current_period_end: 30.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "unpaid", current_period_end: 30.days.from_now.to_i)
 
     post_webhook(event)
     assert_response :ok
@@ -128,16 +115,72 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   test "customer.subscription.updated maps unknown status to incomplete" do
     upgrade_bob_to_pro!
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "trialing",
-      current_period_end: 30.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "trialing", current_period_end: 30.days.from_now.to_i)
 
     post_webhook(event)
     assert_response :ok
     @subscription.reload
     assert @subscription.incomplete?, "Unknown status should map to incomplete"
+  end
+
+  test "customer.subscription.updated succeeds when current_period_end is absent from subscription object (Stripe 2026-01 API)" do
+    # Regression test for production NoMethodError: undefined method 'current_period_end'
+    # for #<Stripe::Subscription>. In Stripe API version 2026-01-28 and later,
+    # current_period_end was removed from the Subscription object and moved onto each item.
+    upgrade_bob_to_pro!
+    original_period_end = @subscription.current_period_end
+    new_period_end = 60.days.from_now.to_i
+
+    event = {
+      id: "evt_test_#{SecureRandom.hex(8)}",
+      object: "event",
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: "sub_bob_test",
+          object: "subscription",
+          customer: @subscription.stripe_customer_id,
+          status: "active",
+          items: {
+            object: "list",
+            data: [ {
+              id: "si_test",
+              object: "subscription_item",
+              current_period_end: new_period_end,
+              current_period_start: 30.days.ago.to_i
+            } ]
+          }
+        }
+      }
+    }
+
+    post_webhook(event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.active?, "Status should be active"
+    assert @subscription.pro?, "Plan should remain pro"
+    assert_not_equal original_period_end.to_i, @subscription.current_period_end.to_i,
+      "current_period_end should be updated from items.data[0].current_period_end"
+    assert_equal Time.at(new_period_end).utc.to_i, @subscription.current_period_end.to_i,
+      "current_period_end should match items.data[0].current_period_end"
+  end
+
+  test "customer.subscription.updated tolerates empty items list" do
+    upgrade_bob_to_pro!
+    original_period_end = @subscription.current_period_end
+
+    event = build_event("customer.subscription.updated", {
+      customer: @subscription.stripe_customer_id,
+      status: "active",
+      items: { object: "list", data: [] }
+    })
+
+    post_webhook(event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.active?, "Status should still update"
+    assert_equal original_period_end.to_i, @subscription.current_period_end.to_i,
+      "current_period_end should be preserved when items.data is empty"
   end
 
   test "checkout.session.completed preserves active status when subscription.updated arrived first" do
@@ -165,11 +208,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   test "out-of-order webhooks: subscription.updated then checkout.session.completed does not strand user" do
     # Step 1: subscription.updated arrives first with active status
     # At this point, no stripe_subscription_id is set, so plan should NOT be set to pro
-    sub_updated_event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "active",
-      current_period_end: 60.days.from_now.to_i
-    })
+    sub_updated_event = build_subscription_updated_event(status: "active", current_period_end: 60.days.from_now.to_i)
 
     post_webhook(sub_updated_event)
     assert_response :ok
@@ -200,11 +239,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
       current_period_end: 30.days.from_now
     )
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "active",
-      current_period_end: 60.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "active", current_period_end: 60.days.from_now.to_i)
 
     assert_enqueued_emails 1 do
       post_webhook(event)
@@ -215,11 +250,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   test "customer.subscription.updated does not send email when already active pro" do
     upgrade_bob_to_pro!
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "active",
-      current_period_end: 60.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "active", current_period_end: 60.days.from_now.to_i)
 
     assert_no_enqueued_emails do
       post_webhook(event)
@@ -235,11 +266,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
       current_period_end: 30.days.from_now
     )
 
-    event = build_event("customer.subscription.updated", {
-      customer: @subscription.stripe_customer_id,
-      status: "past_due",
-      current_period_end: 60.days.from_now.to_i
-    })
+    event = build_subscription_updated_event(status: "past_due", current_period_end: 60.days.from_now.to_i)
 
     assert_no_enqueued_emails do
       post_webhook(event)
@@ -263,6 +290,7 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     upgrade_bob_to_pro!
 
     event = build_event("customer.subscription.deleted", {
+      id: @subscription.stripe_subscription_id,
       customer: @subscription.stripe_customer_id
     })
 
@@ -272,6 +300,49 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert @subscription.free?, "Plan should be reset to free"
     assert @subscription.canceled?, "Status should be canceled"
     assert_nil @subscription.stripe_subscription_id, "stripe_subscription_id should be cleared"
+  end
+
+  test "customer.subscription.deleted ignores events for a different subscription on the same customer" do
+    # Guards against a Stripe customer having multiple subscriptions where the
+    # tracked one is still active but a different one is being deleted.
+    upgrade_bob_to_pro!
+
+    event = build_event("customer.subscription.deleted", {
+      id: "sub_some_other_subscription",
+      customer: @subscription.stripe_customer_id
+    })
+
+    post_webhook(event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.pro?, "Plan should remain pro — the deleted sub is not ours"
+    assert @subscription.active?, "Status should remain active"
+    assert_equal "sub_bob_test", @subscription.stripe_subscription_id,
+      "stripe_subscription_id should not be cleared when a different sub is deleted"
+  end
+
+  test "customer.subscription.updated ignores events for a different subscription on the same customer" do
+    upgrade_bob_to_pro!
+    original_period_end = @subscription.current_period_end
+
+    event = build_event("customer.subscription.updated", {
+      id: "sub_some_other_subscription",
+      object: "subscription",
+      customer: @subscription.stripe_customer_id,
+      status: "canceled",
+      items: {
+        object: "list",
+        data: [ { id: "si_other", object: "subscription_item", current_period_end: 1.day.from_now.to_i } ]
+      }
+    })
+
+    post_webhook(event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.active?, "Status should remain active — the updated sub is not ours"
+    assert @subscription.pro?, "Plan should remain pro"
+    assert_equal original_period_end.to_i, @subscription.current_period_end.to_i,
+      "current_period_end should not be overwritten by a different sub's event"
   end
 
   private
@@ -292,6 +363,26 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
       type: type,
       data: { object: data }
     }
+  end
+
+  # Builds a customer.subscription.updated event matching the Stripe 2026-01-28 API shape,
+  # where current_period_end lives on each subscription item, not on the subscription itself.
+  def build_subscription_updated_event(status:, current_period_end:)
+    build_event("customer.subscription.updated", {
+      id: @subscription.stripe_subscription_id || "sub_bob_test",
+      object: "subscription",
+      customer: @subscription.stripe_customer_id,
+      status: status,
+      items: {
+        object: "list",
+        data: [ {
+          id: "si_test",
+          object: "subscription_item",
+          current_period_end: current_period_end,
+          current_period_start: 30.days.ago.to_i
+        } ]
+      }
+    })
   end
 
   def post_webhook(event_data)

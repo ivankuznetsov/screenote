@@ -55,6 +55,8 @@ class StripeWebhooksController < ActionController::Base
   def handle_subscription_updated(stripe_sub)
     subscription = find_subscription(stripe_sub.customer, "customer.subscription.updated")
     return head(:service_unavailable) unless subscription
+    return head(:ok) if subscription.stripe_subscription_id.present? &&
+                        subscription.stripe_subscription_id != stripe_sub[:id]
 
     was_active_pro = subscription.active_pro?
 
@@ -65,7 +67,9 @@ class StripeWebhooksController < ActionController::Base
     else :incomplete
     end
 
-    attrs = { status: status, current_period_end: Time.at(stripe_sub.current_period_end).utc }
+    attrs = { status: status }
+    period_end = stripe_period_end(stripe_sub)
+    attrs[:current_period_end] = Time.at(period_end).utc if period_end
     attrs[:plan] = :pro if subscription.stripe_subscription_id.present?
 
     subscription.update!(**attrs)
@@ -76,6 +80,7 @@ class StripeWebhooksController < ActionController::Base
   def handle_subscription_deleted(stripe_sub)
     subscription = find_subscription(stripe_sub.customer, "customer.subscription.deleted")
     return head(:service_unavailable) unless subscription
+    return head(:ok) unless subscription.stripe_subscription_id == stripe_sub[:id]
 
     subscription.update!(plan: :free, status: :canceled, stripe_subscription_id: nil)
   end
@@ -84,6 +89,13 @@ class StripeWebhooksController < ActionController::Base
     AdminMailer.new_pro_subscriber(subscription.user).deliver_later
   rescue StandardError => e
     Honeybadger.notify(e, context: { user_id: subscription.user_id })
+  end
+
+  def stripe_period_end(stripe_sub)
+    # Stripe API 2026-01-28 moved current_period_end off the Subscription onto each
+    # subscription item. Use hash-style access so missing keys return nil rather than
+    # raising NoMethodError via StripeObject#method_missing.
+    stripe_sub[:items]&.[](:data)&.first&.[](:current_period_end)
   end
 
   def find_subscription(stripe_customer_id, event_type)
