@@ -66,14 +66,16 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_select "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
   end
 
-  test "show at /viewports/:viewport redirects to default when viewport is missing" do
+  test "show at /viewports/:viewport silently falls back to default when viewport is missing" do
     sign_in(@user)
     assert_equal %w[desktop], @screenshot.available_viewports
 
     get viewport_screenshot_path(@screenshot, :mobile)
 
-    assert_redirected_to screenshot_path(@screenshot)
-    assert_match(/doesn't have a mobile/, flash[:notice])
+    # No redirect, no flash — the canonical /screenshots/:id would show the same
+    # desktop canvas. Silent fallback > jarring redirect for a URL no human typed.
+    assert_response :success
+    assert_select ".screenshot-workspace"
   end
 
   test "show scopes annotations to the active viewport" do

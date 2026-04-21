@@ -6,8 +6,6 @@ class ScreenshotsController < ApplicationController
 
   def show
     @active_viewport = resolve_active_viewport
-    return if performed?
-
     @screenshot_image = @screenshot.image_for(@active_viewport) if @active_viewport
     @annotations = @screenshot.annotations.includes(:user, annotation_comments: [ :user, :api_key ]).order(:created_at)
     @annotations = @annotations.where(status: params[:status]) if params[:status].in?(%w[open resolved])
@@ -78,23 +76,14 @@ class ScreenshotsController < ApplicationController
     params.require(:screenshot).permit(:title, :image)
   end
 
-  # Decides which viewport to render. Explicit :viewport param wins when the
-  # screenshot has that variant; otherwise falls back to default_viewport
-  # (:desktop if present, else first available). If the caller explicitly
-  # requested a viewport that doesn't exist, redirect to the canonical URL
-  # with a notice — better than rendering an empty canvas.
+  # Returns the viewport to render. The explicit :viewport param wins when the
+  # screenshot has that variant; otherwise silently falls back to
+  # default_viewport (:desktop if present, else first available). Silent
+  # fallback beats a redirect-with-flash for a URL no human typed and there's
+  # no user-facing difference.
   def resolve_active_viewport
-    requested = params[:viewport]
-    available = @screenshot.available_viewports
-    return @screenshot.default_viewport if requested.blank?
-
-    if available.include?(requested)
-      requested
-    else
-      redirect_to screenshot_path(@screenshot),
-        notice: "This screenshot doesn't have a #{requested} variant."
-      nil
-    end
+    requested = params[:viewport].presence
+    @screenshot.available_viewports.include?(requested) ? requested : @screenshot.default_viewport
   end
 
   # Route a form-supplied image replacement through the primary ScreenshotImage

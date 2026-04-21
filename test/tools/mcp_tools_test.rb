@@ -177,6 +177,20 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_match(/desktop, tablet, mobile/, result["message"])
   end
 
+  test "create_annotation rejects viewport that doesn't exist on the screenshot" do
+    # @screenshot has only desktop — no tablet / mobile variants
+    assert_equal %w[desktop], @screenshot.available_viewports
+
+    result = JSON.parse(CreateAnnotationTool.new.call(
+      project_id: @project.id, screenshot_id: @screenshot.id,
+      x_percent: 10.0, y_percent: 10.0, comment: "Wrong viewport",
+      viewport: "mobile"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/no mobile variant/, result["message"])
+  end
+
   test "create_multi_viewport_screenshot tokens resolve to the matching ScreenshotImage" do
     result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
       project_id: @project.id, title: "Token check",

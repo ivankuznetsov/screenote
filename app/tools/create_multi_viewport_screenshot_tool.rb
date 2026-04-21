@@ -9,8 +9,6 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
   tool_name "create_multi_viewport_screenshot"
   description "Create a screenshot with one or more viewport variants (desktop, tablet, mobile). Returns signed upload URLs for each variant — PUT each binary separately."
 
-  SUPPORTED_VIEWPORTS = %w[desktop tablet mobile].freeze
-
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
     required(:title).filled(:string).description("Title/version label for the screenshot")
@@ -22,11 +20,12 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
     error = require_project(project_id)
     return error if error
 
-    return invalid("viewports must contain 1..3 entries") unless (1..SUPPORTED_VIEWPORTS.size).cover?(viewports.length)
+    supported = ScreenshotImage.viewports.keys
+    return invalid("viewports must contain 1..#{supported.size} entries") unless (1..supported.size).cover?(viewports.length)
 
     normalized = viewports.map { |v| { viewport: v[:viewport], mime_type: v[:mime_type].presence || "image/png" } }
     names = normalized.map { |v| v[:viewport] }
-    return invalid("viewport must be one of #{SUPPORTED_VIEWPORTS.join(', ')}") if names.any? { |n| !n.in?(SUPPORTED_VIEWPORTS) }
+    return invalid("viewport must be one of #{supported.join(', ')}") if names.any? { |n| !n.in?(supported) }
     return invalid("viewports must be unique") if names.uniq.length != names.length
 
     bad_mime = normalized.find { |v| !v[:mime_type].in?(ScreenshotImage::ALLOWED_CONTENT_TYPES) }
@@ -34,19 +33,26 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
 
     with_error_handling do
       project = current_project
-      page = Page.find_or_create_by_name!(project, page_name || title)
-      screenshot = page.screenshots.create!(title: title)
+      screenshot = nil
+      uploads = nil
 
-      uploads = normalized.map do |v|
-        si = screenshot.screenshot_images.create!(viewport: v[:viewport])
-        token = si.generate_token_for(:upload)
-        {
-          viewport: v[:viewport],
-          upload_url: Rails.application.routes.url_helpers.api_screenshot_upload_url(
-            screenshot, token: token, mime_type: v[:mime_type]
-          ),
-          token: token
-        }
+      # Wrap Screenshot + ScreenshotImages creation so a partial failure
+      # (e.g. RecordNotUnique from the (screenshot_id, viewport) index under
+      # concurrent creation) doesn't leave an orphan Screenshot.
+      page = Page.find_or_create_by_name!(project, page_name || title)
+      ApplicationRecord.transaction do
+        screenshot = page.screenshots.create!(title: title)
+        uploads = normalized.map do |v|
+          si = screenshot.screenshot_images.create!(viewport: v[:viewport])
+          token = si.generate_token_for(:upload)
+          {
+            viewport: v[:viewport],
+            upload_url: Rails.application.routes.url_helpers.api_screenshot_upload_url(
+              screenshot, token: token, mime_type: v[:mime_type]
+            ),
+            token: token
+          }
+        end
       end
 
       {
@@ -56,6 +62,8 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
         uploads: uploads
       }.to_json
     end
+  rescue ActiveRecord::RecordNotUnique
+    invalid("A ScreenshotImage with that viewport already exists for this Screenshot (concurrent request?)")
   end
 
   private

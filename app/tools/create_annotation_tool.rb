@@ -19,12 +19,21 @@ class CreateAnnotationTool < ApplicationTool
     error = require_project(project_id)
     return error if error
 
-    unless %w[desktop tablet mobile].include?(viewport)
-      return { error: "invalid_viewport", message: "viewport must be desktop, tablet, or mobile" }.to_json
+    unless ScreenshotImage.viewports.key?(viewport)
+      return { error: "invalid_arguments", message: "viewport must be one of #{ScreenshotImage.viewports.keys.join(', ')}" }.to_json
     end
 
     with_error_handling do
       screenshot = current_project.screenshots.find(screenshot_id)
+
+      # Guard: the annotation's viewport must correspond to an existing
+      # ScreenshotImage on this screenshot. Otherwise annotation.crop returns
+      # nil forever and the pin has nowhere to render.
+      unless screenshot.screenshot_images.exists?(viewport: viewport)
+        available = screenshot.available_viewports
+        return { error: "invalid_arguments",
+                 message: "Screenshot has no #{viewport} variant. Available: #{available.join(', ').presence || 'none'}" }.to_json
+      end
 
       annotation = screenshot.annotations.create!(
         user: current_user,
