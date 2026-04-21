@@ -67,9 +67,14 @@ class ScreenshotsController < ApplicationController
   end
 
   def set_screenshot
-    @screenshot = Screenshot.find(params[:id])
+    # Scope the initial lookup through the user's projects (including those
+    # they're a member of, not just owner) so an attacker probing IDs gets a
+    # clean 404 at the query level instead of row-read + authz-raise.
+    @screenshot = Screenshot.joins(page: { project: :project_memberships })
+                            .where(project_memberships: { user_id: Current.user.id })
+                            .find(params[:id])
     @page = @screenshot.page
-    @project = Current.user.projects.find(@page.project_id)
+    @project = @page.project
   end
 
   def screenshot_params

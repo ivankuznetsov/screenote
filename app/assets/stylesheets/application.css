@@ -627,26 +627,9 @@ a:hover {
   color: var(--color-accent-fg);
 }
 
-.viewport-switcher__icon {
+.viewport-switcher__btn svg {
   display: inline-block;
-  width: 14px;
-  height: 14px;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-}
-
-/* Minimal inline SVG icons — no external assets to manage */
-.viewport-switcher__icon--desktop {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='3' width='20' height='14' rx='2'/><line x1='8' y1='21' x2='16' y2='21'/><line x1='12' y1='17' x2='12' y2='21'/></svg>");
-}
-
-.viewport-switcher__icon--tablet {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='2' width='16' height='20' rx='2'/><line x1='12' y1='18' x2='12.01' y2='18'/></svg>");
-}
-
-.viewport-switcher__icon--mobile {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='7' y='2' width='10' height='20' rx='2'/><line x1='12' y1='18' x2='12.01' y2='18'/></svg>");
+  flex-shrink: 0;
 }
 
 /* Screenshot workspace (show page layout) */

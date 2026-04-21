@@ -6,7 +6,16 @@
 
   Renders only icons for viewports the Screenshot actually has; a legacy
   single-viewport capture shows just one icon.
+
+  Icons are inline SVG (not CSS data URIs) so stroke="currentColor" inherits
+  the link's computed color — enables active-state color change.
 %>
+<% viewport_icons = {
+  "desktop" => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+  "tablet"  => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>',
+  "mobile"  => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>'
+} %>
+
 <% available = screenshot.available_viewports %>
 <% if available.size > 1 %>
   <nav class="viewport-switcher" role="tablist" aria-label="Viewport">
@@ -20,10 +29,9 @@
           data: {
             turbo_frame: "screenshot_canvas",
             turbo_action: "advance",
-            viewport: vp,
             testid: "viewport-switcher-#{vp}"
           } do %>
-        <span class="viewport-switcher__icon viewport-switcher__icon--<%= vp %>" aria-hidden="true"></span>
+        <%= viewport_icons[vp].html_safe %>
         <span class="viewport-switcher__label"><%= vp.capitalize %></span>
       <% end %>
     <% end %>
