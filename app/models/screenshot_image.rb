@@ -5,8 +5,15 @@
 # captures still work by having a single ScreenshotImage with viewport: :desktop.
 # See plans/multi-viewport-screenshots.md.
 class ScreenshotImage < ApplicationRecord
-  ALLOWED_CONTENT_TYPES = Screenshot::ALLOWED_CONTENT_TYPES
-  MAX_FILE_SIZE = Screenshot::MAX_FILE_SIZE
+  # ScreenshotImage owns the blob post-PR-2. Screenshot references these
+  # constants via the reverse direction during the transition (see PR-1's
+  # original direction). Can be simplified further once Screenshot's legacy
+  # has_one_attached :image is dropped (todo 172).
+  ALLOWED_CONTENT_TYPES = %w[image/png image/jpeg].freeze
+  MAX_FILE_SIZE = 20.megabytes
+
+  BackfillResult = Struct.new(:already_backfilled, :backfilled, :no_image, :errors, keyword_init: true)
+  RollbackResult = Struct.new(:already_rolled_back, :rolled_back, :no_image, :errors, keyword_init: true)
 
   belongs_to :screenshot
   has_one_attached :image
@@ -22,7 +29,145 @@ class ScreenshotImage < ApplicationRecord
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :acceptable_image
 
+  after_create_commit :extract_dimensions_later
+  # Keep Screenshot#status in sync with children so queries like
+  # `Page.screenshots.where(status: :ready)` and readers like
+  # `Screenshot#status` reflect the actual analysis state of the image
+  # variants. Without this, Screenshot#status is stuck at :pending forever
+  # after PR-2.
+  after_save :sync_parent_status, if: :saved_change_to_status?
+  after_destroy :sync_parent_status
+
+  # Move every attached Screenshot#image blob onto a new ScreenshotImage(:desktop).
+  # Idempotent. Screenshots without an attached image are left alone.
+  # Logger receives one line per record (prefix `+` migrated, `x` error). Pass
+  # a logger that prints via `say` when running from a migration, or $stdout
+  # for the Rake task. Completes even if individual records error — caller
+  # decides how to react to `result.errors`.
+  def self.backfill_from_screenshots!(apply: false, logger: $stdout)
+    stats = { already_backfilled: 0, backfilled: 0, no_image: 0, errors: 0 }
+
+    Screenshot.find_each do |screenshot|
+      existing = screenshot.screenshot_images.find_by(viewport: :desktop)
+
+      if existing&.image&.attached?
+        stats[:already_backfilled] += 1
+        next
+      end
+
+      unless screenshot.image.attached?
+        stats[:no_image] += 1
+        next
+      end
+
+      logger.puts "+ Screenshot##{screenshot.id} (#{screenshot.title.truncate(40)}): migrating blob #{screenshot.image.blob.id}"
+      next unless apply
+
+      begin
+        move_blob_from_screenshot!(screenshot, existing)
+        stats[:backfilled] += 1
+      rescue StandardError => e
+        logger.puts "x Screenshot##{screenshot.id}: #{e.class}: #{e.message}"
+        stats[:errors] += 1
+      end
+    end
+
+    BackfillResult.new(**stats)
+  end
+
+  # Inverse of backfill_from_screenshots! — moves ScreenshotImage(:desktop)
+  # blobs back onto Screenshot and destroys the ScreenshotImage. Use before
+  # rolling back the multi-viewport feature to avoid orphaning blobs (AS
+  # attachments are polymorphic, no FK cascade).
+  def self.rollback_to_screenshots!(apply: false, logger: $stdout)
+    stats = { already_rolled_back: 0, rolled_back: 0, no_image: 0, errors: 0 }
+
+    where(viewport: :desktop).find_each do |screenshot_image|
+      screenshot = screenshot_image.screenshot
+
+      if screenshot.image.attached?
+        stats[:already_rolled_back] += 1
+        next
+      end
+
+      unless screenshot_image.image.attached?
+        stats[:no_image] += 1
+        next
+      end
+
+      logger.puts "- ScreenshotImage##{screenshot_image.id} (Screenshot##{screenshot.id}): restoring blob"
+      next unless apply
+
+      begin
+        move_blob_to_screenshot!(screenshot, screenshot_image)
+        stats[:rolled_back] += 1
+      rescue StandardError => e
+        logger.puts "x Screenshot##{screenshot.id}: #{e.class}: #{e.message}"
+        stats[:errors] += 1
+      end
+    end
+
+    RollbackResult.new(**stats)
+  end
+
+  def self.move_blob_from_screenshot!(screenshot, existing)
+    Screenshot.transaction do
+      blob = screenshot.image.blob
+      screenshot.image.detach
+      target = existing || screenshot.screenshot_images.create!(
+        viewport: :desktop,
+        status: screenshot.status,
+        width: screenshot.width,
+        height: screenshot.height
+      )
+      target.image.attach(blob)
+    end
+  end
+  private_class_method :move_blob_from_screenshot!
+
+  def self.move_blob_to_screenshot!(screenshot, screenshot_image)
+    Screenshot.transaction do
+      blob = screenshot_image.image.blob
+      screenshot_image.image.detach
+      screenshot.image.attach(blob)
+      screenshot_image.destroy!
+    end
+  end
+  private_class_method :move_blob_to_screenshot!
+
   private
+
+  def extract_dimensions_later
+    ScreenshotDimensionJob.perform_later(self)
+  end
+
+  # :ready iff every sibling variant is :ready; :failed if any is :failed;
+  # :pending otherwise (including the no-variants case). update_columns skips
+  # Screenshot callbacks/validations — this is a derived field, not user input.
+  def sync_parent_status
+    # Skip when the parent is mid-destroy — dependent: :destroy on
+    # screenshot_images triggers this callback but the Screenshot itself
+    # is already destroyed and cannot be updated.
+    return if screenshot.destroyed? || screenshot.marked_for_destruction?
+
+    # Re-fetch parent + siblings from the DB so we don't rely on cached
+    # associations that may be stale (callers often manipulate the parent's
+    # status via update_columns before triggering this callback in tests).
+    parent = Screenshot.find_by(id: screenshot_id)
+    return unless parent
+
+    siblings = parent.screenshot_images
+    desired = if siblings.where(status: :failed).exists?
+      :failed
+    elsif siblings.exists? && !siblings.where.not(status: :ready).exists?
+      :ready
+    else
+      :pending
+    end
+    return if parent.status == desired.to_s
+
+    parent.update_columns(status: Screenshot.statuses[desired])
+  end
 
   def acceptable_image
     return unless image.attached?

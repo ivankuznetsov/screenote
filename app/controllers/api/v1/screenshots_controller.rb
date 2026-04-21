@@ -11,17 +11,19 @@ module Api
 
         title = params[:title].presence || "Untitled"
         page = Page.find_or_create_by_name!(current_project, title)
-        screenshot = page.screenshots.build(title: title)
-        screenshot.image.attach(params[:image])
+        screenshot = Screenshot.create_with_image!(
+          page: page, title: title,
+          io: params[:image].tempfile,
+          filename: params[:image].original_filename,
+          content_type: params[:image].content_type
+        )
 
-        if screenshot.save
-          render json: {
-            screenshot_id: screenshot.id,
-            annotate_url: screenshot_url(screenshot)
-          }, status: :created
-        else
-          render json: { error: screenshot.errors.full_messages.join(", ") }, status: :unprocessable_entity
-        end
+        render json: {
+          screenshot_id: screenshot.id,
+          annotate_url: screenshot_url(screenshot)
+        }, status: :created
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
       end
 
       private

@@ -1,26 +1,53 @@
 # frozen_string_literal: true
 
 class ScreenshotDimensionJob < ApplicationJob
-  def perform(screenshot)
-    return if screenshot.ready?
+  # Accepts either a ScreenshotImage (new callers) or a Screenshot (legacy
+  # enqueued jobs in flight when PR-2 deploys). The Screenshot path attempts to
+  # forward to the primary ScreenshotImage; if none exists yet (backfill
+  # pending), it exits quietly and relies on ScreenshotImage's own
+  # after_create_commit callback to enqueue a fresh job.
+  def perform(record)
+    screenshot_image = resolve_target(record)
+    if screenshot_image.nil?
+      # Legacy Screenshot-arg whose primary_image isn't ready yet (possible
+      # briefly during the PR-2 deploy window before the backfill migration
+      # completes). Raise so Solid Queue retries rather than silently drop
+      # dimension extraction and leave the Screenshot pending forever.
+      raise "ScreenshotDimensionJob: no primary_image for #{record.class}##{record.id}"
+    end
 
-    unless screenshot.image.attached?
-      Rails.logger.warn("ScreenshotDimensionJob: Screenshot #{screenshot.id} has no attached image")
+    return if screenshot_image.status_ready?
+
+    unless screenshot_image.image.attached?
+      Rails.logger.warn("ScreenshotDimensionJob: ScreenshotImage #{screenshot_image.id} has no attached image")
       return
     end
 
-    screenshot.image.blob.analyze unless screenshot.image.blob.analyzed?
+    screenshot_image.image.blob.analyze unless screenshot_image.image.blob.analyzed?
 
-    metadata = screenshot.image.blob.metadata
+    metadata = screenshot_image.image.blob.metadata
     width = metadata["width"]
     height = metadata["height"]
 
     if width.present? && height.present?
-      screenshot.update!(width: width, height: height, status: :ready)
+      screenshot_image.update!(width: width, height: height, status: :ready)
     else
-      Honeybadger.notify("Screenshot dimension extraction failed",
-        context: { screenshot_id: screenshot.id, metadata: metadata })
-      screenshot.update!(status: :failed)
+      Honeybadger.notify("ScreenshotImage dimension extraction failed",
+        context: { screenshot_image_id: screenshot_image.id, metadata: metadata })
+      screenshot_image.update!(status: :failed)
+    end
+  end
+
+  private
+
+  def resolve_target(record)
+    case record
+    when ScreenshotImage
+      record
+    when Screenshot
+      record.primary_image
+    else
+      raise ArgumentError, "ScreenshotDimensionJob cannot handle #{record.class}"
     end
   end
 end

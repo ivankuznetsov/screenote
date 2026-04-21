@@ -96,4 +96,56 @@ class ScreenshotTest < ActiveSupport::TestCase
       screenshot.destroy
     end
   end
+
+  test "primary_image returns the desktop variant when present" do
+    screenshot = screenshots(:alice_screenshot)
+    assert_equal screenshot_images(:alice_screenshot_desktop), screenshot.primary_image
+  end
+
+  test "primary_image falls back to first available viewport when desktop is missing" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.destroy_all
+    mobile = screenshot.screenshot_images.create!(viewport: :mobile)
+    assert_equal mobile, screenshot.primary_image
+  end
+
+  test "primary_image returns nil when no screenshot_images exist" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.destroy_all
+    assert_nil screenshot.primary_image
+  end
+
+  test "image_for returns the matching viewport variant" do
+    screenshot = screenshots(:alice_screenshot)
+    tablet = screenshot.screenshot_images.create!(viewport: :tablet)
+    assert_equal tablet, screenshot.image_for(:tablet)
+    assert_equal screenshot_images(:alice_screenshot_desktop), screenshot.image_for(:desktop)
+    assert_nil screenshot.image_for(:mobile)
+  end
+
+  test "available_viewports lists viewports that have ScreenshotImage rows" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.create!(viewport: :mobile)
+    assert_equal %w[desktop mobile], screenshot.available_viewports
+  end
+
+  test "default_viewport is desktop when desktop variant exists" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.create!(viewport: :tablet)
+    assert_equal "desktop", screenshot.default_viewport
+  end
+
+  test "default_viewport falls back to first available when desktop is missing" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.destroy_all
+    screenshot.screenshot_images.create!(viewport: :mobile)
+    screenshot.screenshot_images.create!(viewport: :tablet)
+    assert_equal "tablet", screenshot.default_viewport
+  end
+
+  test "default_viewport is nil when no variants exist" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.destroy_all
+    assert_nil screenshot.default_viewport
+  end
 end

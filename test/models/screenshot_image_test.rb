@@ -89,4 +89,37 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     assert_not si.valid?
     assert_includes si.errors[:image].join, "PNG or JPEG"
   end
+
+  test "status change syncs parent Screenshot to :ready when all siblings ready" do
+    screenshot = screenshots(:alice_screenshot)
+    si = screenshot_images(:alice_screenshot_desktop)
+    si.update!(status: :pending)
+    screenshot.update_columns(status: Screenshot.statuses[:pending])
+
+    si.update!(status: :ready)
+
+    assert_equal "ready", screenshot.reload.status
+  end
+
+  test "status change syncs parent Screenshot to :failed when any sibling failed" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.create!(viewport: :mobile, status: :pending)
+    screenshot.update_columns(status: Screenshot.statuses[:pending])
+
+    screenshot.screenshot_images.find_by(viewport: :mobile).update!(status: :failed)
+
+    assert_equal "failed", screenshot.reload.status
+  end
+
+  test "creating a pending sibling drops parent from :ready back to :pending" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.find_by(viewport: :desktop).update!(status: :pending)
+    screenshot.screenshot_images.find_by(viewport: :desktop).update!(status: :ready)
+    assert_equal "ready", screenshot.reload.status
+
+    screenshot.screenshot_images.create!(viewport: :mobile, status: :pending)
+
+    assert_equal "pending", screenshot.reload.status,
+      "New pending sibling fires after_save status callback and drops parent back to :pending"
+  end
 end

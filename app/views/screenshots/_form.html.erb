@@ -19,7 +19,7 @@
   <div class="form__group">
     <%= f.label :image, class: "form__label" %>
     <%= f.file_field :image, class: "form__input", accept: "image/png,image/jpeg" %>
-    <% if screenshot.image.attached? %>
+    <% if screenshot.primary_image&.image&.attached? %>
       <div class="form__hint">Current image will be replaced if you upload a new one.</div>
     <% end %>
   </div>

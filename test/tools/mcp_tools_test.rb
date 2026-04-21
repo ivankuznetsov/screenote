@@ -32,7 +32,7 @@ class McpToolsTest < ActiveSupport::TestCase
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal "MCP Upload", screenshot.title
     assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
-    assert screenshot.image.attached?, "Image should be attached"
+    assert screenshot.primary_image.image.attached?, "Image should be attached to the desktop ScreenshotImage"
   end
 
   # ListScreenshotsTool
@@ -102,6 +102,25 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal 1, result["annotations"].size, "Should return only 1 annotation"
     assert_equal 1, result["pagination"]["limit"]
     assert_equal 0, result["pagination"]["offset"]
+  end
+
+  test "list_annotations includes viewport on each annotation" do
+    result = JSON.parse(ListAnnotationsTool.new.call(project_id: @project.id))
+
+    assert result["annotations"].all? { |a| a.key?("viewport") },
+      "Every annotation should carry its viewport for multi-viewport agents"
+    assert result["annotations"].all? { |a| %w[desktop tablet mobile].include?(a["viewport"]) },
+      "Viewport should be one of desktop/tablet/mobile"
+  end
+
+  test "list_annotations filters by viewport" do
+    annotations(:point_annotation).update!(viewport: :mobile)
+
+    result = JSON.parse(ListAnnotationsTool.new.call(project_id: @project.id, viewport: "mobile"))
+
+    assert result["annotations"].any?, "Should return at least the mobile annotation"
+    assert result["annotations"].all? { |a| a["viewport"] == "mobile" },
+      "Filter should exclude non-mobile annotations"
   end
 
   # GetAnnotationTool

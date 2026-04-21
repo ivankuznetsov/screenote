@@ -29,7 +29,7 @@ class Project < ApplicationRecord
   end
 
   def thumbnail_screenshots(limit = 4)
-    pages.lazy.filter_map { |p| p.latest_screenshot if p.latest_screenshot&.image&.attached? }.first(limit)
+    pages.lazy.filter_map { |p| p.latest_screenshot if p.latest_screenshot&.primary_image&.image&.attached? }.first(limit)
   end
 
   private

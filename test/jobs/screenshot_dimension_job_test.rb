@@ -7,38 +7,57 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
     @page = pages(:alice_page)
   end
 
-  test "sets dimensions and status to ready for valid image" do
+  test "sets dimensions and status to ready for ScreenshotImage with valid image" do
     screenshot = @page.screenshots.create!(title: "Dimension Test")
-    screenshot.image.attach(
+    si = screenshot.screenshot_images.create!(viewport: :desktop)
+    si.image.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test.png",
-      content_type: "image/png"
+      filename: "test.png", content_type: "image/png"
     )
 
-    ScreenshotDimensionJob.perform_now(screenshot)
+    ScreenshotDimensionJob.perform_now(si)
 
-    screenshot.reload
-    assert_equal "ready", screenshot.status
-    assert screenshot.width.present?, "Width should be extracted"
-    assert screenshot.height.present?, "Height should be extracted"
+    si.reload
+    assert si.status_ready?
+    assert si.width.present?
+    assert si.height.present?
   end
 
-  test "skips already ready screenshot" do
-    screenshot = screenshots(:alice_screenshot)
-    original_width = screenshot.width
+  test "skips already ready ScreenshotImage" do
+    si = screenshot_images(:alice_screenshot_desktop)
+    original_width = si.width
 
-    ScreenshotDimensionJob.perform_now(screenshot)
+    ScreenshotDimensionJob.perform_now(si)
 
-    assert_equal original_width, screenshot.reload.width, "Should not modify already ready screenshot"
+    assert_equal original_width, si.reload.width
   end
 
-  test "returns early when no image attached" do
-    screenshot = screenshots(:alice_screenshot_pending)
+  test "returns early when ScreenshotImage has no image attached" do
+    screenshot = @page.screenshots.create!(title: "No image")
+    si = screenshot.screenshot_images.create!(viewport: :desktop)
 
-    assert_nothing_raised do
+    assert_nothing_raised { ScreenshotDimensionJob.perform_now(si) }
+    assert si.reload.status_pending?
+  end
+
+  test "forwards legacy Screenshot argument to its primary ScreenshotImage" do
+    si = screenshot_images(:alice_screenshot_desktop)
+    si.image.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test.png", content_type: "image/png"
+    )
+    si.update!(status: :pending, width: nil, height: nil)
+
+    ScreenshotDimensionJob.perform_now(si.screenshot)
+
+    assert si.reload.status_ready?
+  end
+
+  test "raises when Screenshot has no primary_image so Solid Queue retries" do
+    screenshot = @page.screenshots.create!(title: "Orphan")
+
+    assert_raises(RuntimeError, /no primary_image/) do
       ScreenshotDimensionJob.perform_now(screenshot)
     end
-
-    assert_equal "pending", screenshot.reload.status, "Should remain pending when no image attached"
   end
 end

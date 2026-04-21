@@ -15,7 +15,7 @@ class CreateScreenshotUploadTool < ApplicationTool
     error = require_project(project_id)
     return error if error
 
-    unless mime_type.in?(Screenshot::ALLOWED_CONTENT_TYPES)
+    unless mime_type.in?(ScreenshotImage::ALLOWED_CONTENT_TYPES)
       return { error: "invalid_mime_type", message: "Must be image/png or image/jpeg" }.to_json
     end
 
@@ -23,7 +23,11 @@ class CreateScreenshotUploadTool < ApplicationTool
       project = current_project
       page = Page.find_or_create_by_name!(project, page_name || title)
       screenshot = page.screenshots.create!(title: title)
-      token = screenshot.generate_token_for(:upload)
+      # Desktop variant ships with every capture — trial user's single-image
+      # plugin sees no shape change; the image lands on this variant instead
+      # of on Screenshot directly.
+      screenshot_image = screenshot.screenshot_images.create!(viewport: :desktop)
+      token = screenshot_image.generate_token_for(:upload)
 
       upload_url = Rails.application.routes.url_helpers.api_screenshot_upload_url(
         screenshot,

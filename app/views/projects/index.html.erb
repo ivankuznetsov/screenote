@@ -37,8 +37,10 @@
         <% if thumbnails.any? %>
           <div class="project-card__thumbnails">
             <% thumbnails.each do |screenshot| %>
-              <%= image_tag screenshot.image.variant(resize_to_limit: [240, 160]),
-                    class: "project-card__thumbnail", loading: "lazy", alt: screenshot.title %>
+              <% if screenshot.primary_image&.image&.attached? %>
+                <%= image_tag screenshot.primary_image.image.variant(resize_to_limit: [240, 160]),
+                      class: "project-card__thumbnail", loading: "lazy", alt: screenshot.title %>
+              <% end %>
             <% end %>
           </div>
         <% end %>

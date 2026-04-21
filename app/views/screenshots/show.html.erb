@@ -18,8 +18,8 @@
 
 <div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
   <div class="screenshot-canvas" data-annotorious-target="canvas">
-    <% if @screenshot.image.attached? %>
-      <%= image_tag @screenshot.image, class: "screenshot-canvas__image", alt: @screenshot.title,
+    <% if @screenshot_image&.image&.attached? %>
+      <%= image_tag @screenshot_image.image, class: "screenshot-canvas__image", alt: @screenshot.title,
           data: { annotorious_target: "image", testid: "screenshot-image" } %>
     <% end %>
   </div>
