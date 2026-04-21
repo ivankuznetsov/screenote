@@ -32,7 +32,7 @@ class McpToolsTest < ActiveSupport::TestCase
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal "MCP Upload", screenshot.title
     assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
-    assert screenshot.image.attached?, "Image should be attached"
+    assert screenshot.primary_image.image.attached?, "Image should be attached to the desktop ScreenshotImage"
   end
 
   # ListScreenshotsTool

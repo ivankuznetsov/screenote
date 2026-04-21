@@ -11,18 +11,27 @@ module Api
         return
       end
 
-      unless Screenshot.find_by_token_for(:upload, params[:token]) == screenshot
+      # The signed-upload token is issued on the :desktop ScreenshotImage (see
+      # CreateScreenshotUploadTool). The URL still references the parent
+      # Screenshot for URL-shape stability with existing MCP clients.
+      screenshot_image = screenshot.screenshot_images.find_by(viewport: :desktop)
+      unless screenshot_image
+        render json: { error: "Screenshot not found" }, status: :not_found
+        return
+      end
+
+      unless ScreenshotImage.find_by_token_for(:upload, params[:token]) == screenshot_image
         render json: { error: "Invalid or expired upload token" }, status: :unauthorized
         return
       end
 
-      if screenshot.image.attached?
+      if screenshot_image.image.attached?
         render json: { error: "Image already uploaded" }, status: :conflict
         return
       end
 
       mime_type = params[:mime_type].presence || "image/png"
-      unless mime_type.in?(Screenshot::ALLOWED_CONTENT_TYPES)
+      unless mime_type.in?(ScreenshotImage::ALLOWED_CONTENT_TYPES)
         render json: { error: "Invalid mime type. Must be image/png or image/jpeg" }, status: :unprocessable_entity
         return
       end
@@ -33,23 +42,28 @@ module Api
         return
       end
 
-      if body.bytesize > Screenshot::MAX_FILE_SIZE
-        render json: { error: "File too large (max #{Screenshot::MAX_FILE_SIZE / 1.megabyte}MB)" }, status: :unprocessable_entity
+      if body.bytesize > ScreenshotImage::MAX_FILE_SIZE
+        render json: { error: "File too large (max #{ScreenshotImage::MAX_FILE_SIZE / 1.megabyte}MB)" }, status: :unprocessable_entity
         return
       end
 
       extension = mime_type == "image/jpeg" ? "jpg" : "png"
-      screenshot.image.attach(
+      screenshot_image.image.attach(
         io: StringIO.new(body),
         filename: "screenshot.#{extension}",
         content_type: mime_type
       )
+      # Explicit save! so acceptable_image validators run and surface errors
+      # (todo 166 — security review finding on PR-1).
+      screenshot_image.save!
 
-      ScreenshotDimensionJob.perform_later(screenshot)
+      ScreenshotDimensionJob.perform_later(screenshot_image)
 
       annotate_url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
 
       render json: { success: true, screenshot_id: screenshot.id, annotate_url: annotate_url }, status: :ok
+    rescue ActiveRecord::RecordInvalid => e
+      render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
     rescue ActiveRecord::RecordNotUnique
       render json: { error: "Image already uploaded" }, status: :conflict
     end

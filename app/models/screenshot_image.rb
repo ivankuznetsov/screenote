@@ -22,7 +22,20 @@ class ScreenshotImage < ApplicationRecord
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :acceptable_image
 
+  after_create_commit :extract_dimensions_later
+
+  # Crop the region of this image that corresponds to the given annotation.
+  # Returns a Base64-encoded PNG string suitable for MCP responses. Cached.
+  def crop_for(annotation)
+    AnnotationCropService.crop(self, annotation)
+  end
+
   private
+
+  def extract_dimensions_later
+    ScreenshotDimensionJob.perform_later(self)
+  end
+
 
   def acceptable_image
     return unless image.attached?

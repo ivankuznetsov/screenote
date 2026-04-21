@@ -18,7 +18,7 @@ class CreateScreenshotTool < ApplicationTool
     error = require_project(project_id)
     return error if error
 
-    unless mime_type.in?(Screenshot::ALLOWED_CONTENT_TYPES)
+    unless mime_type.in?(ScreenshotImage::ALLOWED_CONTENT_TYPES)
       return { error: "invalid_mime_type", message: "Must be image/png or image/jpeg" }.to_json
     end
 
@@ -32,11 +32,14 @@ class CreateScreenshotTool < ApplicationTool
 
       page = Page.find_or_create_by_name!(project, page_name || title)
       screenshot = page.screenshots.create!(title: title)
-      screenshot.image.attach(
+      screenshot_image = screenshot.screenshot_images.create!(viewport: :desktop)
+      screenshot_image.image.attach(
         io: StringIO.new(image_data),
         filename: "screenshot.#{mime_type == 'image/jpeg' ? 'jpg' : 'png'}",
         content_type: mime_type
       )
+      # Explicit save! so acceptable_image validators run and surface errors.
+      screenshot_image.save!
 
       url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
 

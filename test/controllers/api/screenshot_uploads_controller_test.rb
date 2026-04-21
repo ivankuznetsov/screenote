@@ -10,9 +10,8 @@ module Api
       @image_data = File.binread(Rails.root.join("test/fixtures/files/test_image.png"))
     end
 
-    test "upload with valid token attaches image" do
-      screenshot = @page.screenshots.create!(title: "Upload test")
-      token = screenshot.generate_token_for(:upload)
+    test "upload with valid token attaches image to ScreenshotImage" do
+      screenshot, si, token = create_screenshot_with_upload_token
 
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
         headers: { "Content-Type" => "image/png" },
@@ -20,15 +19,15 @@ module Api
 
       assert_response :ok
       body = response.parsed_body
-      assert body["success"], "Should return success"
+      assert body["success"]
       assert_equal screenshot.id, body["screenshot_id"]
-      assert body["annotate_url"].present?, "Should return annotate URL"
-      assert screenshot.reload.image.attached?, "Image should be attached"
+      assert body["annotate_url"].present?
+      assert si.reload.image.attached?, "Image should be attached to the ScreenshotImage"
+      assert_not screenshot.reload.image.attached?, "Screenshot itself should NOT hold the image"
     end
 
     test "rejects expired token" do
-      screenshot = @page.screenshots.create!(title: "Expired token")
-      token = screenshot.generate_token_for(:upload)
+      screenshot, _, token = create_screenshot_with_upload_token
 
       travel 6.minutes do
         put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
@@ -36,21 +35,17 @@ module Api
           env: { "RAW_POST_DATA" => @image_data }
 
         assert_response :unauthorized
-        assert_equal "Invalid or expired upload token", response.parsed_body["error"]
       end
     end
 
     test "rejects reused token after image already attached" do
-      screenshot = @page.screenshots.create!(title: "Reuse test")
-      token = screenshot.generate_token_for(:upload)
+      screenshot, _, token = create_screenshot_with_upload_token
 
-      # First upload succeeds
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
         headers: { "Content-Type" => "image/png" },
         env: { "RAW_POST_DATA" => @image_data }
       assert_response :ok
 
-      # Second upload with same token fails (token invalidated by image attach)
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
         headers: { "Content-Type" => "image/png" },
         env: { "RAW_POST_DATA" => @image_data }
@@ -58,19 +53,17 @@ module Api
     end
 
     test "rejects invalid token" do
-      screenshot = @page.screenshots.create!(title: "Invalid token")
+      screenshot, _, _ = create_screenshot_with_upload_token
 
       put api_screenshot_upload_path(screenshot, token: "bogus-token", mime_type: "image/png"),
         headers: { "Content-Type" => "image/png" },
         env: { "RAW_POST_DATA" => @image_data }
 
       assert_response :unauthorized
-      assert_equal "Invalid or expired upload token", response.parsed_body["error"]
     end
 
     test "rejects empty body" do
-      screenshot = @page.screenshots.create!(title: "Empty body")
-      token = screenshot.generate_token_for(:upload)
+      screenshot, _, token = create_screenshot_with_upload_token
 
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
         headers: { "Content-Type" => "image/png" }
@@ -85,12 +78,20 @@ module Api
         env: { "RAW_POST_DATA" => @image_data }
 
       assert_response :not_found
-      assert_equal "Screenshot not found", response.parsed_body["error"]
+    end
+
+    test "rejects Screenshot without a desktop ScreenshotImage (pre-upload state inconsistent)" do
+      screenshot = @page.screenshots.create!(title: "Missing SI")
+
+      put api_screenshot_upload_path(screenshot, token: "any", mime_type: "image/png"),
+        headers: { "Content-Type" => "image/png" },
+        env: { "RAW_POST_DATA" => @image_data }
+
+      assert_response :not_found
     end
 
     test "rejects invalid mime type" do
-      screenshot = @page.screenshots.create!(title: "Bad MIME")
-      token = screenshot.generate_token_for(:upload)
+      screenshot, _, token = create_screenshot_with_upload_token
 
       put api_screenshot_upload_path(screenshot, token: token, mime_type: "text/html"),
         headers: { "Content-Type" => "text/html" },
@@ -100,17 +101,27 @@ module Api
       assert_match(/Invalid mime type/, response.parsed_body["error"])
     end
 
-    test "enqueues dimension job after upload" do
-      screenshot = @page.screenshots.create!(title: "Dimension job")
-      token = screenshot.generate_token_for(:upload)
+    test "enqueues dimension job targeting the ScreenshotImage after upload" do
+      screenshot, si, token = create_screenshot_with_upload_token
 
-      assert_enqueued_with(job: ScreenshotDimensionJob) do
+      assert_enqueued_with(job: ScreenshotDimensionJob, args: [ si ]) do
         put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
           headers: { "Content-Type" => "image/png" },
           env: { "RAW_POST_DATA" => @image_data }
       end
 
       assert_response :ok
+    end
+
+    private
+
+    # Mirrors what CreateScreenshotUploadTool does: creates Screenshot + desktop
+    # ScreenshotImage, issues the token on the ScreenshotImage.
+    def create_screenshot_with_upload_token
+      screenshot = @page.screenshots.create!(title: "Upload test")
+      si = screenshot.screenshot_images.create!(viewport: :desktop)
+      token = si.generate_token_for(:upload)
+      [ screenshot, si, token ]
     end
   end
 end

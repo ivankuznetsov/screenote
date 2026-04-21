@@ -50,7 +50,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     screenshot = Screenshot.last
     assert_redirected_to screenshot_path(screenshot)
     assert_equal "New Screenshot", screenshot.title
-    assert screenshot.image.attached?, "Image should be attached"
+    assert screenshot.primary_image.image.attached?, "Image should be attached to the desktop ScreenshotImage"
   end
 
   test "create without image still creates screenshot" do

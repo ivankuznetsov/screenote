@@ -5,7 +5,8 @@ class ScreenshotsController < ApplicationController
   before_action :set_screenshot, only: %i[show edit update destroy]
 
   def show
-    @annotations = @screenshot.annotations.includes(:user, annotation_comments: [:user, :api_key]).order(:created_at)
+    @screenshot_image = @screenshot.primary_image
+    @annotations = @screenshot.annotations.includes(:user, annotation_comments: [ :user, :api_key ]).order(:created_at)
     @annotations = @annotations.where(status: params[:status]) if params[:status].in?(%w[open resolved])
   end
 
@@ -14,13 +15,21 @@ class ScreenshotsController < ApplicationController
   end
 
   def create
-    @screenshot = @page.screenshots.build(screenshot_params)
+    image_param = params.dig(:screenshot, :image)
+    @screenshot = @page.screenshots.build(screenshot_params.except(:image))
 
-    if @screenshot.save
-      redirect_to screenshot_path(@screenshot), notice: "Screenshot uploaded."
-    else
-      render :new, status: :unprocessable_entity
+    ActiveRecord::Base.transaction do
+      @screenshot.save!
+      if image_param
+        si = @screenshot.screenshot_images.create!(viewport: :desktop)
+        si.image.attach(image_param)
+        si.save!
+      end
     end
+
+    redirect_to screenshot_path(@screenshot), notice: "Screenshot uploaded."
+  rescue ActiveRecord::RecordInvalid
+    render :new, status: :unprocessable_entity
   end
 
   def edit

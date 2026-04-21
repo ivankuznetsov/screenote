@@ -3,8 +3,8 @@
     <% screenshots.each do |screenshot| %>
       <%= link_to screenshot_path(screenshot), class: "screenshot-card" do %>
         <div class="screenshot-card__image">
-          <% if screenshot.image.attached? %>
-            <%= image_tag screenshot.image.variant(resize_to_limit: [800, 600]), alt: screenshot.title %>
+          <% if screenshot.primary_image&.image&.attached? %>
+            <%= image_tag screenshot.primary_image.image.variant(resize_to_limit: [800, 600]), alt: screenshot.title %>
           <% else %>
             <div class="screenshot-card__placeholder">No image</div>
           <% end %>

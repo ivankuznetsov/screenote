@@ -22,6 +22,28 @@ class Screenshot < ApplicationRecord
 
   after_create_commit :extract_dimensions_later
 
+  # Returns the ScreenshotImage to render when no specific viewport is requested.
+  # Prefers :desktop, falls back to the first available viewport, nil if none.
+  def primary_image
+    screenshot_images.find_by(viewport: :desktop) || screenshot_images.order(:viewport).first
+  end
+
+  # Returns the ScreenshotImage matching the given viewport (enum symbol or string), or nil.
+  def image_for(viewport)
+    screenshot_images.find_by(viewport: viewport)
+  end
+
+  # Array of viewport names (as strings, matching the enum) that have a ScreenshotImage.
+  def available_viewports
+    screenshot_images.order(:viewport).pluck(:viewport)
+  end
+
+  # The viewport to activate on page load — desktop if present, else the first available.
+  def default_viewport
+    vps = available_viewports
+    vps.include?("desktop") ? "desktop" : vps.first
+  end
+
   private
 
   def extract_dimensions_later

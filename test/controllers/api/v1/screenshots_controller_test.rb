@@ -28,7 +28,7 @@ module Api
 
         screenshot = Screenshot.find(body["screenshot_id"])
         assert_equal "Homepage", screenshot.title
-        assert screenshot.image.attached?, "Image should be attached"
+        assert screenshot.primary_image.image.attached?, "Image should be attached to the desktop ScreenshotImage"
         assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
       end
 
