@@ -93,6 +93,42 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".screenshot-workspace"
   end
 
+  test "annotation form carries the active viewport so drawn annotations stick to it" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_response :success
+    # Hidden field inside the annotation form should carry mobile so new
+    # annotations drawn on this view save as :mobile, not the model default.
+    assert_select "input[type=hidden][name='annotation[viewport]'][value='mobile']"
+  end
+
+  test "status filters preserve the active viewport" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_response :success
+    # Filter links should point at the same viewport, not fall back to default.
+    assert_select "a.annotation-filter[href='#{viewport_screenshot_path(@screenshot, :mobile, status: :open)}']"
+    assert_select "a.annotation-filter[href='#{viewport_screenshot_path(@screenshot, :mobile, status: :resolved)}']"
+  end
+
+  test "viewport switcher lives inside the turbo frame so active state re-renders on nav" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    # Frame must contain the switcher so a viewport click re-renders the
+    # active-button highlight along with the canvas + sidebar.
+    assert_select "turbo-frame#screenshot_canvas .viewport-switcher"
+  end
+
   test "show scopes annotations to the active viewport" do
     sign_in(@user)
     @screenshot.screenshot_images.create!(viewport: :mobile)

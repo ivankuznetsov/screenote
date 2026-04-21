@@ -23,7 +23,13 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
     supported = ScreenshotImage.viewports.keys
     return invalid("viewports must contain 1..#{supported.size} entries") unless (1..supported.size).cover?(viewports.length)
 
-    normalized = viewports.map { |v| { viewport: v[:viewport], mime_type: v[:mime_type].presence || "image/png" } }
+    # FastMcp symbolises top-level hash keys but NOT hashes inside arrays,
+    # so over MCP each entry arrives as { "viewport" => "...", "mime_type" => "..." }.
+    # Normalize to symbol-key before indexed access.
+    normalized = viewports.map do |v|
+      v = v.symbolize_keys if v.respond_to?(:symbolize_keys)
+      { viewport: v[:viewport], mime_type: v[:mime_type].presence || "image/png" }
+    end
     names = normalized.map { |v| v[:viewport] }
     return invalid("viewport must be one of #{supported.join(', ')}") if names.any? { |n| !n.in?(supported) }
     return invalid("viewports must be unique") if names.uniq.length != names.length

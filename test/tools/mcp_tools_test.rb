@@ -218,6 +218,23 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal "desktop", result["annotation"]["viewport"]
   end
 
+  test "create_multi_viewport_screenshot accepts string-keyed viewport hashes (MCP JSON transport)" do
+    # Regression: FastMcp only symbolises top-level keys, not hashes inside
+    # arrays. Over the real MCP transport, each entry arrives as
+    # { "viewport" => "...", "mime_type" => "..." } — v[:viewport] would be
+    # nil and the tool would reject valid input.
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "String-keyed",
+      viewports: [
+        { "viewport" => "desktop", "mime_type" => "image/png" },
+        { "viewport" => "mobile",  "mime_type" => "image/png" }
+      ]
+    ))
+
+    assert result["screenshot_id"].present?, "Should accept string-keyed hashes: #{result.inspect}"
+    assert_equal 2, result["uploads"].size
+  end
+
   test "create_multi_viewport_screenshot tokens resolve to the matching ScreenshotImage" do
     result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
       project_id: @project.id, title: "Token check",
