@@ -7,6 +7,7 @@ class Screenshot < ApplicationRecord
   belongs_to :page
   has_one :project, through: :page
   has_many :annotations, dependent: :destroy
+  has_many :screenshot_images, dependent: :destroy
   has_one_attached :image
 
   enum :status, { pending: 0, ready: 1, failed: 2 }, default: :pending

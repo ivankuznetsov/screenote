@@ -8,6 +8,7 @@ class Annotation < ApplicationRecord
   has_many :annotation_comments, -> { order(:created_at) }, dependent: :destroy
 
   enum :status, { open: 0, resolved: 1 }, default: :open
+  enum :viewport, { desktop: 0, tablet: 1, mobile: 2 }, default: :desktop, prefix: :viewport
 
   validates :comment, presence: true, length: { maximum: 5000 }
   validates :x_percent, :y_percent, presence: true,

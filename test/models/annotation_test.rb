@@ -279,4 +279,33 @@ class AnnotationTest < ActiveSupport::TestCase
     annotation = annotations(:resolved_annotation)
     assert_respond_to annotation, :annotation_comments
   end
+
+  test "viewport defaults to desktop" do
+    annotation = Annotation.new(
+      screenshot: screenshots(:alice_screenshot), user: users(:alice),
+      x_percent: 10.0, y_percent: 10.0, comment: "Test"
+    )
+    assert annotation.viewport_desktop?
+  end
+
+  test "existing annotations backfilled to desktop via migration default" do
+    assert annotations(:resolved_annotation).viewport_desktop?,
+      "Fixture-loaded annotations should default to desktop via the NOT NULL DEFAULT 0 column"
+  end
+
+  test "viewport enum values" do
+    assert_equal 0, Annotation.viewports[:desktop]
+    assert_equal 1, Annotation.viewports[:tablet]
+    assert_equal 2, Annotation.viewports[:mobile]
+  end
+
+  test "viewport can be set to mobile on create" do
+    annotation = Annotation.new(
+      screenshot: screenshots(:alice_screenshot), user: users(:alice),
+      x_percent: 10.0, y_percent: 10.0, comment: "Mobile-only bug",
+      viewport: :mobile
+    )
+    assert annotation.valid?
+    assert annotation.viewport_mobile?
+  end
 end
