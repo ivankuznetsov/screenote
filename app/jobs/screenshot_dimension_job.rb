@@ -8,7 +8,13 @@ class ScreenshotDimensionJob < ApplicationJob
   # after_create_commit callback to enqueue a fresh job.
   def perform(record)
     screenshot_image = resolve_target(record)
-    return unless screenshot_image
+    if screenshot_image.nil?
+      # Legacy Screenshot-arg whose primary_image isn't ready yet (possible
+      # briefly during the PR-2 deploy window before the backfill migration
+      # completes). Raise so Solid Queue retries rather than silently drop
+      # dimension extraction and leave the Screenshot pending forever.
+      raise "ScreenshotDimensionJob: no primary_image for #{record.class}##{record.id}"
+    end
 
     return if screenshot_image.status_ready?
 
@@ -40,6 +46,8 @@ class ScreenshotDimensionJob < ApplicationJob
       record
     when Screenshot
       record.primary_image
+    else
+      raise ArgumentError, "ScreenshotDimensionJob cannot handle #{record.class}"
     end
   end
 end

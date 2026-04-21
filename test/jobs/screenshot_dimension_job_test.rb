@@ -53,9 +53,11 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
     assert si.reload.status_ready?
   end
 
-  test "no-op when Screenshot has no primary_image" do
+  test "raises when Screenshot has no primary_image so Solid Queue retries" do
     screenshot = @page.screenshots.create!(title: "Orphan")
 
-    assert_nothing_raised { ScreenshotDimensionJob.perform_now(screenshot) }
+    assert_raises(RuntimeError, /no primary_image/) do
+      ScreenshotDimensionJob.perform_now(screenshot)
+    end
   end
 end

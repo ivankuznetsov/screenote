@@ -8,6 +8,9 @@ class ScreenshotImage < ApplicationRecord
   ALLOWED_CONTENT_TYPES = Screenshot::ALLOWED_CONTENT_TYPES
   MAX_FILE_SIZE = Screenshot::MAX_FILE_SIZE
 
+  BackfillResult = Struct.new(:already_backfilled, :backfilled, :no_image, :errors, keyword_init: true)
+  RollbackResult = Struct.new(:already_rolled_back, :rolled_back, :no_image, :errors, keyword_init: true)
+
   belongs_to :screenshot
   has_one_attached :image
 
@@ -30,12 +33,108 @@ class ScreenshotImage < ApplicationRecord
     AnnotationCropService.crop(self, annotation)
   end
 
+  # Move every attached Screenshot#image blob onto a new ScreenshotImage(:desktop).
+  # Idempotent. Screenshots without an attached image are left alone.
+  # Logger receives one line per record (prefix `+` migrated, `x` error). Pass
+  # a logger that prints via `say` when running from a migration, or $stdout
+  # for the Rake task. Completes even if individual records error — caller
+  # decides how to react to `result.errors`.
+  def self.backfill_from_screenshots!(apply: false, logger: $stdout)
+    stats = { already_backfilled: 0, backfilled: 0, no_image: 0, errors: 0 }
+
+    Screenshot.find_each do |screenshot|
+      existing = screenshot.screenshot_images.find_by(viewport: :desktop)
+
+      if existing&.image&.attached?
+        stats[:already_backfilled] += 1
+        next
+      end
+
+      unless screenshot.image.attached?
+        stats[:no_image] += 1
+        next
+      end
+
+      logger.puts "+ Screenshot##{screenshot.id} (#{screenshot.title.truncate(40)}): migrating blob #{screenshot.image.blob.id}"
+      next unless apply
+
+      begin
+        move_blob_from_screenshot!(screenshot, existing)
+        stats[:backfilled] += 1
+      rescue StandardError => e
+        logger.puts "x Screenshot##{screenshot.id}: #{e.class}: #{e.message}"
+        stats[:errors] += 1
+      end
+    end
+
+    BackfillResult.new(**stats)
+  end
+
+  # Inverse of backfill_from_screenshots! — moves ScreenshotImage(:desktop)
+  # blobs back onto Screenshot and destroys the ScreenshotImage. Use before
+  # rolling back the multi-viewport feature to avoid orphaning blobs (AS
+  # attachments are polymorphic, no FK cascade).
+  def self.rollback_to_screenshots!(apply: false, logger: $stdout)
+    stats = { already_rolled_back: 0, rolled_back: 0, no_image: 0, errors: 0 }
+
+    where(viewport: :desktop).find_each do |screenshot_image|
+      screenshot = screenshot_image.screenshot
+
+      if screenshot.image.attached?
+        stats[:already_rolled_back] += 1
+        next
+      end
+
+      unless screenshot_image.image.attached?
+        stats[:no_image] += 1
+        next
+      end
+
+      logger.puts "- ScreenshotImage##{screenshot_image.id} (Screenshot##{screenshot.id}): restoring blob"
+      next unless apply
+
+      begin
+        move_blob_to_screenshot!(screenshot, screenshot_image)
+        stats[:rolled_back] += 1
+      rescue StandardError => e
+        logger.puts "x Screenshot##{screenshot.id}: #{e.class}: #{e.message}"
+        stats[:errors] += 1
+      end
+    end
+
+    RollbackResult.new(**stats)
+  end
+
+  def self.move_blob_from_screenshot!(screenshot, existing)
+    Screenshot.transaction do
+      blob = screenshot.image.blob
+      screenshot.image.detach
+      target = existing || screenshot.screenshot_images.create!(
+        viewport: :desktop,
+        status: screenshot.status,
+        width: screenshot.width,
+        height: screenshot.height
+      )
+      target.image.attach(blob)
+    end
+  end
+  private_class_method :move_blob_from_screenshot!
+
+  def self.move_blob_to_screenshot!(screenshot, screenshot_image)
+    Screenshot.transaction do
+      blob = screenshot_image.image.blob
+      screenshot_image.image.detach
+      screenshot.image.attach(blob)
+      screenshot_image.destroy!
+    end
+  end
+  private_class_method :move_blob_to_screenshot!
+
   private
 
   def extract_dimensions_later
     ScreenshotDimensionJob.perform_later(self)
   end
-
 
   def acceptable_image
     return unless image.attached?
