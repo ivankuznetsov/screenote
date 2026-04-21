@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_10_182720) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_21_065900) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -198,6 +198,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_182720) do
     t.integer "user_id", null: false
     t.index ["created_at"], name: "index_sessions_on_created_at"
     t.index ["user_id"], name: "index_sessions_on_user_id"
+  end
+
+  create_table "stripe_webhook_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "stripe_event_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["stripe_event_id"], name: "index_stripe_webhook_events_on_stripe_event_id", unique: true
   end
 
   create_table "subscriptions", force: :cascade do |t|

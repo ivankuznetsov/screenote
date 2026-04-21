@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Dispatches Stripe webhook events to the Subscription model. The controller is
+# responsible for signature verification, idempotency, row locking, and
+# mail side-effects. State transitions live on Subscription.
 class StripeWebhooksController < ActionController::Base
   skip_forgery_protection
 
@@ -16,6 +19,14 @@ class StripeWebhooksController < ActionController::Base
     end
 
     Rails.logger.info("Stripe webhook received: type=#{event.type} id=#{event.id}")
+
+    begin
+      StripeWebhookEvent.create!(stripe_event_id: event.id)
+    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
+      Rails.logger.info("Stripe webhook already processed, skipping: id=#{event.id}")
+      head :ok
+      return
+    end
 
     case event.type
     when "checkout.session.completed"
@@ -40,62 +51,33 @@ class StripeWebhooksController < ActionController::Base
   private
 
   def handle_checkout_completed(session)
-    subscription = find_subscription(session.customer, "checkout.session.completed")
+    subscription = find_subscription(session[:customer], "checkout.session.completed")
     return head(:service_unavailable) unless subscription
-    return unless session.subscription
+    return unless session[:subscription]
 
-    subscription.update!(
-      stripe_subscription_id: session.subscription,
-      plan: :pro,
-      status: :active,
-      current_period_end: subscription.current_period_end || 30.days.from_now
-    )
+    stripe_sub = Stripe::Subscription.retrieve(session[:subscription])
+    subscription.with_lock { subscription.apply_stripe_checkout(stripe_sub) }
   end
 
   def handle_subscription_updated(stripe_sub)
-    subscription = find_subscription(stripe_sub.customer, "customer.subscription.updated")
+    subscription = find_subscription(stripe_sub[:customer], "customer.subscription.updated")
     return head(:service_unavailable) unless subscription
-    return head(:ok) if subscription.stripe_subscription_id.present? &&
-                        subscription.stripe_subscription_id != stripe_sub[:id]
 
-    was_active_pro = subscription.active_pro?
-
-    status = case stripe_sub.status
-    when "active" then :active
-    when "past_due" then :past_due
-    when "canceled", "unpaid" then :canceled
-    else :incomplete
-    end
-
-    attrs = { status: status }
-    period_end = stripe_period_end(stripe_sub)
-    attrs[:current_period_end] = Time.at(period_end).utc if period_end
-    attrs[:plan] = :pro if subscription.stripe_subscription_id.present?
-
-    subscription.update!(**attrs)
-
-    notify_new_pro_subscriber(subscription) if !was_active_pro && subscription.active_pro?
+    result = subscription.with_lock { subscription.apply_stripe_update(stripe_sub) }
+    notify_new_pro_subscriber(subscription) if result == :activated
   end
 
   def handle_subscription_deleted(stripe_sub)
-    subscription = find_subscription(stripe_sub.customer, "customer.subscription.deleted")
+    subscription = find_subscription(stripe_sub[:customer], "customer.subscription.deleted")
     return head(:service_unavailable) unless subscription
-    return head(:ok) unless subscription.stripe_subscription_id == stripe_sub[:id]
 
-    subscription.update!(plan: :free, status: :canceled, stripe_subscription_id: nil)
+    subscription.with_lock { subscription.apply_stripe_deletion(stripe_sub[:id]) }
   end
 
   def notify_new_pro_subscriber(subscription)
     AdminMailer.new_pro_subscriber(subscription.user).deliver_later
   rescue StandardError => e
     Honeybadger.notify(e, context: { user_id: subscription.user_id })
-  end
-
-  def stripe_period_end(stripe_sub)
-    # Stripe API 2026-01-28 moved current_period_end off the Subscription onto each
-    # subscription item. Use hash-style access so missing keys return nil rather than
-    # raising NoMethodError via StripeObject#method_missing.
-    stripe_sub[:items]&.[](:data)&.first&.[](:current_period_end)
   end
 
   def find_subscription(stripe_customer_id, event_type)

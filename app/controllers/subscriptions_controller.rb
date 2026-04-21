@@ -17,6 +17,11 @@ class SubscriptionsController < ApplicationController
       return
     end
 
+    if Current.user.subscription&.stripe_subscription_id.present?
+      redirect_to subscription_path, alert: "You already have a subscription. Use the billing portal to manage it."
+      return
+    end
+
     subscription = find_or_create_subscription
 
     checkout_session = Stripe::Checkout::Session.create(

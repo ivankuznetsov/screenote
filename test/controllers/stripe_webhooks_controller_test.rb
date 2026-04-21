@@ -8,10 +8,20 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   setup do
     ENV["STRIPE_WEBHOOK_SECRET"] = WEBHOOK_SECRET
     @subscription = subscriptions(:bob_free)
+    @stripe_retrieve_stub = Stripe::Subscription.method(:retrieve)
+    Stripe::Subscription.singleton_class.define_method(:retrieve) do |id|
+      Stripe::Subscription.construct_from(
+        id: id,
+        customer: "cus_stub",
+        status: "active",
+        items: { object: "list", data: [ { current_period_end: 30.days.from_now.to_i } ] }
+      )
+    end
   end
 
   teardown do
     ENV.delete("STRIPE_WEBHOOK_SECRET")
+    Stripe::Subscription.singleton_class.define_method(:retrieve, @stripe_retrieve_stub) if @stripe_retrieve_stub
   end
 
   test "rejects invalid signature" do
@@ -24,6 +34,29 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   test "returns ok for unhandled event types" do
     post_webhook(build_event("invoice.payment_succeeded", {}))
     assert_response :ok
+  end
+
+  test "idempotency: replayed event with same id is short-circuited and does not re-trigger mail" do
+    @subscription.update_columns(
+      plan: :pro,
+      status: :incomplete,
+      stripe_subscription_id: "sub_bob_test",
+      current_period_end: 30.days.from_now
+    )
+    event = build_subscription_updated_event(status: "active", current_period_end: 60.days.from_now.to_i)
+
+    assert_enqueued_emails 1 do
+      post_webhook(event)
+    end
+    assert_response :ok
+    assert_equal 1, StripeWebhookEvent.where(stripe_event_id: event[:id]).count
+
+    assert_no_enqueued_emails do
+      post_webhook(event)
+    end
+    assert_response :ok
+    assert_equal 1, StripeWebhookEvent.where(stripe_event_id: event[:id]).count,
+      "Replayed event should not create a duplicate StripeWebhookEvent row"
   end
 
   test "checkout.session.completed upgrades subscription to pro" do
@@ -115,12 +148,24 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   test "customer.subscription.updated maps unknown status to incomplete" do
     upgrade_bob_to_pro!
 
-    event = build_subscription_updated_event(status: "trialing", current_period_end: 30.days.from_now.to_i)
+    event = build_subscription_updated_event(status: "paused", current_period_end: 30.days.from_now.to_i)
 
     post_webhook(event)
     assert_response :ok
     @subscription.reload
     assert @subscription.incomplete?, "Unknown status should map to incomplete"
+  end
+
+  test "customer.subscription.updated maps trialing to active so trial users keep access" do
+    upgrade_bob_to_pro!
+
+    event = build_subscription_updated_event(status: "trialing", current_period_end: 14.days.from_now.to_i)
+
+    post_webhook(event)
+    assert_response :ok
+    @subscription.reload
+    assert @subscription.active?, "Trialing should map to active"
+    assert @subscription.pro?, "Plan should remain pro during trial"
   end
 
   test "customer.subscription.updated succeeds when current_period_end is absent from subscription object (Stripe 2026-01 API)" do

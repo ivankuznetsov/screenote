@@ -75,6 +75,24 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "You're already on the Pro plan.", flash[:notice]
   end
 
+  test "checkout redirects users with a tracked stripe_subscription_id to the portal (past_due loophole)" do
+    # Regression: prior to this guard, a user whose subscription went past_due
+    # (status != active, so pro? returned false) could create a second Stripe
+    # sub by clicking Upgrade again — leading to double billing.
+    sign_in(users(:bob))
+    users(:bob).subscription.update!(
+      plan: :pro,
+      status: :past_due,
+      stripe_customer_id: "cus_past_due",
+      stripe_subscription_id: "sub_past_due_bob",
+      current_period_end: 1.day.ago
+    )
+
+    post checkout_subscription_path
+    assert_redirected_to subscription_path
+    assert_match(/billing portal/, flash[:alert])
+  end
+
   test "checkout for free user creates Stripe session and redirects" do
     sign_in(users(:bob))
 
