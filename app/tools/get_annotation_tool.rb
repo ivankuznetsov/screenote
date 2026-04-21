@@ -17,18 +17,15 @@ class GetAnnotationTool < ApplicationTool
       annotation = project_annotations(current_project).find(annotation_id)
 
       screenshot = annotation.screenshot
-      screenshot_image = screenshot.image_for(annotation.viewport)
-      cropped_base64 = nil
-      if screenshot_image&.status_ready? && screenshot_image.image.attached?
-        begin
-          cropped_base64 = screenshot_image.crop_for(annotation)
-        rescue => e
-          Honeybadger.notify(e, context: {
-            annotation_id: annotation.id,
-            screenshot_id: screenshot.id,
-            viewport: annotation.viewport
-          })
-        end
+      cropped_base64 = begin
+        annotation.crop
+      rescue => e
+        Honeybadger.notify(e, context: {
+          annotation_id: annotation.id,
+          screenshot_id: screenshot.id,
+          viewport: annotation.viewport
+        })
+        nil
       end
 
       comments = annotation.annotation_comments.includes(:user, :api_key).order(:created_at).map do |ac|

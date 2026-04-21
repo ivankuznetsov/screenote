@@ -28,21 +28,16 @@ class CreateScreenshotTool < ApplicationTool
 
     with_error_handling do
       project = current_project
-      image_data = Base64.decode64(image_base64)
-
       page = Page.find_or_create_by_name!(project, page_name || title)
-      screenshot = page.screenshots.create!(title: title)
-      screenshot_image = screenshot.screenshot_images.create!(viewport: :desktop)
-      screenshot_image.image.attach(
-        io: StringIO.new(image_data),
+
+      screenshot = Screenshot.create_with_image!(
+        page: page, title: title,
+        io: StringIO.new(Base64.decode64(image_base64)),
         filename: "screenshot.#{mime_type == 'image/jpeg' ? 'jpg' : 'png'}",
         content_type: mime_type
       )
-      # Explicit save! so acceptable_image validators run and surface errors.
-      screenshot_image.save!
 
       url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
-
       { screenshot_id: screenshot.id, page_id: page.id, annotate_url: url }.to_json
     end
   end

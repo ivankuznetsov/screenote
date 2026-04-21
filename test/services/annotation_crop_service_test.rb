@@ -39,9 +39,19 @@ class AnnotationCropServiceTest < ActiveSupport::TestCase
     assert_equal service.crop, AnnotationCropService.crop(@screenshot_image, annotation)
   end
 
-  test "screenshot_image.crop_for(annotation) delegates to the service" do
+  test "annotation.crop delegates to the service through the matching ScreenshotImage" do
     annotation = annotations(:point_annotation)
-    assert_equal AnnotationCropService.crop(@screenshot_image, annotation), @screenshot_image.crop_for(annotation)
+    # Ensure the annotation's viewport matches our test ScreenshotImage
+    annotation.update!(viewport: :desktop)
+    @screenshot_image.update!(status: :ready)
+    assert_equal AnnotationCropService.crop(@screenshot_image, annotation), annotation.crop
+  end
+
+  test "annotation.crop returns nil when the ScreenshotImage is not ready" do
+    annotation = annotations(:point_annotation)
+    annotation.update!(viewport: :desktop)
+    @screenshot_image.update!(status: :pending)
+    assert_nil annotation.crop
   end
 
   test "CACHE_VERSION is set so deploys can invalidate old crops" do

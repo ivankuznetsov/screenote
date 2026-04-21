@@ -5,8 +5,12 @@
 # captures still work by having a single ScreenshotImage with viewport: :desktop.
 # See plans/multi-viewport-screenshots.md.
 class ScreenshotImage < ApplicationRecord
-  ALLOWED_CONTENT_TYPES = Screenshot::ALLOWED_CONTENT_TYPES
-  MAX_FILE_SIZE = Screenshot::MAX_FILE_SIZE
+  # ScreenshotImage owns the blob post-PR-2. Screenshot references these
+  # constants via the reverse direction during the transition (see PR-1's
+  # original direction). Can be simplified further once Screenshot's legacy
+  # has_one_attached :image is dropped (todo 172).
+  ALLOWED_CONTENT_TYPES = %w[image/png image/jpeg].freeze
+  MAX_FILE_SIZE = 20.megabytes
 
   BackfillResult = Struct.new(:already_backfilled, :backfilled, :no_image, :errors, keyword_init: true)
   RollbackResult = Struct.new(:already_rolled_back, :rolled_back, :no_image, :errors, keyword_init: true)
@@ -26,12 +30,6 @@ class ScreenshotImage < ApplicationRecord
   validate :acceptable_image
 
   after_create_commit :extract_dimensions_later
-
-  # Crop the region of this image that corresponds to the given annotation.
-  # Returns a Base64-encoded PNG string suitable for MCP responses. Cached.
-  def crop_for(annotation)
-    AnnotationCropService.crop(self, annotation)
-  end
 
   # Move every attached Screenshot#image blob onto a new ScreenshotImage(:desktop).
   # Idempotent. Screenshots without an attached image are left alone.

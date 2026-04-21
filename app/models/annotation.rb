@@ -21,6 +21,16 @@ class Annotation < ApplicationRecord
     width_percent.nil?
   end
 
+  # Returns a Base64-encoded PNG crop of this annotation's region from the
+  # matching ScreenshotImage (same viewport), or nil if the image is missing
+  # or not yet analyzed. Cached via AnnotationCropService.
+  def crop
+    target = screenshot.image_for(viewport)
+    return unless target&.status_ready? && target.image.attached?
+
+    AnnotationCropService.crop(target, self)
+  end
+
   def as_api_json
     {
       id: id,

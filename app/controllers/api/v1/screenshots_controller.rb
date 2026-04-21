@@ -11,15 +11,12 @@ module Api
 
         title = params[:title].presence || "Untitled"
         page = Page.find_or_create_by_name!(current_project, title)
-        screenshot = page.screenshots.build(title: title)
-
-        ActiveRecord::Base.transaction do
-          screenshot.save!
-          screenshot_image = screenshot.screenshot_images.create!(viewport: :desktop)
-          screenshot_image.image.attach(params[:image])
-          # Explicit save! so acceptable_image validators run and surface errors.
-          screenshot_image.save!
-        end
+        screenshot = Screenshot.create_with_image!(
+          page: page, title: title,
+          io: params[:image].tempfile,
+          filename: params[:image].original_filename,
+          content_type: params[:image].content_type
+        )
 
         render json: {
           screenshot_id: screenshot.id,

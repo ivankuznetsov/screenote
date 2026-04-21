@@ -16,19 +16,22 @@ class ScreenshotsController < ApplicationController
 
   def create
     image_param = params.dig(:screenshot, :image)
-    @screenshot = @page.screenshots.build(screenshot_params.except(:image))
+    title = screenshot_params[:title]
 
-    ActiveRecord::Base.transaction do
-      @screenshot.save!
-      if image_param
-        si = @screenshot.screenshot_images.create!(viewport: :desktop)
-        si.image.attach(image_param)
-        si.save!
-      end
+    @screenshot = if image_param
+      Screenshot.create_with_image!(
+        page: @page, title: title,
+        io: image_param.tempfile,
+        filename: image_param.original_filename,
+        content_type: image_param.content_type
+      )
+    else
+      @page.screenshots.create!(title: title)
     end
 
     redirect_to screenshot_path(@screenshot), notice: "Screenshot uploaded."
-  rescue ActiveRecord::RecordInvalid
+  rescue ActiveRecord::RecordInvalid => e
+    @screenshot = e.record.is_a?(Screenshot) ? e.record : @page.screenshots.build(screenshot_params.except(:image))
     render :new, status: :unprocessable_entity
   end
 
