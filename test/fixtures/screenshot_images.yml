@@ -1,17 +1,14 @@
-# Backfill-representative fixtures: each existing Screenshot gets one
-# ScreenshotImage(viewport: :desktop) — matching the state after the
-# Rake task runs against existing production data.
+# Backfill-representative fixtures: each existing Screenshot with an image
+# gets one ScreenshotImage(viewport: :desktop), matching the state after the
+# Rake task has run against production data. `alice_screenshot_pending` has
+# no image and therefore no ScreenshotImage — readers in PR-2 treat
+# `screenshot_images.empty?` as "no image yet".
 alice_screenshot_desktop:
   screenshot: alice_screenshot
   viewport: 0
   status: 1
   width: 1920
   height: 1080
-
-alice_screenshot_pending_desktop:
-  screenshot: alice_screenshot_pending
-  viewport: 0
-  status: 0
 
 bob_screenshot_desktop:
   screenshot: bob_screenshot

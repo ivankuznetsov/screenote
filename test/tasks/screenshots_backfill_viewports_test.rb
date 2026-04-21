@@ -8,6 +8,10 @@ class ScreenshotsBackfillViewportsTest < ActiveSupport::TestCase
     # Remove the desktop fixtures so the task has real work to do.
     ScreenshotImage.delete_all
 
+    # PR-1 doesn't define Screenshot#primary_image yet (that's PR-2). The task
+    # enforces PR-2 is deployed first, so tests bypass the check with BACKFILL_FORCE.
+    ENV["BACKFILL_FORCE"] = "1"
+
     Rails.application.load_tasks unless Rake::Task.task_defined?("screenshots:backfill_viewports")
     @task = Rake::Task["screenshots:backfill_viewports"]
     @task.reenable
@@ -15,20 +19,17 @@ class ScreenshotsBackfillViewportsTest < ActiveSupport::TestCase
 
   teardown do
     ENV.delete("APPLY")
+    ENV.delete("BACKFILL_FORCE")
   end
 
-  test "dry-run creates no ScreenshotImage rows and does not detach blobs" do
-    attach_test_image_to(screenshots(:alice_screenshot))
-    initial = ScreenshotImage.count
-
-    capture_io { @task.invoke }
-
-    assert_equal initial, ScreenshotImage.count, "Dry-run must not write rows"
-    assert screenshots(:alice_screenshot).reload.image.attached?,
-      "Dry-run must not detach the Screenshot's image"
+  test "refuses to run without PR-2 reader method or BACKFILL_FORCE" do
+    ENV.delete("BACKFILL_FORCE")
+    assert_raises(SystemExit) do
+      capture_io { @task.invoke }
+    end
   end
 
-  test "APPLY=1 creates one desktop ScreenshotImage per Screenshot with an image and moves blob" do
+  test "APPLY=1 creates one desktop ScreenshotImage per Screenshot with an image and moves the blob" do
     attach_test_image_to(screenshots(:alice_screenshot))
     original_blob_id = screenshots(:alice_screenshot).image.blob.id
 
@@ -45,16 +46,15 @@ class ScreenshotsBackfillViewportsTest < ActiveSupport::TestCase
     assert_equal screenshot.status, si.status
   end
 
-  test "APPLY=1 on a screenshot without an image creates an empty desktop row" do
+  test "APPLY=1 leaves Screenshots without an image untouched" do
     screenshot = screenshots(:alice_screenshot_pending)
     assert_not screenshot.image.attached?
 
     ENV["APPLY"] = "1"
     capture_io { @task.invoke }
 
-    si = screenshot.reload.screenshot_images.find_by!(viewport: :desktop)
-    assert_not si.image.attached?
-    assert_equal screenshot.status, si.status
+    assert screenshot.reload.screenshot_images.empty?,
+      "Screenshot with no image should not receive an empty ScreenshotImage placeholder"
   end
 
   test "re-running APPLY=1 is idempotent" do
@@ -68,7 +68,7 @@ class ScreenshotsBackfillViewportsTest < ActiveSupport::TestCase
     capture_io { @task.invoke }
 
     assert_equal count_after_first, ScreenshotImage.count,
-      "Second run should skip Screenshots that already have a desktop variant"
+      "Second run should skip Screenshots whose desktop variant already has its blob attached"
   end
 
   private

@@ -269,7 +269,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_110955) do
   add_foreign_key "project_memberships", "projects"
   add_foreign_key "project_memberships", "users"
   add_foreign_key "projects", "users"
-  add_foreign_key "screenshot_images", "screenshots", on_delete: :cascade
+  add_foreign_key "screenshot_images", "screenshots"
   add_foreign_key "screenshots", "pages"
   add_foreign_key "sessions", "users"
   add_foreign_key "subscriptions", "users"

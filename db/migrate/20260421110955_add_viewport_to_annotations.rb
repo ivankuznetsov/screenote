@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class AddViewportToAnnotations < ActiveRecord::Migration[8.1]
   # Adds the viewport column for per-viewport annotation scoping (multi-viewport
   # capture feature, see plans/multi-viewport-screenshots.md).
