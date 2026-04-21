@@ -12,11 +12,16 @@ class CreateAnnotationTool < ApplicationTool
     required(:comment).filled(:string).description("The annotation comment text")
     optional(:width_percent).filled(:float).description("Region width as percentage (0.0-100.0)")
     optional(:height_percent).filled(:float).description("Region height as percentage (0.0-100.0)")
+    optional(:viewport).filled(:string).description("Viewport the annotation applies to: desktop, tablet, or mobile (default: desktop)")
   end
 
-  def call(project_id:, screenshot_id:, x_percent:, y_percent:, comment:, width_percent: nil, height_percent: nil)
+  def call(project_id:, screenshot_id:, x_percent:, y_percent:, comment:, width_percent: nil, height_percent: nil, viewport: "desktop")
     error = require_project(project_id)
     return error if error
+
+    unless %w[desktop tablet mobile].include?(viewport)
+      return { error: "invalid_viewport", message: "viewport must be desktop, tablet, or mobile" }.to_json
+    end
 
     with_error_handling do
       screenshot = current_project.screenshots.find(screenshot_id)
@@ -27,7 +32,8 @@ class CreateAnnotationTool < ApplicationTool
         y_percent: y_percent,
         width_percent: width_percent,
         height_percent: height_percent,
-        comment: comment
+        comment: comment,
+        viewport: viewport
       )
 
       { annotation: serialize_annotation(annotation) }.to_json

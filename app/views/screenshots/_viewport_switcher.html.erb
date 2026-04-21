@@ -1,0 +1,31 @@
+<%#
+  Segmented-control toolbar for switching between viewport variants of a
+  Screenshot. Links target the `screenshot_canvas` Turbo Frame and use
+  data-turbo-action="advance" so each click pushes a real URL into browser
+  history — permalinks to specific viewports are shareable / bookmarkable.
+
+  Renders only icons for viewports the Screenshot actually has; a legacy
+  single-viewport capture shows just one icon.
+%>
+<% available = screenshot.available_viewports %>
+<% if available.size > 1 %>
+  <nav class="viewport-switcher" role="tablist" aria-label="Viewport">
+    <% %w[desktop tablet mobile].each do |vp| %>
+      <% next unless available.include?(vp) %>
+      <% is_active = vp == active_viewport %>
+      <%= link_to viewport_screenshot_path(screenshot, vp),
+          class: "viewport-switcher__btn #{'viewport-switcher__btn--active' if is_active}",
+          role: "tab",
+          aria: { selected: is_active, label: vp.capitalize },
+          data: {
+            turbo_frame: "screenshot_canvas",
+            turbo_action: "advance",
+            viewport: vp,
+            testid: "viewport-switcher-#{vp}"
+          } do %>
+        <span class="viewport-switcher__icon viewport-switcher__icon--<%= vp %>" aria-hidden="true"></span>
+        <span class="viewport-switcher__label"><%= vp.capitalize %></span>
+      <% end %>
+    <% end %>
+  </nav>
+<% end %>

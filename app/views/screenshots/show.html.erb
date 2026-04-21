@@ -16,41 +16,47 @@
   </div>
 </div>
 
-<div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
-  <div class="screenshot-canvas" data-annotorious-target="canvas">
-    <% if @screenshot_image&.image&.attached? %>
-      <%= image_tag @screenshot_image.image, class: "screenshot-canvas__image", alt: @screenshot.title,
-          data: { annotorious_target: "image", testid: "screenshot-image" } %>
-    <% end %>
-  </div>
+<%= render "viewport_switcher", screenshot: @screenshot, active_viewport: @active_viewport %>
 
-  <aside class="annotation-sidebar" data-testid="annotation-sidebar">
-    <div class="annotation-sidebar__header">
-      <h2 class="annotation-sidebar__title" data-testid="sidebar-title">Annotations</h2>
-      <div class="annotation-sidebar__filters">
-        <%= link_to "All", screenshot_path(@screenshot),
-            class: "annotation-filter #{'annotation-filter--active' unless params[:status]}" %>
-        <%= link_to "Open", screenshot_path(@screenshot, status: :open),
-            class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'open'}" %>
-        <%= link_to "Resolved", screenshot_path(@screenshot, status: :resolved),
-            class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'resolved'}" %>
-      </div>
+<%# Frame spans both canvas + sidebar so viewport swaps update the
+    annotation list too (annotations are scoped per-viewport). %>
+<%= turbo_frame_tag "screenshot_canvas" do %>
+  <div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
+    <div class="screenshot-canvas" data-annotorious-target="canvas">
+      <% if @screenshot_image&.image&.attached? %>
+        <%= image_tag @screenshot_image.image, class: "screenshot-canvas__image", alt: @screenshot.title,
+            data: { annotorious_target: "image", testid: "screenshot-image" } %>
+      <% end %>
     </div>
 
-    <div class="annotation-sidebar__list" data-annotorious-target="list">
-      <template data-annotorious-target="formTemplate">
-        <%= render "annotations/form", screenshot: @screenshot %>
-      </template>
-
-      <% @annotations.each.with_index(1) do |annotation, index| %>
-        <%= render "annotations/annotation", annotation: annotation, index: index %>
-      <% end %>
-
-      <% if @annotations.empty? %>
-        <div class="annotation-sidebar__empty" data-testid="sidebar-empty">
-          No annotations yet. Click on the image to add one.
+    <aside class="annotation-sidebar" data-testid="annotation-sidebar">
+      <div class="annotation-sidebar__header">
+        <h2 class="annotation-sidebar__title" data-testid="sidebar-title">Annotations</h2>
+        <div class="annotation-sidebar__filters">
+          <%= link_to "All", screenshot_path(@screenshot),
+              class: "annotation-filter #{'annotation-filter--active' unless params[:status]}" %>
+          <%= link_to "Open", screenshot_path(@screenshot, status: :open),
+              class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'open'}" %>
+          <%= link_to "Resolved", screenshot_path(@screenshot, status: :resolved),
+              class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'resolved'}" %>
         </div>
-      <% end %>
-    </div>
-  </aside>
-</div>
+      </div>
+
+      <div class="annotation-sidebar__list" data-annotorious-target="list">
+        <template data-annotorious-target="formTemplate">
+          <%= render "annotations/form", screenshot: @screenshot %>
+        </template>
+
+        <% @annotations.each.with_index(1) do |annotation, index| %>
+          <%= render "annotations/annotation", annotation: annotation, index: index %>
+        <% end %>
+
+        <% if @annotations.empty? %>
+          <div class="annotation-sidebar__empty" data-testid="sidebar-empty">
+            No annotations yet. Click on the image to add one.
+          </div>
+        <% end %>
+      </div>
+    </aside>
+  </div>
+<% end %>

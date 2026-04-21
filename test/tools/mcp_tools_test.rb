@@ -123,6 +123,77 @@ class McpToolsTest < ActiveSupport::TestCase
       "Filter should exclude non-mobile annotations"
   end
 
+  # CreateMultiViewportScreenshotTool
+  test "create_multi_viewport_screenshot returns one upload URL per requested viewport" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Multi capture",
+      viewports: [
+        { viewport: "desktop", mime_type: "image/png" },
+        { viewport: "tablet",  mime_type: "image/png" },
+        { viewport: "mobile",  mime_type: "image/png" }
+      ]
+    ))
+
+    assert result["screenshot_id"].present?
+    assert result["annotate_url"].present?
+    assert_equal 3, result["uploads"].size
+    assert_equal %w[desktop tablet mobile], result["uploads"].map { |u| u["viewport"] }
+    assert result["uploads"].all? { |u| u["upload_url"].present? && u["token"].present? }
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_equal 3, screenshot.screenshot_images.count
+  end
+
+  test "create_multi_viewport_screenshot with only one entry creates a single variant" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Just mobile",
+      viewports: [ { viewport: "mobile", mime_type: "image/png" } ]
+    ))
+
+    assert_equal 1, result["uploads"].size
+    assert_equal "mobile", result["uploads"].first["viewport"]
+  end
+
+  test "create_multi_viewport_screenshot rejects duplicate viewports" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Dup",
+      viewports: [
+        { viewport: "desktop", mime_type: "image/png" },
+        { viewport: "desktop", mime_type: "image/png" }
+      ]
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/unique/, result["message"])
+  end
+
+  test "create_multi_viewport_screenshot rejects unknown viewport names" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Bad",
+      viewports: [ { viewport: "wide", mime_type: "image/png" } ]
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/desktop, tablet, mobile/, result["message"])
+  end
+
+  test "create_multi_viewport_screenshot tokens resolve to the matching ScreenshotImage" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Token check",
+      viewports: [
+        { viewport: "desktop", mime_type: "image/png" },
+        { viewport: "mobile",  mime_type: "image/png" }
+      ]
+    ))
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    result["uploads"].each do |upload|
+      resolved = ScreenshotImage.find_by_token_for(:upload, upload["token"])
+      assert_equal screenshot.id, resolved.screenshot_id
+      assert_equal upload["viewport"], resolved.viewport
+    end
+  end
+
   # GetAnnotationTool
   test "get_annotation returns annotation details" do
     result = JSON.parse(GetAnnotationTool.new.call(project_id: @project.id, annotation_id: @annotation.id))

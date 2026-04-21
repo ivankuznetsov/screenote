@@ -30,6 +30,63 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  # Viewport switcher
+  test "show renders viewport switcher when multiple viewports exist" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    @screenshot.screenshot_images.create!(viewport: :tablet)
+
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    assert_select ".viewport-switcher"
+    assert_select "[data-testid='viewport-switcher-desktop']"
+    assert_select "[data-testid='viewport-switcher-tablet']"
+    assert_select "[data-testid='viewport-switcher-mobile']"
+  end
+
+  test "show hides viewport switcher for single-viewport legacy screenshots" do
+    sign_in(@user)
+    assert_equal 1, @screenshot.screenshot_images.count
+
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    assert_select ".viewport-switcher", 0, "No switcher when only one viewport exists"
+  end
+
+  test "show at /viewports/:viewport renders the matching variant" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    annotations(:point_annotation).update!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_response :success
+    assert_select "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
+  end
+
+  test "show at /viewports/:viewport redirects to default when viewport is missing" do
+    sign_in(@user)
+    assert_equal %w[desktop], @screenshot.available_viewports
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_redirected_to screenshot_path(@screenshot)
+    assert_match(/doesn't have a mobile/, flash[:notice])
+  end
+
+  test "show scopes annotations to the active viewport" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    annotations(:point_annotation).update!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :desktop)
+
+    # Mobile annotation should NOT appear on desktop
+    assert_select "[data-annotation-id='#{annotations(:point_annotation).id}']", 0
+  end
+
   # New
   test "new renders form" do
     sign_in(@user)

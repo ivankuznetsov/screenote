@@ -80,14 +80,34 @@ module Api
       assert_response :not_found
     end
 
-    test "rejects Screenshot without a desktop ScreenshotImage (pre-upload state inconsistent)" do
-      screenshot = @page.screenshots.create!(title: "Missing SI")
+    test "rejects token issued for a ScreenshotImage on a different Screenshot (IDOR guard)" do
+      mine = @page.screenshots.create!(title: "Mine")
+      mine_si = mine.screenshot_images.create!(viewport: :desktop)
+      mine_token = mine_si.generate_token_for(:upload)
 
-      put api_screenshot_upload_path(screenshot, token: "any", mime_type: "image/png"),
+      other = @page.screenshots.create!(title: "Other")
+
+      # Attempting to use mine's token against other's URL must be rejected.
+      put api_screenshot_upload_path(other, token: mine_token, mime_type: "image/png"),
         headers: { "Content-Type" => "image/png" },
         env: { "RAW_POST_DATA" => @image_data }
 
-      assert_response :not_found
+      assert_response :unauthorized
+    end
+
+    test "routes upload to the correct viewport's ScreenshotImage (multi-viewport support)" do
+      screenshot = @page.screenshots.create!(title: "Multi")
+      desktop = screenshot.screenshot_images.create!(viewport: :desktop)
+      mobile  = screenshot.screenshot_images.create!(viewport: :mobile)
+      mobile_token = mobile.generate_token_for(:upload)
+
+      put api_screenshot_upload_path(screenshot, token: mobile_token, mime_type: "image/png"),
+        headers: { "Content-Type" => "image/png" },
+        env: { "RAW_POST_DATA" => @image_data }
+
+      assert_response :ok
+      assert mobile.reload.image.attached?, "Mobile variant should have the blob"
+      assert_not desktop.reload.image.attached?, "Desktop variant should be untouched"
     end
 
     test "rejects invalid mime type" do
