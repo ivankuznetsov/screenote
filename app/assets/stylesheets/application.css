@@ -591,11 +591,18 @@ a:hover {
 .viewport-switcher {
   display: inline-flex;
   gap: 0.25rem;
-  background: var(--color-surface);
+  background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 0.25rem;
   margin-bottom: 1rem;
+}
+
+.viewport-switcher__btn,
+.viewport-switcher__btn:hover,
+.viewport-switcher__btn:visited,
+.viewport-switcher__btn:focus {
+  text-decoration: none;
 }
 
 .viewport-switcher__btn {
@@ -604,8 +611,7 @@ a:hover {
   gap: 0.4rem;
   padding: 0.35rem 0.75rem;
   border-radius: calc(var(--radius) - 2px);
-  color: var(--color-text-muted);
-  text-decoration: none;
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
   line-height: 1.2;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -616,15 +622,11 @@ a:hover {
   color: var(--color-text);
 }
 
-.viewport-switcher__btn--active {
-  background: var(--color-accent);
-  color: var(--color-accent-fg);
-  font-weight: 600;
-}
-
+.viewport-switcher__btn--active,
 .viewport-switcher__btn--active:hover {
-  background: var(--color-accent);
-  color: var(--color-accent-fg);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
 }
 
 .viewport-switcher__btn svg {
