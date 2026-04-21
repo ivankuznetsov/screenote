@@ -212,6 +212,20 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "create surfaces ScreenshotImage validation errors on the form" do
+    sign_in(@user)
+    # GIF is not in ALLOWED_CONTENT_TYPES — ScreenshotImage#acceptable_image fails.
+    gif = fixture_file_upload("test_invalid.gif", "image/gif")
+
+    post page_screenshots_path(@page), params: { screenshot: { title: "GIF upload", image: gif } }
+
+    assert_response :unprocessable_entity
+    # The form must re-render with the blob-level error surfaced, otherwise the
+    # user gets a 422 with no explanation.
+    assert_select ".form__errors"
+    assert_match(/PNG or JPEG/, response.body)
+  end
+
   test "update with a replacement image routes the new blob onto primary_image" do
     sign_in(@user)
     new_image = fixture_file_upload("test_image.png", "image/png")

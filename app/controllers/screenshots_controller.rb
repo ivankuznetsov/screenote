@@ -33,7 +33,7 @@ class ScreenshotsController < ApplicationController
 
     redirect_to screenshot_path(@screenshot), notice: "Screenshot uploaded."
   rescue ActiveRecord::RecordInvalid => e
-    @screenshot = e.record.is_a?(Screenshot) ? e.record : @page.screenshots.build(screenshot_params.except(:image))
+    @screenshot = recover_invalid_screenshot(e)
     render :new, status: :unprocessable_entity
   end
 
@@ -49,7 +49,8 @@ class ScreenshotsController < ApplicationController
     end
 
     redirect_to screenshot_path(@screenshot), notice: "Screenshot updated."
-  rescue ActiveRecord::RecordInvalid
+  rescue ActiveRecord::RecordInvalid => e
+    @screenshot = recover_invalid_screenshot(e)
     render :edit, status: :unprocessable_entity
   end
 
@@ -94,6 +95,21 @@ class ScreenshotsController < ApplicationController
   def resolve_active_viewport
     requested = params[:viewport].presence
     @screenshot.available_viewports.include?(requested) ? requested : @screenshot.default_viewport
+  end
+
+  # When upload validation fails on ScreenshotImage (e.g. GIF or oversized
+  # image), the RecordInvalid carries the ScreenshotImage, not the Screenshot
+  # — so _form.html.erb's @screenshot.errors would be empty and the user sees
+  # a 422 with no explanation. Copy the blob-level errors onto Screenshot so
+  # they render.
+  def recover_invalid_screenshot(invalid_error)
+    if invalid_error.record.is_a?(Screenshot)
+      invalid_error.record
+    else
+      screenshot = @screenshot || @page.screenshots.build(screenshot_params.except(:image))
+      invalid_error.record.errors[:image].each { |msg| screenshot.errors.add(:image, msg) }
+      screenshot
+    end
   end
 
   # Route a form-supplied image replacement through the primary ScreenshotImage

@@ -125,19 +125,47 @@ class ScreenshotImage < ApplicationRecord
   end
   private_class_method :move_blob_from_screenshot!
 
+  # Rolls a variant back onto the parent Screenshot for pre-rollback data
+  # restoration. Critical detail: Screenshot's status/width/height columns
+  # must be set AFTER destroy! so the after_destroy :sync_parent_status
+  # callback (which recomputes status from surviving children = :pending when
+  # the last variant disappears) doesn't wipe the restored values. The legacy
+  # code path this rollback enables — readers that predate PR-2 — reads
+  # width/height/status off Screenshot directly.
   def self.move_blob_to_screenshot!(screenshot, screenshot_image)
     Screenshot.transaction do
       blob = screenshot_image.image.blob
+      width = screenshot_image.width
+      height = screenshot_image.height
+      status_key = screenshot_image.status
+
       screenshot_image.image.detach
       screenshot.image.attach(blob)
-      screenshot_image.destroy!
+      screenshot_image.destroy! # fires sync_parent_status → parent becomes :pending
+
+      screenshot.update_columns(
+        width: width,
+        height: height,
+        status: Screenshot.statuses[status_key]
+      )
     end
   end
   private_class_method :move_blob_to_screenshot!
 
   private
 
+  # Only enqueue dimension extraction when there's something to analyze AND
+  # the record isn't already :ready:
+  #   - The signed-upload flow creates a blank ScreenshotImage first and the
+  #     agent PUTs the blob later. Without this guard, the create-time
+  #     callback enqueues a useless job that only logs a warning and exits,
+  #     and the upload controller enqueues a second (real) job after attach.
+  #   - The backfill Rake task copies width/height/status=:ready from the
+  #     parent; those records don't need re-analysis.
   def extract_dimensions_later
+    return unless image.attached?
+    return if status_ready?
+
     ScreenshotDimensionJob.perform_later(self)
   end
 
