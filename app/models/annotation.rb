@@ -35,6 +35,7 @@ class Annotation < ApplicationRecord
     {
       id: id,
       screenshot_id: screenshot_id,
+      viewport: viewport,
       type: point? ? "point" : "region",
       coordinates: {
         x_percent: x_percent,

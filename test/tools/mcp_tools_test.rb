@@ -104,6 +104,25 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal 0, result["pagination"]["offset"]
   end
 
+  test "list_annotations includes viewport on each annotation" do
+    result = JSON.parse(ListAnnotationsTool.new.call(project_id: @project.id))
+
+    assert result["annotations"].all? { |a| a.key?("viewport") },
+      "Every annotation should carry its viewport for multi-viewport agents"
+    assert result["annotations"].all? { |a| %w[desktop tablet mobile].include?(a["viewport"]) },
+      "Viewport should be one of desktop/tablet/mobile"
+  end
+
+  test "list_annotations filters by viewport" do
+    annotations(:point_annotation).update!(viewport: :mobile)
+
+    result = JSON.parse(ListAnnotationsTool.new.call(project_id: @project.id, viewport: "mobile"))
+
+    assert result["annotations"].any?, "Should return at least the mobile annotation"
+    assert result["annotations"].all? { |a| a["viewport"] == "mobile" },
+      "Filter should exclude non-mobile annotations"
+  end
+
   # GetAnnotationTool
   test "get_annotation returns annotation details" do
     result = JSON.parse(GetAnnotationTool.new.call(project_id: @project.id, annotation_id: @annotation.id))
