@@ -63,6 +63,14 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to screenshot_path(Screenshot.last)
   end
 
+  test "create without image does not enqueue ScreenshotDimensionJob" do
+    sign_in(@user)
+
+    assert_no_enqueued_jobs only: ScreenshotDimensionJob do
+      post page_screenshots_path(@page), params: { screenshot: { title: "No Image Screenshot" } }
+    end
+  end
+
   test "create with invalid params renders form" do
     sign_in(@user)
 
@@ -92,6 +100,34 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
     patch screenshot_path(@screenshot), params: { screenshot: { title: "" } }
     assert_response :unprocessable_entity
+  end
+
+  test "update with a replacement image routes the new blob onto primary_image" do
+    sign_in(@user)
+    new_image = fixture_file_upload("test_image.png", "image/png")
+
+    # Seed: primary_image has an initial blob so we can detect replacement.
+    si = @screenshot.screenshot_images.find_or_create_by(viewport: :desktop)
+    si.image.attach(io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+                    filename: "old.png", content_type: "image/png")
+    original_blob_id = si.image.blob.id
+
+    patch screenshot_path(@screenshot), params: { screenshot: { image: new_image } }
+    assert_redirected_to screenshot_path(@screenshot)
+
+    si.reload
+    assert si.image.attached?, "Primary image should still have an attachment"
+    assert_not_equal original_blob_id, si.image.blob.id,
+      "Replacement must land on primary_image, not on Screenshot#image (legacy)"
+  end
+
+  test "update with a replacement image enqueues a fresh ScreenshotDimensionJob" do
+    sign_in(@user)
+    new_image = fixture_file_upload("test_image.png", "image/png")
+
+    assert_enqueued_with(job: ScreenshotDimensionJob) do
+      patch screenshot_path(@screenshot), params: { screenshot: { image: new_image } }
+    end
   end
 
   # Destroy

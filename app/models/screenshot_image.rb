@@ -30,6 +30,13 @@ class ScreenshotImage < ApplicationRecord
   validate :acceptable_image
 
   after_create_commit :extract_dimensions_later
+  # Keep Screenshot#status in sync with children so queries like
+  # `Page.screenshots.where(status: :ready)` and readers like
+  # `Screenshot#status` reflect the actual analysis state of the image
+  # variants. Without this, Screenshot#status is stuck at :pending forever
+  # after PR-2.
+  after_save :sync_parent_status, if: :saved_change_to_status?
+  after_destroy :sync_parent_status
 
   # Move every attached Screenshot#image blob onto a new ScreenshotImage(:desktop).
   # Idempotent. Screenshots without an attached image are left alone.
@@ -132,6 +139,34 @@ class ScreenshotImage < ApplicationRecord
 
   def extract_dimensions_later
     ScreenshotDimensionJob.perform_later(self)
+  end
+
+  # :ready iff every sibling variant is :ready; :failed if any is :failed;
+  # :pending otherwise (including the no-variants case). update_columns skips
+  # Screenshot callbacks/validations — this is a derived field, not user input.
+  def sync_parent_status
+    # Skip when the parent is mid-destroy — dependent: :destroy on
+    # screenshot_images triggers this callback but the Screenshot itself
+    # is already destroyed and cannot be updated.
+    return if screenshot.destroyed? || screenshot.marked_for_destruction?
+
+    # Re-fetch parent + siblings from the DB so we don't rely on cached
+    # associations that may be stale (callers often manipulate the parent's
+    # status via update_columns before triggering this callback in tests).
+    parent = Screenshot.find_by(id: screenshot_id)
+    return unless parent
+
+    siblings = parent.screenshot_images
+    desired = if siblings.where(status: :failed).exists?
+      :failed
+    elsif siblings.exists? && !siblings.where.not(status: :ready).exists?
+      :ready
+    else
+      :pending
+    end
+    return if parent.status == desired.to_s
+
+    parent.update_columns(status: Screenshot.statuses[desired])
   end
 
   def acceptable_image

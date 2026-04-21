@@ -23,8 +23,6 @@ class Screenshot < ApplicationRecord
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :acceptable_image
 
-  after_create_commit :extract_dimensions_later
-
   # Returns the ScreenshotImage to render when no specific viewport is requested.
   # Prefers :desktop, falls back to the first available viewport, nil if none.
   def primary_image
@@ -66,10 +64,6 @@ class Screenshot < ApplicationRecord
   end
 
   private
-
-  def extract_dimensions_later
-    ScreenshotDimensionJob.perform_later(self)
-  end
 
   def acceptable_image
     return unless image.attached?

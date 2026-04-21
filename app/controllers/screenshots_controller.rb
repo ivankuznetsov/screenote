@@ -39,11 +39,16 @@ class ScreenshotsController < ApplicationController
   end
 
   def update
-    if @screenshot.update(screenshot_params)
-      redirect_to screenshot_path(@screenshot), notice: "Screenshot updated."
-    else
-      render :edit, status: :unprocessable_entity
+    image_param = params.dig(:screenshot, :image)
+
+    ActiveRecord::Base.transaction do
+      @screenshot.update!(screenshot_params.except(:image))
+      attach_replacement_image!(image_param) if image_param
     end
+
+    redirect_to screenshot_path(@screenshot), notice: "Screenshot updated."
+  rescue ActiveRecord::RecordInvalid
+    render :edit, status: :unprocessable_entity
   end
 
   def destroy
@@ -67,5 +72,15 @@ class ScreenshotsController < ApplicationController
 
   def screenshot_params
     params.require(:screenshot).permit(:title, :image)
+  end
+
+  # Route a form-supplied image replacement through the primary ScreenshotImage
+  # so the new blob is what readers render. Resets dimension metadata + enqueues
+  # re-analysis so Screenshot#status ends up :ready after the job finishes.
+  def attach_replacement_image!(image_param)
+    si = @screenshot.primary_image || @screenshot.screenshot_images.create!(viewport: :desktop)
+    si.image.attach(image_param)
+    si.update!(status: :pending, width: nil, height: nil)
+    ScreenshotDimensionJob.perform_later(si)
   end
 end
