@@ -62,8 +62,13 @@ class ScreenshotsController < ApplicationController
   private
 
   def set_page
-    @page = Page.find(params[:page_id])
-    @project = Current.user.projects.find(@page.project_id)
+    # Match set_screenshot's scope: allow project members (not just owners)
+    # to create screenshots on pages they can access. A pre-PR-3 asymmetry
+    # left members able to view but not upload — fixed here.
+    @page = Page.joins(project: :project_memberships)
+                .where(project_memberships: { user_id: Current.user.id })
+                .find(params[:page_id])
+    @project = @page.project
   end
 
   def set_screenshot

@@ -30,6 +30,21 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "show works for project members (not just owners)" do
+    # Regression guard: set_screenshot's scope change in PR-3 went from
+    # owner-only (Current.user.projects) to membership-scoped. Verify a
+    # non-owner member can view screenshots of projects they joined.
+    bob = users(:bob)
+    assert project_memberships(:bob_member_of_alice_project).present?,
+      "Fixture: bob is a member of alice's project"
+
+    sign_in(bob)
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    assert_select ".screenshot-header__breadcrumb", /#{@screenshot.title}/
+  end
+
   # Viewport switcher
   test "show renders viewport switcher when multiple viewports exist" do
     sign_in(@user)

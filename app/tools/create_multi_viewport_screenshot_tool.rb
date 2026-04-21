@@ -37,22 +37,31 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
       uploads = nil
 
       # Wrap Screenshot + ScreenshotImages creation so a partial failure
-      # (e.g. RecordNotUnique from the (screenshot_id, viewport) index under
-      # concurrent creation) doesn't leave an orphan Screenshot.
+      # (e.g. mid-loop ScreenshotImage validation error) rolls back the
+      # Screenshot too — no orphans with 0 or partial variants. Page is
+      # created outside the transaction so a transient failure here doesn't
+      # un-create a Page another caller may already be using.
       page = Page.find_or_create_by_name!(project, page_name || title)
-      ApplicationRecord.transaction do
-        screenshot = page.screenshots.create!(title: title)
-        uploads = normalized.map do |v|
-          si = screenshot.screenshot_images.create!(viewport: v[:viewport])
-          token = si.generate_token_for(:upload)
-          {
-            viewport: v[:viewport],
-            upload_url: Rails.application.routes.url_helpers.api_screenshot_upload_url(
-              screenshot, token: token, mime_type: v[:mime_type]
-            ),
-            token: token
-          }
+      begin
+        ApplicationRecord.transaction do
+          screenshot = page.screenshots.create!(title: title)
+          uploads = normalized.map do |v|
+            si = screenshot.screenshot_images.create!(viewport: v[:viewport])
+            token = si.generate_token_for(:upload)
+            {
+              viewport: v[:viewport],
+              upload_url: Rails.application.routes.url_helpers.api_screenshot_upload_url(
+                screenshot, token: token, mime_type: v[:mime_type]
+              ),
+              token: token
+            }
+          end
         end
+      rescue ActiveRecord::RecordNotUnique
+        # Catch inside with_error_handling so the structured error returns to
+        # the agent instead of being swallowed as a generic "internal_error"
+        # by the outer StandardError rescue in ApplicationTool.
+        return invalid("A ScreenshotImage with that viewport already exists for this Screenshot (concurrent request?)")
       end
 
       {
@@ -62,8 +71,6 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
         uploads: uploads
       }.to_json
     end
-  rescue ActiveRecord::RecordNotUnique
-    invalid("A ScreenshotImage with that viewport already exists for this Screenshot (concurrent request?)")
   end
 
   private
