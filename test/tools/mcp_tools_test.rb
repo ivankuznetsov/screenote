@@ -191,6 +191,33 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_match(/no mobile variant/, result["message"])
   end
 
+  test "create_annotation requires viewport on multi-variant screenshots" do
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    assert_equal 2, @screenshot.screenshot_images.count
+
+    result = JSON.parse(CreateAnnotationTool.new.call(
+      project_id: @project.id, screenshot_id: @screenshot.id,
+      x_percent: 10.0, y_percent: 10.0, comment: "Ambiguous"
+      # viewport omitted
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/required for multi-variant/, result["message"])
+  end
+
+  test "create_annotation defaults to the sole viewport on single-variant screenshots" do
+    assert_equal %w[desktop], @screenshot.available_viewports
+
+    result = JSON.parse(CreateAnnotationTool.new.call(
+      project_id: @project.id, screenshot_id: @screenshot.id,
+      x_percent: 10.0, y_percent: 10.0, comment: "Implicit desktop"
+      # viewport omitted — allowed because only one variant exists
+    ))
+
+    assert result["annotation"].present?
+    assert_equal "desktop", result["annotation"]["viewport"]
+  end
+
   test "create_multi_viewport_screenshot tokens resolve to the matching ScreenshotImage" do
     result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
       project_id: @project.id, title: "Token check",
