@@ -1,0 +1,130 @@
+---
+title: Data Model
+type: architecture
+source: db/schema.rb
+created: 2026-04-10
+updated: 2026-04-10
+tags: [database, schema, models, relationships]
+---
+
+# Data Model
+
+TLDR: Screenote has 13 application tables (plus 3 Active Storage tables and 3 Doorkeeper OAuth tables). The core hierarchy is User -> Project -> Page -> Screenshot -> Annotation -> AnnotationComment. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription (Stripe). API access is via ApiKey.
+
+Source: `db/schema.rb` (schema version `2026_03_10_182720`)
+
+## ER Diagram
+
+```mermaid
+erDiagram
+    User ||--o{ Session : "has many"
+    User ||--o{ Project : "creates (owned_projects)"
+    User ||--o{ ProjectMembership : "has many"
+    User ||--o{ Annotation : "has many"
+    User ||--o| Subscription : "has one"
+
+    Project ||--o{ ProjectMembership : "has many"
+    Project ||--o{ ProjectInvitation : "has many"
+    Project ||--o{ Page : "has many"
+    Project ||--o{ ApiKey : "has many"
+
+    Page ||--o{ Screenshot : "has many"
+
+    Screenshot ||--o{ Annotation : "has many"
+    Screenshot ||--|| ActiveStorageAttachment : "has one attached image"
+
+    Annotation ||--o{ AnnotationComment : "has many"
+    Annotation }o--|| User : "created by"
+    Annotation }o--o| User : "resolved by"
+    Annotation }o--o| ApiKey : "resolved by api_key"
+
+    AnnotationComment }o--o| User : "authored by"
+    AnnotationComment }o--o| ApiKey : "authored by"
+
+    ProjectMembership }o--|| User : "belongs to"
+    ProjectMembership }o--|| Project : "belongs to"
+
+    ProjectInvitation }o--|| Project : "belongs to"
+    ProjectInvitation }o--|| User : "invited by (inviter)"
+
+    ApiKey }o--|| Project : "belongs to"
+
+    Subscription }o--|| User : "belongs to"
+
+    OAuthApplication ||--o{ OAuthAccessGrant : "has many"
+    OAuthApplication ||--o{ OAuthAccessToken : "has many"
+    OAuthAccessGrant }o--o| Project : "scoped to"
+    OAuthAccessToken }o--o| Project : "scoped to"
+```
+
+## Tables
+
+### Core Domain
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `users` | User accounts with auth | email, password_digest, confirmed_at, oauth_provider, oauth_uid |
+| `projects` | Top-level container | name, description, user_id (creator) |
+| `pages` | Groups screenshots within a project | name, project_id |
+| `screenshots` | Uploaded images for annotation | title, page_id, status (enum), width, height |
+| `annotations` | Feedback pinned to screenshot regions | x_percent, y_percent, width_percent, height_percent, comment, status (enum), screenshot_id, user_id |
+| `annotation_comments` | Threaded comments on annotations | body, action (enum), annotation_id, user_id, api_key_id, notified_at |
+
+### Collaboration
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `project_memberships` | User-project join table with roles | project_id, user_id, role (enum: member/owner) |
+| `project_invitations` | Email-based invites with token | email, project_id, inviter_id, status (enum: pending/accepted) |
+
+### Auth & Access
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `sessions` | Database-backed user sessions | user_id, ip_address, user_agent |
+| `api_keys` | Bearer token auth for API/MCP | name, token_digest, token_prefix, project_id, revoked_at, last_used_at |
+
+### Billing
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `subscriptions` | Stripe subscription state | user_id, stripe_customer_id, stripe_subscription_id, plan (enum), status (enum), current_period_end |
+
+### OAuth (Doorkeeper)
+
+| Table | Purpose |
+|-------|---------|
+| `oauth_applications` | Registered OAuth clients (supports dynamic registration) |
+| `oauth_access_grants` | Authorization codes with PKCE |
+| `oauth_access_tokens` | Bearer tokens scoped to project |
+
+### Active Storage
+
+| Table | Purpose |
+|-------|---------|
+| `active_storage_blobs` | File metadata (S3 keys, checksums) |
+| `active_storage_attachments` | Polymorphic join to models |
+| `active_storage_variant_records` | Image variant tracking |
+
+## Key Indexes
+
+- `users.email` -- unique
+- `pages.(project_id, LOWER(name))` -- unique, case-insensitive
+- `project_memberships.(project_id, user_id)` -- unique
+- `api_keys.token_digest` -- unique
+- `subscriptions.user_id` -- unique (one subscription per user)
+- `subscriptions.stripe_customer_id` -- unique
+- `annotations.(screenshot_id, status)` -- composite for filtered queries
+- `annotation_comments.(annotation_id, created_at)` -- composite for ordered threads
+- `annotation_comments.(action, notified_at)` -- for digest notification queries
+
+## Foreign Key Cascade Rules
+
+- `annotation_comments -> annotations`: ON DELETE CASCADE
+- `annotation_comments -> users/api_keys`: ON DELETE SET NULL
+- `annotations -> resolved_by_user`: ON DELETE SET NULL
+- `annotations -> resolved_by_api_key`: ON DELETE SET NULL
+- `oauth_access_grants/tokens -> oauth_applications`: ON DELETE CASCADE
+- `oauth_access_grants/tokens -> projects`: ON DELETE SET NULL
+
+See also: [[schema-evolution]], [[models/user]], [[models/project]], [[models/screenshot]], [[models/annotation]]
