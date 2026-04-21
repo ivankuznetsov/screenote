@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_21_065900) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_21_110955) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -65,12 +65,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_065900) do
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
+    t.integer "viewport", default: 0, null: false
     t.float "width_percent"
     t.float "x_percent", null: false
     t.float "y_percent", null: false
     t.index ["resolved_by_api_key_id"], name: "index_annotations_on_resolved_by_api_key_id"
     t.index ["resolved_by_user_id"], name: "index_annotations_on_resolved_by_user_id"
     t.index ["screenshot_id", "status"], name: "index_annotations_on_screenshot_id_and_status"
+    t.index ["screenshot_id", "viewport"], name: "index_annotations_on_screenshot_id_and_viewport"
     t.index ["screenshot_id"], name: "index_annotations_on_screenshot_id"
     t.index ["user_id"], name: "index_annotations_on_user_id"
   end
@@ -178,6 +180,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_065900) do
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
 
+  create_table "screenshot_images", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "height"
+    t.integer "screenshot_id", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "viewport", null: false
+    t.integer "width"
+    t.index ["screenshot_id", "viewport"], name: "index_screenshot_images_on_screenshot_id_and_viewport", unique: true
+    t.index ["screenshot_id"], name: "index_screenshot_images_on_screenshot_id"
+  end
+
   create_table "screenshots", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "height"
@@ -255,6 +269,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_065900) do
   add_foreign_key "project_memberships", "projects"
   add_foreign_key "project_memberships", "users"
   add_foreign_key "projects", "users"
+  add_foreign_key "screenshot_images", "screenshots", on_delete: :cascade
   add_foreign_key "screenshots", "pages"
   add_foreign_key "sessions", "users"
   add_foreign_key "subscriptions", "users"

@@ -1,0 +1,21 @@
+# Backfill-representative fixtures: each existing Screenshot gets one
+# ScreenshotImage(viewport: :desktop) — matching the state after the
+# Rake task runs against existing production data.
+alice_screenshot_desktop:
+  screenshot: alice_screenshot
+  viewport: 0
+  status: 1
+  width: 1920
+  height: 1080
+
+alice_screenshot_pending_desktop:
+  screenshot: alice_screenshot_pending
+  viewport: 0
+  status: 0
+
+bob_screenshot_desktop:
+  screenshot: bob_screenshot
+  viewport: 0
+  status: 1
+  width: 1440
+  height: 900
