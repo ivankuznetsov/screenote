@@ -661,6 +661,11 @@ a:hover {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  /* Stretch to match the canvas height in the workspace grid (workspace has
+     align-items: start on its other children). Capped at viewport-minus-chrome
+     so a huge screenshot doesn't push the scrollable list off-screen. */
+  align-self: stretch;
+  min-height: 24rem;
   max-height: calc(100vh - 200px);
   overflow-y: auto;
 }
