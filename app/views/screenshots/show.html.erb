@@ -16,41 +16,58 @@
   </div>
 </div>
 
-<div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
-  <div class="screenshot-canvas" data-annotorious-target="canvas">
-    <% if @screenshot_image&.image&.attached? %>
-      <%= image_tag @screenshot_image.image, class: "screenshot-canvas__image", alt: @screenshot.title,
-          data: { annotorious_target: "image", testid: "screenshot-image" } %>
-    <% end %>
-  </div>
+<%# Frame spans switcher + canvas + sidebar so a viewport change re-renders
+    every part of the workspace: the switcher's active-button highlight, the
+    canvas image, and the annotation sidebar (annotations are scoped
+    per-viewport). Placing the switcher outside the frame would leave the
+    active-state stale after the first click. %>
+<%= turbo_frame_tag "screenshot_canvas" do %>
+  <%= render "viewport_switcher", screenshot: @screenshot, active_viewport: @active_viewport %>
 
-  <aside class="annotation-sidebar" data-testid="annotation-sidebar">
-    <div class="annotation-sidebar__header">
-      <h2 class="annotation-sidebar__title" data-testid="sidebar-title">Annotations</h2>
-      <div class="annotation-sidebar__filters">
-        <%= link_to "All", screenshot_path(@screenshot),
-            class: "annotation-filter #{'annotation-filter--active' unless params[:status]}" %>
-        <%= link_to "Open", screenshot_path(@screenshot, status: :open),
-            class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'open'}" %>
-        <%= link_to "Resolved", screenshot_path(@screenshot, status: :resolved),
-            class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'resolved'}" %>
-      </div>
+  <div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
+    <div class="screenshot-canvas" data-annotorious-target="canvas">
+      <% if @screenshot_image&.image&.attached? %>
+        <%= image_tag @screenshot_image.image, class: "screenshot-canvas__image", alt: @screenshot.title,
+            data: { annotorious_target: "image", testid: "screenshot-image" } %>
+      <% end %>
     </div>
 
-    <div class="annotation-sidebar__list" data-annotorious-target="list">
-      <template data-annotorious-target="formTemplate">
-        <%= render "annotations/form", screenshot: @screenshot %>
-      </template>
+    <% filter_path = ->(status) {
+      if @active_viewport && @screenshot.available_viewports.size > 1
+        viewport_screenshot_path(@screenshot, @active_viewport, status: status)
+      else
+        screenshot_path(@screenshot, status: status)
+      end
+    } %>
 
-      <% @annotations.each.with_index(1) do |annotation, index| %>
-        <%= render "annotations/annotation", annotation: annotation, index: index %>
-      <% end %>
-
-      <% if @annotations.empty? %>
-        <div class="annotation-sidebar__empty" data-testid="sidebar-empty">
-          No annotations yet. Click on the image to add one.
+    <aside class="annotation-sidebar" data-testid="annotation-sidebar">
+      <div class="annotation-sidebar__header">
+        <h2 class="annotation-sidebar__title" data-testid="sidebar-title">Annotations</h2>
+        <div class="annotation-sidebar__filters">
+          <%= link_to "All", filter_path.call(nil),
+              class: "annotation-filter #{'annotation-filter--active' unless params[:status]}" %>
+          <%= link_to "Open", filter_path.call(:open),
+              class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'open'}" %>
+          <%= link_to "Resolved", filter_path.call(:resolved),
+              class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'resolved'}" %>
         </div>
-      <% end %>
-    </div>
-  </aside>
-</div>
+      </div>
+
+      <div class="annotation-sidebar__list" data-annotorious-target="list">
+        <template data-annotorious-target="formTemplate">
+          <%= render "annotations/form", screenshot: @screenshot, active_viewport: @active_viewport %>
+        </template>
+
+        <% @annotations.each.with_index(1) do |annotation, index| %>
+          <%= render "annotations/annotation", annotation: annotation, index: index %>
+        <% end %>
+
+        <% if @annotations.empty? %>
+          <div class="annotation-sidebar__empty" data-testid="sidebar-empty">
+            No annotations yet. Click on the image to add one.
+          </div>
+        <% end %>
+      </div>
+    </aside>
+  </div>
+<% end %>

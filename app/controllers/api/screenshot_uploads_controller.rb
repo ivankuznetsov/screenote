@@ -11,16 +11,13 @@ module Api
         return
       end
 
-      # The signed-upload token is issued on the :desktop ScreenshotImage (see
-      # CreateScreenshotUploadTool). The URL still references the parent
-      # Screenshot for URL-shape stability with existing MCP clients.
-      screenshot_image = screenshot.screenshot_images.find_by(viewport: :desktop)
-      unless screenshot_image
-        render json: { error: "Screenshot not found" }, status: :not_found
-        return
-      end
-
-      unless ScreenshotImage.find_by_token_for(:upload, params[:token]) == screenshot_image
+      # The signed-upload token is issued on a specific ScreenshotImage (any
+      # viewport). Resolve via the token rather than hardcoding `:desktop` so
+      # multi-viewport uploads can PUT to their own viewport's upload URL.
+      # The URL still references the parent Screenshot for URL-shape stability
+      # with existing MCP clients.
+      screenshot_image = ScreenshotImage.find_by_token_for(:upload, params[:token])
+      unless screenshot_image && screenshot_image.screenshot_id == screenshot.id
         render json: { error: "Invalid or expired upload token" }, status: :unauthorized
         return
       end

@@ -3,6 +3,8 @@
 require "test_helper"
 
 class ScreenshotImageTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   test "valid with screenshot and viewport" do
     si = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :mobile)
     assert si.valid?, "Should be valid with screenshot + viewport"
@@ -88,6 +90,51 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     si.image.attach(io: StringIO.new("junk"), filename: "test.gif", content_type: "image/gif")
     assert_not si.valid?
     assert_includes si.errors[:image].join, "PNG or JPEG"
+  end
+
+  test "after_create_commit does not enqueue dimension job when no image attached" do
+    # Blank ScreenshotImage (signed-upload flow — blob arrives later). Without
+    # the guard, the job would fire, log a warning, and exit — pure noise.
+    screenshot = screenshots(:alice_screenshot)
+
+    assert_no_enqueued_jobs only: ScreenshotDimensionJob do
+      screenshot.screenshot_images.create!(viewport: :mobile)
+    end
+  end
+
+  test "after_create_commit does not enqueue dimension job when variant already ready" do
+    # Backfill rows copy status=:ready from the parent. No need to re-analyze.
+    screenshot = screenshots(:alice_screenshot)
+
+    assert_no_enqueued_jobs only: ScreenshotDimensionJob do
+      si = screenshot.screenshot_images.build(viewport: :mobile, status: :ready, width: 375, height: 812)
+      si.image.attach(
+        io: StringIO.new(File.binread(Rails.root.join("test/fixtures/files/test_image.png"))),
+        filename: "m.png", content_type: "image/png"
+      )
+      si.save!
+    end
+  end
+
+  test "rollback_to_screenshots! restores Screenshot width/height/status from the variant" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.image.purge if screenshot.image.attached?
+    screenshot.update_columns(width: nil, height: nil, status: Screenshot.statuses[:pending])
+    si = screenshot.screenshot_images.find_or_create_by(viewport: :desktop)
+    si.update!(width: 1920, height: 1080, status: :ready)
+    si.image.attach(
+      io: StringIO.new(File.binread(Rails.root.join("test/fixtures/files/test_image.png"))),
+      filename: "d.png", content_type: "image/png"
+    )
+
+    ScreenshotImage.rollback_to_screenshots!(apply: true, logger: StringIO.new)
+
+    screenshot.reload
+    assert screenshot.image.attached?
+    assert_equal 1920, screenshot.width
+    assert_equal 1080, screenshot.height
+    assert_equal "ready", screenshot.status,
+      "Rollback must preserve status — otherwise Page.latest_screenshot (filters by :ready) loses this row"
   end
 
   test "status change syncs parent Screenshot to :ready when all siblings ready" do

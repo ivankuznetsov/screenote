@@ -49,7 +49,7 @@ class AnnotationsController < ApplicationController
   end
 
   def annotation_params
-    params.require(:annotation).permit(:x_percent, :y_percent, :width_percent, :height_percent, :comment)
+    params.require(:annotation).permit(:x_percent, :y_percent, :width_percent, :height_percent, :comment, :viewport)
   end
 
   def resolving?

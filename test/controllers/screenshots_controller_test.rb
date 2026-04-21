@@ -30,6 +30,116 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "show works for project members (not just owners)" do
+    # Regression guard: set_screenshot's scope change in PR-3 went from
+    # owner-only (Current.user.projects) to membership-scoped. Verify a
+    # non-owner member can view screenshots of projects they joined.
+    bob = users(:bob)
+    assert project_memberships(:bob_member_of_alice_project).present?,
+      "Fixture: bob is a member of alice's project"
+
+    sign_in(bob)
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    assert_select ".screenshot-header__breadcrumb", /#{@screenshot.title}/
+  end
+
+  # Viewport switcher
+  test "show renders viewport switcher when multiple viewports exist" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    @screenshot.screenshot_images.create!(viewport: :tablet)
+
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    assert_select ".viewport-switcher"
+    assert_select "[data-testid='viewport-switcher-desktop']"
+    assert_select "[data-testid='viewport-switcher-tablet']"
+    assert_select "[data-testid='viewport-switcher-mobile']"
+  end
+
+  test "show hides viewport switcher for single-viewport legacy screenshots" do
+    sign_in(@user)
+    assert_equal 1, @screenshot.screenshot_images.count
+
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    assert_select ".viewport-switcher", 0, "No switcher when only one viewport exists"
+  end
+
+  test "show at /viewports/:viewport renders the matching variant" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    annotations(:point_annotation).update!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_response :success
+    assert_select "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
+  end
+
+  test "show at /viewports/:viewport silently falls back to default when viewport is missing" do
+    sign_in(@user)
+    assert_equal %w[desktop], @screenshot.available_viewports
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    # No redirect, no flash — the canonical /screenshots/:id would show the same
+    # desktop canvas. Silent fallback > jarring redirect for a URL no human typed.
+    assert_response :success
+    assert_select ".screenshot-workspace"
+  end
+
+  test "annotation form carries the active viewport so drawn annotations stick to it" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_response :success
+    # Hidden field inside the annotation form should carry mobile so new
+    # annotations drawn on this view save as :mobile, not the model default.
+    assert_select "input[type=hidden][name='annotation[viewport]'][value='mobile']"
+  end
+
+  test "status filters preserve the active viewport" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_response :success
+    # Filter links should point at the same viewport, not fall back to default.
+    assert_select "a.annotation-filter[href='#{viewport_screenshot_path(@screenshot, :mobile, status: :open)}']"
+    assert_select "a.annotation-filter[href='#{viewport_screenshot_path(@screenshot, :mobile, status: :resolved)}']"
+  end
+
+  test "viewport switcher lives inside the turbo frame so active state re-renders on nav" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+
+    get screenshot_path(@screenshot)
+
+    assert_response :success
+    # Frame must contain the switcher so a viewport click re-renders the
+    # active-button highlight along with the canvas + sidebar.
+    assert_select "turbo-frame#screenshot_canvas .viewport-switcher"
+  end
+
+  test "show scopes annotations to the active viewport" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    annotations(:point_annotation).update!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :desktop)
+
+    # Mobile annotation should NOT appear on desktop
+    assert_select "[data-annotation-id='#{annotations(:point_annotation).id}']", 0
+  end
+
   # New
   test "new renders form" do
     sign_in(@user)
@@ -100,6 +210,20 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
     patch screenshot_path(@screenshot), params: { screenshot: { title: "" } }
     assert_response :unprocessable_entity
+  end
+
+  test "create surfaces ScreenshotImage validation errors on the form" do
+    sign_in(@user)
+    # GIF is not in ALLOWED_CONTENT_TYPES — ScreenshotImage#acceptable_image fails.
+    gif = fixture_file_upload("test_invalid.gif", "image/gif")
+
+    post page_screenshots_path(@page), params: { screenshot: { title: "GIF upload", image: gif } }
+
+    assert_response :unprocessable_entity
+    # The form must re-render with the blob-level error surfaced, otherwise the
+    # user gets a 422 with no explanation.
+    assert_select ".form__errors"
+    assert_match(/PNG or JPEG/, response.body)
   end
 
   test "update with a replacement image routes the new blob onto primary_image" do

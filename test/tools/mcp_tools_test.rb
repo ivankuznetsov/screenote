@@ -123,6 +123,135 @@ class McpToolsTest < ActiveSupport::TestCase
       "Filter should exclude non-mobile annotations"
   end
 
+  # CreateMultiViewportScreenshotTool
+  test "create_multi_viewport_screenshot returns one upload URL per requested viewport" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Multi capture",
+      viewports: [
+        { viewport: "desktop", mime_type: "image/png" },
+        { viewport: "tablet",  mime_type: "image/png" },
+        { viewport: "mobile",  mime_type: "image/png" }
+      ]
+    ))
+
+    assert result["screenshot_id"].present?
+    assert result["annotate_url"].present?
+    assert_equal 3, result["uploads"].size
+    assert_equal %w[desktop tablet mobile], result["uploads"].map { |u| u["viewport"] }
+    assert result["uploads"].all? { |u| u["upload_url"].present? && u["token"].present? }
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_equal 3, screenshot.screenshot_images.count
+  end
+
+  test "create_multi_viewport_screenshot with only one entry creates a single variant" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Just mobile",
+      viewports: [ { viewport: "mobile", mime_type: "image/png" } ]
+    ))
+
+    assert_equal 1, result["uploads"].size
+    assert_equal "mobile", result["uploads"].first["viewport"]
+  end
+
+  test "create_multi_viewport_screenshot rejects duplicate viewports" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Dup",
+      viewports: [
+        { viewport: "desktop", mime_type: "image/png" },
+        { viewport: "desktop", mime_type: "image/png" }
+      ]
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/unique/, result["message"])
+  end
+
+  test "create_multi_viewport_screenshot rejects unknown viewport names" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Bad",
+      viewports: [ { viewport: "wide", mime_type: "image/png" } ]
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/desktop, tablet, mobile/, result["message"])
+  end
+
+  test "create_annotation rejects viewport that doesn't exist on the screenshot" do
+    # @screenshot has only desktop — no tablet / mobile variants
+    assert_equal %w[desktop], @screenshot.available_viewports
+
+    result = JSON.parse(CreateAnnotationTool.new.call(
+      project_id: @project.id, screenshot_id: @screenshot.id,
+      x_percent: 10.0, y_percent: 10.0, comment: "Wrong viewport",
+      viewport: "mobile"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/no mobile variant/, result["message"])
+  end
+
+  test "create_annotation requires viewport on multi-variant screenshots" do
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    assert_equal 2, @screenshot.screenshot_images.count
+
+    result = JSON.parse(CreateAnnotationTool.new.call(
+      project_id: @project.id, screenshot_id: @screenshot.id,
+      x_percent: 10.0, y_percent: 10.0, comment: "Ambiguous"
+      # viewport omitted
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/required for multi-variant/, result["message"])
+  end
+
+  test "create_annotation defaults to the sole viewport on single-variant screenshots" do
+    assert_equal %w[desktop], @screenshot.available_viewports
+
+    result = JSON.parse(CreateAnnotationTool.new.call(
+      project_id: @project.id, screenshot_id: @screenshot.id,
+      x_percent: 10.0, y_percent: 10.0, comment: "Implicit desktop"
+      # viewport omitted — allowed because only one variant exists
+    ))
+
+    assert result["annotation"].present?
+    assert_equal "desktop", result["annotation"]["viewport"]
+  end
+
+  test "create_multi_viewport_screenshot accepts string-keyed viewport hashes (MCP JSON transport)" do
+    # Regression: FastMcp only symbolises top-level keys, not hashes inside
+    # arrays. Over the real MCP transport, each entry arrives as
+    # { "viewport" => "...", "mime_type" => "..." } — v[:viewport] would be
+    # nil and the tool would reject valid input.
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "String-keyed",
+      viewports: [
+        { "viewport" => "desktop", "mime_type" => "image/png" },
+        { "viewport" => "mobile",  "mime_type" => "image/png" }
+      ]
+    ))
+
+    assert result["screenshot_id"].present?, "Should accept string-keyed hashes: #{result.inspect}"
+    assert_equal 2, result["uploads"].size
+  end
+
+  test "create_multi_viewport_screenshot tokens resolve to the matching ScreenshotImage" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id, title: "Token check",
+      viewports: [
+        { viewport: "desktop", mime_type: "image/png" },
+        { viewport: "mobile",  mime_type: "image/png" }
+      ]
+    ))
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    result["uploads"].each do |upload|
+      resolved = ScreenshotImage.find_by_token_for(:upload, upload["token"])
+      assert_equal screenshot.id, resolved.screenshot_id
+      assert_equal upload["viewport"], resolved.viewport
+    end
+  end
+
   # GetAnnotationTool
   test "get_annotation returns annotation details" do
     result = JSON.parse(GetAnnotationTool.new.call(project_id: @project.id, annotation_id: @annotation.id))

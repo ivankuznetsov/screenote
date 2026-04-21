@@ -26,6 +26,10 @@ Rails.application.routes.draw do
   end
 
   resources :screenshots, only: %i[show edit update destroy] do
+    member do
+      get "viewports/:viewport", to: "screenshots#show", as: :viewport,
+          constraints: { viewport: /desktop|tablet|mobile/ }
+    end
     resources :annotations, only: %i[create update destroy] do
       resources :annotation_comments, only: %i[create]
     end
