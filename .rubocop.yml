@@ -1,8 +1,11 @@
 # Omakase Ruby styling for Rails
 inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 
-# Overwrite or add rules to create your own house style
-#
-# # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
-# Layout/SpaceInsideArrayLiteralBrackets:
-#   Enabled: false
+# Committed migrations are historical artifacts — once they've shipped,
+# rewriting them only for cosmetic style breaks git blame and diverges
+# the file from what actually ran in production. New migrations still
+# get linted by the editor; this just keeps automated cops from rewriting
+# committed history.
+Layout/SpaceInsideArrayLiteralBrackets:
+  Exclude:
+    - 'db/migrate/**/*.rb'
