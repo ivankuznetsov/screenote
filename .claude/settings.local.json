@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_compound-engineering_pw__browser_navigate",
+      "Bash(bin/rails test:*)",
+      "Bash(curl:*)",
+      "Bash(kamal version:*)",
+      "Bash(bin/rails db:seed:*)",
+      "Bash(bin/rails runner:*)",
+      "Bash(APP_HOST=http://localhost:3006 bin/rails test:*)",
+      "Bash(git status:*)",
+      "Bash(git push:*)",
+      "Bash(bin/rubocop:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)",
+      "Bash(git rebase:*)",
+      "Bash(brakeman:*)",
+      "mcp__plugin_compound-engineering_pw__browser_resize",
+      "mcp__plugin_compound-engineering_pw__browser_take_screenshot",
+      "mcp__plugin_compound-engineering_pw__browser_fill_form",
+      "mcp__plugin_compound-engineering_pw__browser_click",
+      "mcp__plugin_compound-engineering_pw__browser_wait_for",
+      "mcp__plugin_compound-engineering_pw__browser_run_code",
+      "Bash(kamal console:*)",
+      "Bash(ls:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "honeybadger",
+    "ahrefs",
+    "screenote"
+  ]
+}
