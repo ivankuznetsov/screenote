@@ -123,6 +123,68 @@ class McpToolsTest < ActiveSupport::TestCase
       "Filter should exclude non-mobile annotations"
   end
 
+  # CreateSnapshotTool
+  test "create_snapshot creates a snapshot for the current project" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234def567890abc1234def567890abc1234d",
+      taken_at: "2026-05-14T12:00:00Z"
+    ))
+
+    assert result["snapshot_id"].present?
+    assert_equal @project.id, result["project_id"]
+    assert_equal "2026-05-14 · abc1234", result["label"]
+    assert_equal "2026-05-14T12:00:00Z", result["taken_at"]
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    assert_equal @project, snapshot.project
+    assert_equal "abc1234def567890abc1234def567890abc1234d", snapshot.git_commit
+  end
+
+  test "create_snapshot rejects inaccessible project" do
+    Current.mcp_project = nil
+
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: projects(:bob_project).id,
+      git_commit: "abc1234"
+    ))
+
+    assert_equal "forbidden", result["error"]
+  end
+
+  test "create_snapshot rejects malformed git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "not-a-hash"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/git_commit/, result["message"])
+  end
+
+  test "create_snapshot defaults taken_at to now" do
+    travel_to Time.zone.parse("2026-05-14 13:15:00") do
+      result = JSON.parse(CreateSnapshotTool.new.call(
+        project_id: @project.id,
+        git_commit: "abc1234"
+      ))
+
+      snapshot = Snapshot.find(result["snapshot_id"])
+      assert_equal Time.current, snapshot.taken_at
+    end
+  end
+
+  test "create_snapshot parses provided ISO8601 taken_at" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "2026-05-14T08:30:00Z"
+    ))
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    assert_equal Time.utc(2026, 5, 14, 8, 30), snapshot.taken_at
+  end
+
   # CreateMultiViewportScreenshotTool
   test "create_multi_viewport_screenshot returns one upload URL per requested viewport" do
     result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
@@ -142,6 +204,50 @@ class McpToolsTest < ActiveSupport::TestCase
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal 3, screenshot.screenshot_images.count
+  end
+
+  test "create_multi_viewport_screenshot links screenshot to snapshot" do
+    snapshot = snapshots(:latest)
+
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id,
+      title: "Snapshot capture",
+      snapshot_id: snapshot.id,
+      viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+    ))
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_equal snapshot, screenshot.snapshot
+  end
+
+  test "create_multi_viewport_screenshot without snapshot_id creates ad-hoc screenshot" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id,
+      title: "Ad-hoc capture",
+      viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+    ))
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_nil screenshot.snapshot_id
+  end
+
+  test "create_multi_viewport_screenshot rejects snapshot from another project" do
+    other_snapshot = projects(:bob_project).snapshots.create!(
+      git_commit: "abc1234",
+      taken_at: Time.current
+    )
+
+    assert_no_difference "Screenshot.count" do
+      result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+        project_id: @project.id,
+        title: "Wrong snapshot",
+        snapshot_id: other_snapshot.id,
+        viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+      ))
+
+      assert_equal "invalid_arguments", result["error"]
+      assert_match(/snapshot not found/, result["message"])
+    end
   end
 
   test "create_multi_viewport_screenshot with only one entry creates a single variant" do
