@@ -17,13 +17,17 @@
 </div>
 
 <div class="project-detail__body">
-  <%= render "snapshot_sidebar" %>
+  <%= render "snapshot_sidebar", project: @project, snapshots: @snapshots, active_snapshot: @active_snapshot %>
 
   <div class="project-detail__content">
     <% if @pages.any? %>
       <div class="page-grid">
         <% @pages.each do |page| %>
-          <% thumbnail = @page_thumbnails[page.id] || page.latest_screenshot %>
+          <%# In filtered mode the snapshot scope is authoritative — don't fall
+              back to page.latest_screenshot, which would render an ad-hoc
+              capture from outside the selected snapshot. %>
+          <% thumbnail = @page_thumbnails[page.id] %>
+          <% thumbnail ||= page.latest_screenshot unless @active_snapshot %>
           <% card_data = { testid: "page-card", page_id: page.id }
              card_data[:screenshot_id] = thumbnail.id if thumbnail %>
 

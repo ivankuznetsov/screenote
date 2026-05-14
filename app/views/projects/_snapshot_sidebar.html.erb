@@ -1,18 +1,19 @@
+<%# Locals: project, snapshots, active_snapshot -%>
 <aside class="snapshot-sidebar" data-testid="snapshot-sidebar">
   <h2 class="snapshot-sidebar__title">Snapshots</h2>
 
-  <% if @snapshots.any? %>
+  <% if snapshots.any? %>
     <ul class="snapshot-sidebar__list">
-      <% if @active_snapshot %>
+      <% if active_snapshot %>
         <li class="snapshot-sidebar__clear">
-          <%= link_to "All screens", project_path(@project), data: { testid: "snapshot-sidebar-clear" } %>
+          <%= link_to "All screens", project_path(project), data: { testid: "snapshot-sidebar-clear" } %>
         </li>
       <% end %>
 
-      <% @snapshots.each do |snapshot| %>
-        <li class="snapshot-sidebar__item <%= "snapshot-sidebar__item--active" if @active_snapshot&.id == snapshot.id %>">
+      <% snapshots.each do |snapshot| %>
+        <li class="snapshot-sidebar__item <%= "snapshot-sidebar__item--active" if active_snapshot&.id == snapshot.id %>">
           <%= link_to snapshot.label,
-              project_path(@project, snapshot_id: snapshot.id),
+              project_path(project, snapshot_id: snapshot.id),
               data: { testid: "snapshot-sidebar-item", snapshot_id: snapshot.id } %>
         </li>
       <% end %>

@@ -17,7 +17,13 @@ class ProjectsController < ApplicationController
     @is_owner = @project.owner?(Current.user)
     @snapshots = @project.snapshots.recent.limit(10).to_a
     @active_snapshot = active_snapshot
-    @snapshots.unshift(@active_snapshot) if @active_snapshot && @snapshots.none? { |s| s.id == @active_snapshot.id }
+    # Keep the sidebar at most 10 rows: if the active snapshot is older than
+    # the recent-10 window, prepend it and drop the oldest tail row so the
+    # "recent 10" contract is enforced rather than approximated.
+    if @active_snapshot && @snapshots.none? { |s| s.id == @active_snapshot.id }
+      @snapshots.unshift(@active_snapshot)
+      @snapshots.pop
+    end
     @pages = ordered_pages.to_a
     @page_thumbnails = page_thumbnails
   end
@@ -76,14 +82,23 @@ class ProjectsController < ApplicationController
   def active_snapshot
     return if params[:snapshot_id].blank?
 
-    @project.snapshots.find_by(id: params[:snapshot_id])
+    # Reuse the already-loaded recent-10 list when the active id is in it so
+    # the common case (user clicks the just-created top snapshot) skips one
+    # extra SELECT.
+    cached = @snapshots.detect { |s| s.id.to_s == params[:snapshot_id].to_s }
+    cached || @project.snapshots.find_by(id: params[:snapshot_id])
   end
 
   def ordered_pages
     scope = @project.pages
 
     scope = if @active_snapshot
-      scope.joins(:screenshots).where(screenshots: { snapshot_id: @active_snapshot.id })
+      # Match `page_thumbnails`'s `.ready` filter so a snapshot whose only
+      # screenshot for a page is still pending doesn't render a thumbnail-less
+      # card with no fallback.
+      scope.joins(:screenshots)
+        .merge(Screenshot.ready)
+        .where(screenshots: { snapshot_id: @active_snapshot.id })
     else
       scope.left_joins(:screenshots)
     end
@@ -106,19 +121,18 @@ class ProjectsController < ApplicationController
     page_ids = @pages.map(&:id)
     return {} if page_ids.empty?
 
-    # Pick the newest ready screenshot per page inside the snapshot via a
-    # subselect so we don't fetch every viewport variant and reduce in Ruby —
-    # bounds the row count at one screenshot per page even when the snapshot
-    # captured many viewports per page.
-    newest_ids = @active_snapshot.screenshots
+    # Order candidates by created_at (not MAX(id)) so a backfill/import that
+    # inserts older rows with newer ids cannot silently flip which screenshot
+    # renders as the thumbnail. Bucket the first per page in Ruby to keep the
+    # query SQLite/Postgres-portable without window functions.
+    candidates = @active_snapshot.screenshots
       .ready
       .where(page_id: page_ids)
-      .group(:page_id)
-      .select("MAX(id) AS id")
-
-    Screenshot
-      .where(id: newest_ids)
+      .order(created_at: :desc, id: :desc)
       .includes(screenshot_images: { image_attachment: :blob })
-      .index_by(&:page_id)
+
+    candidates.each_with_object({}) do |screenshot, acc|
+      acc[screenshot.page_id] ||= screenshot
+    end
   end
 end
