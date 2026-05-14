@@ -9,9 +9,9 @@ tags: [database, schema, models, relationships]
 
 # Data Model
 
-TLDR: Screenote has 13 application tables (plus 3 Active Storage tables and 3 Doorkeeper OAuth tables). The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and Doorkeeper OAuth tokens.
+TLDR: Screenote has 14 application tables (plus 3 Active Storage tables and 3 Doorkeeper OAuth tables). The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and Doorkeeper OAuth tokens.
 
-Source: `db/schema.rb` (schema version `2026_04_21_114232`)
+Source: `db/schema.rb` (schema version `2026_05_14_120630`)
 
 ## ER Diagram
 
@@ -27,8 +27,11 @@ erDiagram
     Project ||--o{ ProjectInvitation : "has many"
     Project ||--o{ Page : "has many"
     Project ||--o{ ApiKey : "has many"
+    Project ||--o{ Snapshot : "has many"
 
     Page ||--o{ Screenshot : "has many"
+
+    Snapshot ||--o{ Screenshot : "groups"
 
     Screenshot ||--o{ ScreenshotImage : "has many viewport variants"
     Screenshot ||--o{ Annotation : "has many"
@@ -67,7 +70,8 @@ erDiagram
 | `users` | User accounts with auth | email, password_digest, confirmed_at, oauth_provider, oauth_uid |
 | `projects` | Top-level container | name, description, user_id (creator) |
 | `pages` | Groups screenshots within a project | name, project_id |
-| `screenshots` | Logical capture/version under a page | title, page_id, derived status, legacy width/height during migration |
+| `snapshots` | Capture-run records for a project | project_id, git_commit, taken_at |
+| `screenshots` | Logical capture/version under a page | title, page_id, snapshot_id, derived status, legacy width/height during migration |
 | `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), width, height |
 | `annotations` | Feedback pinned to screenshot regions | x_percent, y_percent, width_percent, height_percent, viewport, comment, status (enum), screenshot_id, user_id |
 | `annotation_comments` | Threaded comments on annotations | body, action (enum), annotation_id, user_id, api_key_id, notified_at |
@@ -113,6 +117,8 @@ erDiagram
 
 - `users.email` -- unique
 - `pages.(project_id, LOWER(name))` -- unique, case-insensitive
+- `snapshots.(project_id, taken_at)` -- recent snapshots sidebar
+- `screenshots.snapshot_id` -- snapshot filtering
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique
 - `subscriptions.user_id` -- unique (one subscription per user)
@@ -132,6 +138,7 @@ erDiagram
 - `annotations -> resolved_by_api_key`: ON DELETE SET NULL
 - `oauth_access_grants/tokens -> oauth_applications`: ON DELETE CASCADE
 - `oauth_access_grants/tokens -> projects`: ON DELETE SET NULL
+- `screenshots -> snapshots`: ON DELETE SET NULL
 - `screenshot_images -> screenshots`: no database cascade; Rails `dependent: :destroy` preserves Active Storage purge callbacks
 
-See also: [[schema-evolution]], [[models/user]], [[models/project]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]
+See also: [[schema-evolution]], [[models/user]], [[models/project]], [[models/snapshot]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]

@@ -10,7 +10,7 @@ tags: [index, wiki]
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 35
+Page count: 36
 Updated: 2026-05-14
 
 ## Core Architecture
@@ -40,6 +40,7 @@ Updated: 2026-05-14
 - [[models/user]] — Authenticated users.
 - [[models/project]] — Project ownership and memberships.
 - [[models/page]] — Logical pages/screens under projects.
+- [[models/snapshot]] — Capture-run records grouping screenshots by commit and timestamp.
 - [[models/screenshot]] — Logical capture/version records.
 - [[models/screenshot-image]] — Per-viewport image variants.
 - [[models/annotation]] — Viewport-scoped visual feedback.

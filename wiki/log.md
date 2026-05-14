@@ -103,3 +103,10 @@ Append-only log of all wiki operations.
 **Scheduler:** `llm-wiki-screenote-a932fe24.timer` is enabled and active under `systemctl --user`; next run is scheduled for 2026-05-15 18:03:41 BST.
 **Maintenance scripts:** `.llm-wiki/refresh-wiki.sh` and `.llm-wiki/post-commit-refresh.sh` use bounded Codex and qmd timeouts and tell headless Codex not to run `qmd update` or `qmd embed` itself.
 **Source:** `systemctl --user list-timers`, `qmd update`, `qmd embed`, and collection-scoped `qmd search`.
+
+## [2026-05-14] snapshot model
+
+**Action:** Documented the Snapshot model and project-page snapshot filtering data model.
+**Pages created:** wiki/models/snapshot.md
+**Pages updated:** wiki/data-model.md, wiki/models/project.md, wiki/models/screenshot.md, wiki/index.md
+**Source:** Snapshot implementation in app/models, db/schema.rb, and project page controller/view changes

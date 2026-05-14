@@ -3,7 +3,7 @@ title: Project
 type: model
 source: app/models/project.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-14
 tags: [model, project, core]
 ---
 
@@ -35,6 +35,7 @@ Source: `app/models/project.rb`
 | pages | has_many | [[page]] (dependent: destroy) |
 | screenshots | has_many through | [[screenshot]] (via pages) |
 | api_keys | has_many | [[api-key]] (dependent: destroy) |
+| snapshots | has_many | [[snapshot]] (dependent: destroy) |
 
 ## Validations
 
@@ -56,4 +57,4 @@ Source: `app/models/project.rb`
 
 - `_destroy_in_progress` is a transient attr_accessor used to bypass the "sole owner" check in [[project-membership]] when the entire project is being destroyed.
 
-See also: [[user]], [[page]], [[project-membership]], [[project-invitation]], [[api-key]]
+See also: [[user]], [[page]], [[snapshot]], [[project-membership]], [[project-invitation]], [[api-key]]
