@@ -15,8 +15,9 @@ class ProjectsController < ApplicationController
 
   def show
     @is_owner = @project.owner?(Current.user)
-    @snapshots = @project.snapshots.recent.limit(10)
+    @snapshots = @project.snapshots.recent.limit(10).to_a
     @active_snapshot = active_snapshot
+    @snapshots.unshift(@active_snapshot) if @active_snapshot && @snapshots.none? { |s| s.id == @active_snapshot.id }
     @pages = ordered_pages.to_a
     @page_thumbnails = page_thumbnails
   end
@@ -73,7 +74,7 @@ class ProjectsController < ApplicationController
   end
 
   def active_snapshot
-    return unless params[:snapshot_id].present?
+    return if params[:snapshot_id].blank?
 
     @project.snapshots.find_by(id: params[:snapshot_id])
   end
@@ -87,22 +88,37 @@ class ProjectsController < ApplicationController
       scope.left_joins(:screenshots)
     end
 
-    scope
-      .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache, MAX(screenshots.created_at) AS latest_screenshot_at")
+    scope = scope
+      .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
       .group("pages.id")
       .order(Arel.sql("COALESCE(MAX(screenshots.created_at), pages.created_at) DESC"))
-      .includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
+
+    if @active_snapshot
+      scope
+    else
+      scope.includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
+    end
   end
 
   def page_thumbnails
     return {} unless @active_snapshot
 
-    @active_snapshot.screenshots
-      .where(page_id: @pages.map(&:id))
+    page_ids = @pages.map(&:id)
+    return {} if page_ids.empty?
+
+    # Pick the newest ready screenshot per page inside the snapshot via a
+    # subselect so we don't fetch every viewport variant and reduce in Ruby —
+    # bounds the row count at one screenshot per page even when the snapshot
+    # captured many viewports per page.
+    newest_ids = @active_snapshot.screenshots
+      .ready
+      .where(page_id: page_ids)
+      .group(:page_id)
+      .select("MAX(id) AS id")
+
+    Screenshot
+      .where(id: newest_ids)
       .includes(screenshot_images: { image_attachment: :blob })
-      .order(created_at: :desc, id: :desc)
-      .each_with_object({}) do |screenshot, thumbnails|
-        thumbnails[screenshot.page_id] ||= screenshot
-      end
+      .index_by(&:page_id)
   end
 end

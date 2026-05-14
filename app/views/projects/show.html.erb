@@ -24,8 +24,10 @@
       <div class="page-grid">
         <% @pages.each do |page| %>
           <% thumbnail = @page_thumbnails[page.id] || page.latest_screenshot %>
+          <% card_data = { testid: "page-card", page_id: page.id }
+             card_data[:screenshot_id] = thumbnail.id if thumbnail %>
 
-          <%= link_to page_path(page), class: "page-card", data: { testid: "page-card", page_id: page.id, screenshot_id: thumbnail&.id } do %>
+          <%= link_to page_path(page), class: "page-card", data: card_data do %>
             <div class="page-card__thumbnail">
               <% if thumbnail&.primary_image&.image&.attached? %>
                 <%= image_tag thumbnail.primary_image.image.variant(resize_to_limit: [480, 360]), alt: page.name, loading: "lazy" %>

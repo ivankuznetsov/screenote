@@ -84,6 +84,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal [ first_page.id, second_page.id ].sort, page_card_page_ids.sort
+    # Guards the `screenshots_count_cache` SELECT alias the view reads at
+    # `app/views/projects/show.html.erb:39-40`: drop the alias and these
+    # counts render blank with all other tests green.
+    assert_includes page_card_version_counters, "1 version"
+    assert_includes page_card_version_counters, "0 versions"
   end
 
   test "show filters to pages captured in the selected snapshot" do
@@ -102,6 +107,39 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal [ captured.id, also_captured.id ].sort, page_card_page_ids.sort
+    # Guards screenshots_count_cache on the filtered path too — a refactor
+    # that scopes the alias to only the unfiltered SELECT would render blank
+    # counters with every other assertion green.
+    assert page_card_version_counters.all? { |c| c =~ /\d+ version/ },
+      "All page cards should render their version counter; got #{page_card_version_counters.inspect}"
+  end
+
+  test "show filtered thumbnails bound query count" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Bounded query project")
+    snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+
+    3.times do |i|
+      page = project.pages.create!(name: "Page #{i}")
+      screenshot = page.screenshots.create!(title: "Shot #{i}", snapshot: snapshot, status: :ready)
+      %i[desktop tablet mobile].each { |vp| screenshot.screenshot_images.create!(viewport: vp) }
+    end
+
+    get project_path(project, snapshot_id: snapshot.id) # warm caches
+
+    # Wrap the second call so a refactor that drops the page_thumbnails
+    # subselect and resolves thumbnails per-card can't silently regress R2.
+    queries = []
+    callback = ->(*, payload) { queries << payload[:sql] unless /SCHEMA|TRANSACTION/i.match?(payload[:name].to_s) }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      get project_path(project, snapshot_id: snapshot.id)
+    end
+
+    assert_response :success
+    # Generous upper bound: a per-card thumbnail resolver would multiply by
+    # page count (here 3); 25 catches that without being a brittle exact match.
+    assert queries.size <= 25,
+      "Filtered show should not issue per-page thumbnail queries (saw #{queries.size}): #{queries.last(40).inspect}"
   end
 
   test "show renders snapshot screenshot as thumbnail when filtered" do
@@ -132,12 +170,17 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "show ignores unknown snapshot filter" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Unknown snapshot project")
+    project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
     page = project.pages.create!(name: "Visible")
 
     get project_path(project, snapshot_id: Snapshot.maximum(:id).to_i + 100)
 
     assert_response :success
     assert_equal [ page.id ], page_card_page_ids
+    assert_select "[data-testid='snapshot-sidebar']",
+      { count: 1 }, "Sidebar should still render so user can choose a valid snapshot"
+    assert_select "[data-testid='snapshot-sidebar-clear']",
+      { count: 0 }, "Clear link should not appear when no active snapshot is bound"
   end
 
   test "show ignores snapshot filter from another project" do
@@ -283,5 +326,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     css_select("[data-testid='page-card']").to_h do |node|
       [ node["data-page-id"].to_i, node["data-screenshot-id"].to_i ]
     end
+  end
+
+  def page_card_version_counters
+    css_select("[data-testid='page-card'] .page-card__meta").map { |node| node.text.strip }
   end
 end
