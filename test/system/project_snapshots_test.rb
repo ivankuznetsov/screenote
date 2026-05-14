@@ -24,9 +24,17 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
     shared_page = "Shared Page #{SecureRandom.hex(4)}"
     snapshot_only_page = "Snapshot Page #{SecureRandom.hex(4)}"
     ad_hoc_only_page = "Ad-hoc Page #{SecureRandom.hex(4)}"
+    older_page = "Older Page #{SecureRandom.hex(4)}"
 
     create_project(project_name)
     token, project_id = create_api_key_with_project(project_name, "Snapshot E2E #{SecureRandom.hex(4)}")
+
+    # Older ad-hoc capture first so it sits below newer ones in the default sort.
+    mcp_create_multi_viewport_screenshot(
+      token, project_id,
+      page_name: older_page,
+      title: "Older first"
+    )
 
     snapshot = mcp_create_snapshot(token, project_id)
     shared_snapshot = mcp_create_multi_viewport_screenshot(
@@ -54,7 +62,7 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
 
     visit "/projects/#{project_id}"
     assert_on_project_show(project_name)
-    assert_page_cards_in_order(shared_page)
+    assert_page_cards_in_order(shared_page, ad_hoc_only_page, snapshot_only_page, older_page)
     assert_snapshot_sidebar_visible
     assert_snapshot_listed snapshot["label"]
 
@@ -62,13 +70,16 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
 
     assert_only_page_cards shared_page, snapshot_only_page
     assert_page_card_not_visible ad_hoc_only_page
+    assert_page_card_not_visible older_page
     assert_page_card_screenshot shared_page, shared_snapshot["screenshot_id"]
     assert_not_equal shared_ad_hoc["screenshot_id"].to_i,
       find(PAGE_CARD, text: shared_page)["data-screenshot-id"].to_i
 
     clear_snapshot_filter
 
-    assert_page_card_visible ad_hoc_only_page
+    assert_only_page_cards shared_page, snapshot_only_page, ad_hoc_only_page, older_page
+    assert_page_card_screenshot shared_page, shared_ad_hoc["screenshot_id"]
+    assert_no_selector SNAPSHOT_SIDEBAR_CLEAR
   end
 
   private
@@ -90,12 +101,15 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
   end
 
   def mcp_create_snapshot(token, project_id)
+    # Distinct from the fixture commit (abc1234def…) so a debugger isn't
+    # confused about which project's snapshot they're looking at when both
+    # databases are open side-by-side.
     response = call_mcp_tool(
       token: token,
       tool_name: "create_snapshot",
       arguments: {
         project_id: project_id,
-        git_commit: "abc1234def567890abc1234def567890abc1234d",
+        git_commit: "deadbeef1234567890abcdef1234567890abcdef",
         taken_at: "2026-05-14T12:00:00Z"
       }
     )
