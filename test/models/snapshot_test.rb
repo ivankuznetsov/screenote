@@ -46,8 +46,21 @@ class SnapshotTest < ActiveSupport::TestCase
     assert snapshot.errors[:taken_at].any?, "Should have taken_at error"
   end
 
-  test "recent scope returns newest first" do
-    assert_equal snapshots(:latest), Snapshot.recent.first
+  test "recent scope returns full ordered array newest first" do
+    assert_equal [ snapshots(:latest), snapshots(:earlier) ],
+      projects(:alice_project).snapshots.recent.to_a
+  end
+
+  test "recent scope tie-breaks by id when taken_at is identical" do
+    same_time = Time.zone.parse("2026-05-14 12:00:00")
+    older = projects(:alice_project).snapshots.create!(git_commit: "aaa1234", taken_at: same_time)
+    newer = projects(:alice_project).snapshots.create!(git_commit: "bbb1234", taken_at: same_time)
+
+    recent = projects(:alice_project).snapshots.recent.to_a
+    older_idx = recent.index(older)
+    newer_idx = recent.index(newer)
+    assert newer_idx < older_idx,
+      "Newer id should come first when taken_at ties (newer=#{newer_idx}, older=#{older_idx})"
   end
 
   test "short_commit truncates to seven characters" do
@@ -64,7 +77,7 @@ class SnapshotTest < ActiveSupport::TestCase
     assert_equal "2026-05-14 · abc1234", snapshot.label
   end
 
-  test "destroying snapshot nullifies screenshots" do
+  test "destroying snapshot nullifies screenshots via Rails dependent: :nullify" do
     snapshot = snapshots(:latest)
     screenshot = screenshots(:alice_screenshot)
     screenshot.update!(snapshot: snapshot)
@@ -74,5 +87,21 @@ class SnapshotTest < ActiveSupport::TestCase
     end
 
     assert_nil screenshot.reload.snapshot_id
+  end
+
+  test "DB foreign key nullifies screenshot.snapshot_id when the row is deleted directly" do
+    # Guards the DB-level ON DELETE NULLIFY: if a future migration drops the
+    # FK action, raw SQL deletes would leave dangling snapshot_ids on
+    # screenshots even though Rails callbacks pass — this test fails loudly
+    # in that scenario.
+    snapshot = snapshots(:latest)
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.update!(snapshot: snapshot)
+
+    ActiveRecord::Base.connection.execute(
+      ActiveRecord::Base.sanitize_sql_for_conditions([ "DELETE FROM snapshots WHERE id = ?", snapshot.id ])
+    )
+
+    assert_nil screenshot.reload.snapshot_id, "DB FK should null out screenshot.snapshot_id"
   end
 end

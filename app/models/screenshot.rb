@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class Screenshot < ApplicationRecord
-  # Canonical constants now live on ScreenshotImage (the real owner of the blob).
+  # Canonical constants live on ScreenshotImage (the real owner of the blob).
   # Screenshot re-exposes them for the still-present has_one_attached :image
-  # (backfill code path, to be removed in PR-3 alongside todo 172).
+  # used by the legacy upload path.
   ALLOWED_CONTENT_TYPES = ScreenshotImage::ALLOWED_CONTENT_TYPES
   MAX_FILE_SIZE = ScreenshotImage::MAX_FILE_SIZE
 
@@ -23,11 +23,19 @@ class Screenshot < ApplicationRecord
   validates :title, presence: true, length: { maximum: 255 }
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :acceptable_image
+  validate :snapshot_belongs_to_same_project, if: :snapshot_id?
 
   # Returns the ScreenshotImage to render when no specific viewport is requested.
   # Prefers :desktop, falls back to the first available viewport, nil if none.
+  # Walks the in-memory association when loaded so preloaded scopes
+  # (e.g. project show page) avoid a per-card SELECT.
   def primary_image
-    screenshot_images.find_by(viewport: :desktop) || screenshot_images.order(:viewport).first
+    if screenshot_images.loaded?
+      images = screenshot_images.to_a
+      images.find { |si| si.viewport == "desktop" } || images.min_by(&:viewport)
+    else
+      screenshot_images.find_by(viewport: :desktop) || screenshot_images.order(:viewport).first
+    end
   end
 
   # Returns the ScreenshotImage matching the given viewport (enum symbol or string), or nil.
@@ -76,5 +84,12 @@ class Screenshot < ApplicationRecord
     if image.blob.byte_size > MAX_FILE_SIZE
       errors.add(:image, "is too large (max #{MAX_FILE_SIZE / 1.megabyte}MB)")
     end
+  end
+
+  def snapshot_belongs_to_same_project
+    return if snapshot.nil?
+    return if page && snapshot.project_id == page.project_id
+
+    errors.add(:snapshot, "must belong to the same project as the page")
   end
 end
