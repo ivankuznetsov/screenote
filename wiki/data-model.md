@@ -117,7 +117,7 @@ erDiagram
 
 - `users.email` -- unique
 - `pages.(project_id, LOWER(name))` -- unique, case-insensitive
-- `snapshots.(project_id, taken_at)` -- recent snapshots sidebar
+- `snapshots.(project_id, taken_at)` -- recent snapshots sidebar; also accelerates `current_project.snapshots.find_by(id:)` in `CreateMultiViewportScreenshotTool` (composite covers the project scope before the id lookup)
 - `screenshots.snapshot_id` -- snapshot filtering
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique

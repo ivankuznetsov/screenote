@@ -36,19 +36,23 @@ Source: `app/models/snapshot.rb`
 - `git_commit`: presence, length max 64
 - `taken_at`: presence
 
+## Constants
+
+- `GIT_COMMIT_FORMAT = /\A[0-9a-f]{7,40}\z/` -- canonical regex for a valid git commit SHA. Callers (e.g. `CreateMultiViewportScreenshotTool`) match against this rather than redefining the contract.
+
 ## Scopes
 
-- `recent` -- newest `taken_at` first.
+- `recent` -- orders by `taken_at DESC, id DESC`. The id tie-break keeps ordering stable across SQLite/Postgres when a `/snapshot` CLI retry creates two rows in the same second.
 
 ## Key Methods
 
 - `short_commit` -- first seven characters of `git_commit`.
-- `label` -- `YYYY-MM-DD · short_commit`, used by the project-page snapshot sidebar.
+- `label` -- `YYYY-MM-DD · short_commit`, used by the project-page snapshot sidebar. Date is computed via `taken_at.in_time_zone.to_date` so it reflects the request's `Time.zone` (the dev-facing CLI expects the commit date in their local zone).
 
 ## Notes
 
 - `screenshots.snapshot_id` is nullable. Existing and ad-hoc screenshots remain outside snapshots.
 - Deleting a snapshot nullifies linked screenshots instead of deleting them.
-- The project page can filter strictly to pages that have screenshots in one selected snapshot.
+- The project page can filter strictly to pages that have screenshots in one selected snapshot. When filtered, each page card's thumbnail switches from the page's `latest_screenshot` to the newest ready screenshot belonging to that snapshot, so the user sees the snapshot-time look (not whatever was uploaded afterward).
 
 See also: [[project]], [[screenshot]], [[page]]
