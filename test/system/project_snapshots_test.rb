@@ -138,7 +138,42 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
 
     result = parse_mcp_result(response)
     assert result["screenshot_id"].present?, "create_multi_viewport_screenshot response should include screenshot_id"
+
+    # Complete the signed-URL upload for every viewport variant; without this
+    # the parent Screenshot stays :pending and never appears in the project
+    # show grid's thumbnail set, which would invalidate later assertions.
+    upload_to_signed_urls(result["uploads"])
+    wait_for_screenshot_ready(result["screenshot_id"])
+
     result
+  end
+
+  def upload_to_signed_urls(uploads)
+    image_data = File.binread(TEST_IMAGE_PATH)
+    uploads.each do |upload|
+      uri = URI(upload["upload_url"])
+      request = Net::HTTP::Put.new(uri)
+      request["Content-Type"] = "image/png"
+      request.body = image_data
+      response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(request) }
+      assert_equal "200", response.code,
+        "Signed-URL upload should succeed (got #{response.code}: #{response.body})"
+    end
+  end
+
+  # Polls Screenshot.status until :ready or the deadline expires. The
+  # ScreenshotDimensionJob runs async in the dev queue, so we can't assume
+  # synchronous readiness after the upload completes.
+  def wait_for_screenshot_ready(screenshot_id, max_wait: 15)
+    deadline = Time.current + max_wait
+    loop do
+      return if Screenshot.where(id: screenshot_id, status: :ready).exists?
+      if Time.current > deadline
+        actual = Screenshot.where(id: screenshot_id).pick(:status)
+        raise "Screenshot ##{screenshot_id} did not reach :ready within #{max_wait}s (status: #{actual.inspect})"
+      end
+      sleep 0.1
+    end
   end
 
   def call_mcp_tool(token:, tool_name:, arguments: {})
