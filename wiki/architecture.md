@@ -3,7 +3,7 @@ title: Architecture
 type: architecture
 source: CLAUDE.md, Gemfile, config/routes.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-14
 tags: [architecture, overview, stack, integrations]
 ---
 
@@ -21,9 +21,9 @@ Browser (Turbo + Stimulus)
     v
 Rails 8.1 (Puma + Thruster)
     |
-    +-- Web UI (controllers + views)
+    +-- Web UI (controllers + views, viewport switcher)
     +-- REST API (Api::V1 namespace, bearer auth)
-    +-- MCP Server (fast-mcp gem, OAuth 2.1)
+    +-- MCP Server (fast-mcp gem, OAuth 2.1/API key auth)
     +-- Stripe Webhooks
     |
     +-- Active Storage (Rabata S3)
@@ -76,7 +76,8 @@ User enters URL -> server captures page -> User annotates -> Agent collects
 - **Concern-based auth** -- `ProjectAuthorization` concern shared across controllers needing project-level access checks
 - **Dual auth systems** -- Web UI uses session-based auth (rails_simple_auth), API uses bearer token auth (ApiKey), MCP uses OAuth 2.1 (Doorkeeper)
 - **Enum-backed status fields** -- integer enums for annotation status, comment actions, subscription plan/status, project membership roles, invitation status, screenshot status
-- **Percentage-based coordinates** -- annotations use 0.0-100.0 percentage coordinates for resolution independence
+- **ScreenshotImage variants** -- a Screenshot is a logical capture/version and one or more ScreenshotImage rows own the actual viewport-specific blobs
+- **Percentage-based coordinates** -- annotations use 0.0-100.0 percentage coordinates and are scoped to desktop/tablet/mobile viewports
 
 ## External Integrations
 
@@ -99,8 +100,9 @@ app/
     api/              # REST API (base + v1 namespace)
     oauth/            # OAuth authorization + registration
     concerns/         # Shared controller concerns
-  models/             # 13 models
+  models/             # core models, including ScreenshotImage viewport variants
   services/           # 1 service (AnnotationCropService)
+  tools/              # 17 registered FastMCP tools plus ApplicationTool base
   javascript/
     controllers/      # Stimulus controllers
   assets/
@@ -109,4 +111,4 @@ app/
     layouts/          # app, auth, landing layouts
 ```
 
-See also: [[routes]], [[gems]], [[data-model]], [[decisions]]
+See also: [[routes]], [[gems]], [[data-model]], [[decisions]], [[mcp-tools]]

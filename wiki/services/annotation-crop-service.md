@@ -3,13 +3,13 @@ title: AnnotationCropService
 type: service
 source: app/services/annotation_crop_service.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-14
 tags: [service, image-processing, annotation, crop]
 ---
 
 # AnnotationCropService
 
-TLDR: Crops a region around an annotation from a screenshot image. Returns a Base64-encoded image. Handles both point annotations (fixed 200x200 crop) and region annotations (crop with 50px padding). Results are cached for 1 hour.
+TLDR: Crops a region around an annotation from the matching `ScreenshotImage`. Returns a Base64-encoded image. Handles both point annotations (fixed 200x200 crop) and region annotations (crop with 50px padding). Results are cached for 1 hour.
 
 Source: `app/services/annotation_crop_service.rb`
 
@@ -21,17 +21,17 @@ When MCP tools return annotations to AI agents, they include a cropped image of 
 
 ```ruby
 # Class method (convenience)
-AnnotationCropService.crop(screenshot, annotation)
+AnnotationCropService.crop(screenshot_image, annotation)
 # => Base64-encoded PNG/JPEG string
 
 # Instance method
-service = AnnotationCropService.new(screenshot, annotation)
+service = AnnotationCropService.new(screenshot_image, annotation)
 service.crop
 ```
 
 ## Inputs
 
-- `screenshot` -- A [[screenshot]] record with `image` attached, `width` and `height` set
+- `screenshot_image` -- A [[models/screenshot-image]] record with `image` attached, `width` and `height` set
 - `annotation` -- An [[annotation]] record with percentage-based coordinates
 
 ## Output
@@ -49,7 +49,7 @@ service.crop
 ## Logic
 
 ### Point annotations (`annotation.point?`)
-1. Convert percentage coordinates to pixel coordinates using screenshot dimensions
+1. Convert percentage coordinates to pixel coordinates using ScreenshotImage dimensions
 2. Crop a 200x200 area centered on the annotation point
 3. Clamp to image bounds
 4. Resize to fit within 1072x1072
@@ -62,7 +62,7 @@ service.crop
 
 ## Caching
 
-Results are cached in Rails.cache (Solid Cache) with key: `annotation_crop/{annotation.id}/{annotation.updated_at}/{blob.checksum}`. Expires in 1 hour. The cache key includes the blob checksum so re-uploads invalidate the cache.
+Results are cached in Rails.cache (Solid Cache) with key prefix `annotation_crop/v2`, plus annotation id, annotation update time, and blob checksum. Expires in 1 hour. The cache version was bumped when crops moved from parent `Screenshot` blobs to child `ScreenshotImage` blobs.
 
 ## Dependencies
 
@@ -70,4 +70,4 @@ Results are cached in Rails.cache (Solid Cache) with key: `annotation_crop/{anno
 - Active Storage (to open blob files)
 - Rails.cache (Solid Cache)
 
-See also: [[models/annotation]], [[models/screenshot]], [[architecture]]
+See also: [[models/annotation]], [[models/screenshot]], [[models/screenshot-image]], [[architecture]]

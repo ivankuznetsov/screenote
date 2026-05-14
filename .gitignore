@@ -38,3 +38,5 @@
 
 .worktrees
 .mcp.json
+.qmd/
+/.llm-wiki/qmd-cache/

@@ -1,15 +1,15 @@
 ---
 title: Plans and Initiatives
 type: architecture
-source: plans/ directory (4 files)
+source: plans/ directory (6 files)
 created: 2026-04-11
-updated: 2026-04-11
+updated: 2026-05-14
 tags: [plans, roadmap, features, initiatives]
 ---
 
 # Plans and Initiatives
 
-Summary of all active plans from the `plans/` directory. These are the major feature initiatives driving Screenote's development, ranging from foundational product vision to specific UX and developer-experience improvements.
+Summary of all active plans from the `plans/` directory. These are the major feature initiatives driving Screenote's development, ranging from foundational product vision to specific UX and developer-experience improvements. Some plans predate implemented code; source files remain authoritative when plan text diverges.
 
 ## Product Vision
 
@@ -29,9 +29,17 @@ The plan covers the full technical stack (Rails 8, Annotorious v3, FastMCP, Acti
 
 ## Feature Initiatives
 
+### Multi-Viewport Screenshots (plans/multi-viewport-screenshots.md)
+
+**Status:** Mostly implemented in commits `7f413b2`, `9786e6e`, and `85d22c3`.
+
+The plan introduced the current mental model: one [[models/screenshot]] is one logical capture event, and each capture has one or more [[models/screenshot-image]] rows for desktop/tablet/mobile renderings. Annotations belong to a `(screenshot, viewport)` pair.
+
+Source inspection confirms the child model, `annotations.viewport`, viewport route, Turbo frame switcher, and `create_multi_viewport_screenshot` signed-upload tool are present. The plan's proposed replacement of `CreateScreenshotTool` with a single `viewports: [{ image_path: ... }]` schema did not land exactly as written; current source keeps the base64 `create_screenshot` tool and adds separate signed-upload tools.
+
 ### Page/Version Hierarchy (plans/project-page-version-hierarchy.md)
 
-**Status:** Ready to implement. Largest pending structural change.
+**Status:** Implemented before this refresh for the Project -> Page -> Screenshot hierarchy; the plan remains useful historical design context.
 
 Replaces the flat Project -> Screenshots structure with **Project -> Page -> Version**. A "Page" represents a logical screen (e.g., "Login", "Dashboard"), and each page has ordered versions (screenshots with timestamps).
 
@@ -48,9 +56,9 @@ See also: [[models/page]], [[models/screenshot]], [[data-model]]
 
 ### Help Page Redesign (plans/help-page-redesign.md)
 
-**Status:** Ready to implement.
+**Status:** Implemented in current source.
 
-Three changes bundled together:
+Current source has `StaticPagesController`, public `/help`, extracted static page help partials, guest nav, and dynamic MCP tool reference. The plan bundled:
 1. **Make help page public** -- currently behind authentication, blocking potential users from evaluating Screenote
 2. **Expand Claude Code quick start** -- fix command syntax, show full feedback loop
 3. **Add MCP connection documentation** -- endpoint URL, OAuth 2.1 and API key auth methods, project_id behavior differences
@@ -71,22 +79,26 @@ A SKILL.md file at `.claude/skills/screenote/SKILL.md` with two modes:
 
 Prerequisite: add `image_path` parameter to `CreateScreenshotTool` (alternative to `image_base64`, reads file from disk directly).
 
+Current source has not added `image_path`; it instead provides signed-upload tools that can avoid base64 transfer. Reconcile the skill implementation with that actual API before building it.
+
 Key decisions: no base64 through context, viewport-only screenshots (not fullPage), resolve is opt-in (ask user first), single skill with two modes.
 
 ## Dependency Map
 
 ```
 Page/Version Hierarchy
-  └── Requires: StaticPagesController rename (Phase 0)
-  └── Affects: MCP tools, routes, views, authorization
+  └── Implemented: StaticPagesController + Project -> Page -> Screenshot
 
 Help Page Redesign
-  └── Blocked by: Page/Version Phase 0 (both touch PagesController)
-  └── Affects: layouts, routes (indirectly), tests
+  └── Implemented: public help + MCP docs + partials
 
 Claude Code Skill
-  └── Requires: image_path parameter on CreateScreenshotTool
+  └── Requires: reconcile image_path plan with current signed-upload tools
   └── Independent of other plans
+
+Multi-Viewport Screenshots
+  └── Implemented: ScreenshotImage + viewport switcher + MCP multi-viewport upload
+  └── Follow-up: remove transitional Screenshot image assumptions when safe
 
 Visual Feedback (master plan)
   └── Mostly implemented; remaining items feed into other plans

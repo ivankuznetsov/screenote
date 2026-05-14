@@ -3,13 +3,13 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-14
 tags: [routes, api, endpoints, auth]
 ---
 
 # Routes
 
-TLDR: The route surface includes web UI CRUD for projects/pages/screenshots/annotations, a REST API (v1) for agent uploads, OAuth 2.1 endpoints for MCP, Stripe webhook, admin dashboard, and static pages.
+TLDR: The route surface includes web UI CRUD for projects/pages/screenshots/annotations, screenshot viewport permalinks, a REST API (v1) for agent uploads, OAuth 2.1 endpoints for MCP, Stripe webhook, admin dashboard, and static pages.
 
 Source: `config/routes.rb`
 
@@ -63,6 +63,7 @@ All require authentication unless noted.
 | GET | `/pages/:page_id/screenshots/new` | new | Member |
 | POST | `/pages/:page_id/screenshots` | create | Member |
 | GET | `/screenshots/:id` | show | Member |
+| GET | `/screenshots/:id/viewports/:viewport` | show specific desktop/tablet/mobile variant | Member |
 | GET | `/screenshots/:id/edit` | edit | Member |
 | PATCH | `/screenshots/:id` | update | Member |
 | DELETE | `/screenshots/:id` | destroy | Member |
@@ -131,6 +132,8 @@ All require authentication unless noted.
 |--------|------|--------|------|
 | PUT | `/api/screenshots/:id/upload` | Binary upload with signed token | Upload token |
 
+The upload route keeps the parent screenshot URL shape, but the signed token resolves to a specific `ScreenshotImage`, allowing multi-viewport uploads to PUT desktop/tablet/mobile binaries independently.
+
 ## OAuth 2.1 Endpoints (Doorkeeper)
 
 | Method | Path | Purpose |
@@ -164,4 +167,4 @@ All require authentication unless noted.
 |--------|------|---------|
 | GET | `/up` | Load balancer health check |
 
-See also: [[architecture]], [[controllers/web-controllers]], [[controllers/api-controllers]]
+See also: [[architecture]], [[controllers/web-controllers]], [[controllers/api-controllers]], [[mcp-tools]]

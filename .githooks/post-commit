@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# BEGIN LLM WIKI POST-COMMIT
+if [ -x ".llm-wiki/post-commit-refresh.sh" ]; then
+  ".llm-wiki/post-commit-refresh.sh" >/dev/null 2>&1 &
+fi
+# END LLM WIKI POST-COMMIT
