@@ -392,6 +392,80 @@ a:hover {
   gap: 0.5rem;
 }
 
+.project-detail__body {
+  display: grid;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.project-detail__content {
+  min-width: 0;
+}
+
+.snapshot-sidebar {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.875rem;
+}
+
+.snapshot-sidebar__title {
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 0.625rem;
+}
+
+.snapshot-sidebar__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  list-style: none;
+}
+
+.snapshot-sidebar__item a,
+.snapshot-sidebar__clear a {
+  display: block;
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  padding: 0.375rem 0.5rem;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.snapshot-sidebar__item a:hover,
+.snapshot-sidebar__clear a:hover,
+.snapshot-sidebar__item a:focus,
+.snapshot-sidebar__clear a:focus {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.snapshot-sidebar__item--active a {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+  font-weight: 600;
+}
+
+.snapshot-sidebar__clear {
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.snapshot-sidebar__clear a {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.snapshot-sidebar__empty {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
 /* Page grid */
 .page-grid {
   display: grid;
@@ -473,6 +547,26 @@ a:hover {
 .page-card__meta {
   color: var(--color-text-secondary);
   font-size: 0.8125rem;
+}
+
+@media (max-width: 760px) {
+  .project-detail__body {
+    grid-template-columns: 1fr;
+  }
+
+  .snapshot-sidebar__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .snapshot-sidebar__clear {
+    border-bottom: 0;
+    border-right: 1px solid var(--color-border);
+    margin-bottom: 0;
+    margin-right: 0.25rem;
+    padding-bottom: 0;
+    padding-right: 0.25rem;
+  }
 }
 
 /* Page detail */

@@ -15,11 +15,10 @@ class ProjectsController < ApplicationController
 
   def show
     @is_owner = @project.owner?(Current.user)
-    @pages = @project.pages.ordered
-              .left_joins(:screenshots)
-              .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
-              .group("pages.id")
-              .includes(latest_screenshot: { image_attachment: :blob })
+    @snapshots = @project.snapshots.recent.limit(10)
+    @active_snapshot = active_snapshot
+    @pages = ordered_pages.to_a
+    @page_thumbnails = page_thumbnails
   end
 
   def new
@@ -71,5 +70,39 @@ class ProjectsController < ApplicationController
 
   def project_params
     params.require(:project).permit(:name, :description)
+  end
+
+  def active_snapshot
+    return unless params[:snapshot_id].present?
+
+    @project.snapshots.find_by(id: params[:snapshot_id])
+  end
+
+  def ordered_pages
+    scope = @project.pages
+
+    scope = if @active_snapshot
+      scope.joins(:screenshots).where(screenshots: { snapshot_id: @active_snapshot.id })
+    else
+      scope.left_joins(:screenshots)
+    end
+
+    scope
+      .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache, MAX(screenshots.created_at) AS latest_screenshot_at")
+      .group("pages.id")
+      .order(Arel.sql("COALESCE(MAX(screenshots.created_at), pages.created_at) DESC"))
+      .includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
+  end
+
+  def page_thumbnails
+    return {} unless @active_snapshot
+
+    @active_snapshot.screenshots
+      .where(page_id: @pages.map(&:id))
+      .includes(screenshot_images: { image_attachment: :blob })
+      .order(created_at: :desc, id: :desc)
+      .each_with_object({}) do |screenshot, thumbnails|
+        thumbnails[screenshot.page_id] ||= screenshot
+      end
   end
 end

@@ -57,6 +57,116 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".project-detail__title", @project.name
   end
 
+  test "show orders pages by newest screenshot and falls back to page created_at" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Ordering project")
+    older = project.pages.create!(name: "Older", created_at: 6.days.ago)
+    no_screenshots = project.pages.create!(name: "No screenshots", created_at: 1.hour.ago)
+    newest = project.pages.create!(name: "Newest", created_at: 7.days.ago)
+
+    older.screenshots.create!(title: "Older shot", status: :ready, created_at: 4.days.ago)
+    newest.screenshots.create!(title: "Newest shot", status: :ready, created_at: 10.minutes.ago)
+
+    get project_path(project)
+
+    assert_response :success
+    assert_equal [ newest.id, no_screenshots.id, older.id ], page_card_page_ids
+  end
+
+  test "show without snapshot filter returns all pages" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "All pages project")
+    first_page = project.pages.create!(name: "First")
+    second_page = project.pages.create!(name: "Second")
+    first_page.screenshots.create!(title: "First shot", status: :ready)
+
+    get project_path(project)
+
+    assert_response :success
+    assert_equal [ first_page.id, second_page.id ].sort, page_card_page_ids.sort
+  end
+
+  test "show filters to pages captured in the selected snapshot" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Snapshot project")
+    snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+    captured = project.pages.create!(name: "Captured")
+    also_captured = project.pages.create!(name: "Also captured")
+    ad_hoc_only = project.pages.create!(name: "Ad-hoc only")
+
+    captured.screenshots.create!(title: "Captured shot", snapshot: snapshot, status: :ready)
+    also_captured.screenshots.create!(title: "Also captured shot", snapshot: snapshot, status: :ready)
+    ad_hoc_only.screenshots.create!(title: "Ad-hoc shot", status: :ready)
+
+    get project_path(project, snapshot_id: snapshot.id)
+
+    assert_response :success
+    assert_equal [ captured.id, also_captured.id ].sort, page_card_page_ids.sort
+  end
+
+  test "show renders snapshot screenshot as thumbnail when filtered" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Snapshot thumbnails project")
+    snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+    page = project.pages.create!(name: "Shared page")
+
+    snapshot_screenshot = page.screenshots.create!(
+      title: "Snapshot shot",
+      snapshot: snapshot,
+      status: :ready,
+      created_at: 2.hours.ago
+    )
+    ad_hoc_screenshot = page.screenshots.create!(
+      title: "Newer ad-hoc shot",
+      status: :ready,
+      created_at: 5.minutes.ago
+    )
+
+    get project_path(project, snapshot_id: snapshot.id)
+
+    assert_response :success
+    assert_equal snapshot_screenshot.id, page_card_screenshot_ids.fetch(page.id)
+    assert_not_equal ad_hoc_screenshot.id, page_card_screenshot_ids.fetch(page.id)
+  end
+
+  test "show ignores unknown snapshot filter" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Unknown snapshot project")
+    page = project.pages.create!(name: "Visible")
+
+    get project_path(project, snapshot_id: Snapshot.maximum(:id).to_i + 100)
+
+    assert_response :success
+    assert_equal [ page.id ], page_card_page_ids
+  end
+
+  test "show ignores snapshot filter from another project" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Cross snapshot project")
+    page = project.pages.create!(name: "Visible")
+    other_snapshot = projects(:bob_project).snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+
+    get project_path(project, snapshot_id: other_snapshot.id)
+
+    assert_response :success
+    assert_equal [ page.id ], page_card_page_ids
+  end
+
+  test "show lists recent snapshots in the sidebar" do
+    sign_in(@user)
+    snapshot = @project.snapshots.create!(
+      git_commit: "abc1234def567890",
+      taken_at: Time.zone.parse("2026-05-14 12:00:00")
+    )
+
+    get project_path(@project, snapshot_id: snapshot.id)
+
+    assert_response :success
+    assert_select "[data-testid='snapshot-sidebar']"
+    assert_select "[data-testid='snapshot-sidebar-item']", text: "2026-05-14 · abc1234"
+    assert_select "[data-testid='snapshot-sidebar-clear']", text: "All screens"
+  end
+
   # New
   test "new renders form" do
     sign_in(@user)
@@ -161,5 +271,17 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       post projects_path, params: { project: { name: "Another Pro Project", description: "Yes" } }
     end
     assert_redirected_to project_path(Project.last)
+  end
+
+  private
+
+  def page_card_page_ids
+    css_select("[data-testid='page-card']").map { |node| node["data-page-id"].to_i }
+  end
+
+  def page_card_screenshot_ids
+    css_select("[data-testid='page-card']").to_h do |node|
+      [ node["data-page-id"].to_i, node["data-screenshot-id"].to_i ]
+    end
   end
 end
