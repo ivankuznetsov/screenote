@@ -3,7 +3,7 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-04-21
+updated: 2026-05-14
 tags: [controller, web, ui, auth]
 ---
 
@@ -79,7 +79,8 @@ Source: `app/controllers/screenshots_controller.rb`
 **Actions:** show, new, create, edit, update, destroy
 
 - `new/create` -- Scoped to page via `params[:page_id]`
-- `show` -- Loads annotations with eager-loaded comments (user + api_key). Supports `?status=open|resolved` filter.
+- `show` -- Resolves the active viewport, loads the matching `ScreenshotImage`, and filters annotations by status and active viewport.
+- `viewports/:viewport` -- Same action as show; constrained to desktop/tablet/mobile and rendered through the `screenshot_canvas` Turbo Frame switcher.
 - Permits: `title`, `image`
 
 ---
@@ -93,7 +94,7 @@ Source: `app/controllers/annotations_controller.rb`
 - All actions scoped via screenshot -> project membership check
 - `create` -- Builds annotation, assigns `Current.user`
 - `update` -- Handles two paths: (1) resolve if `status=resolved`, (2) standard attribute update
-- Permits: `x_percent`, `y_percent`, `width_percent`, `height_percent`, `comment`
+- Permits: `x_percent`, `y_percent`, `width_percent`, `height_percent`, `comment`, `viewport`
 
 ---
 
@@ -193,6 +194,7 @@ Source: `app/controllers/stripe_webhooks_controller.rb`
 
 - Verifies Stripe webhook signature
 - Handles: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+- Inserts `StripeWebhookEvent` before dispatch so duplicate Stripe retries do not re-run side effects
 - Sends admin notification email on new Pro subscriber
 - Reports errors to Honeybadger
 - `current_period_end` is read from `items.data[0]` (Stripe API 2026-01-28 moved it off `Subscription` onto each `SubscriptionItem`); uses hash-style access so a missing key returns `nil` rather than raising via `StripeObject#method_missing`

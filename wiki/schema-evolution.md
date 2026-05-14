@@ -3,13 +3,13 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-14
 tags: [database, migrations, schema, history]
 ---
 
 # Schema Evolution
 
-TLDR: 21 migrations across 4 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, and annotation threading.
+TLDR: 25 migrations across 6 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, and multi-viewport screenshots.
 
 Source: `db/migrate/`
 
@@ -56,6 +56,20 @@ Source: `db/migrate/`
 | `20260221064533_add_ci_uniqueness_to_pages` | Case-insensitive unique index on page names within a project |
 | `20260310182720_add_notified_at_to_annotation_comments` | Track notification state for digest emails |
 
+### Phase 5: Stripe Webhook Hardening (2026-04-21)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260421065900_create_stripe_webhook_events` | Idempotency ledger keyed by Stripe event id |
+
+### Phase 6: Multi-Viewport Screenshots (2026-04-21)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260421110931_create_screenshot_images` | Per-viewport image child table with unique `(screenshot_id, viewport)` |
+| `20260421110955_add_viewport_to_annotations` | Scope annotations to desktop/tablet/mobile viewport |
+| `20260421114232_backfill_screenshot_images` | Deploy-time backfill from legacy `Screenshot#image` blobs to `ScreenshotImage(:desktop)` |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -68,4 +82,8 @@ Source: `db/migrate/`
 
 5. **Notification tracking**: `notified_at` on annotation_comments enables hourly digest notifications without re-sending.
 
-See also: [[data-model]], [[decisions]]
+6. **Stripe webhook idempotency**: `stripe_webhook_events.stripe_event_id` prevents retry-driven duplicate side effects.
+
+7. **ScreenshotImage child rows**: A Screenshot is now a logical capture/version; ScreenshotImage owns actual viewport blobs, dimensions, status, and upload tokens.
+
+See also: [[data-model]], [[decisions]], [[models/screenshot-image]]

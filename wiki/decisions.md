@@ -3,15 +3,15 @@ title: Architectural Decisions
 type: decision
 source: git log
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-14
 tags: [decisions, adr, architecture, history]
 ---
 
 # Architectural Decisions
 
-TLDR: Key decisions extracted from the git history as lightweight ADRs. Screenote evolved through 4 phases: foundation, MCP integration, collaboration, and annotation threading.
+TLDR: Key decisions extracted from the git history as lightweight ADRs. Screenote evolved through foundation, MCP integration, collaboration, annotation threading, Stripe hardening, and multi-viewport screenshots.
 
-Source: `git log --all --oneline` (109 commits total)
+Source: `git log --all --oneline` (112 commits total)
 
 ## ADR-001: Rails 8 with No-Build Frontend
 
@@ -109,4 +109,20 @@ Source: `git log --all --oneline` (109 commits total)
 **Decision**: Hourly digest emails collecting all unnotified resolved annotation comments. Track notification state via `notified_at` on annotation_comments.
 **Rationale**: Avoids email spam from rapid resolve/unresolve cycles. Per-author tracking prevents duplicate emails on retry.
 
-See also: [[architecture]], [[schema-evolution]], [[active-areas]]
+## ADR-013: Stripe Webhook Idempotency and Model-Owned State Transitions
+
+**Date**: 2026-04-21 (commit `cd99da2`)
+**Status**: Active
+**Context**: Stripe webhook retries and API shape changes created risk of duplicate side effects and stale subscription state.
+**Decision**: Add `StripeWebhookEvent` as an idempotency ledger, move subscription state transitions onto `Subscription`, use row locks around webhook mutations, and read `current_period_end` from the subscription item for Stripe API 2026-01-28.
+**Rationale**: Unique event ids make retries safe, model methods concentrate state transition rules, and row locks reduce TOCTOU risk.
+
+## ADR-014: ScreenshotImage Child Model for Multi-Viewport Captures
+
+**Date**: 2026-04-21 (commits `7f413b2`, `9786e6e`, `85d22c3`)
+**Status**: Active
+**Context**: Responsive review needs desktop/tablet/mobile images under one logical capture without splitting feedback into unrelated screenshots.
+**Decision**: Add `ScreenshotImage` child rows with per-viewport blobs, dimensions, status, and upload tokens. Add `Annotation#viewport` and a viewport switcher route `/screenshots/:id/viewports/:viewport`.
+**Rationale**: Per-variant rows make upload tokens, analysis status, retry, and UI filtering explicit. Annotations remain percentage-based but are scoped to the layout they reference.
+
+See also: [[architecture]], [[schema-evolution]], [[active-areas]], [[models/screenshot-image]]

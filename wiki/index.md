@@ -1,60 +1,67 @@
 ---
-title: Wiki Index
-type: architecture
-source: wiki/
-created: 2026-04-10
-updated: 2026-04-11
-tags: [index, catalog]
+title: screenote Wiki
+type: index
+source: wiki/**/*.md
+created: 2026-05-14
+updated: 2026-05-14
+tags: [index, wiki]
 ---
 
-# screenote -- Wiki Index
 
-*Auto-generated. Do not edit manually.*
-*Last updated: 2026-04-11*
+**TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-## Architecture
+Page count: 35
+Updated: 2026-05-14
 
-- [[architecture]] -- High-level app structure, patterns, external integrations
-- [[data-model]] -- Entity relationship overview with Mermaid ER diagram
-- [[schema-evolution]] -- Major schema changes and why
-- [[routes]] -- Complete route surface area, namespaces, auth requirements
-- [[gems]] -- Key gem choices with rationale
-- [[decisions]] -- Architectural decisions from git history (12 ADRs)
-- [[active-areas]] -- What's being actively worked on
+## Core Architecture
 
-## Planning
+- [[architecture]] — Rails 8.1 app architecture, integrations, and major patterns.
+- [[data-model]] — Current schema, relationships, indexes, and FK behavior.
+- [[schema-evolution]] — Migration timeline through Stripe hardening and multi-viewport screenshots.
+- [[routes]] — Web, REST API, OAuth, viewport, webhook, and static routes.
+- [[decisions]] — Lightweight ADRs from git history.
+- [[dependencies]] — Dependency files and stack notes.
+- [[gems]] — Gem choices and rationale.
+- [[commands]] — Controller/command source inventory.
+- [[mcp-tools]] — FastMCP transport/auth behavior and current tool inventory.
 
-- [[plans-and-initiatives]] -- All active plans: product vision, Page/Version hierarchy, help page redesign, Claude Code skill
-- [[roadmap]] -- What's planned, in progress, and recently done; high-level project direction
-- [[technical-debt]] -- Code quality issues, deferred work, and security findings from 151 todos
+## Controllers And Services
+
+- [[controllers/web-controllers]] — Browser UI controllers and public static pages.
+- [[controllers/api-controllers]] — REST and signed-upload API controllers.
+- [[controllers/oauth-controllers]] — Doorkeeper, DCR, and OAuth metadata controllers.
+- [[services/annotation-crop-service]] — Cropped annotation image generation.
 
 ## Models
 
-- [[models/user]] -- Central identity model with auth concerns
-- [[models/project]] -- Top-level container for pages and team collaboration
-- [[models/page]] -- Groups screenshots within a project
-- [[models/screenshot]] -- Uploaded image canvas for annotations
-- [[models/annotation]] -- Feedback pinned to screenshot regions (point or rectangle)
-- [[models/annotation-comment]] -- Threaded comments with action tracking
-- [[models/api-key]] -- Project-scoped bearer tokens for API auth
-- [[models/project-membership]] -- User-project join table with roles
-- [[models/project-invitation]] -- Email-based project invitations
-- [[models/subscription]] -- Stripe subscription state (free/pro)
-- [[models/session]] -- Database-backed user sessions
-- [[models/current]] -- Thread-local request context (CurrentAttributes)
-- [[models/application-record]] -- Abstract base class
+- [[models/application-record]] — ApplicationRecord base model.
+- [[models/current]] — Request-local current state.
+- [[models/session]] — Database-backed sessions.
+- [[models/user]] — Authenticated users.
+- [[models/project]] — Project ownership and memberships.
+- [[models/page]] — Logical pages/screens under projects.
+- [[models/screenshot]] — Logical capture/version records.
+- [[models/screenshot-image]] — Per-viewport image variants.
+- [[models/annotation]] — Viewport-scoped visual feedback.
+- [[models/annotation-comment]] — Threaded comments and resolution audit log.
+- [[models/api-key]] — Project-scoped bearer tokens.
+- [[models/project-membership]] — Project membership roles.
+- [[models/project-invitation]] — Email invitations.
+- [[models/subscription]] — Stripe subscription state.
+- [[models/stripe-webhook-event]] — Stripe webhook idempotency ledger.
 
-## Controllers
+## Planning And Operations
 
-- [[controllers/web-controllers]] -- Web UI controllers (14 total: projects, pages, screenshots, annotations, invitations, billing, admin, static pages)
-- [[controllers/api-controllers]] -- REST API controllers (bearer token auth, screenshot upload, annotation listing)
-- [[controllers/oauth-controllers]] -- OAuth 2.1 provider (Doorkeeper authorization, dynamic client registration, metadata)
+- [[active-areas]] — Recently active development areas from git history.
+- [[plans-and-initiatives]] — Active plans and implemented plan status.
+- [[roadmap]] — Current product/engineering priorities.
+- [[technical-debt]] — Todo-derived debt, cross-checked against source drift.
+- [[gaps]] — Missing coverage and uncertainty.
+- [[index]] — This catalog.
+- [[log]] — Append-only wiki changelog.
 
-## Services
+## Maintenance
 
-- [[services/annotation-crop-service]] -- Image cropping for annotation regions (used by MCP tools)
-
-## Meta
-
-- [[gaps]] -- What's missing or needs documentation
-- [[log]] -- Append-only changelog of wiki operations
+- Managed config: `.llm-wiki/config.json`
+- Headless refresh: `.llm-wiki/refresh-wiki.sh`
+- Post-commit refresh: `.llm-wiki/post-commit-refresh.sh`
