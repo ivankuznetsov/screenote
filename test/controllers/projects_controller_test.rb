@@ -136,9 +136,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    # Generous upper bound: a per-card thumbnail resolver would multiply by
-    # page count (here 3); 25 catches that without being a brittle exact match.
-    assert queries.size <= 25,
+    # Tight upper bound near observed baseline so a partial N+1 regression
+    # (e.g. per-card membership/project lookup) trips this even when the
+    # subselect itself stays in place.
+    assert queries.size <= 12,
       "Filtered show should not issue per-page thumbnail queries (saw #{queries.size}): #{queries.last(40).inspect}"
   end
 
@@ -208,6 +209,48 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select "[data-testid='snapshot-sidebar']"
     assert_select "[data-testid='snapshot-sidebar-item']", text: "2026-05-14 · abc1234"
     assert_select "[data-testid='snapshot-sidebar-clear']", text: "All screens"
+  end
+
+  test "show caps the sidebar at 10 snapshots when there are more" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Many snapshots project")
+    12.times do |i|
+      project.snapshots.create!(
+        git_commit: "a%07x" % i,
+        taken_at: Time.zone.parse("2026-05-01 12:00:00") + i.days
+      )
+    end
+
+    get project_path(project)
+
+    assert_response :success
+    assert_select "[data-testid='snapshot-sidebar-item']", count: 10
+  end
+
+  test "show prepends the active snapshot when it is older than the recent ten" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Stale active snapshot project")
+    older = project.snapshots.create!(
+      git_commit: "01dabcd",
+      taken_at: Time.zone.parse("2026-01-01 12:00:00")
+    )
+    10.times do |i|
+      project.snapshots.create!(
+        git_commit: "f%06x" % i,
+        taken_at: Time.zone.parse("2026-05-01 12:00:00") + i.days
+      )
+    end
+
+    get project_path(project, snapshot_id: older.id)
+
+    assert_response :success
+    # Older snapshot must still appear in the sidebar even though it falls
+    # outside the recent-10 window.
+    assert_select "[data-testid='snapshot-sidebar-item'][data-snapshot-id='#{older.id}']",
+      { count: 1 }, "Active snapshot should be prepended into the sidebar even when older than recent-10"
+    # And the sidebar still caps at 10 rows so the active row replaces the
+    # oldest in-window row rather than expanding to 11.
+    assert_select "[data-testid='snapshot-sidebar-item']", count: 10
   end
 
   # New
