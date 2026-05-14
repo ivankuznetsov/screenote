@@ -44,6 +44,10 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
       # structured internal_error payload (and reaches Honeybadger) instead
       # of escaping the tool envelope.
       snapshot = snapshot_id && current_project.snapshots.find_by(id: snapshot_id)
+      # `return invalid(...)` from inside the block exits #call directly and
+      # bypasses with_error_handling's `rescue` clauses — that's intentional
+      # for an arg-validation failure. A future refactor wrapping this in
+      # ApplicationRecord.transaction must preserve that early-exit.
       return invalid("snapshot not found in project") if snapshot_id && !snapshot
 
       project = current_project

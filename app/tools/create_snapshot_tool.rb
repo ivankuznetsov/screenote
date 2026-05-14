@@ -5,6 +5,7 @@ class CreateSnapshotTool < ApplicationTool
   description "Create a project snapshot record for a capture run. Pass the returned snapshot_id into create_multi_viewport_screenshot."
 
   PARSE_FAILED = :invalid
+  private_constant :PARSE_FAILED
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -40,7 +41,10 @@ class CreateSnapshotTool < ApplicationTool
     return Time.current unless taken_at
 
     Time.iso8601(taken_at).in_time_zone
-  rescue ArgumentError, TypeError
+  rescue ArgumentError, TypeError, Date::Error
+    # Date::Error subclasses ArgumentError on Ruby 3.4, but list it
+    # explicitly so a future Ruby that re-parents Date::Error doesn't fall
+    # through to the generic `internal_error` envelope.
     PARSE_FAILED
   end
 end
