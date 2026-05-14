@@ -62,6 +62,23 @@ class ScreenshotTest < ActiveSupport::TestCase
     assert_includes snapshot.screenshots, screenshot
   end
 
+  test "invalid when snapshot belongs to a different project than the page" do
+    # Defense-in-depth against direct ActiveRecord writes that bypass the
+    # MCP tool's `current_project.snapshots.find_by` scoping.
+    cross_project_snapshot = projects(:bob_project).snapshots.create!(
+      git_commit: "deadbee", taken_at: Time.current
+    )
+
+    screenshot = Screenshot.new(
+      title: "Cross-project",
+      page: pages(:alice_page),
+      snapshot: cross_project_snapshot
+    )
+
+    assert_not screenshot.valid?, "Screenshot should be invalid with mismatched snapshot/page project"
+    assert screenshot.errors[:snapshot].any?, "Error should attach to :snapshot"
+  end
+
   test "has many annotations" do
     screenshot = screenshots(:alice_screenshot)
     assert screenshot.annotations.count >= 2, "Should have annotations"
@@ -121,6 +138,23 @@ class ScreenshotTest < ActiveSupport::TestCase
     screenshot.screenshot_images.destroy_all
     mobile = screenshot.screenshot_images.create!(viewport: :mobile)
     assert_equal mobile, screenshot.primary_image
+  end
+
+  test "primary_image picks tablet over mobile via integer enum order in loaded and cold paths" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.destroy_all
+    tablet = screenshot.screenshot_images.create!(viewport: :tablet)
+    screenshot.screenshot_images.create!(viewport: :mobile)
+
+    # Cold path: re-read from DB, association unloaded.
+    cold = Screenshot.find(screenshot.id)
+    assert_not cold.screenshot_images.loaded?
+    assert_equal tablet, cold.primary_image, "Cold path should prefer tablet (enum 1) over mobile (enum 2)"
+
+    # Loaded path: preload the association so the in-memory branch runs.
+    loaded = Screenshot.includes(:screenshot_images).find(screenshot.id)
+    assert loaded.screenshot_images.loaded?
+    assert_equal tablet, loaded.primary_image, "Loaded path should agree with the cold path"
   end
 
   test "primary_image returns nil when no screenshot_images exist" do

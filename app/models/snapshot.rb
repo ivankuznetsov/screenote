@@ -6,7 +6,12 @@ class Snapshot < ApplicationRecord
   belongs_to :project
   has_many :screenshots, dependent: :nullify
 
-  validates :git_commit, presence: true, length: { maximum: 64 }
+  before_validation :normalize_git_commit
+
+  validates :git_commit, presence: true,
+    length: { maximum: 64 },
+    format: { with: GIT_COMMIT_FORMAT, allow_blank: true,
+              message: "must be 7-40 hexadecimal characters" }
   validates :taken_at, presence: true
 
   # Tie-break by id so two snapshots created in the same second
@@ -21,5 +26,11 @@ class Snapshot < ApplicationRecord
     # Server-zone date — Time.zone reflects the request's zone, which is what
     # the dev-facing /snapshot CLI expects (commit date in their local zone).
     "#{taken_at.in_time_zone.to_date.iso8601} · #{short_commit}"
+  end
+
+  private
+
+  def normalize_git_commit
+    git_commit&.downcase!
   end
 end

@@ -26,13 +26,15 @@ class Screenshot < ApplicationRecord
   validate :snapshot_belongs_to_same_project, if: :snapshot_id?
 
   # Returns the ScreenshotImage to render when no specific viewport is requested.
-  # Prefers :desktop, falls back to the first available viewport, nil if none.
-  # Walks the in-memory association when loaded so preloaded scopes
-  # (e.g. project show page) avoid a per-card SELECT.
+  # Prefers :desktop, falls back to the next viewport by the underlying enum
+  # integer (desktop=0 < tablet=1 < mobile=2) so the loaded and cold paths
+  # agree — `min_by(&:viewport)` on the enum string would compare
+  # alphabetically and silently swap the result for the unloaded case.
   def primary_image
     if screenshot_images.loaded?
       images = screenshot_images.to_a
-      images.find { |si| si.viewport == "desktop" } || images.min_by(&:viewport)
+      images.find { |si| si.viewport == "desktop" } ||
+        images.min_by { |si| ScreenshotImage.viewports[si.viewport] }
     else
       screenshot_images.find_by(viewport: :desktop) || screenshot_images.order(:viewport).first
     end

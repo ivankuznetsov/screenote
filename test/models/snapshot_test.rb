@@ -26,17 +26,32 @@ class SnapshotTest < ActiveSupport::TestCase
     assert snapshot.errors[:git_commit].any?, "Should have git_commit error"
   end
 
-  test "git_commit max length 64" do
-    snapshot = Snapshot.new(
-      project: projects(:alice_project),
-      git_commit: "a" * 65,
+  test "git_commit must be 7-40 hexadecimal characters" do
+    snapshot = Snapshot.new(project: projects(:alice_project), taken_at: Time.current)
+
+    snapshot.git_commit = "a" * 6
+    assert_not snapshot.valid?, "git_commit shorter than 7 chars should fail format"
+
+    snapshot.git_commit = "a" * 41
+    assert_not snapshot.valid?, "git_commit longer than 40 chars should fail format"
+
+    snapshot.git_commit = ("z" * 7)
+    assert_not snapshot.valid?, "Non-hex git_commit should fail format"
+
+    snapshot.git_commit = "abc1234"
+    assert snapshot.valid?, "7-char hex git_commit should be valid"
+
+    snapshot.git_commit = "a" * 40
+    assert snapshot.valid?, "40-char hex git_commit should be valid"
+  end
+
+  test "git_commit is normalized to lowercase on save" do
+    snapshot = projects(:alice_project).snapshots.create!(
+      git_commit: "ABC1234DEF",
       taken_at: Time.current
     )
 
-    assert_not snapshot.valid?, "Snapshot should be invalid with git_commit > 64 chars"
-
-    snapshot.git_commit = "a" * 64
-    assert snapshot.valid?, "Snapshot should be valid with git_commit = 64 chars"
+    assert_equal "abc1234def", snapshot.git_commit
   end
 
   test "requires taken_at" do
