@@ -133,12 +133,76 @@ class McpToolsTest < ActiveSupport::TestCase
 
     assert result["snapshot_id"].present?
     assert_equal @project.id, result["project_id"]
-    assert_equal "2026-05-14 · abc1234", result["label"]
-    assert_equal "2026-05-14T12:00:00Z", result["taken_at"]
 
     snapshot = Snapshot.find(result["snapshot_id"])
+    expected_label = "#{snapshot.taken_at.in_time_zone.to_date.iso8601} · abc1234"
+    assert_equal expected_label, result["label"], "Label should be computed from the stored taken_at in the request zone"
+    assert_equal "2026-05-14T12:00:00Z", result["taken_at"]
+
     assert_equal @project, snapshot.project
     assert_equal "abc1234def567890abc1234def567890abc1234d", snapshot.git_commit
+  end
+
+  test "create_snapshot normalizes git_commit to lowercase" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "AbC1234"
+    ))
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    assert_equal "abc1234", snapshot.git_commit,
+      "Mixed-case input should not create a snapshot distinct from its lowercase twin"
+  end
+
+  test "create_snapshot rejects bare date without time component" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "2026-05-14"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/ISO 8601/, result["message"])
+  end
+
+  test "create_snapshot rejects malformed taken_at" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "not-iso"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/ISO 8601/, result["message"])
+  end
+
+  test "create_snapshot rejects empty git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: ""
+    ))
+
+    assert_equal "invalid_arguments", result["error"], "Empty git_commit must trip validation, not silently create"
+  end
+
+  test "create_snapshot rejects sub-7-char git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc12"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/git_commit/, result["message"])
+  end
+
+  test "create_snapshot rejects over-40-char git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "a" * 41
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/git_commit/, result["message"])
   end
 
   test "create_snapshot rejects inaccessible project" do
@@ -242,6 +306,28 @@ class McpToolsTest < ActiveSupport::TestCase
         project_id: @project.id,
         title: "Wrong snapshot",
         snapshot_id: other_snapshot.id,
+        viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+      ))
+
+      assert_equal "invalid_arguments", result["error"]
+      assert_match(/snapshot not found/, result["message"])
+    end
+  end
+
+  test "create_multi_viewport_screenshot rejects a stale (destroyed) snapshot_id" do
+    # Realistic regression: a CLI retry holds onto a snapshot_id that's since
+    # been destroyed. Without an explicit check, agents would silently get a
+    # screenshot with snapshot: nil and not realize their snapshot context
+    # was lost.
+    snapshot = @project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+    stale_id = snapshot.id
+    snapshot.destroy!
+
+    assert_no_difference "Screenshot.count" do
+      result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+        project_id: @project.id,
+        title: "Stale snapshot",
+        snapshot_id: stale_id,
         viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
       ))
 

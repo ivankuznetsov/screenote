@@ -51,10 +51,4 @@ class CreateAnnotationTool < ApplicationTool
       { annotation: serialize_annotation(annotation) }.to_json
     end
   end
-
-  private
-
-  def invalid(message)
-    { error: "invalid_arguments", message: message }.to_json
-  end
 end

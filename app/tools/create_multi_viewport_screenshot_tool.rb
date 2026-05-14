@@ -13,16 +13,13 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
     required(:project_id).filled(:integer).description("The project ID")
     required(:title).filled(:string).description("Title/version label for the screenshot")
     optional(:page_name).filled(:string).description("Page to group this screenshot under (default: same as title)")
-    optional(:snapshot_id).filled(:integer).description("Snapshot ID to link this screenshot to")
+    optional(:snapshot_id).filled(:integer).description("Snapshot ID to link this screenshot to. Must belong to the same project.")
     required(:viewports).description("Array of { viewport: desktop|tablet|mobile, mime_type: image/png|image/jpeg }, 1-3 entries")
   end
 
   def call(project_id:, title:, viewports:, page_name: nil, snapshot_id: nil)
     error = require_project(project_id)
     return error if error
-
-    snapshot = snapshot_id && current_project.snapshots.find_by(id: snapshot_id)
-    return invalid("snapshot not found in project") if snapshot_id && !snapshot
 
     supported = ScreenshotImage.viewports.keys
     return invalid("viewports must contain 1..#{supported.size} entries") unless (1..supported.size).cover?(viewports.length)
@@ -42,6 +39,13 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
     return invalid("mime_type must be image/png or image/jpeg") if bad_mime
 
     with_error_handling do
+      # Resolve the snapshot inside with_error_handling so a transient
+      # connection / StatementInvalid error from find_by surfaces as the
+      # structured internal_error payload (and reaches Honeybadger) instead
+      # of escaping the tool envelope.
+      snapshot = snapshot_id && current_project.snapshots.find_by(id: snapshot_id)
+      return invalid("snapshot not found in project") if snapshot_id && !snapshot
+
       project = current_project
       screenshot = nil
       uploads = nil
@@ -81,11 +85,5 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
         uploads: uploads
       }.to_json
     end
-  end
-
-  private
-
-  def invalid(message)
-    { error: "invalid_arguments", message: message }.to_json
   end
 end

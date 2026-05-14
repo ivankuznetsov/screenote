@@ -46,8 +46,16 @@ class ApplicationTool < FastMcp::Tool
   rescue ActiveRecord::RecordInvalid => e
     { error: "validation_failed", message: e.message, details: e.record.errors.full_messages }.to_json
   rescue StandardError => e
-    Honeybadger.notify(e)
-    { error: "internal_error", message: "An unexpected error occurred" }.to_json
+    correlation_id = Honeybadger.notify(e)
+    payload = { error: "internal_error", message: "An unexpected error occurred" }
+    payload[:correlation_id] = correlation_id if correlation_id
+    payload.to_json
+  end
+
+  # Shared structured response for argument-validation failures so every MCP
+  # tool returns the same envelope to the agent.
+  def invalid(message)
+    { error: "invalid_arguments", message: message }.to_json
   end
 
   def project_annotations(project)
