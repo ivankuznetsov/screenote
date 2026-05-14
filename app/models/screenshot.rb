@@ -8,6 +8,7 @@ class Screenshot < ApplicationRecord
   MAX_FILE_SIZE = ScreenshotImage::MAX_FILE_SIZE
 
   belongs_to :page
+  belongs_to :snapshot, optional: true
   has_one :project, through: :page
   has_many :annotations, dependent: :destroy
   has_many :screenshot_images, dependent: :destroy

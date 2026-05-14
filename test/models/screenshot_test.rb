@@ -48,6 +48,20 @@ class ScreenshotTest < ActiveSupport::TestCase
     assert_equal projects(:alice_project), screenshot.project
   end
 
+  test "snapshot is optional" do
+    screenshot = Screenshot.new(title: "Ad-hoc", page: pages(:alice_page), snapshot: nil)
+
+    assert screenshot.valid?, "Screenshot should be valid without a snapshot"
+  end
+
+  test "belongs to snapshot when provided" do
+    snapshot = snapshots(:latest)
+    screenshot = Screenshot.create!(title: "Snapshot capture", page: pages(:alice_page), snapshot: snapshot)
+
+    assert_equal snapshot, screenshot.snapshot
+    assert_includes snapshot.screenshots, screenshot
+  end
+
   test "has many annotations" do
     screenshot = screenshots(:alice_screenshot)
     assert screenshot.annotations.count >= 2, "Should have annotations"

@@ -1,0 +1,9 @@
+latest:
+  project: alice_project
+  git_commit: abc1234def567890abc1234def567890abc1234d
+  taken_at: <%= 2.hours.ago %>
+
+earlier:
+  project: alice_project
+  git_commit: 9876543fedcba0987654321fedcba0987654321f
+  taken_at: <%= 1.day.ago %>
