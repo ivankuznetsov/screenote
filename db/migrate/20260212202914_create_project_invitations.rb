@@ -9,6 +9,6 @@ class CreateProjectInvitations < ActiveRecord::Migration[8.1]
       t.timestamps
     end
 
-    add_index :project_invitations, [:project_id, :email], unique: true
+    add_index :project_invitations, [ :project_id, :email ], unique: true
   end
 end
