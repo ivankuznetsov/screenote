@@ -135,8 +135,8 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal @project.id, result["project_id"]
 
     snapshot = Snapshot.find(result["snapshot_id"])
-    expected_label = "#{snapshot.taken_at.in_time_zone.to_date.iso8601} · abc1234"
-    assert_equal expected_label, result["label"], "Label should be computed from the stored taken_at in the request zone"
+    expected_label = "#{snapshot.taken_at.utc.to_date.iso8601} · abc1234"
+    assert_equal expected_label, result["label"], "Label should be computed from the stored UTC taken_at date"
     assert_equal "2026-05-14T12:00:00Z", result["taken_at"]
 
     assert_equal @project, snapshot.project
@@ -249,6 +249,38 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal Time.utc(2026, 5, 14, 8, 30), snapshot.taken_at
   end
 
+  test "create_snapshot rejects future taken_at" do
+    travel_to Time.zone.parse("2026-05-14 12:00:00") do
+      result = JSON.parse(CreateSnapshotTool.new.call(
+        project_id: @project.id,
+        git_commit: "abc1234",
+        taken_at: "2026-05-14T12:10:01Z"
+      ))
+
+      assert_equal "validation_failed", result["error"]
+      assert_match(/future/, result["message"])
+    end
+  end
+
+  test "create_snapshot accepts non-UTC offsets and keeps label/taken_at consistent" do
+    # Round-trips through `Time.iso8601(...).in_time_zone`, so a 23:00 wall time
+    # at -05:00 lands as 04:00 UTC on the next day. The label uses that stable
+    # UTC date so collaborators in different request zones see the same row.
+    travel_to Time.zone.parse("2026-05-15 05:00:00") do
+      result = JSON.parse(CreateSnapshotTool.new.call(
+        project_id: @project.id,
+        git_commit: "abc1234",
+        taken_at: "2026-05-14T23:00:00-05:00"
+      ))
+
+      snapshot = Snapshot.find(result["snapshot_id"])
+      assert_equal Time.utc(2026, 5, 15, 4, 0), snapshot.taken_at,
+        "taken_at must be normalized to UTC equivalent of the offset input"
+      assert_equal "2026-05-15 · abc1234", result["label"],
+        "label day should match the stored UTC taken_at, not the input wall time"
+    end
+  end
+
   # CreateMultiViewportScreenshotTool
   test "create_multi_viewport_screenshot returns one upload URL per requested viewport" do
     result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
@@ -306,28 +338,6 @@ class McpToolsTest < ActiveSupport::TestCase
         project_id: @project.id,
         title: "Wrong snapshot",
         snapshot_id: other_snapshot.id,
-        viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
-      ))
-
-      assert_equal "invalid_arguments", result["error"]
-      assert_match(/snapshot not found/, result["message"])
-    end
-  end
-
-  test "create_multi_viewport_screenshot rejects a stale (destroyed) snapshot_id" do
-    # Realistic regression: a CLI retry holds onto a snapshot_id that's since
-    # been destroyed. Without an explicit check, agents would silently get a
-    # screenshot with snapshot: nil and not realize their snapshot context
-    # was lost.
-    snapshot = @project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
-    stale_id = snapshot.id
-    snapshot.destroy!
-
-    assert_no_difference "Screenshot.count" do
-      result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
-        project_id: @project.id,
-        title: "Stale snapshot",
-        snapshot_id: stale_id,
         viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
       ))
 

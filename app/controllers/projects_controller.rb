@@ -15,17 +15,11 @@ class ProjectsController < ApplicationController
 
   def show
     @is_owner = @project.owner?(Current.user)
-    @snapshots = @project.snapshots.recent.limit(10).to_a
-    @active_snapshot = active_snapshot
-    # Keep the sidebar at most 10 rows: if the active snapshot is older than
-    # the recent-10 window, prepend it and drop the oldest tail row so the
-    # "recent 10" contract is enforced rather than approximated.
-    if @active_snapshot && @snapshots.none? { |s| s.id == @active_snapshot.id }
-      @snapshots.unshift(@active_snapshot)
-      @snapshots.pop
-    end
-    @pages = ordered_pages.to_a
-    @page_thumbnails = page_thumbnails
+    recent_snapshots = @project.snapshots.recent.limit(10).to_a
+    @active_snapshot = active_snapshot(recent_snapshots)
+    @snapshots = snapshot_sidebar_items(recent_snapshots)
+    @pages = @project.pages_ordered_by_latest(snapshot: @active_snapshot).to_a
+    @page_thumbnails = @active_snapshot ? @active_snapshot.thumbnails_for(@pages) : {}
   end
 
   def new
@@ -79,60 +73,20 @@ class ProjectsController < ApplicationController
     params.require(:project).permit(:name, :description)
   end
 
-  def active_snapshot
+  def active_snapshot(recent_snapshots)
     return if params[:snapshot_id].blank?
 
     # Reuse the already-loaded recent-10 list when the active id is in it so
     # the common case (user clicks the just-created top snapshot) skips one
     # extra SELECT.
-    cached = @snapshots.detect { |s| s.id.to_s == params[:snapshot_id].to_s }
+    cached = recent_snapshots.detect { |s| s.id.to_s == params[:snapshot_id].to_s }
     cached || @project.snapshots.find_by(id: params[:snapshot_id])
   end
 
-  def ordered_pages
-    scope = @project.pages
+  def snapshot_sidebar_items(recent_snapshots)
+    return recent_snapshots unless @active_snapshot
+    return recent_snapshots if recent_snapshots.any? { |s| s.id == @active_snapshot.id }
 
-    scope = if @active_snapshot
-      # Match `page_thumbnails`'s `.ready` filter so a snapshot whose only
-      # screenshot for a page is still pending doesn't render a thumbnail-less
-      # card with no fallback.
-      scope.joins(:screenshots)
-        .merge(Screenshot.ready)
-        .where(screenshots: { snapshot_id: @active_snapshot.id })
-    else
-      scope.left_joins(:screenshots)
-    end
-
-    scope = scope
-      .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
-      .group("pages.id")
-      .order(Arel.sql("COALESCE(MAX(screenshots.created_at), pages.created_at) DESC"))
-
-    if @active_snapshot
-      scope
-    else
-      scope.includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
-    end
-  end
-
-  def page_thumbnails
-    return {} unless @active_snapshot
-
-    page_ids = @pages.map(&:id)
-    return {} if page_ids.empty?
-
-    # Order candidates by created_at (not MAX(id)) so a backfill/import that
-    # inserts older rows with newer ids cannot silently flip which screenshot
-    # renders as the thumbnail. Bucket the first per page in Ruby to keep the
-    # query SQLite/Postgres-portable without window functions.
-    candidates = @active_snapshot.screenshots
-      .ready
-      .where(page_id: page_ids)
-      .order(created_at: :desc, id: :desc)
-      .includes(screenshot_images: { image_attachment: :blob })
-
-    candidates.each_with_object({}) do |screenshot, acc|
-      acc[screenshot.page_id] ||= screenshot
-    end
+    [ @active_snapshot, *recent_snapshots ]
   end
 end

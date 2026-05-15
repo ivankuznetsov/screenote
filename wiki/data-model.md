@@ -117,7 +117,7 @@ erDiagram
 
 - `users.email` -- unique
 - `pages.(project_id, LOWER(name))` -- unique, case-insensitive
-- `snapshots.(project_id, taken_at)` -- recent snapshots sidebar; also accelerates `current_project.snapshots.find_by(id:)` in `CreateMultiViewportScreenshotTool` (composite covers the project scope before the id lookup)
+- `snapshots.(project_id, taken_at)` -- powers the project-page "recent snapshots" sidebar (`Snapshot.recent` within a project scope). The id-equality `find_by(id:)` path used elsewhere is served by the PK, not this composite.
 - `screenshots.snapshot_id` -- snapshot filtering
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique
@@ -140,5 +140,6 @@ erDiagram
 - `oauth_access_grants/tokens -> projects`: ON DELETE SET NULL
 - `screenshots -> snapshots`: ON DELETE SET NULL
 - `screenshot_images -> screenshots`: no database cascade; Rails `dependent: :destroy` preserves Active Storage purge callbacks
+- Duplicate snapshots for the same `(project_id, git_commit)` are allowed because repeated `/snapshot` captures of one commit can be useful at different times; `taken_at` distinguishes the runs.
 
 See also: [[schema-evolution]], [[models/user]], [[models/project]], [[models/snapshot]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]

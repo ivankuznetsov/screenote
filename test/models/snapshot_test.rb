@@ -54,16 +54,68 @@ class SnapshotTest < ActiveSupport::TestCase
     assert_equal "abc1234def", snapshot.git_commit
   end
 
-  test "requires taken_at" do
-    snapshot = Snapshot.new(project: projects(:alice_project), git_commit: "abc1234")
+  test "git_commit normalization strips surrounding whitespace" do
+    # CLI paste regression — leading/trailing whitespace from a shell var
+    # would otherwise fail the GIT_COMMIT_FORMAT regex silently.
+    snapshot = projects(:alice_project).snapshots.create!(
+      git_commit: "  abc1234\n",
+      taken_at: Time.current
+    )
 
-    assert_not snapshot.valid?, "Snapshot should be invalid without taken_at"
-    assert snapshot.errors[:taken_at].any?, "Should have taken_at error"
+    assert_equal "abc1234", snapshot.git_commit
+  end
+
+  test "git_commit normalization is safe on frozen strings" do
+    frozen_commit = "AbC1234".freeze
+    snapshot = projects(:alice_project).snapshots.create!(
+      git_commit: frozen_commit,
+      taken_at: Time.current
+    )
+
+    assert_equal "abc1234", snapshot.git_commit
+  end
+
+  test "defaults taken_at to current time" do
+    travel_to Time.zone.parse("2026-05-14 13:15:00") do
+      snapshot = Snapshot.create!(project: projects(:alice_project), git_commit: "abc1234")
+
+      assert_equal Time.current, snapshot.taken_at
+    end
+  end
+
+  test "rejects taken_at too far in the future" do
+    snapshot = Snapshot.new(
+      project: projects(:alice_project),
+      git_commit: "abc1234",
+      taken_at: Time.current + 10.minutes
+    )
+
+    assert_not snapshot.valid?, "Snapshot should reject future capture timestamps"
+    assert_includes snapshot.errors[:taken_at], "can't be in the future"
+  end
+
+  test "allows duplicate git_commit snapshots for repeated captures" do
+    project = projects(:alice_project)
+
+    assert_difference -> { project.snapshots.count }, 2 do
+      project.snapshots.create!(git_commit: "abc1234", taken_at: 2.hours.ago)
+      project.snapshots.create!(git_commit: "abc1234", taken_at: 1.hour.ago)
+    end
   end
 
   test "recent scope returns full ordered array newest first" do
     assert_equal [ snapshots(:latest), snapshots(:earlier) ],
       projects(:alice_project).snapshots.recent.to_a
+  end
+
+  test "recent scope orders newest first across many distinct taken_at" do
+    project = users(:alice).owned_projects.create!(name: "Ordering snapshots")
+    oldest = project.snapshots.create!(git_commit: "1111111", taken_at: 3.days.ago)
+    middle = project.snapshots.create!(git_commit: "2222222", taken_at: 2.days.ago)
+    newest = project.snapshots.create!(git_commit: "3333333", taken_at: 1.day.ago)
+
+    assert_equal [ newest, middle, oldest ], project.snapshots.recent.to_a,
+      "Snapshots should descend by taken_at across 3+ distinct timestamps"
   end
 
   test "recent scope tie-breaks by id when taken_at is identical" do
@@ -92,6 +144,18 @@ class SnapshotTest < ActiveSupport::TestCase
     assert_equal "2026-05-14 · abc1234", snapshot.label
   end
 
+  test "label uses the UTC date consistently across request zones" do
+    snapshot = Snapshot.new(
+      project: projects(:alice_project),
+      git_commit: "abc1234def567890",
+      taken_at: Time.iso8601("2026-05-14T23:00:00-05:00")
+    )
+
+    Time.use_zone("Hawaii") do
+      assert_equal "2026-05-15 · abc1234", snapshot.label
+    end
+  end
+
   test "destroying snapshot nullifies screenshots via Rails dependent: :nullify" do
     snapshot = snapshots(:latest)
     screenshot = screenshots(:alice_screenshot)
@@ -102,6 +166,21 @@ class SnapshotTest < ActiveSupport::TestCase
     end
 
     assert_nil screenshot.reload.snapshot_id
+  end
+
+  test "destroying a screenshot leaves its snapshot intact" do
+    # `dependent: :nullify` runs snapshot -> screenshots. The reverse
+    # direction must not exist — destroying one screenshot should not
+    # cascade to delete the snapshot or its sibling screenshots.
+    snapshot = snapshots(:latest)
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.update!(snapshot: snapshot)
+
+    assert_no_difference -> { Snapshot.count }, "Snapshot should survive its screenshot's destroy" do
+      screenshot.destroy
+    end
+
+    assert Snapshot.exists?(snapshot.id), "Snapshot row should still exist after screenshot destroy"
   end
 
   test "DB foreign key nullifies screenshot.snapshot_id when the row is deleted directly" do

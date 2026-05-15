@@ -35,14 +35,10 @@ module Pages
       assert_selector SNAPSHOT_SIDEBAR_ITEM, text: label, wait: DEFAULT_WAIT_SECONDS
     end
 
-    # Asserts the first `names.size` cards match `names` in order. Strict prefix
-    # by design: the tail can be in any order (caller passes only the rows whose
-    # order matters), but earlier silent regressions in the head are caught.
     def assert_page_cards_in_order(*names)
-      assert_selector PAGE_CARD, minimum: names.size, wait: DEFAULT_WAIT_SECONDS
-      actual = page_card_names.first(names.size)
-      assert_equal names, actual,
-        "Page cards should start with #{names.inspect}, got #{actual.inspect}"
+      assert_selector PAGE_CARD, count: names.size, wait: DEFAULT_WAIT_SECONDS
+      assert_equal names, page_card_names,
+        "Page cards should match #{names.inspect}, got #{page_card_names.inspect}"
     end
 
     def assert_only_page_cards(*names)

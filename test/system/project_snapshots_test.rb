@@ -117,6 +117,8 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
 
     result = parse_mcp_result(response)
     assert result["snapshot_id"].present?, "create_snapshot response should include snapshot_id"
+    assert_equal "2026-05-14 · deadbee", result["label"],
+      "label should be derived from taken_at + short_commit; a wrong shape would surface as a missing sidebar item later"
     result
   end
 
@@ -161,18 +163,18 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
     end
   end
 
-  # Polls Screenshot.status until :ready or the deadline expires. The
-  # ScreenshotDimensionJob runs async in the dev queue, so we can't assume
-  # synchronous readiness after the upload completes.
+  # Waits for ScreenshotDimensionJob to flip status -> :ready. Uses Capybara's
+  # synchronize loop (the same retry primitive that powers `assert_selector`)
+  # so the wait obeys Capybara.default_max_wait_time and never sleeps blindly.
   def wait_for_screenshot_ready(screenshot_id, max_wait: 15)
-    deadline = Time.current + max_wait
-    loop do
-      return if Screenshot.where(id: screenshot_id, status: :ready).exists?
-      if Time.current > deadline
-        actual = Screenshot.where(id: screenshot_id).pick(:status)
-        raise "Screenshot ##{screenshot_id} did not reach :ready within #{max_wait}s (status: #{actual.inspect})"
+    using_wait_time(max_wait) do
+      page.document.synchronize(max_wait) do
+        unless Screenshot.where(id: screenshot_id, status: :ready).exists?
+          actual = Screenshot.where(id: screenshot_id).pick(:status)
+          raise Capybara::ElementNotFound,
+            "Screenshot ##{screenshot_id} not yet :ready (status: #{actual.inspect})"
+        end
       end
-      sleep 0.1
     end
   end
 

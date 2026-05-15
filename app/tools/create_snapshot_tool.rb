@@ -4,9 +4,6 @@ class CreateSnapshotTool < ApplicationTool
   tool_name "create_snapshot"
   description "Create a project snapshot record for a capture run. Pass the returned snapshot_id into create_multi_viewport_screenshot."
 
-  PARSE_FAILED = :invalid
-  private_constant :PARSE_FAILED
-
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
     required(:git_commit).filled(:string).description("Short or full git commit hash, 7-40 hex characters; case is normalized to lowercase")
@@ -20,8 +17,12 @@ class CreateSnapshotTool < ApplicationTool
     normalized_commit = git_commit.to_s.downcase
     return invalid("git_commit must be 7-40 hex characters") unless normalized_commit.match?(Snapshot::GIT_COMMIT_FORMAT)
 
-    snapshot_taken_at = parse_taken_at(taken_at)
-    return invalid("taken_at must be an ISO 8601 timestamp") if snapshot_taken_at == PARSE_FAILED
+    if taken_at
+      snapshot_taken_at = parse_taken_at(taken_at)
+      return invalid("taken_at must be an ISO 8601 timestamp") unless snapshot_taken_at
+    else
+      snapshot_taken_at = Time.current
+    end
 
     with_error_handling do
       snapshot = current_project.snapshots.create!(git_commit: normalized_commit, taken_at: snapshot_taken_at)
@@ -38,13 +39,8 @@ class CreateSnapshotTool < ApplicationTool
   private
 
   def parse_taken_at(taken_at)
-    return Time.current unless taken_at
-
     Time.iso8601(taken_at).in_time_zone
-  rescue ArgumentError, TypeError, Date::Error
-    # Date::Error subclasses ArgumentError on Ruby 3.4, but list it
-    # explicitly so a future Ruby that re-parents Date::Error doesn't fall
-    # through to the generic `internal_error` envelope.
-    PARSE_FAILED
+  rescue ArgumentError
+    nil
   end
 end

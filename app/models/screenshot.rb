@@ -25,11 +25,10 @@ class Screenshot < ApplicationRecord
   validate :acceptable_image
   validate :snapshot_belongs_to_same_project, if: :snapshot_id?
 
-  # Returns the ScreenshotImage to render when no specific viewport is requested.
-  # Prefers :desktop, falls back to the next viewport by the underlying enum
-  # integer (desktop=0 < tablet=1 < mobile=2) so the loaded and cold paths
-  # agree — `min_by(&:viewport)` on the enum string would compare
-  # alphabetically and silently swap the result for the unloaded case.
+  # Prefers :desktop, else lowest viewport enum int. Cold path's `order(:viewport)`
+  # also sorts by the enum int (desktop=0 < tablet=1 < mobile=2), and the
+  # unique `(screenshot_id, viewport)` index breaks ties — same shape, same
+  # result on SQLite and Postgres.
   def primary_image
     if screenshot_images.loaded?
       images = screenshot_images.to_a
@@ -56,13 +55,7 @@ class Screenshot < ApplicationRecord
     vps.include?("desktop") ? "desktop" : vps.first
   end
 
-  # Canonical factory for "new Screenshot with an image attached". Creates the
-  # Screenshot + a ScreenshotImage(:desktop) + attaches + saves everything in
-  # one transaction so validators run and partial state can't persist.
-  #
-  # Callers: web form, MCP create_screenshot, API v1, signed-upload flow.
-  # Returns the saved Screenshot (with its ScreenshotImage accessible via
-  # `screenshot.primary_image`).
+  # Canonical factory: creates Screenshot + ScreenshotImage + attaches blob in one transaction.
   def self.create_with_image!(page:, title:, io:, filename:, content_type:, viewport: :desktop)
     screenshot = nil
     transaction do
@@ -88,6 +81,7 @@ class Screenshot < ApplicationRecord
     end
   end
 
+  # Defense-in-depth at the AR layer only; raw SQL updates bypass it.
   def snapshot_belongs_to_same_project
     return if snapshot.nil?
     return if page && snapshot.project_id == page.project_id

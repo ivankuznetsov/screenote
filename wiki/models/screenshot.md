@@ -47,6 +47,7 @@ Source: `app/models/screenshot.rb`
 - `title`: presence, length max 255
 - `width`, `height`: integer > 0 (allow nil for pending uploads)
 - legacy `image`: content type must be PNG or JPEG, max 20MB when attached
+- `snapshot_belongs_to_same_project`: when `snapshot_id` is set, the snapshot's `project_id` must match the page's `project_id`. Defense-in-depth at the AR layer; raw SQL updates bypass it (the DB FK doesn't constrain cross-project pairings, only existence).
 
 ## Callbacks
 

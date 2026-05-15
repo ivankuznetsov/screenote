@@ -110,3 +110,9 @@ Append-only log of all wiki operations.
 **Pages created:** wiki/models/snapshot.md
 **Pages updated:** wiki/data-model.md, wiki/models/project.md, wiki/models/screenshot.md, wiki/index.md
 **Source:** Snapshot implementation in app/models, db/schema.rb, and project page controller/view changes
+
+## [2026-05-15] snapshot review hardening
+
+**Action:** Clarified snapshot duplicate-commit semantics, UTC-stable labels, future timestamp validation, and model-owned project-page snapshot queries.
+**Pages updated:** data-model.md, models/project.md, models/snapshot.md
+**Source:** Review pass 03 fixes for the snapshot feature

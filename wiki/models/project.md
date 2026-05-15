@@ -3,7 +3,7 @@ title: Project
 type: model
 source: app/models/project.rb
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-05-15
 tags: [model, project, core]
 ---
 
@@ -52,6 +52,7 @@ Source: `app/models/project.rb`
 - `role_for(user)` -- Returns the user's role symbol (:member or :owner), or nil
 - `owner?(user)` -- Checks if user has owner role
 - `thumbnail_screenshots(limit = 4)` -- Returns up to `limit` latest ready screenshots with attached images (for project card thumbnails)
+- `pages_ordered_by_latest(snapshot: nil)` -- Returns project pages with `screenshots_count_cache`, ordered by newest ready screenshot; when `snapshot:` is passed it filters and counts only ready screenshots in that snapshot.
 
 ## Notes
 

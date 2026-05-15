@@ -33,6 +33,27 @@ class Project < ApplicationRecord
     pages.lazy.filter_map { |p| p.latest_screenshot if p.latest_screenshot&.primary_image&.image&.attached? }.first(limit)
   end
 
+  def pages_ordered_by_latest(snapshot: nil)
+    scope = pages
+
+    scope = if snapshot
+      scope.joins(:screenshots)
+        .merge(Screenshot.ready)
+        .where(screenshots: { snapshot_id: snapshot.id })
+    else
+      ready_status = Screenshot.statuses[:ready]
+      scope.left_joins(:screenshots)
+        .where("screenshots.id IS NULL OR screenshots.status = ?", ready_status)
+    end
+
+    scope = scope
+      .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
+      .group("pages.id")
+      .order(Arel.sql("COALESCE(MAX(screenshots.created_at), pages.created_at) DESC"))
+
+    snapshot ? scope : scope.includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
+  end
+
   private
 
   def create_owner_membership

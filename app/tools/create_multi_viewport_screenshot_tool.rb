@@ -1,10 +1,7 @@
 # frozen_string_literal: true
 
 # Creates one Screenshot with N ScreenshotImages (one per viewport) and returns
-# signed upload URLs for each. The caller PUTs each viewport's binary to its
-# `upload_url` with the matching `token`. Image bytes never enter the MCP
-# transport — same pattern as the single-viewport `create_screenshot_upload`,
-# extended for 1..3 viewports.
+# signed upload URLs for each. Image bytes never enter the MCP transport.
 class CreateMultiViewportScreenshotTool < ApplicationTool
   tool_name "create_multi_viewport_screenshot"
   description "Create a screenshot with one or more viewport variants (desktop, tablet, mobile). Returns signed upload URLs for each variant — PUT each binary separately."
@@ -38,27 +35,18 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
     bad_mime = normalized.find { |v| !v[:mime_type].in?(ScreenshotImage::ALLOWED_CONTENT_TYPES) }
     return invalid("mime_type must be image/png or image/jpeg") if bad_mime
 
-    with_error_handling do
-      # Resolve the snapshot inside with_error_handling so a transient
-      # connection / StatementInvalid error from find_by surfaces as the
-      # structured internal_error payload (and reaches Honeybadger) instead
-      # of escaping the tool envelope.
-      snapshot = snapshot_id && current_project.snapshots.find_by(id: snapshot_id)
-      # `return invalid(...)` from inside the block exits #call directly and
-      # bypasses with_error_handling's `rescue` clauses — that's intentional
-      # for an arg-validation failure. A future refactor wrapping this in
-      # ApplicationRecord.transaction must preserve that early-exit.
-      return invalid("snapshot not found in project") if snapshot_id && !snapshot
+    # Resolve snapshot outside with_error_handling so the early-exit on a
+    # missing snapshot stays clear of the StandardError rescue.
+    if snapshot_id
+      snapshot = current_project.snapshots.find_by(id: snapshot_id)
+      return invalid("snapshot not found in project") unless snapshot
+    end
 
+    with_error_handling do
       project = current_project
       screenshot = nil
       uploads = nil
 
-      # Wrap Screenshot + ScreenshotImages creation so a partial failure
-      # (e.g. mid-loop ScreenshotImage validation error) rolls back the
-      # Screenshot too — no orphans with 0 or partial variants. Page is
-      # created outside the transaction so a transient failure here doesn't
-      # un-create a Page another caller may already be using.
       page = Page.find_or_create_by_name!(project, page_name || title)
       begin
         ApplicationRecord.transaction do
@@ -75,11 +63,15 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
             }
           end
         end
-      rescue ActiveRecord::RecordNotUnique
-        # Catch inside with_error_handling so the structured error returns to
-        # the agent instead of being swallowed as a generic "internal_error"
-        # by the outer StandardError rescue in ApplicationTool.
-        return invalid("A ScreenshotImage with that viewport already exists for this Screenshot (concurrent request?)")
+      rescue ActiveRecord::RecordNotUnique => e
+        Honeybadger.notify(e)
+        next invalid("A ScreenshotImage with that viewport already exists for this Screenshot (concurrent request?)")
+      rescue ActiveRecord::InvalidForeignKey => e
+        # TOCTOU: snapshot existed at the pre-check but was destroyed before
+        # the INSERT landed. Surface the same envelope as the pre-check so
+        # agents can rely on a stable error shape.
+        Honeybadger.notify(e)
+        next invalid("snapshot not found in project")
       end
 
       {
@@ -90,4 +82,8 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
       }.to_json
     end
   end
+
+  # Visibility marker: any helper methods added below default to private so
+  # subclass authors don't silently expose internals.
+  private
 end

@@ -1,11 +1,8 @@
 # Omakase Ruby styling for Rails
 inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 
-# Committed migrations are historical artifacts — once they've shipped,
-# rewriting them only for cosmetic style breaks git blame and diverges
-# the file from what actually ran in production. New migrations still
-# get linted by the editor; this just keeps automated cops from rewriting
-# committed history.
+# Migrations are historical artifacts — don't let cosmetic cops rewrite
+# what already ran in production.
 Layout/SpaceInsideArrayLiteralBrackets:
   Exclude:
     - 'db/migrate/**/*.rb'

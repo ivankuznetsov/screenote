@@ -85,10 +85,22 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal [ first_page.id, second_page.id ].sort, page_card_page_ids.sort
     # Guards the `screenshots_count_cache` SELECT alias the view reads at
-    # `app/views/projects/show.html.erb:39-40`: drop the alias and these
-    # counts render blank with all other tests green.
+    # `app/views/projects/show.html.erb`: drop the alias and the view raises
+    # NoMethodError on `page.screenshots_count_cache` with every other test
+    # still green.
     assert_includes page_card_version_counters, "1 version"
     assert_includes page_card_version_counters, "0 versions"
+  end
+
+  test "show renders 'No screenshots yet' placeholder when a page has no ready screenshots" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Placeholder project")
+    project.pages.create!(name: "Empty page")
+
+    get project_path(project)
+
+    assert_response :success
+    assert_select ".page-card__placeholder", text: "No screenshots yet"
   end
 
   test "show filters to pages captured in the selected snapshot" do
@@ -99,18 +111,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     also_captured = project.pages.create!(name: "Also captured")
     ad_hoc_only = project.pages.create!(name: "Ad-hoc only")
 
-    captured.screenshots.create!(title: "Captured shot", snapshot: snapshot, status: :ready)
-    also_captured.screenshots.create!(title: "Also captured shot", snapshot: snapshot, status: :ready)
+    captured.screenshots.create!(title: "Captured shot", snapshot: snapshot, status: :ready, created_at: 2.hours.ago)
+    also_captured.screenshots.create!(title: "Also captured shot", snapshot: snapshot, status: :ready, created_at: 10.minutes.ago)
+    captured.screenshots.create!(title: "Ad-hoc follow-up", status: :ready, created_at: 5.minutes.ago)
     ad_hoc_only.screenshots.create!(title: "Ad-hoc shot", status: :ready)
 
     get project_path(project, snapshot_id: snapshot.id)
 
     assert_response :success
-    assert_equal [ captured.id, also_captured.id ].sort, page_card_page_ids.sort
+    # Assert order, not just set membership: the filtered scope still has to
+    # honor `ORDER BY MAX(screenshots.created_at) DESC`. A refactor that drops
+    # the ORDER BY only on the `@active_snapshot` branch would slip through a
+    # set-equality assertion.
+    assert_equal [ also_captured.id, captured.id ], page_card_page_ids,
+      "Filtered pages should still be ordered by newest screenshot first"
     # Guards screenshots_count_cache on the filtered path too — a refactor
-    # that scopes the alias to only the unfiltered SELECT would render blank
-    # counters with every other assertion green.
-    assert page_card_version_counters.all? { |c| c =~ /\d+ version/ },
+    # that scopes the alias to only the unfiltered SELECT would raise
+    # NoMethodError in the view with every other assertion green.
+    assert_equal [ "1 snapshot version", "1 snapshot version" ], page_card_version_counters,
       "All page cards should render their version counter; got #{page_card_version_counters.inspect}"
   end
 
@@ -119,13 +137,18 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     project = @user.owned_projects.create!(name: "Bounded query project")
     snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
 
-    3.times do |i|
+    # Use more pages than the previous bound (12) so a per-card query would
+    # scale visibly past it — even a single missed eager-load lands well
+    # above the new ceiling.
+    8.times do |i|
       page = project.pages.create!(name: "Page #{i}")
       screenshot = page.screenshots.create!(title: "Shot #{i}", snapshot: snapshot, status: :ready)
       %i[desktop tablet mobile].each { |vp| screenshot.screenshot_images.create!(viewport: vp) }
     end
 
     get project_path(project, snapshot_id: snapshot.id) # warm caches
+    Rails.cache.clear # cold cache between requests so a per-card Solid Cache
+    # hit can't mask a per-card SQL query the second time through.
 
     # Wrap the second call so a refactor that drops the page_thumbnails
     # subselect and resolves thumbnails per-card can't silently regress R2.
@@ -136,10 +159,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    # Tight upper bound near observed baseline so a partial N+1 regression
-    # (e.g. per-card membership/project lookup) trips this even when the
-    # subselect itself stays in place.
-    assert queries.size <= 12,
+    # Tight upper bound near observed baseline. With 8 pages, a per-card
+    # query path would land at >= 16; we cap at 14 so partial N+1 regressions
+    # trip the assertion well before they double-up.
+    assert queries.size <= 14,
       "Filtered show should not issue per-page thumbnail queries (saw #{queries.size}): #{queries.last(40).inspect}"
   end
 
@@ -194,6 +217,12 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal [ page.id ], page_card_page_ids
+    # Sidebar must NOT show the clear link — `@active_snapshot` should be nil
+    # when the id resolves to another project's snapshot. Otherwise a regression
+    # where `@active_snapshot` cross-loaded but `@pages` happened to come out
+    # right would slip through the page assertion above.
+    assert_select "[data-testid='snapshot-sidebar-clear']",
+      { count: 0 }, "Cross-project snapshot id must not produce an active snapshot context"
   end
 
   test "show lists recent snapshots in the sidebar" do
@@ -248,9 +277,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     # outside the recent-10 window.
     assert_select "[data-testid='snapshot-sidebar-item'][data-snapshot-id='#{older.id}']",
       { count: 1 }, "Active snapshot should be prepended into the sidebar even when older than recent-10"
-    # And the sidebar still caps at 10 rows so the active row replaces the
-    # oldest in-window row rather than expanding to 11.
-    assert_select "[data-testid='snapshot-sidebar-item']", count: 10
+    # And the recent-10 list still remains complete: the active row is extra,
+    # not a silent replacement for one of the recent snapshots.
+    assert_select "[data-testid='snapshot-sidebar-item']", count: 11
   end
 
   # New

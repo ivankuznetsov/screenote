@@ -51,4 +51,8 @@ class CreateAnnotationTool < ApplicationTool
       { annotation: serialize_annotation(annotation) }.to_json
     end
   end
+
+  # Visibility marker: any helper methods added below default to private so
+  # subclass authors don't silently expose internals.
+  private
 end

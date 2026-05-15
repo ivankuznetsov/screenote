@@ -26,8 +26,11 @@
           <%# In filtered mode the snapshot scope is authoritative — don't fall
               back to page.latest_screenshot, which would render an ad-hoc
               capture from outside the selected snapshot. %>
-          <% thumbnail = @page_thumbnails[page.id] %>
-          <% thumbnail ||= page.latest_screenshot unless @active_snapshot %>
+          <% thumbnail = if @active_snapshot
+                          @page_thumbnails[page.id]
+                        else
+                          @page_thumbnails[page.id] || page.latest_screenshot
+                        end %>
           <% card_data = { testid: "page-card", page_id: page.id }
              card_data[:screenshot_id] = thumbnail.id if thumbnail %>
 
@@ -43,7 +46,8 @@
               <div class="page-card__name" data-testid="page-card-name"><%= page.name %></div>
               <div class="page-card__meta">
                 <% count = page.screenshots_count_cache %>
-                <%= count %> <%= "version".pluralize(count) %>
+                <% version_label = @active_snapshot ? "snapshot version" : "version" %>
+                <%= count %> <%= version_label.pluralize(count) %>
               </div>
             </div>
           <% end %>
