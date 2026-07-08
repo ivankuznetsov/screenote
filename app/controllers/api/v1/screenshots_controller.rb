@@ -22,7 +22,8 @@ module Api
       end
 
       def create
-        unless params[:image]
+        image = params[:image]
+        unless uploaded_file?(image)
           render_error("Image file is required", code: "validation_failed", status: :unprocessable_entity)
           return
         end
@@ -31,15 +32,21 @@ module Api
         page = resolve_page(title)
         screenshot = Screenshot.create_with_image!(
           page: page, title: title,
-          io: params[:image].tempfile,
-          filename: params[:image].original_filename,
-          content_type: params[:image].content_type
+          io: image.tempfile,
+          filename: image.original_filename,
+          content_type: image.content_type
         )
 
         render json: Api::V1::ContractSerializer.screenshot_create(screenshot, url_options: url_options), status: :created
       end
 
       private
+
+      def uploaded_file?(image)
+        image.respond_to?(:tempfile) &&
+          image.respond_to?(:original_filename) &&
+          image.respond_to?(:content_type)
+      end
 
       def resolve_page(title)
         page_id = params[:page_id].presence || params[:page].presence

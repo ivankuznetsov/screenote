@@ -18,7 +18,7 @@ module Api
       def self.annotations(project)
         Annotation.joins(screenshot: { page: :project })
           .where(projects: { id: project.id })
-          .includes(:user, :screenshot, :annotation_comments)
+          .includes(:user, :screenshot, annotation_comments: [ :user, :api_key ])
       end
     end
   end

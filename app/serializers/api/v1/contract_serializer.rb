@@ -33,7 +33,7 @@ module Api
             annotation_count: screenshot.annotations.size,
             unresolved_count: screenshot.annotations.count(&:open?),
             annotate_url: routes.screenshot_url(screenshot, url_options),
-            viewports: screenshot.screenshot_images.order(:viewport).map { |image| screenshot_image(image) },
+            viewports: screenshot.screenshot_images.sort_by(&:viewport).map { |image| screenshot_image(image) },
             created_at: screenshot.created_at.iso8601
           }
         end
@@ -53,7 +53,7 @@ module Api
         end
 
         def annotation_detail(annotation, cropped_base64:)
-          comments = annotation.annotation_comments.includes(:user, :api_key).order(:created_at).map do |comment|
+          comments = annotation.annotation_comments.sort_by(&:created_at).map do |comment|
             annotation_comment(comment, annotation: annotation, include_annotation_id: false)
           end
 

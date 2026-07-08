@@ -111,6 +111,24 @@ module Api
         assert_equal "validation_failed", response.parsed_body["code"]
       end
 
+      test "returns 422 when image is not an uploaded file" do
+        post api_v1_screenshots_path,
+          params: { image: "not-a-file", title: "Bad image" },
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :unprocessable_entity
+        assert_equal "Image file is required", response.parsed_body["error"]
+        assert_equal "validation_failed", response.parsed_body["code"]
+      end
+
+      test "returns stable JSON for malformed pagination params" do
+        get api_v1_project_screenshots_path(@project, limit: { x: 1 }),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        assert_equal 50, response.parsed_body["pagination"]["limit"]
+      end
+
       test "uses default title when none provided" do
         assert_difference "Screenshot.count", 1 do
           post api_v1_screenshots_path,

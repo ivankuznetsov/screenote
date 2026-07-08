@@ -47,10 +47,19 @@ module Api
     end
 
     def pagination_params
-      limit = params.fetch(:limit, 50).to_i.clamp(1, 100)
-      offset = [ params.fetch(:offset, 0).to_i, 0 ].max
+      limit = integer_param(:limit, 50).clamp(1, 100)
+      offset = [ integer_param(:offset, 0), 0 ].max
 
       [ limit, offset ]
+    end
+
+    # Coerce only scalar pagination values; structured params such as
+    # `limit[x]=1` or `offset[]=2` are treated as absent rather than raising.
+    def integer_param(key, default)
+      value = params[key]
+      return default unless value.is_a?(String) || value.is_a?(Integer)
+
+      value.to_i
     end
 
     def render_error(message, code:, status:, details: nil)
