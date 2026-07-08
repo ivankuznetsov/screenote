@@ -18,7 +18,7 @@ Updated: 2026-07-08
 - [[architecture]] — Rails 8.1 app architecture, integrations, and major patterns.
 - [[data-model]] — Current schema, relationships, indexes, and FK behavior.
 - [[schema-evolution]] — Migration timeline through Stripe hardening and multi-viewport screenshots.
-- [[routes]] — Web, REST API, OAuth, viewport, webhook, and static routes.
+- [[routes]] — Web, REST API bearer auth, OAuth, viewport, webhook, and static routes.
 - [[decisions]] — Lightweight ADRs from git history.
 - [[dependencies]] — Dependency files and stack notes.
 - [[gems]] — Gem choices and rationale.
@@ -29,7 +29,7 @@ Updated: 2026-07-08
 ## Controllers And Services
 
 - [[controllers/web-controllers]] — Browser UI controllers and public static pages.
-- [[controllers/api-controllers]] — REST and signed-upload API controllers.
+- [[controllers/api-controllers]] — REST bearer-auth and signed-upload API controllers.
 - [[controllers/oauth-controllers]] — Doorkeeper, DCR, and OAuth metadata controllers.
 - [[services/annotation-crop-service]] — Cropped annotation image generation.
 

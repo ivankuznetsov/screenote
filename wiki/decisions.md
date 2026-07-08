@@ -3,7 +3,7 @@ title: Architectural Decisions
 type: decision
 source: git log
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-08
 tags: [decisions, adr, architecture, history]
 ---
 
@@ -40,7 +40,7 @@ Source: `git log --all --oneline` (112 commits total)
 ## ADR-004: MCP Server with API Key Auth
 
 **Date**: 2026-02-11 (commit `4599a19`)
-**Status**: Superseded by ADR-007 (OAuth added, API keys still supported for REST API)
+**Status**: Superseded by ADR-007 for MCP auth; still active for project-scoped REST API keys.
 **Context**: AI agents need to read annotations and upload screenshots.
 **Decision**: fast-mcp gem with bearer token API keys per project.
 **Rationale**: Simple, project-scoped access. API keys are hashed with SHA-256, never stored in plaintext.
@@ -67,7 +67,7 @@ Source: `git log --all --oneline` (112 commits total)
 **Status**: Active
 **Context**: MCP clients (like Claude Desktop) need standardized auth, not custom API keys.
 **Decision**: Add Doorkeeper as OAuth 2.1 provider with PKCE support, dynamic client registration (RFC 7591), and standard metadata endpoints (RFC 8414, RFC 9728).
-**Rationale**: MCP specification requires OAuth 2.1. Dynamic registration lets any MCP client connect without manual setup. Tokens are scoped to projects.
+**Rationale**: MCP specification requires OAuth 2.1. Dynamic registration lets any MCP client connect without manual setup. Current REST `Api::V1` bearer auth also accepts OAuth tokens and enforces `mcp_read`/`mcp_write` scopes; source still contains uncertainty about long-term user-scoped vs project-scoped OAuth semantics.
 
 ## ADR-008: Stripe for Billing (Free/Pro Tiers)
 

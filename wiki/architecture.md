@@ -3,7 +3,7 @@ title: Architecture
 type: architecture
 source: CLAUDE.md, Gemfile, config/routes.rb
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-08
 tags: [architecture, overview, stack, integrations]
 ---
 
@@ -74,7 +74,7 @@ User enters URL -> server captures page -> User annotates -> Agent collects
 - **Fat models, skinny controllers** -- business logic in models, controllers only do routing/auth
 - **Service objects** for complex operations (only `AnnotationCropService` exists currently)
 - **Concern-based auth** -- `ProjectAuthorization` concern shared across controllers needing project-level access checks
-- **Dual auth systems** -- Web UI uses session-based auth (rails_simple_auth), API uses bearer token auth (ApiKey), MCP uses OAuth 2.1 (Doorkeeper)
+- **Bearer-auth API surface** -- Web UI uses session-based auth (rails_simple_auth). REST `Api::V1` endpoints use `Api::BearerAuthenticator`, accepting project-scoped ApiKey tokens or Doorkeeper OAuth access tokens with `mcp_read`/`mcp_write` scopes. MCP also uses OAuth 2.1 (Doorkeeper) and still supports API keys.
 - **Enum-backed status fields** -- integer enums for annotation status, comment actions, subscription plan/status, project membership roles, invitation status, screenshot status
 - **ScreenshotImage variants** -- a Screenshot is a logical capture/version and one or more ScreenshotImage rows own the actual viewport-specific blobs
 - **Percentage-based coordinates** -- annotations use 0.0-100.0 percentage coordinates and are scoped to desktop/tablet/mobile viewports
