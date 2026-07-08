@@ -1,0 +1,34 @@
+package cli
+
+import "github.com/spf13/cobra"
+
+func (a *app) commentCommand() *cobra.Command {
+	cmd := &cobra.Command{Use: "comment", Short: "Comment commands"}
+
+	var annotationID, body string
+	add := &cobra.Command{
+		Use:   "add",
+		Short: "Add an annotation comment",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if annotationID == "" {
+				return missingFlag("annotation")
+			}
+			if body == "" {
+				return missingFlag("body")
+			}
+			client, _, err := a.client()
+			if err != nil {
+				return err
+			}
+			raw, err := client.AddComment(cmd.Context(), annotationID, body)
+			if err != nil {
+				return err
+			}
+			return writeRawJSON(a.stdout, raw)
+		},
+	}
+	add.Flags().StringVar(&annotationID, "annotation", "", "Annotation ID")
+	add.Flags().StringVar(&body, "body", "", "Comment body")
+	cmd.AddCommand(add)
+	return cmd
+}

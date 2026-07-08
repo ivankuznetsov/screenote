@@ -1,0 +1,212 @@
+package screenote
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/url"
+	"path"
+	"strconv"
+	"strings"
+)
+
+type Client struct {
+	baseURL    *url.URL
+	apiKey     string
+	httpClient *http.Client
+}
+
+type Error struct {
+	StatusCode int
+	Code       string
+	Message    string
+}
+
+func (e *Error) Error() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	return http.StatusText(e.StatusCode)
+}
+
+func NewClient(baseURL, apiKey string, httpClient *http.Client) (*Client, error) {
+	if baseURL == "" {
+		return nil, errors.New("base url is required")
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return nil, errors.New("base url must include scheme and host")
+	}
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	return &Client{baseURL: parsed, apiKey: apiKey, httpClient: httpClient}, nil
+}
+
+func (c *Client) Projects(ctx context.Context) (json.RawMessage, ProjectsResponse, error) {
+	var out ProjectsResponse
+	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/projects", nil, nil, &out)
+	return raw, out, err
+}
+
+func (c *Client) Pages(ctx context.Context, project string) (json.RawMessage, error) {
+	return c.doJSON(ctx, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/pages", nil, nil, nil)
+}
+
+func (c *Client) Screenshots(ctx context.Context, project string, query url.Values) (json.RawMessage, ScreenshotsResponse, error) {
+	var out ScreenshotsResponse
+	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/screenshots", query, nil, &out)
+	return raw, out, err
+}
+
+func (c *Client) CreateScreenshot(ctx context.Context, title, pageValue, filename, contentType string, r io.Reader) (json.RawMessage, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if title != "" {
+		_ = writer.WriteField("title", title)
+	}
+	if pageValue != "" {
+		_ = writer.WriteField("page", pageValue)
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if filename == "" || filename == "-" {
+		filename = "stdin"
+	}
+	part, err := writer.CreateFormFile("image", path.Base(filename))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(part, r); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	headers := map[string]string{"Content-Type": writer.FormDataContentType()}
+	return c.doJSON(ctx, http.MethodPost, "/api/v1/screenshots", nil, headers, nil, &body)
+}
+
+func (c *Client) Annotations(ctx context.Context, screenshot string, query url.Values) (json.RawMessage, AnnotationsResponse, error) {
+	var out AnnotationsResponse
+	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/screenshots/"+url.PathEscape(screenshot)+"/annotations", query, nil, &out)
+	return raw, out, err
+}
+
+func (c *Client) Annotation(ctx context.Context, id string) (json.RawMessage, error) {
+	return c.doJSON(ctx, http.MethodGet, "/api/v1/annotations/"+url.PathEscape(id), nil, nil, nil)
+}
+
+func (c *Client) AddComment(ctx context.Context, annotation, body string) (json.RawMessage, error) {
+	form := url.Values{"body": []string{body}}
+	headers := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
+	return c.doJSON(ctx, http.MethodPost, "/api/v1/annotations/"+url.PathEscape(annotation)+"/comments", nil, headers, nil, strings.NewReader(form.Encode()))
+}
+
+func Query(params map[string]string) url.Values {
+	values := url.Values{}
+	for key, value := range params {
+		if value != "" {
+			values.Set(key, value)
+		}
+	}
+	return values
+}
+
+func WithLimitOffset(values url.Values, limit, offset int) url.Values {
+	if limit > 0 {
+		values.Set("limit", strconv.Itoa(limit))
+	}
+	if offset > 0 {
+		values.Set("offset", strconv.Itoa(offset))
+	}
+	return values
+}
+
+func (c *Client) doJSON(ctx context.Context, method, rawPath string, query url.Values, headers map[string]string, out any, body ...io.Reader) (json.RawMessage, error) {
+	u := *c.baseURL
+	u.Path = strings.TrimRight(c.baseURL.Path, "/") + rawPath
+	u.RawQuery = query.Encode()
+
+	var reader io.Reader
+	if len(body) > 0 {
+		reader = body[0]
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
+	if err != nil {
+		return nil, err
+	}
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	req.Header.Set("Accept", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return raw, parseError(resp.StatusCode, raw)
+	}
+	if out != nil && len(raw) > 0 {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return raw, err
+		}
+	}
+	return raw, nil
+}
+
+func parseError(status int, raw []byte) error {
+	var payload struct {
+		Error   string `json:"error"`
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	_ = json.Unmarshal(raw, &payload)
+
+	message := payload.Error
+	if message == "" {
+		message = payload.Message
+	}
+	if message == "" {
+		message = http.StatusText(status)
+	}
+	code := payload.Code
+	if code == "" {
+		code = statusCode(status)
+	}
+
+	return &Error{StatusCode: status, Code: code, Message: message}
+}
+
+func statusCode(status int) string {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "unauthorized"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	default:
+		return fmt.Sprintf("http_%d", status)
+	}
+}

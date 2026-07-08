@@ -1,0 +1,81 @@
+package cli
+
+import (
+	"os"
+
+	"github.com/ivankuznetsov/screenote/internal/screenote"
+	"github.com/spf13/cobra"
+)
+
+func (a *app) screenshotCommand() *cobra.Command {
+	cmd := &cobra.Command{Use: "screenshot", Short: "Screenshot commands"}
+
+	var listPage, listStatus string
+	var limit, offset int
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List screenshots",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, resolved, err := a.client()
+			if err != nil {
+				return err
+			}
+			project, err := a.projectID(cmd.Context(), client, resolved)
+			if err != nil {
+				return err
+			}
+			query := screenote.WithLimitOffset(screenote.Query(map[string]string{
+				"page_id": listPage,
+				"status":  listStatus,
+			}), limit, offset)
+			raw, _, err := client.Screenshots(cmd.Context(), project, query)
+			if err != nil {
+				return err
+			}
+			return writeRawJSON(a.stdout, raw)
+		},
+	}
+	list.Flags().StringVar(&listPage, "page", "", "Page ID")
+	list.Flags().StringVar(&listStatus, "status", "", "Screenshot status")
+	list.Flags().IntVar(&limit, "limit", 50, "Maximum results")
+	list.Flags().IntVar(&offset, "offset", 0, "Results to skip")
+
+	var title, pageValue, filePath string
+	create := &cobra.Command{
+		Use:   "create",
+		Short: "Create a screenshot",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if title == "" {
+				return missingFlag("title")
+			}
+			client, _, err := a.client()
+			if err != nil {
+				return err
+			}
+
+			reader := a.stdin
+			filename := "stdin"
+			if filePath != "" && filePath != "-" {
+				file, err := os.Open(filePath)
+				if err != nil {
+					return err
+				}
+				defer file.Close()
+				reader = file
+				filename = filePath
+			}
+
+			raw, err := client.CreateScreenshot(cmd.Context(), title, pageValue, filename, "", reader)
+			if err != nil {
+				return err
+			}
+			return writeRawJSON(a.stdout, raw)
+		},
+	}
+	create.Flags().StringVar(&title, "title", "", "Screenshot title")
+	create.Flags().StringVar(&pageValue, "page", "", "Page ID or page name")
+	create.Flags().StringVar(&filePath, "file", "-", "Image file path or - for stdin")
+
+	cmd.AddCommand(list, create)
+	return cmd
+}
