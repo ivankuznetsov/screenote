@@ -53,21 +53,17 @@ screenote annotation get --annotation ID
 screenote comment add --annotation ID --body TEXT
 ```
 
-`annotation list` without `--screenshot` lists annotations across all screenshots in the resolved project. The CLI pages through screenshots and per-screenshot annotations, skips screenshots that become inaccessible during aggregation, reports the aggregate total, and applies `--limit`/`--offset` to the aggregate result.
+`screenshot create` reads stdin when `--file` is omitted or set to `-`. When uploading a file, the content type is derived from the file extension (e.g. `.png` → `image/png`); stdin uploads fall back to `application/octet-stream` and are re-identified server-side from the bytes.
 
-`screenshot create` reads stdin when `--file` is omitted or set to `-`. When uploading a file, the content type is derived from the file extension (for example, `.png` becomes `image/png`); stdin uploads fall back to `application/octet-stream` and are re-identified server-side from the bytes.
-
-`--page` selects a page by ID when the value is all digits, otherwise it is treated as a page name that is created if it does not exist. Consequently a page literally named `123` cannot be selected by name; an all-digit value always resolves as an ID.
+`--page` selects a page by ID when the value is all digits, otherwise it is treated as a page name (created if it does not exist). Consequently a page literally named `123` cannot be selected by name — an all-digit value always resolves as an ID.
 
 ## Error Contract
 
-Successful commands write compact JSON to stdout. Errors write this shape to stderr:
+Successful commands write JSON to stdout. Errors write this shape to stderr:
 
 ```json
 {"code":"missing_base_url","error":"base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url"}
 ```
-
-Cobra flag parse errors use the stable `invalid_flag` usage error. Invalid base URLs use `invalid_base_url`.
 
 Exit codes:
 

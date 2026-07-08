@@ -30,8 +30,7 @@ Base class for authenticated API endpoints. Inherits from `ActionController::API
 - `current_api_key` -- The authenticated ApiKey
 - `current_project` -- The project associated with the API key
 - Stable JSON error rendering with `error` and machine-readable `code`
-- `require_current_project!` guard for API-key scoped nested routes
-- Shared pagination coercion for `limit` and `offset` params
+- Project mismatch guard for API-key scoped nested routes
 
 ---
 
@@ -41,7 +40,7 @@ Source: `app/controllers/api/v1/projects_controller.rb`
 
 **Actions:** index
 
-Returns the project bound to the API key. API-key auth is project-authoritative, so the response is a one-project list with role `api_key`.
+Returns the project bound to the API key. API-key auth is project authoritative, so the response is a one-project list.
 
 ---
 
@@ -51,7 +50,7 @@ Source: `app/controllers/api/v1/pages_controller.rb`
 
 **Actions:** index
 
-Lists pages for the API key's project with version counts and page URLs. `:project_id` must match the key's project.
+Lists pages for the API key's project with version counts.
 
 ---
 
@@ -69,10 +68,9 @@ Source: `app/controllers/api/v1/screenshots_controller.rb`
 | create | POST | `/api/v1/screenshots` | Uploads screenshot with image file |
 
 - Requires `image` parameter (file upload)
-- For create, `page`/`page_id` selects a page by numeric ID or name; absent page input falls back to the screenshot title and creates the page if needed
+- Uses `Page.find_or_create_by_name!` to auto-create pages from `title` parameter (defaults to "Untitled")
 - Uses `Screenshot.create_with_image!`, which creates the parent screenshot and a desktop [[models/screenshot-image]]
-- List supports `page_id`, `status`, `limit`, and `offset`
-- Create returns `screenshot_id`, `page_id`, `status`, `annotate_url`, and primary image metadata
+- Returns `screenshot_id`, `page_id`, `status`, `annotate_url`, and image metadata
 
 ---
 
