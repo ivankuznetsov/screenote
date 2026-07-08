@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"os/exec"
 	"runtime"
 	"time"
@@ -152,6 +151,15 @@ type callbackResult struct {
 }
 
 func callbackHandler(expectedState string, result chan<- callbackResult) http.Handler {
+	// send never blocks: result is buffered for one value, so a second callback
+	// after the first result is consumed is dropped rather than wedging the
+	// handler (which would stall the deferred server.Shutdown indefinitely).
+	send := func(r callbackResult) {
+		select {
+		case result <- r:
+		default:
+		}
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/callback" {
 			http.NotFound(w, r)
@@ -159,29 +167,26 @@ func callbackHandler(expectedState string, result chan<- callbackResult) http.Ha
 		}
 		query := r.URL.Query()
 		if query.Get("state") != expectedState {
-			result <- callbackResult{err: usageError("invalid_oauth_state", "OAuth callback state did not match")}
 			http.Error(w, "Invalid OAuth state", http.StatusBadRequest)
+			send(callbackResult{err: usageError("invalid_oauth_state", "OAuth callback state did not match")})
 			return
 		}
 		if errText := query.Get("error"); errText != "" {
-			result <- callbackResult{err: authError("oauth_error", errText)}
 			http.Error(w, errText, http.StatusBadRequest)
+			send(callbackResult{err: authError("oauth_error", errText)})
 			return
 		}
 		code := query.Get("code")
 		if code == "" {
-			result <- callbackResult{err: usageError("missing_oauth_code", "OAuth callback did not include an authorization code")}
 			http.Error(w, "Missing OAuth code", http.StatusBadRequest)
+			send(callbackResult{err: usageError("missing_oauth_code", "OAuth callback did not include an authorization code")})
 			return
 		}
-		result <- callbackResult{code: code}
+		// Write the success page before signaling so the deferred shutdown, which
+		// runs once runLogin consumes this result, cannot race ahead of the write
+		// and truncate the response.
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("Screenote login complete. You can close this window."))
+		send(callbackResult{code: code})
 	})
-}
-
-func callbackURL(base string, values url.Values) string {
-	u, _ := url.Parse(base)
-	u.RawQuery = values.Encode()
-	return u.String()
 }

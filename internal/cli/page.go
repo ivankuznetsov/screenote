@@ -9,11 +9,7 @@ func (a *app) pageCommand() *cobra.Command {
 		Short: "List pages",
 		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, resolved, err := a.client()
-			if err != nil {
-				return err
-			}
-			project, err := a.projectID(cmd.Context(), client, resolved)
+			client, project, err := a.clientForProject(cmd.Context())
 			if err != nil {
 				return err
 			}

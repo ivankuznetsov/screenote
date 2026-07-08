@@ -17,11 +17,7 @@ func (a *app) commentCommand() *cobra.Command {
 			if body == "" {
 				return missingFlag("body")
 			}
-			client, resolved, err := a.client()
-			if err != nil {
-				return err
-			}
-			project, err := a.projectID(cmd.Context(), client, resolved)
+			client, project, err := a.clientForProject(cmd.Context())
 			if err != nil {
 				return err
 			}

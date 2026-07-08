@@ -14,13 +14,12 @@ import (
 )
 
 type app struct {
-	stdin       io.Reader
-	stdout      io.Writer
-	stderr      io.Writer
-	httpClient  *http.Client
-	flags       appconfig.Values
-	configPath  string
-	interactive bool
+	stdin      io.Reader
+	stdout     io.Writer
+	stderr     io.Writer
+	httpClient *http.Client
+	flags      appconfig.Values
+	configPath string
 }
 
 func Execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -54,7 +53,6 @@ func (a *app) rootCommand(_ context.Context) *cobra.Command {
 	root.PersistentFlags().StringVar(&a.flags.BaseURL, "base-url", "", "Screenote base URL")
 	root.PersistentFlags().StringVar(&a.flags.Project, "project", "", "Screenote project ID")
 	root.PersistentFlags().StringVar(&a.configPath, "config", "", "Config file path")
-	root.PersistentFlags().BoolVar(&a.interactive, "interactive", false, "Allow interactive prompts")
 
 	root.AddCommand(
 		a.configCommand(),
@@ -76,7 +74,7 @@ func (a *app) resolvedConfig() (appconfig.Resolved, error) {
 	})
 }
 
-func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
+func (a *app) client(ctx context.Context) (*screenote.Client, appconfig.Resolved, error) {
 	resolved, err := a.resolvedConfig()
 	if err != nil {
 		return nil, resolved, err
@@ -85,7 +83,7 @@ func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
 		return nil, resolved, usageError("missing_base_url", "base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url")
 	}
 	if resolved.Token == "" {
-		token, err := a.storedLoginToken(cmdContext(), resolved)
+		token, err := a.storedLoginToken(ctx, resolved)
 		if err != nil {
 			return nil, resolved, err
 		}
@@ -99,8 +97,23 @@ func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
 	return client, resolved, nil
 }
 
-func cmdContext() context.Context {
-	return context.Background()
+// clientForProject resolves the required project locally before constructing a
+// client, so a missing project fails with the local usage error without first
+// triggering OAuth discovery/refresh network calls or mutating stored config.
+func (a *app) clientForProject(ctx context.Context) (*screenote.Client, string, error) {
+	resolved, err := a.resolvedConfig()
+	if err != nil {
+		return nil, "", err
+	}
+	project, err := a.projectID(resolved)
+	if err != nil {
+		return nil, "", err
+	}
+	client, _, err := a.client(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return client, project, nil
 }
 
 func (a *app) storedLoginToken(ctx context.Context, resolved appconfig.Resolved) (string, error) {
@@ -143,7 +156,7 @@ func (a *app) storedLoginToken(ctx context.Context, resolved appconfig.Resolved)
 	return credentials.AccessToken, nil
 }
 
-func (a *app) projectID(_ context.Context, _ *screenote.Client, resolved appconfig.Resolved) (string, error) {
+func (a *app) projectID(resolved appconfig.Resolved) (string, error) {
 	if resolved.Project != "" {
 		return resolved.Project, nil
 	}

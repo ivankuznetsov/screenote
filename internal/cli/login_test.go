@@ -175,6 +175,48 @@ func TestStoredExpiredCredentialsRefreshBeforeCommand(t *testing.T) {
 	}
 }
 
+func TestStoredExpiredCredentialsFailedRefreshReturnsAuthError(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"authorization_endpoint": serverURL(r) + "/oauth/authorize",
+				"token_endpoint":         serverURL(r) + "/oauth/token",
+				"registration_endpoint":  serverURL(r) + "/oauth/register",
+			})
+		case "/oauth/token":
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := appconfig.Save(configPath, appconfig.Values{
+		BaseURL: server.URL,
+		Login: &appconfig.LoginCredentials{
+			AccessToken:  "access-1",
+			RefreshToken: "refresh-1",
+			ExpiresAt:    time.Now().Add(-time.Hour),
+			ClientID:     "client-1",
+			BaseURL:      server.URL,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, code := runCLI(t, []string{"--config", configPath, "project", "list"}, "")
+	if code != ExitAuth {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stderr, "invalid_token") {
+		t.Fatalf("stderr=%s", stderr)
+	}
+}
+
 func TestExplicitTokenSkipsStoredRefresh(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

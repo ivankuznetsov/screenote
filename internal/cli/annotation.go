@@ -23,7 +23,7 @@ func (a *app) annotationCommand() *cobra.Command {
 		Short: "List annotations",
 		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, resolved, err := a.client()
+			client, project, err := a.clientForProject(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -31,10 +31,6 @@ func (a *app) annotationCommand() *cobra.Command {
 				"status":   status,
 				"viewport": viewport,
 			})
-			project, err := a.projectID(cmd.Context(), client, resolved)
-			if err != nil {
-				return err
-			}
 			if screenshotID != "" {
 				raw, _, err := client.Annotations(cmd.Context(), screenshotID, project, screenote.WithLimitOffset(cloneValues(filters), limit, offset))
 				if err != nil {
@@ -93,11 +89,7 @@ func (a *app) annotationCommand() *cobra.Command {
 			if annotationID == "" {
 				return missingFlag("annotation")
 			}
-			client, resolved, err := a.client()
-			if err != nil {
-				return err
-			}
-			project, err := a.projectID(cmd.Context(), client, resolved)
+			client, project, err := a.clientForProject(cmd.Context())
 			if err != nil {
 				return err
 			}
