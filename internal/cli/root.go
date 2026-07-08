@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	appconfig "github.com/ivankuznetsov/screenote/internal/config"
 	"github.com/ivankuznetsov/screenote/internal/screenote"
@@ -57,6 +58,8 @@ func (a *app) rootCommand(_ context.Context) *cobra.Command {
 
 	root.AddCommand(
 		a.configCommand(),
+		a.loginCommand(),
+		a.logoutCommand(),
 		a.projectCommand(),
 		a.pageCommand(),
 		a.screenshotCommand(),
@@ -82,7 +85,11 @@ func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
 		return nil, resolved, usageError("missing_base_url", "base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url")
 	}
 	if resolved.Token == "" {
-		return nil, resolved, usageError("missing_token", "OAuth bearer token is required; set --token, SCREENOTE_TOKEN, config token, or run screenote login")
+		token, err := a.storedLoginToken(cmdContext(), resolved)
+		if err != nil {
+			return nil, resolved, err
+		}
+		resolved.Token = token
 	}
 
 	client, err := screenote.NewClient(resolved.BaseURL, resolved.Token, a.httpClient)
@@ -90,6 +97,50 @@ func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
 		return nil, resolved, usageError("invalid_base_url", err.Error())
 	}
 	return client, resolved, nil
+}
+
+func cmdContext() context.Context {
+	return context.Background()
+}
+
+func (a *app) storedLoginToken(ctx context.Context, resolved appconfig.Resolved) (string, error) {
+	path := defaultConfigPath(a.configPath)
+	values, err := appconfig.LoadExpanded(path)
+	if err != nil {
+		return "", err
+	}
+	credentials := values.Login
+	if credentials == nil || credentials.AccessToken == "" {
+		return "", usageError("missing_token", "OAuth bearer token is required; set --token, SCREENOTE_TOKEN, config token, or run screenote login")
+	}
+	if credentials.BaseURL != "" && resolved.BaseURL != "" && credentials.BaseURL != resolved.BaseURL {
+		return "", authError("invalid_token", "stored login credentials are for a different base URL")
+	}
+	if credentials.ExpiresAt.IsZero() || time.Until(credentials.ExpiresAt) > time.Minute {
+		return credentials.AccessToken, nil
+	}
+	if credentials.RefreshToken == "" {
+		return "", authError("invalid_token", "stored OAuth token is expired and has no refresh token")
+	}
+
+	metadata, err := screenote.DiscoverOAuth(ctx, resolved.BaseURL, a.httpClient)
+	if err != nil {
+		return "", authError("invalid_token", "stored OAuth token refresh failed: "+err.Error())
+	}
+	response, err := screenote.RefreshAccessToken(ctx, metadata, credentials.ClientID, credentials.RefreshToken, a.httpClient)
+	if err != nil {
+		return "", authError("invalid_token", "stored OAuth token refresh failed: "+err.Error())
+	}
+	credentials.AccessToken = response.AccessToken
+	if response.RefreshToken != "" {
+		credentials.RefreshToken = response.RefreshToken
+	}
+	credentials.ExpiresAt = screenote.ExpiresAt(response, time.Now())
+	values.Login = credentials
+	if err := appconfig.Save(path, values); err != nil {
+		return "", err
+	}
+	return credentials.AccessToken, nil
 }
 
 func (a *app) projectID(_ context.Context, _ *screenote.Client, resolved appconfig.Resolved) (string, error) {

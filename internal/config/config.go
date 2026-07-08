@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -11,9 +12,19 @@ import (
 const DefaultConfigPath = "~/.config/screenote/config.toml"
 
 type Values struct {
-	Token   string `toml:"token" json:"token,omitempty"`
-	BaseURL string `toml:"base_url" json:"base_url,omitempty"`
-	Project string `toml:"project" json:"project,omitempty"`
+	Token   string            `toml:"token" json:"token,omitempty"`
+	BaseURL string            `toml:"base_url" json:"base_url,omitempty"`
+	Project string            `toml:"project" json:"project,omitempty"`
+	Login   *LoginCredentials `toml:"login,omitempty" json:"-"`
+}
+
+type LoginCredentials struct {
+	AccessToken  string    `toml:"access_token"`
+	RefreshToken string    `toml:"refresh_token,omitempty"`
+	ExpiresAt    time.Time `toml:"expires_at,omitempty"`
+	ClientID     string    `toml:"client_id"`
+	BaseURL      string    `toml:"base_url"`
+	Issuer       string    `toml:"issuer,omitempty"`
 }
 
 type Sources struct {

@@ -32,6 +32,10 @@ func usageError(code, message string) error {
 	return &cliError{Code: code, Message: message, Exit: ExitUsage}
 }
 
+func authError(code, message string) error {
+	return &cliError{Code: code, Message: message, Exit: ExitAuth}
+}
+
 func writeError(w io.Writer, err error) int {
 	code := "internal_error"
 	message := err.Error()
