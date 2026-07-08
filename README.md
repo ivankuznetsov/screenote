@@ -40,7 +40,7 @@ screenote --base-url http://localhost:3005 --token "$SCREENOTE_TOKEN" project li
 screenote --project 7 page list
 screenote --project 7 screenshot create --title "Homepage" --file screenshot.png
 cat screenshot.png | screenote --project 7 screenshot create --title "Homepage"
-screenote screenshot list --status ready --limit 25
+screenote --project 7 screenshot list --status ready --limit 25
 screenote --project 7 annotation list --screenshot 123 --status open
 screenote --project 7 annotation get --annotation 456
 screenote --project 7 comment add --annotation 456 --body "Fix pushed in abc123"
