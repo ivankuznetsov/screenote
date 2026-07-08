@@ -41,7 +41,10 @@ Implemented command groups:
 - `app/controllers/annotations_controller.rb`
 - `app/controllers/api/base_controller.rb`
 - `app/controllers/api/screenshot_uploads_controller.rb`
+- `app/controllers/api/v1/annotation_comments_controller.rb`
 - `app/controllers/api/v1/annotations_controller.rb`
+- `app/controllers/api/v1/pages_controller.rb`
+- `app/controllers/api/v1/projects_controller.rb`
 - `app/controllers/api/v1/screenshots_controller.rb`
 - `app/controllers/api_keys_controller.rb`
 - `app/controllers/application_controller.rb`
@@ -61,6 +64,9 @@ Implemented command groups:
 - `app/controllers/static_pages_controller.rb`
 - `app/controllers/stripe_webhooks_controller.rb`
 - `app/controllers/subscriptions_controller.rb`
+- `cmd/screenote/main.go`
+- `internal/cli/`
+- `internal/screenote/`
 - `config/routes.rb`
 - `bin/brakeman`
 - `bin/bundler-audit`
