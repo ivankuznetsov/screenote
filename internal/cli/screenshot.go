@@ -10,13 +10,14 @@ import (
 )
 
 func (a *app) screenshotCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "screenshot", Short: "Screenshot commands"}
+	cmd := &cobra.Command{Use: "screenshot", Short: "Screenshot commands", Args: rejectArgs, RunE: showHelp}
 
 	var listPage, listStatus string
 	var limit, offset int
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List screenshots",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, resolved, err := a.client()
 			if err != nil {
@@ -46,6 +47,7 @@ func (a *app) screenshotCommand() *cobra.Command {
 	create := &cobra.Command{
 		Use:   "create",
 		Short: "Create a screenshot",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if title == "" {
 				return missingFlag("title")

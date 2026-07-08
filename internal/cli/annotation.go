@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"net/url"
 
 	"github.com/ivankuznetsov/screenote/internal/screenote"
@@ -12,13 +14,14 @@ import (
 const pageSize = 100
 
 func (a *app) annotationCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "annotation", Short: "Annotation commands"}
+	cmd := &cobra.Command{Use: "annotation", Short: "Annotation commands", Args: rejectArgs, RunE: showHelp}
 
 	var screenshotID, status, viewport string
 	var limit, offset int
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List annotations",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, resolved, err := a.client()
 			if err != nil {
@@ -51,9 +54,16 @@ func (a *app) annotationCommand() *cobra.Command {
 			for _, screenshot := range screenshots {
 				response, err := allAnnotations(cmd.Context(), client, intString(screenshot.ID), filters)
 				if err != nil {
-					// A deleted or inaccessible screenshot should not fail the
-					// whole listing; skip it and keep aggregating the rest.
-					continue
+					// A screenshot deleted between the list and the per-screenshot
+					// fetch returns 404; skip it and keep aggregating the rest.
+					// Every other failure (auth, rate limit, 5xx, network) must
+					// propagate so the listing never seals a partial result as
+					// complete.
+					var apiErr *screenote.Error
+					if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+						continue
+					}
+					return err
 				}
 				annotations = append(annotations, response...)
 			}
@@ -78,6 +88,7 @@ func (a *app) annotationCommand() *cobra.Command {
 	get := &cobra.Command{
 		Use:   "get",
 		Short: "Get annotation details",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if annotationID == "" {
 				return missingFlag("annotation")

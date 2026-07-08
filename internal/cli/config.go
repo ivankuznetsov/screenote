@@ -9,6 +9,7 @@ func (a *app) configCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Print resolved configuration",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resolved, err := a.resolvedConfig()
 			if err != nil {
@@ -22,6 +23,7 @@ func (a *app) configCommand() *cobra.Command {
 	set := &cobra.Command{
 		Use:   "set",
 		Short: "Write configuration values",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := defaultConfigPath(a.configPath)
 			values, err := appconfig.LoadExpanded(path)

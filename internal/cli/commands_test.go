@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -148,5 +151,135 @@ func TestCommentAddPathAndBody(t *testing.T) {
 	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "comment", "add", "--annotation", "5", "--body", "hello"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+}
+
+// aggregateServer serves the project-wide `annotation list` aggregate path:
+// two pages of screenshots, per-screenshot annotation paging, and a
+// configurable failure for one screenshot ID.
+func aggregateServer(t *testing.T, failID int, failStatus int) *httptest.Server {
+	t.Helper()
+	// annotationCount maps a screenshot ID to its total annotation count.
+	annotationCount := func(sid int) int {
+		switch sid {
+		case 1:
+			return 150 // spans two annotation pages (100 + 50)
+		default:
+			return 1
+		}
+	}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/projects/7/screenshots":
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			var ids []int
+			if offset == 0 {
+				for id := 1; id <= 100; id++ { // full page -> forces a second request
+					ids = append(ids, id)
+				}
+			} else {
+				ids = []int{101, 102}
+			}
+			parts := make([]string, 0, len(ids))
+			for _, id := range ids {
+				parts = append(parts, fmt.Sprintf(`{"id":%d}`, id))
+			}
+			fmt.Fprintf(w, `{"screenshots":[%s],"pagination":{"total":102,"limit":100,"offset":%d}}`, strings.Join(parts, ","), offset)
+		case strings.HasPrefix(r.URL.Path, "/api/v1/screenshots/") && strings.HasSuffix(r.URL.Path, "/annotations"):
+			trimmed := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/screenshots/"), "/annotations")
+			sid, err := strconv.Atoi(trimmed)
+			if err != nil {
+				t.Fatalf("bad screenshot id %q", trimmed)
+			}
+			if sid == failID {
+				w.WriteHeader(failStatus)
+				_, _ = w.Write([]byte(`{"error":"boom","code":"boom"}`))
+				return
+			}
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			total := annotationCount(sid)
+			parts := make([]string, 0)
+			for i := offset; i < total && i < offset+pageSize; i++ {
+				parts = append(parts, fmt.Sprintf(`{"id":%d,"screenshot_id":%d}`, sid*1000+i, sid))
+			}
+			fmt.Fprintf(w, `{"annotations":[%s],"pagination":{"total":%d,"limit":%d,"offset":%d}}`, strings.Join(parts, ","), total, pageSize, offset)
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+}
+
+func TestAnnotationListAggregatesAcrossScreenshots(t *testing.T) {
+	// Screenshot 2 is deleted between list and fetch (404) and must be
+	// silently skipped: 150 (sid 1) + 0 (sid 2) + 100 (sid 3..102) = 250.
+	server := aggregateServer(t, 2, http.StatusNotFound)
+	defer server.Close()
+
+	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "--project", "7", "annotation", "list", "--limit", "10", "--offset", "5"}, "")
+	if code != ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+
+	var payload struct {
+		Annotations []struct {
+			ID int `json:"id"`
+		} `json:"annotations"`
+		Pagination struct {
+			Total  int `json:"total"`
+			Limit  int `json:"limit"`
+			Offset int `json:"offset"`
+		} `json:"pagination"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("stdout=%s err=%v", stdout, err)
+	}
+	if payload.Pagination.Total != 250 {
+		t.Fatalf("total=%d want 250", payload.Pagination.Total)
+	}
+	if len(payload.Annotations) != 10 {
+		t.Fatalf("window len=%d want 10", len(payload.Annotations))
+	}
+	if payload.Pagination.Limit != 10 || payload.Pagination.Offset != 5 {
+		t.Fatalf("pagination=%+v", payload.Pagination)
+	}
+}
+
+func TestAnnotationListPropagatesServerError(t *testing.T) {
+	// A 500 from one screenshot must fail the whole listing rather than seal
+	// a partial result as complete.
+	server := aggregateServer(t, 2, http.StatusInternalServerError)
+	defer server.Close()
+
+	_, _, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "--project", "7", "annotation", "list"}, "")
+	if code == ExitOK {
+		t.Fatalf("expected non-zero exit for server error, got %d", code)
+	}
+}
+
+func TestUnknownCommandExitsUsage(t *testing.T) {
+	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "bogus"}, "")
+	if code != ExitUsage {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(stderr), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["code"] != "unexpected_arguments" {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestUnknownSubcommandExitsUsage(t *testing.T) {
+	_, _, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "project", "bogus"}, "")
+	if code != ExitUsage {
+		t.Fatalf("code=%d", code)
+	}
+}
+
+func TestStrayPositionalArgExitsUsage(t *testing.T) {
+	_, _, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "project", "list", "extra"}, "")
+	if code != ExitUsage {
+		t.Fatalf("code=%d", code)
 	}
 }

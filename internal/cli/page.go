@@ -3,10 +3,11 @@ package cli
 import "github.com/spf13/cobra"
 
 func (a *app) pageCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "page", Short: "Page commands"}
+	cmd := &cobra.Command{Use: "page", Short: "Page commands", Args: rejectArgs, RunE: showHelp}
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List pages",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, resolved, err := a.client()
 			if err != nil {

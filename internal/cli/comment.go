@@ -3,12 +3,13 @@ package cli
 import "github.com/spf13/cobra"
 
 func (a *app) commentCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "comment", Short: "Comment commands"}
+	cmd := &cobra.Command{Use: "comment", Short: "Comment commands", Args: rejectArgs, RunE: showHelp}
 
 	var annotationID, body string
 	add := &cobra.Command{
 		Use:   "add",
 		Short: "Add an annotation comment",
+		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if annotationID == "" {
 				return missingFlag("annotation")

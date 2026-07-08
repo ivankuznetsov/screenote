@@ -41,6 +41,8 @@ func (a *app) rootCommand(_ context.Context) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "screenote",
 		Short:         "Screenote REST CLI",
+		Args:          rejectArgs,
+		RunE:          showHelp,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
