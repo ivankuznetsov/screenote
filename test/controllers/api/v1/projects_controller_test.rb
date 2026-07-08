@@ -34,7 +34,10 @@ module Api
         body = response.parsed_body
         assert_equal [ projects(:alice_project).id, projects(:alice_second_project).id ].sort,
           body["projects"].map { |project| project["id"] }.sort
-        assert body["projects"].all? { |project| project["role"].present? }
+
+        expected_roles = users(:alice).project_memberships.index_by(&:project_id).transform_values(&:role)
+        actual_roles = body["projects"].to_h { |project| [ project["id"], project["role"] ] }
+        assert_equal expected_roles, actual_roles
       end
 
       test "oauth write-only token cannot list projects" do
