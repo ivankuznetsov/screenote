@@ -24,7 +24,7 @@ builds:
 
 archives:
   - id: screenote
-    builds:
+    ids:
       - screenote
     formats:
       - tar.gz
