@@ -10,30 +10,40 @@ Install:
 go install github.com/ivankuznetsov/screenote/cmd/screenote@latest
 ```
 
-Configure a self-hosted, local, staging, or production base URL explicitly:
+Configure a self-hosted, local, staging, or production base URL explicitly. CI and agents can use a pre-provisioned OAuth bearer token:
 
 ```sh
-screenote config set --base-url https://screenote.ai --api-key sk_proj_...
+screenote config set --base-url https://screenote.ai --token "$SCREENOTE_TOKEN"
 screenote config
+```
+
+Developers can also store OAuth login credentials explicitly:
+
+```sh
+screenote --base-url https://screenote.ai login
+screenote logout
 ```
 
 Configuration precedence is:
 
-1. Flags: `--api-key`, `--base-url`, `--project`
-2. Environment: `SCREENOTE_API_KEY`, `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
+1. Flags: `--token`, `--base-url`, `--project`
+2. Environment: `SCREENOTE_TOKEN`, `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
 3. Config file: `~/.config/screenote/config.toml`
+4. Stored login credentials from `screenote login`
+
+Ordinary commands never prompt or open a browser. Project-scoped commands require `--project`, `SCREENOTE_PROJECT`, or config `project`.
 
 Examples:
 
 ```sh
-screenote --base-url http://localhost:3005 --api-key "$SCREENOTE_API_KEY" project list
-screenote page list
-screenote screenshot create --title "Homepage" --file screenshot.png
-cat screenshot.png | screenote screenshot create --title "Homepage"
+screenote --base-url http://localhost:3005 --token "$SCREENOTE_TOKEN" project list
+screenote --project 7 page list
+screenote --project 7 screenshot create --title "Homepage" --file screenshot.png
+cat screenshot.png | screenote --project 7 screenshot create --title "Homepage"
 screenote screenshot list --status ready --limit 25
-screenote annotation list --screenshot 123 --status open
-screenote annotation get --annotation 456
-screenote comment add --annotation 456 --body "Fix pushed in abc123"
+screenote --project 7 annotation list --screenshot 123 --status open
+screenote --project 7 annotation get --annotation 456
+screenote --project 7 comment add --annotation 456 --body "Fix pushed in abc123"
 ```
 
 Successful commands write JSON to stdout. Errors write JSON to stderr:
@@ -49,7 +59,7 @@ Exit codes:
 | 0 | OK |
 | 1 | Generic error |
 | 2 | Usage/config error |
-| 3 | Auth/forbidden |
+| 3 | Auth/forbidden, including invalid or expired tokens |
 | 4 | Not found |
 | 5 | Rate limited |
 

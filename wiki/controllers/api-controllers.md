@@ -9,7 +9,7 @@ tags: [controller, api, rest, bearer-auth]
 
 # API Controllers
 
-TLDR: REST API for agent/programmatic access. Bearer token authentication via ApiKey. Two namespaces: `Api` (upload endpoint) and `Api::V1` (versioned CRUD).
+TLDR: REST API for agent/programmatic access. REST v1 accepts project API keys and Doorkeeper OAuth bearer tokens; the upload endpoint remains signed-token based.
 
 Source: `app/controllers/api/`
 
@@ -20,7 +20,7 @@ Source: `app/controllers/api/base_controller.rb`
 Base class for authenticated API endpoints. Inherits from `ActionController::API` (no view rendering, no CSRF).
 
 **before_actions:**
-- `authenticate_api_key!` -- Extracts bearer token from `Authorization` header, finds active ApiKey, returns 401 if invalid
+- `authenticate_bearer!` -- Extracts bearer token from `Authorization`, validates an active `ApiKey` or a live Doorkeeper access token, returns 401 JSON `unauthorized` if invalid
 
 **Rescue handlers:**
 - `ActiveRecord::RecordInvalid` -> 422 with error messages
@@ -28,7 +28,8 @@ Base class for authenticated API endpoints. Inherits from `ActionController::API
 
 **Provides:**
 - `current_api_key` -- The authenticated ApiKey
-- `current_project` -- The project associated with the API key
+- `current_oauth_token` / `current_user` -- OAuth request identity
+- `current_project` -- The API-key project or selected OAuth member project
 - Stable JSON error rendering with `error` and machine-readable `code`
 - `require_current_project!` guard for API-key scoped nested routes
 - Shared pagination coercion for `limit` and `offset` params
@@ -41,7 +42,7 @@ Source: `app/controllers/api/v1/projects_controller.rb`
 
 **Actions:** index
 
-Returns the project bound to the API key. API-key auth is project-authoritative, so the response is a one-project list with role `api_key`.
+API-key auth returns the project bound to the API key with role `api_key`. OAuth with `mcp_read` returns all projects visible through the authenticated user's memberships with membership roles.
 
 ---
 
@@ -51,7 +52,7 @@ Source: `app/controllers/api/v1/pages_controller.rb`
 
 **Actions:** index
 
-Lists pages for the API key's project with version counts and page URLs. `:project_id` must match the key's project.
+Lists pages with version counts and page URLs. API-key requests require `:project_id` to match the key's project. OAuth requests require `mcp_read` and membership in the selected `:project_id`.
 
 ---
 
@@ -73,6 +74,7 @@ Source: `app/controllers/api/v1/screenshots_controller.rb`
 - Uses `Screenshot.create_with_image!`, which creates the parent screenshot and a desktop [[models/screenshot-image]]
 - List supports `page_id`, `status`, `limit`, and `offset`
 - Create returns `screenshot_id`, `page_id`, `status`, `annotate_url`, and primary image metadata
+- OAuth list requires `mcp_read`; OAuth create requires `mcp_write` and explicit `project_id`
 
 ---
 
@@ -92,6 +94,7 @@ Source: `app/controllers/api/v1/annotations_controller.rb`
 - Scopes to current project via join through screenshots
 - Supports `?status=open|resolved`, `?viewport=desktop|tablet|mobile`, `?limit=`, and `?offset=` filters
 - Returns serialized annotations via `Annotation#as_api_json`
+- OAuth requests require `mcp_read` and explicit `project_id`
 
 ---
 
@@ -103,7 +106,9 @@ Source: `app/controllers/api/v1/annotation_comments_controller.rb`
 
 | Action | Method | Path | Notes |
 |--------|--------|------|-------|
-| create | POST | `/api/v1/annotations/:annotation_id/comments` | Creates an API-key-authored annotation comment |
+| create | POST | `/api/v1/annotations/:annotation_id/comments` | Creates an API-key-authored or OAuth-user-authored annotation comment |
+
+- OAuth requests require `mcp_write` and explicit `project_id`
 
 ---
 
@@ -130,7 +135,9 @@ Source: `app/controllers/api/screenshot_uploads_controller.rb`
 
 | Endpoint | Auth Method |
 |----------|------------|
-| `Api::V1::*` | Bearer token (ApiKey) via `Authorization: Bearer sk_proj_...` |
+| `Api::V1::*` | Bearer token via project API key or Doorkeeper OAuth access token |
 | `Api::ScreenshotUploadsController` | One-time upload token via query param `?token=...` |
+
+OAuth REST scopes reuse MCP scopes: read endpoints require `mcp_read`, and write endpoints require `mcp_write`. OAuth project-scoped endpoints require explicit project context and membership validation; object IDs alone are not enough.
 
 See also: [[routes]], [[models/api-key]], [[models/screenshot]], [[models/screenshot-image]], [[controllers/web-controllers]]
