@@ -3,15 +3,15 @@ title: screenote Wiki
 type: index
 source: wiki/**/*.md
 created: 2026-05-14
-updated: 2026-05-14
+updated: 2026-07-08
 tags: [index, wiki]
 ---
 
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 35
-Updated: 2026-05-14
+Page count: 36
+Updated: 2026-07-08
 
 ## Core Architecture
 
@@ -23,6 +23,7 @@ Updated: 2026-05-14
 - [[dependencies]] — Dependency files and stack notes.
 - [[gems]] — Gem choices and rationale.
 - [[commands]] — Controller/command source inventory.
+- [[api-cli]] — Go REST CLI install, config, command, and error contract.
 - [[mcp-tools]] — FastMCP transport/auth behavior and current tool inventory.
 
 ## Controllers And Services

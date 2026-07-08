@@ -1,13 +1,38 @@
 ---
 title: Interaction Surface
 type: commands
-source: app/controllers/admin/dashboard_controller.rb, app/controllers/annotation_comments_controller.rb, app/controllers/annotations_controller.rb, app/controllers/api/base_controller.rb, app/controllers/api/screenshot_uploads_controller.rb, app/controllers/api/v1/annotations_controller.rb, app/controllers/api/v1/screenshots_controller.rb, app/controllers/api_keys_controller.rb, app/controllers/application_controller.rb, app/controllers/collaborator_suggestions_controller.rb, app/controllers/concerns/.keep, app/controllers/concerns/project_authorization.rb, app/controllers/invitation_acceptances_controller.rb, app/controllers/oauth/authorizations_controller.rb, app/controllers/oauth/registrations_controller.rb, app/controllers/oauth_metadata_controller.rb, app/controllers/omniauth_callbacks_controller.rb, app/controllers/pages_controller.rb, app/controllers/project_invitations_controller.rb, app/controllers/project_memberships_controller.rb, app/controllers/projects_controller.rb, app/controllers/screenshots_controller.rb, app/controllers/static_pages_controller.rb, app/controllers/stripe_webhooks_controller.rb, app/controllers/subscriptions_controller.rb, config/routes.rb, bin/brakeman, bin/bundler-audit
+source: app/controllers/**, cmd/screenote, internal/cli, internal/screenote, config/routes.rb, bin/brakeman, bin/bundler-audit
 created: 2026-05-14
-updated: 2026-05-14
+updated: 2026-07-08
 tags: [commands, api]
 ---
 
 **TLDR**: External interaction surface is derived from routes, controllers, commands, and plugin surfaces.
+
+## Go CLI
+
+Source: `cmd/screenote`, `internal/cli`, `internal/screenote`
+
+The installable CLI is available at:
+
+```sh
+go install github.com/ivankuznetsov/screenote/cmd/screenote@latest
+```
+
+The CLI talks to the REST API, not MCP. It emits JSON to stdout for successful commands and stable JSON errors to stderr. See [[api-cli]] for command examples, config precedence, and exit codes.
+
+Implemented command groups:
+
+| Command | Purpose |
+| --- | --- |
+| `screenote config` / `screenote config set` | Print or write noninteractive config |
+| `screenote project list` | List the API key's project |
+| `screenote page list` | List pages for a project, inferring from the API key when possible |
+| `screenote screenshot list` | List screenshots with filters and pagination |
+| `screenote screenshot create` | Multipart upload from file or stdin |
+| `screenote annotation list` | List screenshot annotations, or traverse project screenshots when `--screenshot` is omitted |
+| `screenote annotation get` | Get annotation details plus comments and crop data |
+| `screenote comment add` | Add an annotation comment |
 
 ## Source Files
 

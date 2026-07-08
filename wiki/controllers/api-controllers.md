@@ -3,7 +3,7 @@ title: API Controllers
 type: controller
 source: app/controllers/api/
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-08
 tags: [controller, api, rest, bearer-auth]
 ---
 
@@ -29,6 +29,28 @@ Base class for authenticated API endpoints. Inherits from `ActionController::API
 **Provides:**
 - `current_api_key` -- The authenticated ApiKey
 - `current_project` -- The project associated with the API key
+- Stable JSON error rendering with `error` and machine-readable `code`
+- Project mismatch guard for API-key scoped nested routes
+
+---
+
+## Api::V1::ProjectsController
+
+Source: `app/controllers/api/v1/projects_controller.rb`
+
+**Actions:** index
+
+Returns the project bound to the API key. API-key auth is project authoritative, so the response is a one-project list.
+
+---
+
+## Api::V1::PagesController
+
+Source: `app/controllers/api/v1/pages_controller.rb`
+
+**Actions:** index
+
+Lists pages for the API key's project with version counts.
 
 ---
 
@@ -38,16 +60,17 @@ Source: `app/controllers/api/v1/screenshots_controller.rb`
 
 **Inherits from:** `Api::BaseController`
 
-**Actions:** create
+**Actions:** index, create
 
 | Action | Method | Path | Notes |
 |--------|--------|------|-------|
+| index | GET | `/api/v1/projects/:project_id/screenshots` | Lists screenshots with filters and pagination |
 | create | POST | `/api/v1/screenshots` | Uploads screenshot with image file |
 
 - Requires `image` parameter (file upload)
 - Uses `Page.find_or_create_by_name!` to auto-create pages from `title` parameter (defaults to "Untitled")
 - Uses `Screenshot.create_with_image!`, which creates the parent screenshot and a desktop [[models/screenshot-image]]
-- Returns `screenshot_id` and `annotate_url` (web UI URL for the screenshot)
+- Returns `screenshot_id`, `page_id`, `status`, `annotate_url`, and image metadata
 
 ---
 
@@ -57,15 +80,28 @@ Source: `app/controllers/api/v1/annotations_controller.rb`
 
 **Inherits from:** `Api::BaseController`
 
-**Actions:** index
+**Actions:** index, show
 
 | Action | Method | Path | Notes |
 |--------|--------|------|-------|
 | index | GET | `/api/v1/screenshots/:screenshot_id/annotations` | Lists annotations |
+| show | GET | `/api/v1/annotations/:id` | Annotation detail with comments and best-effort crop data |
 
 - Scopes to current project via join through screenshots
-- Supports `?status=open|resolved` filter
+- Supports `?status=open|resolved`, `?viewport=desktop|tablet|mobile`, `?limit=`, and `?offset=` filters
 - Returns serialized annotations via `Annotation#as_api_json`
+
+---
+
+## Api::V1::AnnotationCommentsController
+
+Source: `app/controllers/api/v1/annotation_comments_controller.rb`
+
+**Actions:** create
+
+| Action | Method | Path | Notes |
+|--------|--------|------|-------|
+| create | POST | `/api/v1/annotations/:annotation_id/comments` | Creates an API-key-authored annotation comment |
 
 ---
 
