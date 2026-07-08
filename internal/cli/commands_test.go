@@ -24,7 +24,7 @@ func TestScreenshotListSendsFilters(t *testing.T) {
 	}))
 	defer server.Close()
 
-	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "--project", "7", "screenshot", "list", "--page", "9", "--status", "ready", "--limit", "10", "--offset", "2"}, "")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "screenshot", "list", "--page", "9", "--status", "ready", "--limit", "10", "--offset", "2"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -38,11 +38,14 @@ func TestAnnotationGetPath(t *testing.T) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/annotations/5" {
 			t.Fatalf("%s %s", r.Method, r.URL.Path)
 		}
+		if r.URL.Query().Get("project_id") != "7" {
+			t.Fatalf("query=%s", r.URL.RawQuery)
+		}
 		_, _ = w.Write([]byte(`{"id":5}`))
 	}))
 	defer server.Close()
 
-	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "annotation", "get", "--annotation", "5"}, "")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "annotation", "get", "--annotation", "5"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -56,25 +59,45 @@ func TestAnnotationListPath(t *testing.T) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/screenshots/4/annotations" {
 			t.Fatalf("%s %s", r.Method, r.URL.Path)
 		}
-		if r.URL.Query().Get("status") != "open" || r.URL.Query().Get("viewport") != "mobile" {
+		if r.URL.Query().Get("status") != "open" || r.URL.Query().Get("viewport") != "mobile" || r.URL.Query().Get("project_id") != "7" {
 			t.Fatalf("query=%s", r.URL.RawQuery)
 		}
 		_, _ = w.Write([]byte(`{"annotations":[]}`))
 	}))
 	defer server.Close()
 
-	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "annotation", "list", "--screenshot", "4", "--status", "open", "--viewport", "mobile"}, "")
+	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "annotation", "list", "--screenshot", "4", "--status", "open", "--viewport", "mobile"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
 }
 
 func TestUnknownFlagExitsUsage(t *testing.T) {
-	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "project", "list", "--nope"}, "")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--token", "key", "project", "list", "--nope"}, "")
 	if code != ExitUsage {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 	if !strings.Contains(stderr, "invalid_flag") {
+		t.Fatalf("stderr=%s", stderr)
+	}
+}
+
+func TestLegacyAPIKeyFlagIsRejected(t *testing.T) {
+	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "project", "list"}, "")
+	if code != ExitUsage {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "unknown flag: --api-key") {
+		t.Fatalf("stderr=%s", stderr)
+	}
+}
+
+func TestMissingTokenUsesStableUsageError(t *testing.T) {
+	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "project", "list"}, "")
+	if code != ExitUsage {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "missing_token") {
 		t.Fatalf("stderr=%s", stderr)
 	}
 }
@@ -84,6 +107,9 @@ func TestScreenshotCreateDerivesContentType(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseMultipartForm(1024); err != nil {
 			t.Fatal(err)
+		}
+		if r.FormValue("project_id") != "7" {
+			t.Fatalf("project_id=%q", r.FormValue("project_id"))
 		}
 		files := r.MultipartForm.File["image"]
 		if len(files) == 0 {
@@ -100,7 +126,7 @@ func TestScreenshotCreateDerivesContentType(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "screenshot", "create", "--title", "Home", "--file", path}, "")
+	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "screenshot", "create", "--title", "Home", "--file", path}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -115,6 +141,9 @@ func TestScreenshotCreateStdinContentTypeFallback(t *testing.T) {
 		if err := r.ParseMultipartForm(1024); err != nil {
 			t.Fatal(err)
 		}
+		if r.FormValue("project_id") != "7" {
+			t.Fatalf("project_id=%q", r.FormValue("project_id"))
+		}
 		files := r.MultipartForm.File["image"]
 		if len(files) == 0 {
 			t.Fatal("no image part")
@@ -124,7 +153,7 @@ func TestScreenshotCreateStdinContentTypeFallback(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "screenshot", "create", "--title", "Home"}, "png-bytes")
+	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "screenshot", "create", "--title", "Home"}, "png-bytes")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -144,11 +173,14 @@ func TestCommentAddPathAndBody(t *testing.T) {
 		if r.Form.Get("body") != "hello" {
 			t.Fatalf("body=%q", r.Form.Get("body"))
 		}
+		if r.Form.Get("project_id") != "7" {
+			t.Fatalf("project_id=%q", r.Form.Get("project_id"))
+		}
 		_, _ = w.Write([]byte(`{"success":true}`))
 	}))
 	defer server.Close()
 
-	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "comment", "add", "--annotation", "5", "--body", "hello"}, "")
+	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "comment", "add", "--annotation", "5", "--body", "hello"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -186,6 +218,9 @@ func aggregateServer(t *testing.T, failID int, failStatus int) *httptest.Server 
 			}
 			fmt.Fprintf(w, `{"screenshots":[%s],"pagination":{"total":102,"limit":100,"offset":%d}}`, strings.Join(parts, ","), offset)
 		case strings.HasPrefix(r.URL.Path, "/api/v1/screenshots/") && strings.HasSuffix(r.URL.Path, "/annotations"):
+			if r.URL.Query().Get("project_id") != "7" {
+				t.Fatalf("query=%s", r.URL.RawQuery)
+			}
 			trimmed := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/screenshots/"), "/annotations")
 			sid, err := strconv.Atoi(trimmed)
 			if err != nil {
@@ -215,7 +250,7 @@ func TestAnnotationListAggregatesAcrossScreenshots(t *testing.T) {
 	server := aggregateServer(t, 2, http.StatusNotFound)
 	defer server.Close()
 
-	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "--project", "7", "annotation", "list", "--limit", "10", "--offset", "5"}, "")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "annotation", "list", "--limit", "10", "--offset", "5"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -250,14 +285,14 @@ func TestAnnotationListPropagatesServerError(t *testing.T) {
 	server := aggregateServer(t, 2, http.StatusInternalServerError)
 	defer server.Close()
 
-	_, _, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "--project", "7", "annotation", "list"}, "")
+	_, _, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "annotation", "list"}, "")
 	if code == ExitOK {
 		t.Fatalf("expected non-zero exit for server error, got %d", code)
 	}
 }
 
 func TestUnknownCommandExitsUsage(t *testing.T) {
-	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "bogus"}, "")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--token", "key", "bogus"}, "")
 	if code != ExitUsage {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -271,14 +306,14 @@ func TestUnknownCommandExitsUsage(t *testing.T) {
 }
 
 func TestUnknownSubcommandExitsUsage(t *testing.T) {
-	_, _, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "project", "bogus"}, "")
+	_, _, code := runCLI(t, []string{"--base-url", "http://example.test", "--token", "key", "project", "bogus"}, "")
 	if code != ExitUsage {
 		t.Fatalf("code=%d", code)
 	}
 }
 
 func TestStrayPositionalArgExitsUsage(t *testing.T) {
-	_, _, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "project", "list", "extra"}, "")
+	_, _, code := runCLI(t, []string{"--base-url", "http://example.test", "--token", "key", "project", "list", "extra"}, "")
 	if code != ExitUsage {
 		t.Fatalf("code=%d", code)
 	}

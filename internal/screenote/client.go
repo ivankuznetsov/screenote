@@ -16,9 +16,9 @@ import (
 )
 
 type Client struct {
-	baseURL    *url.URL
-	apiKey     string
-	httpClient *http.Client
+	baseURL     *url.URL
+	bearerToken string
+	httpClient  *http.Client
 }
 
 type Error struct {
@@ -34,7 +34,7 @@ func (e *Error) Error() string {
 	return http.StatusText(e.StatusCode)
 }
 
-func NewClient(baseURL, apiKey string, httpClient *http.Client) (*Client, error) {
+func NewClient(baseURL, bearerToken string, httpClient *http.Client) (*Client, error) {
 	if baseURL == "" {
 		return nil, errors.New("base url is required")
 	}
@@ -48,7 +48,7 @@ func NewClient(baseURL, apiKey string, httpClient *http.Client) (*Client, error)
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &Client{baseURL: parsed, apiKey: apiKey, httpClient: httpClient}, nil
+	return &Client{baseURL: parsed, bearerToken: bearerToken, httpClient: httpClient}, nil
 }
 
 func (c *Client) Projects(ctx context.Context) (json.RawMessage, ProjectsResponse, error) {
@@ -67,7 +67,7 @@ func (c *Client) Screenshots(ctx context.Context, project string, query url.Valu
 	return raw, out, err
 }
 
-func (c *Client) CreateScreenshot(ctx context.Context, title, pageValue, filename, contentType string, r io.Reader) (json.RawMessage, error) {
+func (c *Client) CreateScreenshot(ctx context.Context, project, title, pageValue, filename, contentType string, r io.Reader) (json.RawMessage, error) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
@@ -99,6 +99,11 @@ func (c *Client) CreateScreenshot(ctx context.Context, title, pageValue, filenam
 				return
 			}
 		}
+		if project != "" {
+			if err = writer.WriteField("project_id", project); err != nil {
+				return
+			}
+		}
 
 		header := make(textproto.MIMEHeader)
 		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image"; filename="%s"`, escapeQuotes(path.Base(filename))))
@@ -114,18 +119,29 @@ func (c *Client) CreateScreenshot(ctx context.Context, title, pageValue, filenam
 	return c.doJSON(ctx, http.MethodPost, "/api/v1/screenshots", nil, headers, nil, pr)
 }
 
-func (c *Client) Annotations(ctx context.Context, screenshot string, query url.Values) (json.RawMessage, AnnotationsResponse, error) {
+func (c *Client) Annotations(ctx context.Context, screenshot, project string, query url.Values) (json.RawMessage, AnnotationsResponse, error) {
 	var out AnnotationsResponse
+	if project != "" {
+		query = cloneQuery(query)
+		query.Set("project_id", project)
+	}
 	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/screenshots/"+url.PathEscape(screenshot)+"/annotations", query, nil, &out, nil)
 	return raw, out, err
 }
 
-func (c *Client) Annotation(ctx context.Context, id string) (json.RawMessage, error) {
-	return c.doJSON(ctx, http.MethodGet, "/api/v1/annotations/"+url.PathEscape(id), nil, nil, nil, nil)
+func (c *Client) Annotation(ctx context.Context, id, project string) (json.RawMessage, error) {
+	query := url.Values{}
+	if project != "" {
+		query.Set("project_id", project)
+	}
+	return c.doJSON(ctx, http.MethodGet, "/api/v1/annotations/"+url.PathEscape(id), query, nil, nil, nil)
 }
 
-func (c *Client) AddComment(ctx context.Context, annotation, body string) (json.RawMessage, error) {
+func (c *Client) AddComment(ctx context.Context, annotation, project, body string) (json.RawMessage, error) {
 	form := url.Values{"body": []string{body}}
+	if project != "" {
+		form.Set("project_id", project)
+	}
 	headers := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
 	return c.doJSON(ctx, http.MethodPost, "/api/v1/annotations/"+url.PathEscape(annotation)+"/comments", nil, headers, nil, strings.NewReader(form.Encode()))
 }
@@ -159,8 +175,8 @@ func (c *Client) doJSON(ctx context.Context, method, rawPath string, query url.V
 	if err != nil {
 		return nil, err
 	}
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearerToken)
 	}
 	req.Header.Set("Accept", "application/json")
 	for key, value := range headers {
@@ -186,6 +202,14 @@ func (c *Client) doJSON(ctx context.Context, method, rawPath string, query url.V
 		}
 	}
 	return raw, nil
+}
+
+func cloneQuery(values url.Values) url.Values {
+	out := url.Values{}
+	for key, vals := range values {
+		out[key] = append([]string(nil), vals...)
+	}
+	return out
 }
 
 func parseError(status int, raw []byte) error {

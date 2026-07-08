@@ -49,7 +49,7 @@ func (a *app) rootCommand(_ context.Context) *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return usageError("invalid_flag", err.Error())
 	})
-	root.PersistentFlags().StringVar(&a.flags.APIKey, "api-key", "", "Screenote project API key")
+	root.PersistentFlags().StringVar(&a.flags.Token, "token", "", "Screenote OAuth bearer token")
 	root.PersistentFlags().StringVar(&a.flags.BaseURL, "base-url", "", "Screenote base URL")
 	root.PersistentFlags().StringVar(&a.flags.Project, "project", "", "Screenote project ID")
 	root.PersistentFlags().StringVar(&a.configPath, "config", "", "Config file path")
@@ -81,29 +81,22 @@ func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
 	if resolved.BaseURL == "" {
 		return nil, resolved, usageError("missing_base_url", "base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url")
 	}
-	if resolved.APIKey == "" {
-		return nil, resolved, usageError("missing_api_key", "API key is required; set --api-key, SCREENOTE_API_KEY, or config api_key")
+	if resolved.Token == "" {
+		return nil, resolved, usageError("missing_token", "OAuth bearer token is required; set --token, SCREENOTE_TOKEN, config token, or run screenote login")
 	}
 
-	client, err := screenote.NewClient(resolved.BaseURL, resolved.APIKey, a.httpClient)
+	client, err := screenote.NewClient(resolved.BaseURL, resolved.Token, a.httpClient)
 	if err != nil {
 		return nil, resolved, usageError("invalid_base_url", err.Error())
 	}
 	return client, resolved, nil
 }
 
-func (a *app) projectID(ctx context.Context, client *screenote.Client, resolved appconfig.Resolved) (string, error) {
+func (a *app) projectID(_ context.Context, _ *screenote.Client, resolved appconfig.Resolved) (string, error) {
 	if resolved.Project != "" {
 		return resolved.Project, nil
 	}
-	_, projects, err := client.Projects(ctx)
-	if err != nil {
-		return "", err
-	}
-	if len(projects.Projects) == 0 {
-		return "", usageError("missing_project", "project is required and could not be inferred from the API key")
-	}
-	return intString(projects.Projects[0].ID), nil
+	return "", usageError("missing_project", "project is required; set --project, SCREENOTE_PROJECT, or config project")
 }
 
 func writeJSON(w io.Writer, value any) error {

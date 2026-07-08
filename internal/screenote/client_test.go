@@ -12,14 +12,14 @@ import (
 
 func TestClientSendsAuthAndParsesErrors(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer test-key" {
+		if r.Header.Get("Authorization") != "Bearer test-token" {
 			t.Fatalf("Authorization = %q", r.Header.Get("Authorization"))
 		}
 		http.Error(w, `{"error":"nope","code":"unauthorized"}`, http.StatusUnauthorized)
 	}))
 	defer server.Close()
 
-	client, err := NewClient(server.URL, "test-key", server.Client())
+	client, err := NewClient(server.URL, "test-token", server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +47,9 @@ func TestClientCreateScreenshotMultipart(t *testing.T) {
 		if got := r.FormValue("title"); got != "Home" {
 			t.Fatalf("title = %q", got)
 		}
+		if got := r.FormValue("project_id"); got != "7" {
+			t.Fatalf("project_id = %q", got)
+		}
 		file, header, err := r.FormFile("image")
 		if err != nil {
 			t.Fatal(err)
@@ -60,15 +63,33 @@ func TestClientCreateScreenshotMultipart(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(server.URL, "test-key", server.Client())
+	client, err := NewClient(server.URL, "test-token", server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := client.CreateScreenshot(context.Background(), "Home", "", "stdin.png", "image/png", strings.NewReader("png-data"))
+	raw, err := client.CreateScreenshot(context.Background(), "7", "Home", "", "stdin.png", "image/png", strings.NewReader("png-data"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(raw), `"screenshot_id":7`) {
 		t.Fatalf("raw = %s", raw)
+	}
+}
+
+func TestClientEmptyTokenOmitsAuthorization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		_, _ = w.Write([]byte(`{"projects":[]}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, "", server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := client.Projects(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -30,8 +30,8 @@ func (a *app) configCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if setValues.APIKey != "" {
-				values.APIKey = setValues.APIKey
+			if setValues.Token != "" {
+				values.Token = setValues.Token
 			}
 			if setValues.BaseURL != "" {
 				values.BaseURL = setValues.BaseURL
@@ -45,7 +45,7 @@ func (a *app) configCommand() *cobra.Command {
 			return writeJSON(a.stdout, map[string]any{"ok": true, "path": path})
 		},
 	}
-	set.Flags().StringVar(&setValues.APIKey, "api-key", "", "API key to write")
+	set.Flags().StringVar(&setValues.Token, "token", "", "OAuth bearer token to write")
 	set.Flags().StringVar(&setValues.BaseURL, "base-url", "", "Base URL to write")
 	set.Flags().StringVar(&setValues.Project, "project", "", "Project ID to write")
 	cmd.AddCommand(set)

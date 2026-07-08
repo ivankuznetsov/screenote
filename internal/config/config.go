@@ -11,13 +11,13 @@ import (
 const DefaultConfigPath = "~/.config/screenote/config.toml"
 
 type Values struct {
-	APIKey  string `toml:"api_key" json:"api_key,omitempty"`
+	Token   string `toml:"token" json:"token,omitempty"`
 	BaseURL string `toml:"base_url" json:"base_url,omitempty"`
 	Project string `toml:"project" json:"project,omitempty"`
 }
 
 type Sources struct {
-	APIKey  string `json:"api_key,omitempty"`
+	Token   string `json:"token,omitempty"`
 	BaseURL string `json:"base_url,omitempty"`
 	Project string `json:"project,omitempty"`
 }
@@ -56,8 +56,8 @@ func Resolve(options Options) (Resolved, error) {
 	}
 
 	resolved := Resolved{Values: fileValues}
-	if fileValues.APIKey != "" {
-		resolved.Sources.APIKey = "config"
+	if fileValues.Token != "" {
+		resolved.Sources.Token = "config"
 	}
 	if fileValues.BaseURL != "" {
 		resolved.Sources.BaseURL = "config"
@@ -74,10 +74,10 @@ func Resolve(options Options) (Resolved, error) {
 		*sourceTarget = source
 	}
 
-	apply(env("SCREENOTE_API_KEY"), "env", &resolved.APIKey, &resolved.Sources.APIKey)
+	apply(env("SCREENOTE_TOKEN"), "env", &resolved.Token, &resolved.Sources.Token)
 	apply(env("SCREENOTE_BASE_URL"), "env", &resolved.BaseURL, &resolved.Sources.BaseURL)
 	apply(env("SCREENOTE_PROJECT"), "env", &resolved.Project, &resolved.Sources.Project)
-	apply(options.Flags.APIKey, "flag", &resolved.APIKey, &resolved.Sources.APIKey)
+	apply(options.Flags.Token, "flag", &resolved.Token, &resolved.Sources.Token)
 	apply(options.Flags.BaseURL, "flag", &resolved.BaseURL, &resolved.Sources.BaseURL)
 	apply(options.Flags.Project, "flag", &resolved.Project, &resolved.Sources.Project)
 

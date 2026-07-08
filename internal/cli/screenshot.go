@@ -52,7 +52,11 @@ func (a *app) screenshotCommand() *cobra.Command {
 			if title == "" {
 				return missingFlag("title")
 			}
-			client, _, err := a.client()
+			client, resolved, err := a.client()
+			if err != nil {
+				return err
+			}
+			project, err := a.projectID(cmd.Context(), client, resolved)
 			if err != nil {
 				return err
 			}
@@ -71,7 +75,7 @@ func (a *app) screenshotCommand() *cobra.Command {
 				contentType = mime.TypeByExtension(filepath.Ext(filePath))
 			}
 
-			raw, err := client.CreateScreenshot(cmd.Context(), title, pageValue, filename, contentType, reader)
+			raw, err := client.CreateScreenshot(cmd.Context(), project, title, pageValue, filename, contentType, reader)
 			if err != nil {
 				return err
 			}

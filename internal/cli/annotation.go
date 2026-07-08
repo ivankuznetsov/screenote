@@ -31,18 +31,18 @@ func (a *app) annotationCommand() *cobra.Command {
 				"status":   status,
 				"viewport": viewport,
 			})
+			project, err := a.projectID(cmd.Context(), client, resolved)
+			if err != nil {
+				return err
+			}
 			if screenshotID != "" {
-				raw, _, err := client.Annotations(cmd.Context(), screenshotID, screenote.WithLimitOffset(cloneValues(filters), limit, offset))
+				raw, _, err := client.Annotations(cmd.Context(), screenshotID, project, screenote.WithLimitOffset(cloneValues(filters), limit, offset))
 				if err != nil {
 					return err
 				}
 				return writeRawJSON(a.stdout, raw)
 			}
 
-			project, err := a.projectID(cmd.Context(), client, resolved)
-			if err != nil {
-				return err
-			}
 			screenshots, err := allScreenshots(cmd.Context(), client, project)
 			if err != nil {
 				return err
@@ -52,7 +52,7 @@ func (a *app) annotationCommand() *cobra.Command {
 			// rather than a single per-screenshot slice.
 			annotations := make([]screenote.Annotation, 0)
 			for _, screenshot := range screenshots {
-				response, err := allAnnotations(cmd.Context(), client, intString(screenshot.ID), filters)
+				response, err := allAnnotations(cmd.Context(), client, intString(screenshot.ID), project, filters)
 				if err != nil {
 					// A screenshot deleted between the list and the per-screenshot
 					// fetch returns 404; skip it and keep aggregating the rest.
@@ -93,11 +93,15 @@ func (a *app) annotationCommand() *cobra.Command {
 			if annotationID == "" {
 				return missingFlag("annotation")
 			}
-			client, _, err := a.client()
+			client, resolved, err := a.client()
 			if err != nil {
 				return err
 			}
-			raw, err := client.Annotation(cmd.Context(), annotationID)
+			project, err := a.projectID(cmd.Context(), client, resolved)
+			if err != nil {
+				return err
+			}
+			raw, err := client.Annotation(cmd.Context(), annotationID, project)
 			if err != nil {
 				return err
 			}
@@ -128,10 +132,10 @@ func allScreenshots(ctx context.Context, client *screenote.Client, project strin
 
 // allAnnotations pages through every annotation for a single screenshot,
 // applying the shared status/viewport filters.
-func allAnnotations(ctx context.Context, client *screenote.Client, screenshot string, filters url.Values) ([]screenote.Annotation, error) {
+func allAnnotations(ctx context.Context, client *screenote.Client, screenshot, project string, filters url.Values) ([]screenote.Annotation, error) {
 	all := make([]screenote.Annotation, 0)
 	for offset := 0; ; offset += pageSize {
-		_, response, err := client.Annotations(ctx, screenshot, screenote.WithLimitOffset(cloneValues(filters), pageSize, offset))
+		_, response, err := client.Annotations(ctx, screenshot, project, screenote.WithLimitOffset(cloneValues(filters), pageSize, offset))
 		if err != nil {
 			return nil, err
 		}
