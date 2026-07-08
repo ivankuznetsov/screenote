@@ -53,7 +53,9 @@ screenote annotation get --annotation ID
 screenote comment add --annotation ID --body TEXT
 ```
 
-`screenshot create` reads stdin when `--file` is omitted or set to `-`.
+`screenshot create` reads stdin when `--file` is omitted or set to `-`. When uploading a file, the content type is derived from the file extension (e.g. `.png` → `image/png`); stdin uploads fall back to `application/octet-stream` and are re-identified server-side from the bytes.
+
+`--page` selects a page by ID when the value is all digits, otherwise it is treated as a page name (created if it does not exist). Consequently a page literally named `123` cannot be selected by name — an all-digit value always resolves as an ID.
 
 ## Error Contract
 

@@ -3,6 +3,8 @@ package cli
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -61,6 +63,70 @@ func TestAnnotationListPath(t *testing.T) {
 	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "annotation", "list", "--screenshot", "4", "--status", "open", "--viewport", "mobile"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+}
+
+func TestUnknownFlagExitsUsage(t *testing.T) {
+	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "project", "list", "--nope"}, "")
+	if code != ExitUsage {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "invalid_flag") {
+		t.Fatalf("stderr=%s", stderr)
+	}
+}
+
+func TestScreenshotCreateDerivesContentType(t *testing.T) {
+	contentTypes := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1024); err != nil {
+			t.Fatal(err)
+		}
+		files := r.MultipartForm.File["image"]
+		if len(files) == 0 {
+			t.Fatal("no image part")
+		}
+		contentTypes <- files[0].Header.Get("Content-Type")
+		_, _ = w.Write([]byte(`{"screenshot_id":9}`))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shot.png")
+	if err := os.WriteFile(path, []byte("png-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "screenshot", "create", "--title", "Home", "--file", path}, "")
+	if code != ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if got := <-contentTypes; got != "image/png" {
+		t.Fatalf("content type=%q", got)
+	}
+}
+
+func TestScreenshotCreateStdinContentTypeFallback(t *testing.T) {
+	contentTypes := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1024); err != nil {
+			t.Fatal(err)
+		}
+		files := r.MultipartForm.File["image"]
+		if len(files) == 0 {
+			t.Fatal("no image part")
+		}
+		contentTypes <- files[0].Header.Get("Content-Type")
+		_, _ = w.Write([]byte(`{"screenshot_id":9}`))
+	}))
+	defer server.Close()
+
+	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "screenshot", "create", "--title", "Home"}, "png-bytes")
+	if code != ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if got := <-contentTypes; got != "application/octet-stream" {
+		t.Fatalf("content type=%q", got)
 	}
 }
 

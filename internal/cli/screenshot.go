@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"mime"
 	"os"
+	"path/filepath"
 
 	"github.com/ivankuznetsov/screenote/internal/screenote"
 	"github.com/spf13/cobra"
@@ -55,6 +57,7 @@ func (a *app) screenshotCommand() *cobra.Command {
 
 			reader := a.stdin
 			filename := "stdin"
+			contentType := ""
 			if filePath != "" && filePath != "-" {
 				file, err := os.Open(filePath)
 				if err != nil {
@@ -63,9 +66,10 @@ func (a *app) screenshotCommand() *cobra.Command {
 				defer file.Close()
 				reader = file
 				filename = filePath
+				contentType = mime.TypeByExtension(filepath.Ext(filePath))
 			}
 
-			raw, err := client.CreateScreenshot(cmd.Context(), title, pageValue, filename, "", reader)
+			raw, err := client.CreateScreenshot(cmd.Context(), title, pageValue, filename, contentType, reader)
 			if err != nil {
 				return err
 			}

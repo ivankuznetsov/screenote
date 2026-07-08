@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 
 	appconfig "github.com/ivankuznetsov/screenote/internal/config"
@@ -45,6 +44,9 @@ func (a *app) rootCommand(_ context.Context) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return usageError("invalid_flag", err.Error())
+	})
 	root.PersistentFlags().StringVar(&a.flags.APIKey, "api-key", "", "Screenote project API key")
 	root.PersistentFlags().StringVar(&a.flags.BaseURL, "base-url", "", "Screenote base URL")
 	root.PersistentFlags().StringVar(&a.flags.Project, "project", "", "Screenote project ID")
@@ -82,7 +84,10 @@ func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
 	}
 
 	client, err := screenote.NewClient(resolved.BaseURL, resolved.APIKey, a.httpClient)
-	return client, resolved, err
+	if err != nil {
+		return nil, resolved, usageError("invalid_base_url", err.Error())
+	}
+	return client, resolved, nil
 }
 
 func (a *app) projectID(ctx context.Context, client *screenote.Client, resolved appconfig.Resolved) (string, error) {
@@ -100,9 +105,7 @@ func (a *app) projectID(ctx context.Context, client *screenote.Client, resolved 
 }
 
 func writeJSON(w io.Writer, value any) error {
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(value)
+	return json.NewEncoder(w).Encode(value)
 }
 
 func writeRawJSON(w io.Writer, raw json.RawMessage) error {
@@ -113,7 +116,7 @@ func writeRawJSON(w io.Writer, raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	if len(raw) == 0 || raw[len(raw)-1] != '\n' {
+	if raw[len(raw)-1] != '\n' {
 		_, err = io.WriteString(w, "\n")
 	}
 	return err
@@ -128,13 +131,4 @@ func defaultConfigPath(path string) string {
 		return path
 	}
 	return appconfig.DefaultConfigPath
-}
-
-func fileExists(path string) bool {
-	expanded, err := appconfig.ExpandPath(path)
-	if err != nil {
-		return false
-	}
-	_, err = os.Stat(expanded)
-	return err == nil
 }
