@@ -10,7 +10,7 @@ tags: [index, wiki]
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 37
+Page count: 36
 Updated: 2026-07-08
 
 ## Core Architecture
@@ -23,8 +23,8 @@ Updated: 2026-07-08
 - [[dependencies]] — Dependency files and stack notes.
 - [[gems]] — Gem choices and rationale.
 - [[commands]] — Controller/command source inventory.
+- [[api-cli]] — Go REST CLI install, config, command, and error contract.
 - [[mcp-tools]] — FastMCP transport/auth behavior and current tool inventory.
-- [[api-cli]] — Go REST CLI commands, configuration, JSON/error contract, and deferred surface area.
 
 ## Controllers And Services
 
@@ -66,4 +66,3 @@ Updated: 2026-07-08
 - Managed config: `.llm-wiki/config.json`
 - Headless refresh: `.llm-wiki/refresh-wiki.sh`
 - Post-commit refresh: `.llm-wiki/post-commit-refresh.sh`
-- [[llm-wiki-maintenance]] — Managed wiki refresh scripts, log fragments, worktree-safe post-commit behavior, and cross-project wiki lookup notes.
