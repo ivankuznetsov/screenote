@@ -1,15 +1,97 @@
----
-title: Wiki Changelog
-type: architecture
-source: wiki/
-created: 2026-04-10
-updated: 2026-04-11
-tags: [log, changelog]
----
-
 # Wiki Changelog
 
 Append-only log of all wiki operations.
+
+<!-- BEGIN GENERATED WIKI LOG FRAGMENTS -->
+## [2026-07-08T19:42:13Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed command, REST API controller, route, MCP/CLI boundary, and CLI wiki coverage after the `add-a-go-cli-for-260708-edec` branch updated wiki-facing command/API surface documentation.
+**Pages updated:** `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/routes.md`, `wiki/mcp-tools.md`
+**Pages already current:** `wiki/api-cli.md`, `wiki/index.md`, `wiki/gaps.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `config/routes.rb`, `app/controllers/api/base_controller.rb`, `app/controllers/api/v1/*`, `app/serializers/api/v1/contract_serializer.rb`, `app/services/api/v1/project_scope.rb`, `cmd/screenote`, `internal/cli`, and `internal/screenote`.
+**Notes:** Kept wiki edits in the main checkout only. Used `qmd search` and source inspection; did not run `qmd update` or `qmd embed`.
+
+## [2026-07-08T19:22:29Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed main-checkout wiki coverage after the `add-a-go-cli-for-260708-edec` residual finalizer commit changed only branch-local wiki files, deleted branch-local log fragments/maintenance coverage, and simplified some CLI/API wiki wording.
+**Pages updated:** `wiki/gaps.md`
+**Pages verified current:** `wiki/api-cli.md`, `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/index.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `git show add-a-go-cli-for-260708-edec:internal/cli/annotation.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/screenshot.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/root.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/errors.go`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/base_controller.rb`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/v1/*`, `git show add-a-go-cli-for-260708-edec:app/serializers/api/v1/contract_serializer.rb`, and `git show add-a-go-cli-for-260708-edec:config/routes.rb`.
+**Uncertainty:** The configured cross-project wiki path `/home/asterio/wikis/master/wiki` is absent and `qmd search` returned no matching results for the CLI/API refresh query. The branch-local wiki maintenance/log rollback still conflicts with the main-checkout wrapper instruction to add fragments and avoid direct compiled `wiki/log.md` edits.
+**Notes:** Kept wiki edits in `/home/asterio/Dev/screenote/wiki/` only. Did not run `qmd update` or `qmd embed`; did not edit compiled `wiki/log.md`.
+
+## [2026-07-08T19:20:03Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed main-checkout wiki coverage after the `add-a-go-cli-for-260708-edec` finalizer commit changed branch-local wiki files and removed branch-local log fragments/maintenance coverage without changing the committed CLI/API source behavior.
+**Pages updated:** `wiki/gaps.md`
+**Pages verified current:** `wiki/api-cli.md`, `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/routes.md`, `wiki/mcp-tools.md`, `wiki/index.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `git show add-a-go-cli-for-260708-edec:README.md`, `git show add-a-go-cli-for-260708-edec:cmd/screenote/main.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/*`, `git show add-a-go-cli-for-260708-edec:internal/screenote/*`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/base_controller.rb`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/v1/*`, `git show add-a-go-cli-for-260708-edec:app/serializers/api/v1/contract_serializer.rb`, `git show add-a-go-cli-for-260708-edec:app/services/api/v1/project_scope.rb`, and `git show add-a-go-cli-for-260708-edec:config/routes.rb`.
+**Uncertainty:** `qmd search` returned no matching results for the CLI/API refresh query, and the configured cross-project wiki path plus default fallback paths were absent. The branch-local maintenance/log rollback still conflicts with the main-checkout fragment-based refresh instructions, so this refresh kept the main checkout's fragment policy and did not edit compiled `wiki/log.md`.
+**Notes:** Kept wiki edits in `/home/asterio/Dev/screenote/wiki/` only. Did not run `qmd update` or `qmd embed`.
+
+## [2026-07-08T19:16:02Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed main-checkout wiki coverage after the `add-a-go-cli-for-260708-edec` residual 6-review commit removed or simplified branch-local wiki details without changing the committed CLI/API source behavior.
+**Pages updated:** `wiki/gaps.md`
+**Pages verified current:** `wiki/api-cli.md`, `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/index.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `git show add-a-go-cli-for-260708-edec:internal/cli/annotation.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/screenshot.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/root.go`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/base_controller.rb`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/v1/screenshots_controller.rb`, and current main-checkout wiki pages.
+**Uncertainty:** `qmd search` returned no matching results for the CLI/API refresh query, and the configured cross-project wiki path plus default fallback paths were absent. The branch-local maintenance/log rollback still conflicts with the main-checkout fragment-based log policy.
+**Notes:** Kept edits in `/home/asterio/Dev/screenote/wiki/` only. Did not run `qmd update` or `qmd embed`; did not edit compiled `wiki/log.md`.
+
+## [2026-07-08T19:14:11Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed main-checkout wiki coverage after the `add-a-go-cli-for-260708-edec` residual 6-review commit changed only branch-local wiki files while the committed CLI/API source tree still supports the richer documented command and REST API surface.
+**Pages updated:** `wiki/gaps.md`
+**Pages verified current:** `wiki/api-cli.md`, `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/routes.md`, `wiki/mcp-tools.md`, `wiki/index.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `README.md`, `cmd/screenote/main.go`, `internal/cli/annotation.go`, `internal/cli/screenshot.go`, `internal/cli/root.go`, `internal/cli/errors.go`, `internal/screenote/client.go`, `internal/screenote/types.go`, `app/controllers/api/base_controller.rb`, `app/controllers/api/v1/*`, `app/serializers/api/v1/contract_serializer.rb`, and `config/routes.rb`.
+**Uncertainty:** `qmd search` returned no matching results for the CLI/API refresh query, and the configured cross-project wiki path remained unavailable. The branch-local wiki maintenance/log rollback conflicts with the main-checkout wrapper instruction to add fragments and avoid direct compiled `wiki/log.md` edits.
+**Notes:** Kept edits in `/home/asterio/Dev/screenote/wiki/` only. Did not run `qmd update` or `qmd embed`; did not edit compiled `wiki/log.md`.
+
+## [2026-07-08T18:54:31Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed main-checkout wiki coverage after the `add-a-go-cli-for-260708-edec` pass-02 review-fix commit edited CLI/API wiki wording, removed branch-local `wiki/log.d/` fragments, deleted branch-local `wiki/llm-wiki-maintenance.md`, and rewrote branch-local compiled `wiki/log.md`.
+**Pages updated:** `wiki/gaps.md`
+**Pages verified current:** `wiki/api-cli.md`, `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/routes.md`, `wiki/mcp-tools.md`, `wiki/index.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `git show add-a-go-cli-for-260708-edec:cmd/screenote/main.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/annotation.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/screenshot.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/root.go`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/base_controller.rb`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/v1/*`, `git show add-a-go-cli-for-260708-edec:app/serializers/api/v1/contract_serializer.rb`, `git show add-a-go-cli-for-260708-edec:app/services/api/v1/project_scope.rb`, and `git show add-a-go-cli-for-260708-edec:config/routes.rb`.
+**Uncertainty:** The configured cross-project wiki path and default fallback paths were absent, and `qmd search` returned no matching project-wiki results. The branch-local wiki maintenance/log policy still conflicts with the main-checkout wrapper instructions, so this refresh kept the main checkout's fragment-based log policy and did not edit compiled `wiki/log.md`.
+**Notes:** Kept wiki edits in `/home/asterio/Dev/screenote/wiki/` only. Did not run `qmd update` or `qmd embed`.
+
+## [2026-07-08T18:51:56Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed main-checkout CLI/API wiki coverage after the `add-a-go-cli-for-260708-edec` review-pass commit changed wiki-facing CLI/API wording and removed wiki maintenance artifacts from its own tree.
+**Pages updated:** `wiki/api-cli.md`
+**Pages verified current:** `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/routes.md`, `wiki/mcp-tools.md`, `wiki/index.md`, `wiki/gaps.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `git show add-a-go-cli-for-260708-edec:README.md`, `git show add-a-go-cli-for-260708-edec:cmd/screenote/main.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/annotation.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/screenshot.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/root.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/commands_test.go`, `git show add-a-go-cli-for-260708-edec:internal/screenote/client.go`, `git show add-a-go-cli-for-260708-edec:internal/screenote/types.go`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/base_controller.rb`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/v1/*`, `git show add-a-go-cli-for-260708-edec:app/serializers/api/v1/contract_serializer.rb`, and `git show add-a-go-cli-for-260708-edec:config/routes.rb`.
+**Uncertainty:** The configured cross-project wiki path and default fallback paths were absent; `qmd search` returned no matching project-wiki results. The branch tree still conflicts with current main-checkout instructions on `wiki/log.d/` fragments and compiled `wiki/log.md`, so this refresh followed the wrapper instruction to add a fragment and avoid editing compiled `wiki/log.md`.
+**Notes:** Kept wiki edits in `/home/asterio/Dev/screenote/wiki/` only. Did not run `qmd update` or `qmd embed`.
+
+## [2026-07-08T18:47:28Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed main-checkout wiki coverage after inspecting the `add-a-go-cli-for-260708-edec` branch wiki commit and the committed REST/Go CLI source tree it documents.
+**Pages updated:** `wiki/gaps.md`
+**Pages verified current:** `wiki/api-cli.md`, `wiki/commands.md`, `wiki/controllers/api-controllers.md`, `wiki/routes.md`, `wiki/mcp-tools.md`, `wiki/index.md`, `wiki/llm-wiki-maintenance.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, `git show add-a-go-cli-for-260708-edec:config/routes.rb`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/base_controller.rb`, `git show add-a-go-cli-for-260708-edec:app/controllers/api/v1/*`, `git show add-a-go-cli-for-260708-edec:app/serializers/api/v1/contract_serializer.rb`, `git show add-a-go-cli-for-260708-edec:internal/cli/annotation.go`, `git show add-a-go-cli-for-260708-edec:internal/cli/screenshot.go`, and current main-checkout wiki pages.
+**Uncertainty:** The branch commit deletes `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` in its own tree, but current main-checkout instructions require log fragments and wrapper-owned compiled `wiki/log.md`; recorded this policy mismatch in `wiki/gaps.md`.
+**Notes:** Kept edits under `/home/asterio/Dev/screenote/wiki/` only. Used `qmd search`; did not run `qmd update` or `qmd embed`; did not edit compiled `wiki/log.md`.
+
+## [2026-07-08T18:23:02Z] add-a-go-cli-for-260708-edec
+
+**Action:** Refreshed wiki coverage after the `add-a-go-cli-for-260708-edec` branch corrected Go CLI annotation aggregation, usage exits, upload content types, compact JSON output, and CLI docs.
+**Pages created:** `wiki/api-cli.md`
+**Pages updated:** `wiki/index.md`, `wiki/gaps.md`
+**Source:** `git show add-a-go-cli-for-260708-edec`, committed `internal/cli/annotation.go`, `internal/cli/root.go`, `internal/cli/screenshot.go`, `internal/cli/commands_test.go`, and committed `wiki/api-cli.md`
+**Notes:** Did not edit compiled `wiki/log.md`; this fragment is for the post-commit wrapper to compile. Did not run `qmd update` or `qmd embed`.
+
+## [2026-07-08T15:34:48Z] refresh
+
+**Action:** Refreshed project wiki against current LLM-wiki automation and recent git history.
+**Pages created:** `wiki/llm-wiki-maintenance.md`
+**Pages updated:** `wiki/index.md`, `wiki/gaps.md`
+**Pages unchanged after source verification:** core architecture/model/controller/MCP pages; recent commits after the prior refresh changed LLM-wiki automation and context files, not application source behavior.
+**Cross-project wiki:** `.llm-wiki/config.json` still points at `/home/asterio/wikis/master/wiki`, but that path and the default fallback main wiki paths were absent on this machine during refresh.
+**QMD:** Used `qmd search` only; did not run `qmd update` or `qmd embed`.
+**Source:** `.llm-wiki/config.json`, `AGENTS.md`, `CLAUDE.md`, `.llm-wiki/refresh-wiki.sh`, `.llm-wiki/post-commit-refresh.sh`, `.llm-wiki/compile-log.sh`, `.claude/settings.json`, recent `git log`, source inventory under `app/`, `config/`, `db/`, `plans/`, and `todos/`.
+<!-- END GENERATED WIKI LOG FRAGMENTS -->
 
 ## 2026-04-10 -- Bootstrap
 
@@ -103,10 +185,3 @@ Append-only log of all wiki operations.
 **Scheduler:** `llm-wiki-screenote-a932fe24.timer` is enabled and active under `systemctl --user`; next run is scheduled for 2026-05-15 18:03:41 BST.
 **Maintenance scripts:** `.llm-wiki/refresh-wiki.sh` and `.llm-wiki/post-commit-refresh.sh` use bounded Codex and qmd timeouts and tell headless Codex not to run `qmd update` or `qmd embed` itself.
 **Source:** `systemctl --user list-timers`, `qmd update`, `qmd embed`, and collection-scoped `qmd search`.
-
-## [2026-07-08] Go CLI and REST API expansion
-
-**Action:** Documented the new Screenote Go REST CLI and expanded `api/v1` contract.
-**Pages created:** wiki/api-cli.md
-**Pages updated:** wiki/index.md, wiki/commands.md, wiki/routes.md, wiki/controllers/api-controllers.md, wiki/mcp-tools.md, wiki/log.md
-**Source:** `cmd/screenote`, `internal/cli`, `internal/screenote`, `app/controllers/api/v1`, `config/routes.rb`, `config/deploy.yml`
