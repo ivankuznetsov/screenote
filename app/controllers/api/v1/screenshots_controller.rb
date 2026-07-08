@@ -4,6 +4,8 @@ module Api
   module V1
     class ScreenshotsController < Api::BaseController
       def index
+        return unless require_scope!("mcp_read")
+
         project = require_current_project!(params[:project_id])
         return unless project
 
@@ -22,6 +24,11 @@ module Api
       end
 
       def create
+        return unless require_scope!("mcp_write")
+
+        project = require_current_project!(params[:project_id])
+        return unless project
+
         image = params[:image]
         unless uploaded_file?(image)
           render_error("Image file is required", code: "validation_failed", status: :unprocessable_entity)
@@ -29,7 +36,7 @@ module Api
         end
 
         title = params[:title].presence || "Untitled"
-        page = resolve_page(title)
+        page = resolve_page(project, title)
         screenshot = Screenshot.create_with_image!(
           page: page, title: title,
           io: image.tempfile,
@@ -48,12 +55,12 @@ module Api
           image.respond_to?(:content_type)
       end
 
-      def resolve_page(title)
+      def resolve_page(project, title)
         page_id = params[:page_id].presence || params[:page].presence
-        return current_project.pages.find(page_id) if page_id.to_s.match?(/\A\d+\z/)
-        return Page.find_or_create_by_name!(current_project, page_id) if page_id.present?
+        return project.pages.find(page_id) if page_id.to_s.match?(/\A\d+\z/)
+        return Page.find_or_create_by_name!(project, page_id) if page_id.present?
 
-        Page.find_or_create_by_name!(current_project, title)
+        Page.find_or_create_by_name!(project, title)
       end
 
       def url_options

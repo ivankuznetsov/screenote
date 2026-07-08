@@ -46,10 +46,57 @@ module Api
         assert_equal "not_found", response.parsed_body["code"]
       end
 
+      test "oauth write token creates user-authored comment with explicit project" do
+        annotation = annotations(:point_annotation)
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        assert_difference "AnnotationComment.count", 1 do
+          post api_v1_annotation_comments_path(annotation),
+            params: { body: "OAuth comment", project_id: projects(:alice_project).id },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :created
+        assert_equal users(:alice), AnnotationComment.last.user
+        assert_nil AnnotationComment.last.api_key
+      end
+
+      test "oauth read token cannot create comments" do
+        annotation = annotations(:point_annotation)
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        assert_no_difference "AnnotationComment.count" do
+          post api_v1_annotation_comments_path(annotation),
+            params: { body: "Read only", project_id: projects(:alice_project).id },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :forbidden
+        assert_equal "insufficient_scope", response.parsed_body["code"]
+      end
+
+      test "oauth comment requires explicit project" do
+        annotation = annotations(:point_annotation)
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        assert_no_difference "AnnotationComment.count" do
+          post api_v1_annotation_comments_path(annotation),
+            params: { body: "Missing project" },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :unprocessable_entity
+        assert_equal "missing_project", response.parsed_body["code"]
+      end
+
       private
 
       def auth_header(token)
         { "Authorization" => "Bearer #{token}" }
+      end
+
+      def oauth_token(user:, scopes:)
+        create_oauth_token(application: create_oauth_application, user: user, scopes: scopes)
       end
     end
   end

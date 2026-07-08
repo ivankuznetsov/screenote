@@ -26,10 +26,32 @@ module Api
         assert_equal "forbidden", response.parsed_body["code"]
       end
 
+      test "oauth read token lists pages for member project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_project_pages_path(projects(:alice_project)), headers: auth_header(token.token)
+
+        assert_response :success
+        assert response.parsed_body["pages"].any? { |page| page["id"] == pages(:alice_page).id }
+      end
+
+      test "oauth write-only token cannot list pages" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        get api_v1_project_pages_path(projects(:alice_project)), headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "insufficient_scope", response.parsed_body["code"]
+      end
+
       private
 
       def auth_header(token)
         { "Authorization" => "Bearer #{token}" }
+      end
+
+      def oauth_token(user:, scopes:)
+        create_oauth_token(application: create_oauth_application, user: user, scopes: scopes)
       end
     end
   end

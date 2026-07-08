@@ -79,10 +79,62 @@ module Api
         assert_response :unauthorized
       end
 
+      test "oauth read token lists annotations with explicit project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_screenshot_annotations_path(@screenshot, project_id: @project.id),
+          headers: auth_header(token.token)
+
+        assert_response :success
+        assert response.parsed_body["annotations"].is_a?(Array)
+      end
+
+      test "oauth annotation list requires explicit project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_screenshot_annotations_path(@screenshot), headers: auth_header(token.token)
+
+        assert_response :unprocessable_entity
+        assert_equal "missing_project", response.parsed_body["code"]
+      end
+
+      test "oauth read token gets annotation details with explicit project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_annotation_path(annotations(:resolved_annotation), project_id: @project.id),
+          headers: auth_header(token.token)
+
+        assert_response :success
+        assert_equal annotations(:resolved_annotation).id, response.parsed_body["id"]
+      end
+
+      test "oauth token cannot get annotation outside member project by known id" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_annotation_path(annotations(:bob_annotation), project_id: @project.id),
+          headers: auth_header(token.token)
+
+        assert_response :not_found
+      end
+
+      test "oauth write-only token cannot read annotations" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        get api_v1_annotation_path(annotations(:resolved_annotation), project_id: @project.id),
+          headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "insufficient_scope", response.parsed_body["code"]
+      end
+
       private
 
       def auth_header(token)
         { "Authorization" => "Bearer #{token}" }
+      end
+
+      def oauth_token(user:, scopes:)
+        create_oauth_token(application: create_oauth_application, user: user, scopes: scopes)
       end
     end
   end

@@ -4,8 +4,13 @@ module Api
   module V1
     class AnnotationsController < Api::BaseController
       def index
+        return unless require_scope!("mcp_read")
+
+        project = require_current_project!(params[:project_id])
+        return unless project
+
         limit, offset = pagination_params
-        annotations = project_annotations.order(:created_at)
+        annotations = project_annotations(project).order(:created_at)
         annotations = annotations.where(screenshot_id: params[:screenshot_id]) if params[:screenshot_id].present?
         annotations = annotations.where(status: params[:status]) if params[:status].present?
         annotations = annotations.where(viewport: params[:viewport]) if params[:viewport].present?
@@ -19,7 +24,12 @@ module Api
       end
 
       def show
-        annotation = project_annotations.find(params[:id])
+        return unless require_scope!("mcp_read")
+
+        project = require_current_project!(params[:project_id])
+        return unless project
+
+        annotation = project_annotations(project).find(params[:id])
         cropped_base64 = begin
           annotation.crop
         rescue => e
@@ -36,8 +46,8 @@ module Api
 
       private
 
-      def project_annotations
-        Api::V1::ProjectScope.annotations(current_project)
+      def project_annotations(project)
+        Api::V1::ProjectScope.annotations(project)
       end
 
       def serialize(annotation)
