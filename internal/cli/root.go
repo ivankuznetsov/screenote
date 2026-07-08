@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	appconfig "github.com/ivankuznetsov/screenote/internal/config"
@@ -126,7 +128,7 @@ func (a *app) storedLoginToken(ctx context.Context, resolved appconfig.Resolved)
 	if credentials == nil || credentials.AccessToken == "" {
 		return "", usageError("missing_token", "OAuth bearer token is required; set --token, SCREENOTE_TOKEN, config token, or run screenote login")
 	}
-	if credentials.BaseURL != "" && resolved.BaseURL != "" && credentials.BaseURL != resolved.BaseURL {
+	if credentials.BaseURL != "" && resolved.BaseURL != "" && !sameBaseURL(credentials.BaseURL, resolved.BaseURL) {
 		return "", authError("invalid_token", "stored login credentials are for a different base URL")
 	}
 	if credentials.ExpiresAt.IsZero() || time.Until(credentials.ExpiresAt) > time.Minute {
@@ -139,6 +141,9 @@ func (a *app) storedLoginToken(ctx context.Context, resolved appconfig.Resolved)
 	metadata, err := screenote.DiscoverOAuth(ctx, resolved.BaseURL, a.httpClient)
 	if err != nil {
 		return "", authError("invalid_token", "stored OAuth token refresh failed: "+err.Error())
+	}
+	if credentials.Issuer != "" && metadata.Issuer != credentials.Issuer {
+		return "", authError("invalid_token", "stored OAuth issuer does not match discovered issuer")
 	}
 	response, err := screenote.RefreshAccessToken(ctx, metadata, credentials.ClientID, credentials.RefreshToken, a.httpClient)
 	if err != nil {
@@ -154,6 +159,22 @@ func (a *app) storedLoginToken(ctx context.Context, resolved appconfig.Resolved)
 		return "", err
 	}
 	return credentials.AccessToken, nil
+}
+
+// sameBaseURL compares two base URLs ignoring trailing-slash differences so a
+// stored "https://x" and a resolved "https://x/" don't force an unnecessary
+// re-login. It fails closed: unparseable inputs fall back to trimmed strings.
+func sameBaseURL(a, b string) bool {
+	return normalizeBaseURL(a) == normalizeBaseURL(b)
+}
+
+func normalizeBaseURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return strings.TrimRight(raw, "/")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	return parsed.String()
 }
 
 func (a *app) projectID(resolved appconfig.Resolved) (string, error) {

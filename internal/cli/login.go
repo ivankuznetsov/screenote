@@ -117,7 +117,11 @@ func (a *app) runLogin(ctx context.Context, baseURL string) (*appconfig.LoginCre
 	go func() {
 		_ = server.Serve(listener)
 	}()
-	defer server.Shutdown(context.Background())
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
 
 	if err := openBrowser(authURL); err != nil {
 		fmt.Fprintf(a.stderr, "Open this URL to continue login: %s\n", authURL)
