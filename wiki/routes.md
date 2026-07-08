@@ -119,19 +119,19 @@ All require authentication unless noted.
 
 ## REST API Routes
 
-### API v1 (Bearer token auth via ApiKey or OAuth)
+### API v1 (Bearer token auth via API key or OAuth)
 
 | Method | Path | Action | Auth |
 |--------|------|--------|------|
-| GET | `/api/v1/projects` | API key: list the key's project. OAuth: list all current-user memberships with roles. | API Key or OAuth `mcp_read` |
-| GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API Key or OAuth `mcp_read` |
-| GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API Key or OAuth `mcp_read` |
-| POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API Key or OAuth `mcp_write` |
-| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API Key or OAuth `mcp_read` |
-| GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API Key or OAuth `mcp_read` |
-| POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored or OAuth-user-authored annotation comment | API Key or OAuth `mcp_write` |
+| GET | `/api/v1/projects` | List API-key project or OAuth user's member projects | API key or OAuth `mcp_read` |
+| GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API key or OAuth `mcp_read` |
+| GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
+| POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API key or OAuth `mcp_write` |
+| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
+| GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API key or OAuth `mcp_read` |
+| POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored or OAuth-user-authored annotation comment | API key or OAuth `mcp_write` |
 
-API-key auth is project-scoped. If `:project_id` does not match the key's project, or the key has no resolved project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries or raising on a nil project. OAuth auth is user-scoped at the bearer authenticator layer; project-scoped endpoints require `project_id`, enforce membership with `Project#member?`, and return `code: "missing_project"` or `code: "forbidden"` for absent or inaccessible projects.
+API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries. OAuth project-scoped calls require explicit `project_id` where the route does not already carry it, and the authenticated user must be a project member.
 
 ### Upload API (Token-based, no persistent auth)
 

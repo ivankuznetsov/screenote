@@ -3,19 +3,6 @@
 Append-only log of all wiki operations.
 
 <!-- BEGIN GENERATED WIKI LOG FRAGMENTS -->
----
-timestamp: 2026-07-08T22:13:51Z
-slug: replace-screenote-cli-api-key-260708-545b
----
-
-## [2026-07-08T22:13:51Z] replace-screenote-cli-api-key-260708-545b
-
-**Action:** Refreshed API command/surface wiki coverage after `replace-screenote-cli-api-key-260708-545b`.
-**Pages updated:** `wiki/architecture.md`, `wiki/decisions.md`, `wiki/controllers/api-controllers.md`, `wiki/routes.md`, `wiki/api-cli.md`, `wiki/models/api-key.md`, `wiki/gaps.md`
-**Pages created:** none
-**Source:** committed diff and source for `app/controllers/api/base_controller.rb`, `app/controllers/api/v1/projects_controller.rb`, `app/serializers/api/v1/contract_serializer.rb`, related API controllers, `config/routes.rb`, and API controller tests.
-**Notes:** Documented REST `Api::V1` bearer auth as accepting both project API keys and scoped OAuth tokens; documented OAuth project listing screenshot-count precomputation; documented the forbidden JSON guard for stale/projectless API keys.
-
 ## [2026-07-08T19:42:13Z] add-a-go-cli-for-260708-edec
 
 **Action:** Refreshed command, REST API controller, route, MCP/CLI boundary, and CLI wiki coverage after the `add-a-go-cli-for-260708-edec` branch updated wiki-facing command/API surface documentation.
@@ -198,3 +185,9 @@ slug: replace-screenote-cli-api-key-260708-545b
 **Scheduler:** `llm-wiki-screenote-a932fe24.timer` is enabled and active under `systemctl --user`; next run is scheduled for 2026-05-15 18:03:41 BST.
 **Maintenance scripts:** `.llm-wiki/refresh-wiki.sh` and `.llm-wiki/post-commit-refresh.sh` use bounded Codex and qmd timeouts and tell headless Codex not to run `qmd update` or `qmd embed` itself.
 **Source:** `systemctl --user list-timers`, `qmd update`, `qmd embed`, and collection-scoped `qmd search`.
+
+## [2026-07-08] OAuth-first CLI and REST OAuth auth
+
+**Action:** Updated API/CLI docs for OAuth-first CLI authentication and REST v1 dual bearer authentication.
+**Pages updated:** wiki/api-cli.md, wiki/controllers/api-controllers.md, wiki/routes.md, wiki/log.md
+**Source:** `internal/cli`, `internal/screenote`, `app/controllers/api`, `app/services/api/bearer_authenticator.rb`, controller tests

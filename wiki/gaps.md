@@ -49,7 +49,6 @@ Areas where documentation is missing or incomplete. Updated from current source,
 
 ### API CLI
 - [[api-cli]] now documents the Go REST CLI surface from `add-a-go-cli-for-260708-edec`, including aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. The remaining uncertainty is product scope: `annotation resolve`, `annotation reopen`, OAuth browser login, daemon/watch mode, member management, and required multi-viewport upload are explicitly deferred rather than confirmed CLI ship criteria.
-- `replace-screenote-cli-api-key-260708-545b` updates `Api::V1::ProjectsController#index` to avoid N+1 screenshot counts for OAuth project listing and hardens `require_current_project!` for projectless API keys. The committed tests cover API-key listing, OAuth project listing, scope rejection, and revoked/expired OAuth tokens, but this refresh did not find a focused test for the stale/projectless API-key guard or a query-count assertion for the grouped screenshot count.
 
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.
