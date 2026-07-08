@@ -7,9 +7,17 @@ module Api
         return unless require_scope!("mcp_read")
 
         if oauth_authenticated?
+          memberships = current_user.project_memberships.includes(:project).to_a
+          screenshot_counts = Screenshot.joins(:page)
+            .where(pages: { project_id: memberships.map(&:project_id) })
+            .group("pages.project_id").count
+
           render json: {
-            projects: current_user.project_memberships.includes(:project).map do |membership|
-              Api::V1::ContractSerializer.project(membership.project).merge(role: membership.role)
+            projects: memberships.map do |membership|
+              Api::V1::ContractSerializer.project(
+                membership.project,
+                screenshot_count: screenshot_counts.fetch(membership.project_id, 0)
+              ).merge(role: membership.role)
             end
           }
           return

@@ -41,8 +41,9 @@ module Api
 
     def require_current_project!(project_id)
       if api_key_authenticated?
-        return current_project if project_id.blank?
-        return current_project if project_id.to_s == current_project.id.to_s
+        if current_project.present? && (project_id.blank? || project_id.to_s == current_project.id.to_s)
+          return current_project
+        end
 
         render_error("Project is not accessible with this API key", code: "forbidden", status: :forbidden)
         return nil
