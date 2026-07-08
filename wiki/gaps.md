@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-08
 tags: [gaps, documentation, todo]
 ---
 
@@ -47,6 +47,9 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - E2E test setup with Capybara + Playwright is not covered.
 - **NEW:** Specific test coverage gaps identified: CreateScreenshotTool (#056), SQL injection testing (#149), OAuth test helpers (#102).
 
+### API CLI
+- [[api-cli]] now documents the Go REST CLI surface from `add-a-go-cli-for-260708-edec`, including aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. The remaining uncertainty is product scope: `annotation resolve`, `annotation reopen`, OAuth browser login, daemon/watch mode, member management, and required multi-viewport upload are explicitly deferred rather than confirmed CLI ship criteria.
+
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.
 - Environment variable documentation for production setup.
@@ -78,11 +81,15 @@ The following gaps from the original bootstrap have been partially or fully addr
 3. How is the digest notification job scheduled? (Solid Queue cron? Rake task?)
 4. **NEW:** Should OAuth be user-scoped or project-scoped? (#108 -- architectural decision pending)
 5. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
+6. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was not present during the 2026-07-08 refresh; neither were the default fallback paths `~/wikis/main/wiki/`, `../wikis/master/wiki/`, or `../wikis/main/wiki/`. `qmd search` returned no matching project-wiki results for the CLI/API refresh query. Cross-project context may be incomplete until the path is restored or config is updated.
+7. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
 
 See also: [[architecture]], [[active-areas]], [[plans-and-initiatives]], [[technical-debt]]
 
 ## Environment / Automation
 
+- [[llm-wiki-maintenance]] now documents current refresh scripts, QMD ownership, log fragment compilation, and worktree-safe post-commit behavior.
+- `.claude/settings.json` currently has overlapping `SessionStart` hooks that both print wiki context; verify whether both are intentional before editing Claude automation.
 
 ## Resolved Bootstrap Validation
 
