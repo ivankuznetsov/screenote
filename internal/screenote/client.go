@@ -53,17 +53,17 @@ func NewClient(baseURL, apiKey string, httpClient *http.Client) (*Client, error)
 
 func (c *Client) Projects(ctx context.Context) (json.RawMessage, ProjectsResponse, error) {
 	var out ProjectsResponse
-	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/projects", nil, nil, &out)
+	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/projects", nil, nil, &out, nil)
 	return raw, out, err
 }
 
 func (c *Client) Pages(ctx context.Context, project string) (json.RawMessage, error) {
-	return c.doJSON(ctx, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/pages", nil, nil, nil)
+	return c.doJSON(ctx, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/pages", nil, nil, nil, nil)
 }
 
 func (c *Client) Screenshots(ctx context.Context, project string, query url.Values) (json.RawMessage, ScreenshotsResponse, error) {
 	var out ScreenshotsResponse
-	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/screenshots", query, nil, &out)
+	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/projects/"+url.PathEscape(project)+"/screenshots", query, nil, &out, nil)
 	return raw, out, err
 }
 
@@ -116,12 +116,12 @@ func (c *Client) CreateScreenshot(ctx context.Context, title, pageValue, filenam
 
 func (c *Client) Annotations(ctx context.Context, screenshot string, query url.Values) (json.RawMessage, AnnotationsResponse, error) {
 	var out AnnotationsResponse
-	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/screenshots/"+url.PathEscape(screenshot)+"/annotations", query, nil, &out)
+	raw, err := c.doJSON(ctx, http.MethodGet, "/api/v1/screenshots/"+url.PathEscape(screenshot)+"/annotations", query, nil, &out, nil)
 	return raw, out, err
 }
 
 func (c *Client) Annotation(ctx context.Context, id string) (json.RawMessage, error) {
-	return c.doJSON(ctx, http.MethodGet, "/api/v1/annotations/"+url.PathEscape(id), nil, nil, nil)
+	return c.doJSON(ctx, http.MethodGet, "/api/v1/annotations/"+url.PathEscape(id), nil, nil, nil, nil)
 }
 
 func (c *Client) AddComment(ctx context.Context, annotation, body string) (json.RawMessage, error) {
@@ -150,16 +150,12 @@ func WithLimitOffset(values url.Values, limit, offset int) url.Values {
 	return values
 }
 
-func (c *Client) doJSON(ctx context.Context, method, rawPath string, query url.Values, headers map[string]string, out any, body ...io.Reader) (json.RawMessage, error) {
+func (c *Client) doJSON(ctx context.Context, method, rawPath string, query url.Values, headers map[string]string, out any, body io.Reader) (json.RawMessage, error) {
 	u := *c.baseURL
 	u.Path = strings.TrimRight(c.baseURL.Path, "/") + rawPath
 	u.RawQuery = query.Encode()
 
-	var reader io.Reader
-	if len(body) > 0 {
-		reader = body[0]
-	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}

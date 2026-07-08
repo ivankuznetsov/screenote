@@ -20,10 +20,6 @@ type Page struct {
 	CreatedAt    string `json:"created_at"`
 }
 
-type PagesResponse struct {
-	Pages []Page `json:"pages"`
-}
-
 type Pagination struct {
 	Total  int `json:"total"`
 	Limit  int `json:"limit"`
@@ -55,14 +51,6 @@ type Screenshot struct {
 type ScreenshotsResponse struct {
 	Screenshots []Screenshot `json:"screenshots"`
 	Pagination  Pagination   `json:"pagination"`
-}
-
-type ScreenshotCreateResponse struct {
-	ScreenshotID int              `json:"screenshot_id"`
-	PageID       int              `json:"page_id"`
-	Status       string           `json:"status"`
-	AnnotateURL  string           `json:"annotate_url"`
-	Image        *ScreenshotImage `json:"image"`
 }
 
 type Coordinates struct {
@@ -101,9 +89,4 @@ type Comment struct {
 	Body         string `json:"body"`
 	Author       string `json:"author"`
 	CreatedAt    string `json:"created_at"`
-}
-
-type CommentCreateResponse struct {
-	Success bool    `json:"success"`
-	Comment Comment `json:"comment"`
 }
