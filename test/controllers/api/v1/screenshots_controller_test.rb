@@ -218,6 +218,19 @@ module Api
         assert_equal "forbidden", response.parsed_body["code"]
       end
 
+      test "oauth write token cannot create screenshots in a non-member project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        assert_no_difference "Screenshot.count" do
+          post api_v1_screenshots_path,
+            params: { image: @image, title: "Trespass", project_id: projects(:bob_project).id },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      end
+
       test "oauth requests do not touch api key last_used_at" do
         @api_key.update_column(:last_used_at, 1.hour.ago)
         old_last_used = @api_key.last_used_at

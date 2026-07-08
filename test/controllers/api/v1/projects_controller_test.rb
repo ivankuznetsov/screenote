@@ -46,6 +46,13 @@ module Api
         assert_equal "insufficient_scope", response.parsed_body["code"]
       end
 
+      test "unknown non-api-key bearer token is unauthorized" do
+        get api_v1_projects_path, headers: auth_header("garbage-oauth-token-not-sk-prefixed")
+
+        assert_response :unauthorized
+        assert_equal "unauthorized", response.parsed_body["code"]
+      end
+
       test "revoked and expired oauth tokens are unauthorized" do
         revoked = oauth_token(user: users(:alice), revoked_at: 1.minute.ago)
         expired = oauth_token(user: users(:alice), expires_in: -1.minute)

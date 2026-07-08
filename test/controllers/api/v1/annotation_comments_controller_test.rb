@@ -75,6 +75,20 @@ module Api
         assert_equal "insufficient_scope", response.parsed_body["code"]
       end
 
+      test "oauth write token cannot comment in a non-member project" do
+        annotation = annotations(:point_annotation)
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        assert_no_difference "AnnotationComment.count" do
+          post api_v1_annotation_comments_path(annotation),
+            params: { body: "Trespass", project_id: projects(:bob_project).id },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      end
+
       test "oauth comment requires explicit project" do
         annotation = annotations(:point_annotation)
         token = oauth_token(user: users(:alice), scopes: "mcp_write")

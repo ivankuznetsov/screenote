@@ -46,6 +46,10 @@ module Api
       end
 
       test "does not list annotations for another project screenshot" do
+        # The screenshot must actually own annotations, otherwise an empty result
+        # proves nothing about cross-project scoping.
+        assert screenshots(:bob_screenshot).annotations.any?
+
         get api_v1_screenshot_annotations_path(screenshots(:bob_screenshot)),
           headers: auth_header(ALICE_TOKEN)
 
