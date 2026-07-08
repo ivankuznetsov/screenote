@@ -13,6 +13,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Client struct {
@@ -46,7 +47,7 @@ func NewClient(baseURL, bearerToken string, httpClient *http.Client) (*Client, e
 		return nil, errors.New("base url must include scheme and host")
 	}
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
 	return &Client{baseURL: parsed, bearerToken: bearerToken, httpClient: httpClient}, nil
 }
@@ -116,6 +117,9 @@ func (c *Client) CreateScreenshot(ctx context.Context, project, title, pageValue
 		_, err = io.Copy(part, r)
 	}()
 
+	// Close the reader when we return so the producer goroutine unblocks (and
+	// releases the open upload file) even if doJSON never starts draining it.
+	defer pr.Close()
 	return c.doJSON(ctx, http.MethodPost, "/api/v1/screenshots", nil, headers, nil, pr)
 }
 
