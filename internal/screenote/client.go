@@ -1,7 +1,6 @@
 package screenote
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"path"
 	"strconv"
@@ -68,33 +68,50 @@ func (c *Client) Screenshots(ctx context.Context, project string, query url.Valu
 }
 
 func (c *Client) CreateScreenshot(ctx context.Context, title, pageValue, filename, contentType string, r io.Reader) (json.RawMessage, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	if title != "" {
-		_ = writer.WriteField("title", title)
-	}
-	if pageValue != "" {
-		_ = writer.WriteField("page", pageValue)
-	}
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 	if filename == "" || filename == "-" {
 		filename = "stdin"
 	}
-	part, err := writer.CreateFormFile("image", path.Base(filename))
-	if err != nil {
-		return nil, err
-	}
-	if _, err := io.Copy(part, r); err != nil {
-		return nil, err
-	}
-	if err := writer.Close(); err != nil {
-		return nil, err
-	}
 
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
 	headers := map[string]string{"Content-Type": writer.FormDataContentType()}
-	return c.doJSON(ctx, http.MethodPost, "/api/v1/screenshots", nil, headers, nil, &body)
+
+	go func() {
+		var err error
+		defer func() {
+			closeErr := writer.Close()
+			if err == nil {
+				err = closeErr
+			}
+			_ = pw.CloseWithError(err)
+		}()
+
+		if title != "" {
+			if err = writer.WriteField("title", title); err != nil {
+				return
+			}
+		}
+		if pageValue != "" {
+			if err = writer.WriteField("page", pageValue); err != nil {
+				return
+			}
+		}
+
+		header := make(textproto.MIMEHeader)
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image"; filename="%s"`, escapeQuotes(path.Base(filename))))
+		header.Set("Content-Type", contentType)
+		var part io.Writer
+		part, err = writer.CreatePart(header)
+		if err != nil {
+			return
+		}
+		_, err = io.Copy(part, r)
+	}()
+
+	return c.doJSON(ctx, http.MethodPost, "/api/v1/screenshots", nil, headers, nil, pr)
 }
 
 func (c *Client) Annotations(ctx context.Context, screenshot string, query url.Values) (json.RawMessage, AnnotationsResponse, error) {
@@ -209,4 +226,8 @@ func statusCode(status int) string {
 	default:
 		return fmt.Sprintf("http_%d", status)
 	}
+}
+
+func escapeQuotes(value string) string {
+	return strings.NewReplacer("\\", "\\\\", `"`, "\\\"").Replace(value)
 }
