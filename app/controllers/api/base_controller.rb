@@ -5,11 +5,16 @@ module Api
     before_action :authenticate_api_key!
 
     rescue_from ActiveRecord::RecordInvalid do |e|
-      render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+      render_error(
+        e.record.errors.full_messages.join(", "),
+        code: "validation_failed",
+        status: :unprocessable_entity,
+        details: e.record.errors.full_messages
+      )
     end
 
     rescue_from ActiveRecord::RecordNotFound do |e|
-      render json: { error: e.message }, status: :not_found
+      render_error(e.message, code: "not_found", status: :not_found)
     end
 
     private
@@ -19,7 +24,7 @@ module Api
       api_key = ApiKey.active.find_by_token(token)
 
       if api_key.nil?
-        render json: { error: "Invalid or missing API key" }, status: :unauthorized
+        render_error("Invalid or missing API key", code: "unauthorized", status: :unauthorized)
         return
       end
 
@@ -31,6 +36,27 @@ module Api
     def extract_bearer_token
       header = request.headers["Authorization"]
       header&.match(/\ABearer\s+(.+)\z/)&.captures&.first
+    end
+
+    def require_current_project!(project_id)
+      return current_project if project_id.blank?
+      return current_project if project_id.to_s == current_project.id.to_s
+
+      render_error("Project is not accessible with this API key", code: "forbidden", status: :forbidden)
+      nil
+    end
+
+    def pagination_params
+      limit = params.fetch(:limit, 50).to_i.clamp(1, 100)
+      offset = [ params.fetch(:offset, 0).to_i, 0 ].max
+
+      [ limit, offset ]
+    end
+
+    def render_error(message, code:, status:, details: nil)
+      payload = { error: message, code: code }
+      payload[:details] = details if details
+      render json: payload, status: status
     end
 
     attr_reader :current_api_key, :current_project

@@ -3,14 +3,32 @@
 module Api
   module V1
     class ScreenshotsController < Api::BaseController
+      def index
+        project = require_current_project!(params[:project_id])
+        return unless project
+
+        limit, offset = pagination_params
+        screenshots = Api::V1::ProjectScope.screenshots(project)
+        screenshots = screenshots.where(page_id: params[:page_id]) if params[:page_id].present?
+        screenshots = screenshots.where(status: params[:status]) if params[:status].present?
+
+        total = screenshots.count
+        screenshots = screenshots.limit(limit).offset(offset)
+
+        render json: {
+          screenshots: screenshots.map { |screenshot| Api::V1::ContractSerializer.screenshot(screenshot, url_options: url_options) },
+          pagination: { total: total, limit: limit, offset: offset }
+        }
+      end
+
       def create
         unless params[:image]
-          render json: { error: "Image file is required" }, status: :unprocessable_entity
+          render_error("Image file is required", code: "validation_failed", status: :unprocessable_entity)
           return
         end
 
         title = params[:title].presence || "Untitled"
-        page = Page.find_or_create_by_name!(current_project, title)
+        page = resolve_page(title)
         screenshot = Screenshot.create_with_image!(
           page: page, title: title,
           io: params[:image].tempfile,
@@ -18,21 +36,21 @@ module Api
           content_type: params[:image].content_type
         )
 
-        render json: {
-          screenshot_id: screenshot.id,
-          annotate_url: screenshot_url(screenshot)
-        }, status: :created
-      rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        render json: Api::V1::ContractSerializer.screenshot_create(screenshot, url_options: url_options), status: :created
       end
 
       private
 
-      def screenshot_url(screenshot)
-        Rails.application.routes.url_helpers.screenshot_url(
-          screenshot,
-          host: request.host, port: request.port, protocol: request.protocol
-        )
+      def resolve_page(title)
+        page_id = params[:page_id].presence || params[:page].presence
+        return current_project.pages.find(page_id) if page_id.to_s.match?(/\A\d+\z/)
+        return Page.find_or_create_by_name!(current_project, page_id) if page_id.present?
+
+        Page.find_or_create_by_name!(current_project, title)
+      end
+
+      def url_options
+        { host: request.host, port: request.optional_port, protocol: request.protocol }
       end
     end
   end

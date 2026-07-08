@@ -14,6 +14,27 @@ module Api
         @image = fixture_file_upload("test_image.png", "image/png")
       end
 
+      test "lists screenshots with filters and pagination" do
+        get api_v1_project_screenshots_path(@project, page_id: pages(:alice_page).id, status: "ready", limit: 1, offset: 0),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        body = response.parsed_body
+        assert_equal 1, body["screenshots"].length
+        assert_equal screenshots(:alice_screenshot).id, body["screenshots"].first["id"]
+        assert_equal "ready", body["screenshots"].first["status"]
+        assert_equal 1, body["pagination"]["limit"]
+        assert_equal 1, body["pagination"]["total"]
+      end
+
+      test "does not list screenshots outside the key project" do
+        get api_v1_project_screenshots_path(projects(:bob_project)),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      end
+
       test "creates screenshot with valid image and auth" do
         assert_difference "Screenshot.count", 1 do
           post api_v1_screenshots_path,
@@ -25,11 +46,34 @@ module Api
         body = response.parsed_body
         assert body["screenshot_id"].present?, "Response should include screenshot_id"
         assert body["annotate_url"].present?, "Response should include annotate_url"
+        assert_equal @project.pages.find_by(name: "Homepage").id, body["page_id"]
+        assert body["image"].present?, "Response should include image metadata"
 
         screenshot = Screenshot.find(body["screenshot_id"])
         assert_equal "Homepage", screenshot.title
         assert screenshot.primary_image.image.attached?, "Image should be attached to the desktop ScreenshotImage"
         assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
+      end
+
+      test "creates screenshot on the requested page id" do
+        page = pages(:alice_page)
+
+        post api_v1_screenshots_path,
+          params: { image: @image, title: "Requested Page", page_id: page.id },
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :created
+        assert_equal page.id, Screenshot.find(response.parsed_body["screenshot_id"]).page_id
+      end
+
+      test "creates screenshot on the requested page name" do
+        post api_v1_screenshots_path,
+          params: { image: @image, title: "Upload Title", page: "Checkout" },
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :created
+        screenshot = Screenshot.find(response.parsed_body["screenshot_id"])
+        assert_equal "Checkout", screenshot.page.name
       end
 
       test "returns 401 without authorization header" do
@@ -38,6 +82,7 @@ module Api
 
         assert_response :unauthorized
         assert_equal "Invalid or missing API key", response.parsed_body["error"]
+        assert_equal "unauthorized", response.parsed_body["code"]
       end
 
       test "returns 401 with invalid token" do
@@ -63,6 +108,7 @@ module Api
 
         assert_response :unprocessable_entity
         assert_equal "Image file is required", response.parsed_body["error"]
+        assert_equal "validation_failed", response.parsed_body["code"]
       end
 
       test "uses default title when none provided" do
