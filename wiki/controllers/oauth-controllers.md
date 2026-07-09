@@ -3,7 +3,7 @@ title: OAuth Controllers
 type: controller
 source: app/controllers/oauth/
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-07-09
 tags: [controller, oauth, mcp, doorkeeper]
 ---
 
@@ -42,6 +42,26 @@ Source: `app/controllers/oauth/registrations_controller.rb`
 - Creates Doorkeeper::Application with `confidential: false`, `dynamic: true`
 - Scopes: `mcp_read mcp_write`
 - Returns: `client_id`, `client_name`, `redirect_uris`, `grant_types`, `token_endpoint_auth_method`
+
+---
+
+## Oauth::TestTokensController
+
+Source: `app/controllers/oauth/test_tokens_controller.rb`
+
+**Inherits from:** `ActionController::API` (no session auth)
+
+**Actions:** create
+
+| Action | Method | Path | Notes |
+|--------|--------|------|-------|
+| create | POST | `/oauth/test_token` | Secret-gated non-interactive MCP test token minting |
+
+- Gated by `ENV["SCREENOTE_MCP_TEST_TOKEN_SECRET"]`; unset, blank, missing, or mismatched secrets return 404.
+- Accepts the secret as `Authorization: Bearer <secret>` or `secret` param.
+- Creates or reuses the fixed user `hive-mcp-ci@screenote.test`, fixed project `hive-mcp-ci`, and fixed OAuth application `hive-mcp-ci-test-client`.
+- Mints `mcp_read mcp_write` access tokens with `oauth_access_tokens.project_id` set to the fixed test project.
+- Project-scoped test tokens resolve `Current.mcp_project` during MCP auth, list only the fixed project, cannot create projects, and cannot use another project even if the fixed test user later gains other memberships.
 
 ---
 

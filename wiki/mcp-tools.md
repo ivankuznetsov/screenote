@@ -3,7 +3,7 @@ title: MCP Tools
 type: architecture
 source: app/tools/**/*.rb, config/initializers/fast_mcp.rb
 created: 2026-05-14
-updated: 2026-05-14
+updated: 2026-07-09
 tags: [mcp, tools, api, agent]
 ---
 
@@ -19,6 +19,7 @@ Source: `app/tools/**/*.rb`, `config/initializers/fast_mcp.rb`
 
 - Project API keys (`sk_proj_...`): project is implicit through `Current.mcp_project`.
 - OAuth 2.1 bearer tokens: user is implicit, and tool calls must pass `project_id`.
+- Project-scoped OAuth bearer tokens with `oauth_access_tokens.project_id` set: project is implicit through `Current.mcp_project`; project-specific tools reject a different `project_id`, `list_projects` returns only that project, and `create_project` is forbidden.
 
 The transport rate-limits API keys and OAuth tokens at 60 requests/minute, logs validation failures, reports unexpected errors to Honeybadger, and returns a JSON 429 for rate-limited requests.
 
