@@ -12,3 +12,8 @@ bob_project:
   name: "Bob's Project"
   description: "A test project for Bob"
   user_id: <%= ActiveRecord::FixtureSet.identify(:bob) %>
+
+demo_project:
+  name: "Demo Project"
+  description: "A sample project for testing."
+  user_id: <%= ActiveRecord::FixtureSet.identify(:test_user) %>

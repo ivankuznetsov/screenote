@@ -17,3 +17,13 @@ admin:
   email: ivan@ikuznetsov.com
   password_digest: <%= BCrypt::Password.create("password123") %>
   confirmed_at: <%= Time.current %>
+
+test_user:
+  email: test@screenote.app
+  password_digest: <%= BCrypt::Password.create("password") %>
+  confirmed_at: <%= Time.current %>
+
+free_user:
+  email: free@screenote.app
+  password_digest: <%= BCrypt::Password.create("password") %>
+  confirmed_at: <%= Time.current %>
