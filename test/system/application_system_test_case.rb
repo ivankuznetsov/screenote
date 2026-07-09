@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "capybara-playwright-driver"
+require "uri"
 
 # System tests run against the dev server on port 3005 (must be running: bin/dev).
 # Uses Capybara with the Playwright driver for real browser automation.
@@ -69,5 +70,12 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   def with_playwright_page(&block)
     page.driver.with_playwright_page(&block)
+  end
+
+  def app_base_url
+    return Capybara.app_host if Capybara.app_host.present?
+
+    current_uri = URI.parse(page.current_url)
+    "#{current_uri.scheme}://#{current_uri.host}:#{current_uri.port}"
   end
 end

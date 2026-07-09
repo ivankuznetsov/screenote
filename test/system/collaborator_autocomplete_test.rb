@@ -11,6 +11,7 @@ class CollaboratorAutocompleteTest < ApplicationSystemTestCase
   include Pages::MembersPage
 
   setup do
+    ActionMailer::Base.deliveries.clear
     login_as_test_user
     @unique_prefix = "ac#{SecureRandom.hex(4)}"
     @collab_email = "#{@unique_prefix}@example.com"
@@ -97,8 +98,8 @@ class CollaboratorAutocompleteTest < ApplicationSystemTestCase
     invite_email(email)
     assert_flash_notice "Invitation sent to #{email}."
 
-    invitation_link = extract_invitation_link_from_letter_opener
-    assert invitation_link, "Invitation link should be found in letter_opener email"
+    invitation_link = extract_invitation_link_from_deliveries(@collab_email)
+    assert invitation_link, "Invitation link should be found in delivered email"
 
     visit invitation_link
     assert_selector "input[value='Accept Invitation']", wait: 10
@@ -109,15 +110,11 @@ class CollaboratorAutocompleteTest < ApplicationSystemTestCase
     logout
   end
 
-  def extract_invitation_link_from_letter_opener
-    letter_opener_dir = Rails.root.join("tmp/letter_opener")
-    latest_email_dir = Dir.glob("#{letter_opener_dir}/*/").max_by { |d| File.mtime(d) }
-    return nil unless latest_email_dir
+  def extract_invitation_link_from_deliveries(email)
+    message = ActionMailer::Base.deliveries.reverse.find { |delivery| delivery.to.include?(email) }
+    return nil unless message
 
-    html_file = File.join(latest_email_dir, "rich.html")
-    return nil unless File.exist?(html_file)
-
-    content = File.read(html_file)
+    content = message.html_part&.body&.to_s || message.body.to_s
     match = content.match(%r{(https?://[^"&\s]*?/invitations/[^"&\s<]+)})
     match ? URI.parse(match[1]).request_uri : nil
   end

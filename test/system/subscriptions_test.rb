@@ -4,6 +4,7 @@ require_relative "application_system_test_case"
 require_relative "pages/auth_page"
 require_relative "pages/projects_page"
 require_relative "pages/subscription_page"
+require "ostruct"
 
 class SubscriptionsFreeUserTest < ApplicationSystemTestCase
   include Pages::AuthPage
@@ -48,11 +49,13 @@ class SubscriptionsFreeUserTest < ApplicationSystemTestCase
   test "clicking upgrade redirects to Stripe Checkout" do
     visit_billing
 
-    with_playwright_page do |pw_page|
-      pw_page.expect_navigation(url: /checkout\.stripe\.com/, timeout: 30_000) do
-        pw_page.locator('[data-testid="upgrade-btn"]').click
+    Stripe::Checkout::Session.stub(:create, OpenStruct.new(url: "https://checkout.stripe.com/c/test_session")) do
+      with_playwright_page do |pw_page|
+        pw_page.expect_navigation(url: /checkout\.stripe\.com/, timeout: 30_000) do
+          pw_page.locator('[data-testid="upgrade-btn"]').click
+        end
+        assert pw_page.url.include?("checkout.stripe.com"), "Expected redirect to Stripe Checkout, got: #{pw_page.url}"
       end
-      assert pw_page.url.include?("checkout.stripe.com"), "Expected redirect to Stripe Checkout, got: #{pw_page.url}"
     end
   end
 
