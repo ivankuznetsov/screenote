@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"os/exec"
@@ -46,21 +45,29 @@ func (a *app) loginCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			path := defaultConfigPath(a.configPath)
-			values, err := appconfig.LoadExpanded(path)
+			path, err := a.saveLoginCredentials(resolved.BaseURL, credentials)
 			if err != nil {
-				return err
-			}
-			values.Login = credentials
-			if values.BaseURL == "" {
-				values.BaseURL = resolved.BaseURL
-			}
-			if err := appconfig.Save(path, values); err != nil {
 				return err
 			}
 			return writeJSON(a.stdout, map[string]any{"ok": true, "path": path})
 		},
 	}
+}
+
+func (a *app) saveLoginCredentials(baseURL string, credentials *appconfig.LoginCredentials) (string, error) {
+	path := defaultConfigPath(a.configPath)
+	values, err := appconfig.LoadExpanded(path)
+	if err != nil {
+		return "", err
+	}
+	values.Login = credentials
+	// There is one stored login credential set, so keep the configured server
+	// aligned with it even when login used a flag/env override.
+	values.BaseURL = baseURL
+	if err := appconfig.Save(path, values); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func (a *app) logoutCommand() *cobra.Command {
@@ -124,7 +131,13 @@ func (a *app) runLogin(ctx context.Context, baseURL string) (*appconfig.LoginCre
 	}()
 
 	if err := openBrowser(authURL); err != nil {
-		fmt.Fprintf(a.stderr, "Open this URL to continue login: %s\n", authURL)
+		if writeErr := writeJSON(a.stderr, map[string]string{
+			"code":              "browser_open_failed",
+			"message":           "browser could not be opened; open authorization_url to continue login",
+			"authorization_url": authURL,
+		}); writeErr != nil {
+			return nil, writeErr
+		}
 	}
 
 	select {

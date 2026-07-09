@@ -138,11 +138,19 @@ func Save(path string, values Values) error {
 		return err
 	}
 
-	f, err := os.OpenFile(expanded, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(expanded, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	// OpenFile's permission is only applied on creation. Tighten an existing
+	// hand-authored config before writing OAuth access/refresh credentials.
+	if err := f.Chmod(0o600); err != nil {
+		return err
+	}
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
 
 	return toml.NewEncoder(f).Encode(values)
 }

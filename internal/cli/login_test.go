@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -107,6 +108,76 @@ func TestCallbackRejectsMismatchedState(t *testing.T) {
 	received := <-result
 	if received.err == nil || !strings.Contains(received.err.Error(), "state") {
 		t.Fatalf("result=%#v", received)
+	}
+}
+
+func TestRunLoginBrowserFallbackUsesJSONStderr(t *testing.T) {
+	originalOpenBrowser := openBrowser
+	defer func() { openBrowser = originalOpenBrowser }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	openBrowser = func(rawURL string) error {
+		cancel()
+		return errors.New("no browser")
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"issuer":                 serverURL(r),
+				"authorization_endpoint": serverURL(r) + "/oauth/authorize",
+				"token_endpoint":         serverURL(r) + "/oauth/token",
+				"registration_endpoint":  serverURL(r) + "/oauth/register",
+			})
+		case "/oauth/register":
+			_ = json.NewEncoder(w).Encode(map[string]string{"client_id": "client-1"})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	var stderr bytes.Buffer
+	a := &app{stderr: &stderr, httpClient: server.Client()}
+	_, err := a.runLogin(ctx, server.URL)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v", err)
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(stderr.Bytes(), &payload); err != nil {
+		t.Fatalf("stderr=%q err=%v", stderr.String(), err)
+	}
+	if payload["code"] != "browser_open_failed" || payload["authorization_url"] == "" {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestSaveLoginCredentialsSwitchesConfiguredBaseURL(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := appconfig.Save(configPath, appconfig.Values{BaseURL: "https://old.example"}); err != nil {
+		t.Fatal(err)
+	}
+
+	a := &app{configPath: configPath}
+	credentials := &appconfig.LoginCredentials{
+		AccessToken: "access-1",
+		ClientID:    "client-1",
+		BaseURL:     "https://new.example",
+	}
+	path, err := a.saveLoginCredentials("https://new.example", credentials)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != configPath {
+		t.Fatalf("path=%q", path)
+	}
+	values, err := appconfig.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values.BaseURL != "https://new.example" || values.Login == nil || values.Login.AccessToken != "access-1" {
+		t.Fatalf("values=%#v", values)
 	}
 }
 

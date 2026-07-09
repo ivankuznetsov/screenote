@@ -22,6 +22,8 @@ type Client struct {
 	httpClient  *http.Client
 }
 
+const defaultHTTPTimeout = 30 * time.Second
+
 type Error struct {
 	StatusCode int
 	Code       string
@@ -46,10 +48,15 @@ func NewClient(baseURL, bearerToken string, httpClient *http.Client) (*Client, e
 	if parsed.Scheme == "" || parsed.Host == "" {
 		return nil, errors.New("base url must include scheme and host")
 	}
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
-	}
+	httpClient = httpClientOrDefault(httpClient)
 	return &Client{baseURL: parsed, bearerToken: bearerToken, httpClient: httpClient}, nil
+}
+
+func httpClientOrDefault(httpClient *http.Client) *http.Client {
+	if httpClient == nil {
+		return &http.Client{Timeout: defaultHTTPTimeout}
+	}
+	return httpClient
 }
 
 func (c *Client) Projects(ctx context.Context) (json.RawMessage, ProjectsResponse, error) {

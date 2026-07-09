@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -86,5 +87,28 @@ func TestLoadMissingConfig(t *testing.T) {
 	}
 	if values != (Values{}) {
 		t.Fatalf("values = %#v", values)
+	}
+}
+
+func TestSaveTightensExistingConfigPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not available on Windows")
+	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("base_url = \"https://old.example\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(path, Values{BaseURL: "https://screenote.test", Login: &LoginCredentials{AccessToken: "access-1"}}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("permissions=%#o want 0600", got)
 	}
 }

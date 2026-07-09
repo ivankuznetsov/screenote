@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-07-08
+updated: 2026-07-09
 tags: [cli, api, rest, agents]
 ---
 
@@ -38,7 +38,7 @@ Precedence:
 3. Config: `~/.config/screenote/config.toml`
 4. Stored OAuth credentials from `screenote login`
 
-`screenote config` prints resolved config as JSON and omits stored login secrets. `screenote config set` writes values noninteractively. Ordinary commands never prompt or open a browser; only explicit `screenote login` starts browser-based OAuth.
+`screenote config` prints resolved config as JSON, reports `token_set` plus the token source, and never prints either explicit tokens or stored login secrets. `screenote config set` writes values noninteractively. Config writes enforce owner-only permissions even for a pre-existing hand-authored file. Ordinary commands never prompt or open a browser; only explicit `screenote login` starts browser-based OAuth.
 
 The base URL should be set explicitly. Current docs use localhost, staging/self-hosted URLs, or the canonical production host `https://screenote.ai` from `config/deploy.yml`.
 
@@ -54,6 +54,8 @@ Developers can use the OAuth authorization-code flow with PKCE and loopback redi
 screenote --base-url https://screenote.ai login
 screenote logout
 ```
+
+Login stores the authorized base URL alongside its single credential set, so a `--base-url` or environment override becomes the configured server for later commands. When browser launch is unavailable, stderr receives a JSON `browser_open_failed` message with `authorization_url` for manual continuation. Default REST and OAuth HTTP clients use a 30-second timeout; command cancellation still propagates through OAuth discovery, registration, exchange, and refresh.
 
 ## Commands
 

@@ -191,3 +191,9 @@ Append-only log of all wiki operations.
 **Action:** Updated API/CLI docs for OAuth-first CLI authentication and REST v1 dual bearer authentication.
 **Pages updated:** wiki/api-cli.md, wiki/controllers/api-controllers.md, wiki/routes.md, wiki/log.md
 **Source:** `internal/cli`, `internal/screenote`, `app/controllers/api`, `app/services/api/bearer_authenticator.rb`, controller tests
+
+## [2026-07-09] OAuth CLI review hardening
+
+**Action:** Hardened the OAuth CLI review findings: bounded every default HTTP path, kept saved login credentials aligned with the configured server, preserved JSON-only output when browser launch fails, masked bearer tokens from `screenote config`, and enforced owner-only permissions on existing config files.
+**Pages updated:** wiki/api-cli.md, wiki/log.md
+**Source:** `internal/cli`, `internal/config`, `internal/screenote`, Go regression tests

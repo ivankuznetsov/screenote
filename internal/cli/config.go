@@ -15,7 +15,17 @@ func (a *app) configCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return writeJSON(a.stdout, resolved)
+			return writeJSON(a.stdout, struct {
+				BaseURL  string            `json:"base_url,omitempty"`
+				Project  string            `json:"project,omitempty"`
+				TokenSet bool              `json:"token_set"`
+				Sources  appconfig.Sources `json:"sources"`
+			}{
+				BaseURL:  resolved.BaseURL,
+				Project:  resolved.Project,
+				TokenSet: resolved.Token != "",
+				Sources:  resolved.Sources,
+			})
 		},
 	}
 

@@ -17,12 +17,16 @@ screenote config set --base-url https://screenote.ai --token "$SCREENOTE_TOKEN"
 screenote config
 ```
 
+`screenote config` reports whether a token is set and where it came from, but never prints the bearer token itself.
+
 Developers can also store OAuth login credentials explicitly:
 
 ```sh
 screenote --base-url https://screenote.ai login
 screenote logout
 ```
+
+Login aligns the saved base URL with the authorized server and stores the config with owner-only permissions. If the browser cannot be opened, the CLI writes a JSON message containing `authorization_url` to stderr so the URL can be opened manually.
 
 Configuration precedence is:
 

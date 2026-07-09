@@ -102,6 +102,34 @@ func TestMissingTokenUsesStableUsageError(t *testing.T) {
 	}
 }
 
+func TestConfigMasksBearerToken(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	stdout, stderr, code := runCLI(t, []string{
+		"--config", configPath,
+		"--base-url", "https://screenote.test",
+		"--token", "super-secret-token",
+		"config",
+	}, "")
+	if code != ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if strings.Contains(stdout, "super-secret-token") {
+		t.Fatalf("stdout leaked token: %s", stdout)
+	}
+	var payload struct {
+		TokenSet bool `json:"token_set"`
+		Sources  struct {
+			Token string `json:"token"`
+		} `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("stdout=%s err=%v", stdout, err)
+	}
+	if !payload.TokenSet || payload.Sources.Token != "flag" {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
 func TestScreenshotCreateDerivesContentType(t *testing.T) {
 	contentTypes := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

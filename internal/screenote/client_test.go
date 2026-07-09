@@ -93,3 +93,16 @@ func TestClientEmptyTokenOmitsAuthorization(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNewClientUsesBoundedDefaultHTTPClient(t *testing.T) {
+	client, err := NewClient("https://screenote.test", "token", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.httpClient.Timeout != defaultHTTPTimeout {
+		t.Fatalf("timeout=%s want %s", client.httpClient.Timeout, defaultHTTPTimeout)
+	}
+	if oauthClient := httpClientOrDefault(nil); oauthClient.Timeout != defaultHTTPTimeout {
+		t.Fatalf("OAuth timeout=%s want %s", oauthClient.Timeout, defaultHTTPTimeout)
+	}
+}

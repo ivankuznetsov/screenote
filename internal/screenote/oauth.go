@@ -44,9 +44,7 @@ func DiscoverOAuth(ctx context.Context, baseURL string, httpClient *http.Client)
 	if err != nil {
 		return metadata, err
 	}
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient = httpClientOrDefault(httpClient)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return metadata, err
@@ -80,9 +78,7 @@ func RegisterOAuthClient(ctx context.Context, metadata OAuthMetadata, redirectUR
 	if err != nil {
 		return registration, err
 	}
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient = httpClientOrDefault(httpClient)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metadata.RegistrationEndpoint, bytes.NewReader(raw))
 	if err != nil {
 		return registration, err
@@ -179,9 +175,7 @@ func metadataURL(baseURL string) (string, error) {
 
 func tokenRequest(ctx context.Context, endpoint string, form url.Values, httpClient *http.Client) (TokenResponse, error) {
 	var token TokenResponse
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient = httpClientOrDefault(httpClient)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return token, err
