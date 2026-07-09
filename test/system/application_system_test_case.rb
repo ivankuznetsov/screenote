@@ -9,8 +9,12 @@ require "capybara-playwright-driver"
 # API guidelines:
 #   - Prefer Capybara methods (find, assert_selector, fill_in, click_button) for most interactions.
 #   - Use with_playwright_page for hover, response interception, or low-level mouse/keyboard.
-Capybara.run_server = false
-Capybara.app_host = ENV.fetch("APP_HOST", "http://localhost:3005")
+if ENV["CAPYBARA_RUN_SERVER"] == "true"
+  Capybara.run_server = true
+else
+  Capybara.run_server = false
+  Capybara.app_host = ENV.fetch("APP_HOST", "http://localhost:3005")
+end
 Capybara.default_max_wait_time = 15
 Capybara.save_path = "tmp/capybara"
 

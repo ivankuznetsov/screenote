@@ -47,9 +47,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install system packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
-
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -134,6 +131,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -148,6 +148,7 @@ jobs:
       - name: Run System Tests
         env:
           RAILS_ENV: test
+          CAPYBARA_RUN_SERVER: "true"
           # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test:system
