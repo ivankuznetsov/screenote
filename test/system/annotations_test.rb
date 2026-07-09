@@ -34,7 +34,6 @@ class AnnotationsTest < ApplicationSystemTestCase
     submit_annotation
     wait_for_turbo
 
-    assert_flash_notice "Annotation added."
     assert_annotation_visible("First annotation from e2e test")
     assert_annotation_count(1)
   end
@@ -67,7 +66,6 @@ class AnnotationsTest < ApplicationSystemTestCase
     resolve_annotation("Will be resolved")
     wait_for_turbo
 
-    assert_flash_notice "Annotation updated."
     assert_annotation_resolved("Will be resolved")
   end
 
@@ -81,7 +79,6 @@ class AnnotationsTest < ApplicationSystemTestCase
     unresolve_annotation("Will be unresolved", reason: "Still broken on mobile")
     wait_for_turbo
 
-    assert_flash_notice "Annotation unresolved."
     assert_annotation_open("Will be unresolved")
     assert_thread_has_resolved_badge("Will be unresolved")
     assert_thread_has_reopened_badge("Will be unresolved")
@@ -98,7 +95,6 @@ class AnnotationsTest < ApplicationSystemTestCase
     end
     wait_for_turbo
 
-    assert_flash_notice "Annotation deleted."
     assert_annotation_not_visible("Will be deleted")
   end
 

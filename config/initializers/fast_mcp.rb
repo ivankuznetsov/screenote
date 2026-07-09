@@ -109,6 +109,18 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
 
     Current.mcp_user = user
     Current.mcp_oauth_token = access_token
+
+    if access_token.project_id.present?
+      project = user.projects.find_by(id: access_token.project_id)
+      unless project
+        Rails.logger.error("MCP auth: OAuth token #{access_token.id} references inaccessible project #{access_token.project_id}")
+        Honeybadger.notify("OAuth token references inaccessible project", context: { token_id: access_token.id, project_id: access_token.project_id })
+        return false
+      end
+
+      Current.mcp_project = project
+    end
+
     true
   end
 

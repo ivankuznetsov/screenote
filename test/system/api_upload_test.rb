@@ -43,7 +43,7 @@ class ApiUploadTest < ApplicationSystemTestCase
     assert body["screenshot_id"].present?, "Response should include screenshot_id"
     assert body["annotate_url"].present?, "Response should include annotate_url"
 
-    visit body["annotate_url"]
+    visit_app_url body["annotate_url"]
     assert_selector '[data-testid="screenshot-workspace"]', wait: 10
   end
 
@@ -85,7 +85,7 @@ class ApiUploadTest < ApplicationSystemTestCase
   private
 
   def api_upload_screenshot(token:, image_path:, title: nil)
-    uri = URI("#{Capybara.app_host}/api/v1/screenshots")
+    uri = URI("#{app_base_url}/api/v1/screenshots")
 
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{token}" if token

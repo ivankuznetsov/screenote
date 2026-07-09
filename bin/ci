@@ -1,4 +1,18 @@
 #!/usr/bin/env ruby
+require "rbconfig"
+
+APP_ROOT = File.expand_path("..", __dir__)
+ENV["BUNDLE_GEMFILE"] ||= File.join(APP_ROOT, "Gemfile")
+ENV["BUNDLE_PATH"] ||= File.join(APP_ROOT, "vendor", "bundle")
+
+def bundle_command
+  @bundle_command ||= [ RbConfig.ruby, Gem.bin_path("bundler", "bundle") ]
+end
+
+Dir.chdir(APP_ROOT) do
+  system(*bundle_command, "check") || system(*bundle_command, "install", exception: true)
+end
+
 require_relative "../config/boot"
 require "active_support/continuous_integration"
 

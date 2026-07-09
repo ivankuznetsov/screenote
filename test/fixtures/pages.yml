@@ -9,3 +9,7 @@ alice_page_pending:
 bob_page:
   name: "Bob's Screenshot"
   project: bob_project
+
+demo_home:
+  name: "Home"
+  project: demo_project
