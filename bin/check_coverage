@@ -1,0 +1,48 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+
+result_path = ARGV.fetch(0, "coverage/.resultset.json")
+minimum = Float(ENV.fetch("MIN_COVERAGE", "100"))
+
+abort "Coverage result not found: #{result_path}" unless File.exist?(result_path)
+
+resultset = JSON.parse(File.read(result_path))
+covered_lines = {}
+covered_branches = {}
+
+resultset.each_value do |result|
+  result.fetch("coverage").each do |file, coverage|
+    coverage.fetch("lines", []).each_with_index do |count, index|
+      next if count.nil?
+
+      key = [ file, index + 1 ]
+      covered_lines[key] ||= false
+      covered_lines[key] ||= count.positive?
+    end
+
+    coverage.fetch("branches", {}).each do |branch_id, branch_counts|
+      branch_counts.each do |edge_id, count|
+        key = [ file, branch_id, edge_id ]
+        covered_branches[key] ||= false
+        covered_branches[key] ||= count.positive?
+      end
+    end
+  end
+end
+
+abort "No instrumented Ruby lines found in #{result_path}" if covered_lines.empty?
+
+line_percent = covered_lines.values.count(true).fdiv(covered_lines.length) * 100
+branch_percent =
+  if covered_branches.empty?
+    100.0
+  else
+    covered_branches.values.count(true).fdiv(covered_branches.length) * 100
+  end
+
+puts format("Line coverage: %.2f%%", line_percent)
+puts format("Branch coverage: %.2f%%", branch_percent)
+
+exit 1 if line_percent < minimum || branch_percent < minimum

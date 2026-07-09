@@ -1,11 +1,27 @@
 ENV["RAILS_ENV"] ||= "test"
+
+if ENV["COVERAGE"] == "true"
+  require "simplecov"
+
+  SimpleCov.command_name "rails-test-#{ENV.fetch('TEST_ENV_NUMBER', '0')}"
+  SimpleCov.minimum_coverage 100
+  SimpleCov.enable_coverage :branch
+  SimpleCov.minimum_coverage line: 100, branch: 100
+  SimpleCov.start "rails" do
+    add_filter "/test/"
+    add_filter "/config/"
+    add_filter "/db/"
+    add_filter "/vendor/"
+  end
+end
+
 require_relative "../config/environment"
 require "rails/test_help"
 require_relative "support/oauth_test_helper"
 
 module ActiveSupport
   class TestCase
-    parallelize(workers: :number_of_processors)
+    parallelize(workers: ENV["COVERAGE"] == "true" ? 1 : :number_of_processors)
     fixtures :all
   end
 end

@@ -10,7 +10,12 @@ CI.run do
   step "Security: Gem audit", "bin/bundler-audit"
   step "Security: Importmap vulnerability audit", "bin/importmap audit"
   step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
-  step "Tests: Rails", "bin/rails test"
+  if ENV["REQUIRE_COVERAGE"] == "true"
+    step "Tests: Rails coverage", "env COVERAGE=true bin/rails test && bin/check_coverage"
+  else
+    step "Tests: Rails", "bin/rails test"
+  end
+
   step "Tests: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
 
   if File.exist?("go.mod")
