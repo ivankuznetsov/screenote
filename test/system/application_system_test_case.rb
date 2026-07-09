@@ -78,4 +78,9 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     current_uri = URI.parse(page.current_url)
     "#{current_uri.scheme}://#{current_uri.host}:#{current_uri.port}"
   end
+
+  def visit_app_url(url)
+    uri = URI.parse(url)
+    visit uri.request_uri
+  end
 end

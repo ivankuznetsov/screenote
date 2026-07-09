@@ -43,7 +43,7 @@ class ApiUploadTest < ApplicationSystemTestCase
     assert body["screenshot_id"].present?, "Response should include screenshot_id"
     assert body["annotate_url"].present?, "Response should include annotate_url"
 
-    visit body["annotate_url"]
+    visit_app_url body["annotate_url"]
     assert_selector '[data-testid="screenshot-workspace"]', wait: 10
   end
 

@@ -49,13 +49,20 @@ class SubscriptionsFreeUserTest < ApplicationSystemTestCase
   test "clicking upgrade redirects to Stripe Checkout" do
     visit_billing
 
-    Stripe::Checkout::Session.stub(:create, OpenStruct.new(url: "https://checkout.stripe.com/c/test_session")) do
+    original_create = Stripe::Checkout::Session.method(:create)
+    Stripe::Checkout::Session.define_singleton_method(:create) do |*_args|
+      OpenStruct.new(url: "https://checkout.stripe.com/c/test_session")
+    end
+
+    begin
       with_playwright_page do |pw_page|
         pw_page.expect_navigation(url: /checkout\.stripe\.com/, timeout: 30_000) do
           pw_page.locator('[data-testid="upgrade-btn"]').click
         end
         assert pw_page.url.include?("checkout.stripe.com"), "Expected redirect to Stripe Checkout, got: #{pw_page.url}"
       end
+    ensure
+      Stripe::Checkout::Session.define_singleton_method(:create, original_create)
     end
   end
 

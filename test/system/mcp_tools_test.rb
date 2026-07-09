@@ -84,7 +84,7 @@ class McpToolsTest < ApplicationSystemTestCase
     assert annotation["id"].present?, "Response should include annotation id"
     assert_equal comment, annotation["comment"], "Annotation comment should match"
 
-    visit screenshot_result["annotate_url"]
+    visit_app_url screenshot_result["annotate_url"]
     assert_on_screenshot_show
     assert_annotation_visible(comment)
   end
