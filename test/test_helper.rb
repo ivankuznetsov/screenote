@@ -21,7 +21,16 @@ require_relative "support/oauth_test_helper"
 
 module ActiveSupport
   class TestCase
-    parallelize(workers: ENV["COVERAGE"] == "true" ? 1 : :number_of_processors)
+    workers =
+      if ENV["COVERAGE"] == "true"
+        1
+      elsif ENV["PARALLEL_WORKERS"]
+        ENV["PARALLEL_WORKERS"].to_i
+      else
+        :number_of_processors
+      end
+
+    parallelize(workers: workers)
     fixtures :all
   end
 end
