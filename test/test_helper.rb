@@ -23,4 +23,15 @@ end
 
 class ActiveSupport::TestCase
   include OauthTestHelper
+
+  def require_vips!
+    require "vips"
+    Vips::Image.black(1, 1)
+  rescue LoadError => e
+    skip "libvips is required for image-processing tests: #{e.message}"
+  rescue StandardError => e
+    raise unless defined?(FFI::NotFoundError) && e.is_a?(FFI::NotFoundError)
+
+    skip "libvips is required for image-processing tests: #{e.message}"
+  end
 end

@@ -3,6 +3,8 @@
 CI.run do
   step "Setup", "bin/setup --skip-server"
 
+  step "Whitespace", "git diff --check"
+
   step "Style: Ruby", "bin/rubocop"
 
   step "Security: Gem audit", "bin/bundler-audit"
@@ -10,6 +12,10 @@ CI.run do
   step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
   step "Tests: Rails", "bin/rails test"
   step "Tests: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
+
+  if File.exist?("go.mod")
+    step "Tests: Go", "env GOFLAGS=-mod=mod go test ./..."
+  end
 
   # Optional: Run system tests
   # step "Tests: System", "bin/rails test:system"
