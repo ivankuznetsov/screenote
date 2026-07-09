@@ -12,9 +12,13 @@ class ApplicationTool < FastMcp::Tool
   end
 
   # Resolves the project for the current request. API key auth pre-sets
-  # Current.mcp_project; OAuth auth requires an explicit project_id.
+  # Current.mcp_project; user-scoped OAuth auth requires an explicit project_id.
   def resolve_project(project_id)
-    return current_project if current_project
+    if current_project
+      return current_project if project_id.blank? || project_id.to_i == current_project.id
+
+      return nil
+    end
 
     unless project_id
       return nil
@@ -37,6 +41,10 @@ class ApplicationTool < FastMcp::Tool
       end
     end
     nil
+  end
+
+  def project_scoped_oauth?
+    Current.mcp_api_key.nil? && Current.mcp_oauth_token&.project_id.present? && current_project.present?
   end
 
   def with_error_handling

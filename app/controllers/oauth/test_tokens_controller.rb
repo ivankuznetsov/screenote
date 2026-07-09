@@ -28,8 +28,8 @@ module Oauth
       return head(:not_found) unless authorized?
 
       user = find_or_create_test_user
-      find_or_create_test_project(user)
-      token = mint_token(user)
+      project = find_or_create_test_project(user)
+      token = mint_token(user, project)
 
       render json: {
         access_token: token.token,
@@ -74,10 +74,11 @@ module Oauth
       user.owned_projects.find_or_create_by!(name: TEST_PROJECT_NAME)
     end
 
-    def mint_token(user)
+    def mint_token(user, project)
       Doorkeeper::AccessToken.create!(
         application: test_application,
         resource_owner_id: user.id,
+        project_id: project.id,
         scopes: TOKEN_SCOPES,
         expires_in: Doorkeeper.config.access_token_expires_in,
         use_refresh_token: false

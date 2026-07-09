@@ -9,7 +9,12 @@ class ListProjectsTool < ApplicationTool
 
   def call
     with_error_handling do
-      projects = current_user.projects.order(:name)
+      projects =
+        if project_scoped_oauth?
+          Project.where(id: current_project.id)
+        else
+          current_user.projects.order(:name)
+        end
 
       {
         projects: projects.map do |p|

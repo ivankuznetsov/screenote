@@ -51,9 +51,10 @@ module Oauth
       assert_not access_token.revoked?, "Token should not be revoked"
       assert_not access_token.expired?, "Token should not be expired"
       assert_equal %w[mcp_read mcp_write].sort, access_token.scopes.to_a.sort
+      assert_equal test_project.id, access_token.project_id, "Token should be scoped to the fixed test project"
     end
 
-    test "token resolves through validate_oauth_token to the fixed test user" do
+    test "token resolves through validate_oauth_token to the fixed test user and project" do
       post oauth_test_token_path, headers: { "Authorization" => "Bearer #{SECRET}" }
       raw = JSON.parse(response.body)["access_token"]
 
@@ -64,23 +65,45 @@ module Oauth
       assert result, "ProjectAuthTransport#valid_token? should accept the minted token"
       assert_equal TestTokensController::TEST_USER_EMAIL, Current.mcp_user.email,
         "valid_token? should resolve mcp_user to the fixed test identity"
+      assert_equal test_project, Current.mcp_project,
+        "Project-scoped token should resolve mcp_project to the fixed test project"
       assert_nil Current.mcp_api_key, "OAuth path must not set mcp_api_key"
     end
 
-    test "minted token's user owns exactly the fixed test project (tool resolution path)" do
+    test "minted token can only resolve the fixed project through tools" do
       post oauth_test_token_path, headers: { "Authorization" => "Bearer #{SECRET}" }
       raw = JSON.parse(response.body)["access_token"]
 
       transport = ProjectAuthTransport.allocate
       transport.send(:valid_token?, raw)
 
-      # This is how ApplicationTool#resolve_project derives the project for an
-      # OAuth-authenticated MCP request: current_user.projects.find_by(id:).
-      project = Current.mcp_user.projects.find_by(name: TestTokensController::TEST_PROJECT_NAME)
-      assert project.present?, "The test user should own the fixed test project"
+      project = test_project
+      other_project = Current.mcp_user.owned_projects.create!(name: "not-for-test-token")
+
       assert_equal Current.mcp_user, project.creator, "Test user is the project creator"
       assert_equal :owner, project.role_for(Current.mcp_user),
         "Test user is an owner member (so user.projects includes it)"
+
+      fixed_result = JSON.parse(ListScreenshotsTool.new.call(project_id: project.id))
+      assert fixed_result.key?("screenshots"), "Fixed project should be usable"
+
+      other_result = JSON.parse(ListScreenshotsTool.new.call(project_id: other_project.id))
+      assert_equal "forbidden", other_result["error"], "Project-scoped token must not access another owned project"
+    end
+
+    test "minted token cannot list or create projects outside the fixed project" do
+      post oauth_test_token_path, headers: { "Authorization" => "Bearer #{SECRET}" }
+      raw = JSON.parse(response.body)["access_token"]
+
+      transport = ProjectAuthTransport.allocate
+      transport.send(:valid_token?, raw)
+      Current.mcp_user.owned_projects.create!(name: "hidden-from-test-token")
+
+      listed = JSON.parse(ListProjectsTool.new.call)
+      assert_equal [ test_project.id ], listed["projects"].map { |project| project["id"] }
+
+      created = JSON.parse(CreateProjectTool.new.call(name: "blocked"))
+      assert_equal "forbidden", created["error"]
     end
 
     # --- Gating: fail closed ---
@@ -148,6 +171,13 @@ module Oauth
       assert_not_equal first, second, "Each call should mint a distinct token"
       assert Doorkeeper::AccessToken.by_token(first).present?
       assert Doorkeeper::AccessToken.by_token(second).present?
+    end
+
+    private
+
+    def test_project
+      User.find_by!(email: TestTokensController::TEST_USER_EMAIL)
+        .owned_projects.find_by!(name: TestTokensController::TEST_PROJECT_NAME)
     end
   end
 end

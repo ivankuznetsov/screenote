@@ -3,7 +3,7 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-09
 tags: [routes, api, endpoints, auth]
 ---
 
@@ -142,6 +142,7 @@ The upload route keeps the parent screenshot URL shape, but the signed token res
 | POST | `/oauth/token` | Token endpoint |
 | POST | `/oauth/revoke` | Token revocation |
 | POST | `/oauth/register` | Dynamic client registration (RFC 7591) |
+| POST | `/oauth/test_token` | Secret-gated non-interactive MCP CI token minting |
 | GET | `/.well-known/oauth-protected-resource` | Resource metadata (RFC 9728) |
 | GET | `/.well-known/oauth-authorization-server` | Server metadata (RFC 8414) |
 

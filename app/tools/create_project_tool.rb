@@ -10,6 +10,10 @@ class CreateProjectTool < ApplicationTool
 
   def call(name:)
     with_error_handling do
+      if project_scoped_oauth?
+        return { error: "forbidden", message: "Project-scoped tokens cannot create projects" }.to_json
+      end
+
       project = current_user.owned_projects.create!(name: name)
 
       {
