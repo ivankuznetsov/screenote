@@ -4,6 +4,8 @@ require "test_helper"
 
 class AnnotationCropServiceTest < ActiveSupport::TestCase
   setup do
+    require_vips!
+
     @screenshot_image = screenshot_images(:alice_screenshot_desktop)
     @screenshot_image.update!(width: 400, height: 300)
     @screenshot_image.image.attach(
