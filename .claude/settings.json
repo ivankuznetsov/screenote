@@ -12,6 +12,10 @@
       },
       {
         "matcher": "*",
+        "hooks": []
+      },
+      {
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
