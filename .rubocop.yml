@@ -1,8 +1,10 @@
 # Omakase Ruby styling for Rails
 inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 
-# Migrations are historical artifacts — don't let cosmetic cops rewrite
-# what already ran in production.
+# Migrations and schema dumps are generated/historical artifacts. Don't let
+# cosmetic cops rewrite what already ran in production or what Rails emits.
 Layout/SpaceInsideArrayLiteralBrackets:
   Exclude:
     - 'db/migrate/**/*.rb'
+    - 'db/schema.rb'
+    - 'db/*_schema.rb'
