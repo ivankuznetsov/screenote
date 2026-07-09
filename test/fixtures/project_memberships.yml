@@ -17,3 +17,8 @@ bob_member_of_alice_project:
   project: alice_project
   user: bob
   role: 0
+
+test_user_owns_demo_project:
+  project: demo_project
+  user: test_user
+  role: 1

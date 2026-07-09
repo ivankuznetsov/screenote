@@ -8,6 +8,8 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
   end
 
   test "sets dimensions and status to ready for ScreenshotImage with valid image" do
+    require_vips!
+
     screenshot = @page.screenshots.create!(title: "Dimension Test")
     si = screenshot.screenshot_images.create!(viewport: :desktop)
     si.image.attach(
@@ -41,6 +43,8 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
   end
 
   test "forwards legacy Screenshot argument to its primary ScreenshotImage" do
+    require_vips!
+
     si = screenshot_images(:alice_screenshot_desktop)
     si.image.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
@@ -56,8 +60,9 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
   test "raises when Screenshot has no primary_image so Solid Queue retries" do
     screenshot = @page.screenshots.create!(title: "Orphan")
 
-    assert_raises(RuntimeError, /no primary_image/) do
+    error = assert_raises(RuntimeError) do
       ScreenshotDimensionJob.perform_now(screenshot)
     end
+    assert_match(/no primary_image/, error.message)
   end
 end

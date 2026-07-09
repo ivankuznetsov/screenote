@@ -3,7 +3,7 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-09
 tags: [routes, api, endpoints, auth]
 ---
 
@@ -119,12 +119,19 @@ All require authentication unless noted.
 
 ## REST API Routes
 
-### API v1 (Bearer token auth via ApiKey)
+### API v1 (Bearer token auth via API key or OAuth)
 
 | Method | Path | Action | Auth |
 |--------|------|--------|------|
-| POST | `/api/v1/screenshots` | Upload screenshot | API Key |
-| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations | API Key |
+| GET | `/api/v1/projects` | List API-key project or OAuth user's member projects | API key or OAuth `mcp_read` |
+| GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API key or OAuth `mcp_read` |
+| GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
+| POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API key or OAuth `mcp_write` |
+| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
+| GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API key or OAuth `mcp_read` |
+| POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored or OAuth-user-authored annotation comment | API key or OAuth `mcp_write` |
+
+API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries. OAuth project-scoped calls require explicit `project_id` where the route does not already carry it, and the authenticated user must be a project member.
 
 ### Upload API (Token-based, no persistent auth)
 
@@ -142,6 +149,7 @@ The upload route keeps the parent screenshot URL shape, but the signed token res
 | POST | `/oauth/token` | Token endpoint |
 | POST | `/oauth/revoke` | Token revocation |
 | POST | `/oauth/register` | Dynamic client registration (RFC 7591) |
+| POST | `/oauth/test_token` | Secret-gated non-interactive MCP CI token minting |
 | GET | `/.well-known/oauth-protected-resource` | Resource metadata (RFC 9728) |
 | GET | `/.well-known/oauth-authorization-server` | Server metadata (RFC 8414) |
 

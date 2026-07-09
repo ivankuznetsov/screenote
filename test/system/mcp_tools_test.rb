@@ -84,7 +84,7 @@ class McpToolsTest < ApplicationSystemTestCase
     assert annotation["id"].present?, "Response should include annotation id"
     assert_equal comment, annotation["comment"], "Annotation comment should match"
 
-    visit screenshot_result["annotate_url"]
+    visit_app_url screenshot_result["annotate_url"]
     assert_on_screenshot_show
     assert_annotation_visible(comment)
   end
@@ -229,7 +229,7 @@ class McpToolsTest < ApplicationSystemTestCase
   end
 
   def call_mcp_tool(token:, tool_name:, arguments: {})
-    uri = URI("#{Capybara.app_host}/mcp/messages")
+    uri = URI("#{app_base_url}/mcp/messages")
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{token}" if token
     request["Content-Type"] = "application/json"

@@ -13,6 +13,11 @@ Rails.application.routes.draw do
   # Dynamic Client Registration (RFC 7591)
   post "oauth/register", to: "oauth/registrations#create"
 
+  # Non-interactive MCP test-token endpoint (hive OAuth/MCP integration tests).
+  # Gated entirely on ENV["SCREENOTE_MCP_TEST_TOKEN_SECRET"]; responds 404 when
+  # the secret is unset or unmatched. See Oauth::TestTokensController.
+  post "oauth/test_token", to: "oauth/test_tokens#create"
+
   resources :projects do
     resources :pages, only: %i[new create]
     resources :api_keys, only: %i[index new create destroy]
@@ -41,8 +46,15 @@ Rails.application.routes.draw do
   namespace :api do
     put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
     namespace :v1 do
+      resources :projects, only: [ :index ] do
+        resources :pages, only: [ :index ]
+        resources :screenshots, only: [ :index ]
+      end
       resources :screenshots, only: [ :create ] do
         resources :annotations, only: [ :index ]
+      end
+      resources :annotations, only: [ :show ] do
+        resources :comments, controller: "annotation_comments", only: [ :create ]
       end
     end
   end

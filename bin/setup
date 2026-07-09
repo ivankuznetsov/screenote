@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 require "fileutils"
+require "rbconfig"
 
 APP_ROOT = File.expand_path("..", __dir__)
 
@@ -7,13 +8,19 @@ def system!(*args)
   system(*args, exception: true)
 end
 
+def bundle_command
+  @bundle_command ||= [ RbConfig.ruby, Gem.bin_path("bundler", "bundle") ]
+end
+
 FileUtils.chdir APP_ROOT do
+  ENV["BUNDLE_PATH"] ||= File.join(APP_ROOT, "vendor", "bundle")
+
   # This script is a way to set up or update your development environment automatically.
   # This script is idempotent, so that you can run it at any time and get an expectable outcome.
   # Add necessary setup steps to this file.
 
   puts "== Installing dependencies =="
-  system("bundle check") || system!("bundle install")
+  system(*bundle_command, "check") || system!(*bundle_command, "install")
 
   # puts "\n== Copying sample files =="
   # unless File.exist?("config/database.yml")

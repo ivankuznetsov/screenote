@@ -11,3 +11,17 @@ bob_free:
   stripe_customer_id: cus_bob_test_789
   plan: 0
   status: 0
+
+test_user_pro:
+  user: test_user
+  stripe_customer_id: cus_test_user_seed
+  stripe_subscription_id: sub_test_user_seed
+  plan: 1
+  status: 1
+  current_period_end: <%= 1.year.from_now %>
+
+free_user_free:
+  user: free_user
+  stripe_customer_id: cus_free_user_seed
+  plan: 0
+  status: 0

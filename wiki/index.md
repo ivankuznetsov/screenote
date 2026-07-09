@@ -3,15 +3,15 @@ title: screenote Wiki
 type: index
 source: wiki/**/*.md
 created: 2026-05-14
-updated: 2026-05-14
+updated: 2026-07-08
 tags: [index, wiki]
 ---
 
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 36
-Updated: 2026-05-14
+Page count: 38
+Updated: 2026-07-09
 
 ## Core Architecture
 
@@ -24,6 +24,7 @@ Updated: 2026-05-14
 - [[gems]] — Gem choices and rationale.
 - [[commands]] — Controller/command source inventory.
 - [[mcp-tools]] — FastMCP transport/auth behavior and current tool inventory.
+- [[api-cli]] — Go REST CLI commands, configuration, JSON/error contract, and deferred surface area.
 
 ## Controllers And Services
 
@@ -66,3 +67,4 @@ Updated: 2026-05-14
 - Managed config: `.llm-wiki/config.json`
 - Headless refresh: `.llm-wiki/refresh-wiki.sh`
 - Post-commit refresh: `.llm-wiki/post-commit-refresh.sh`
+- [[llm-wiki-maintenance]] — Managed wiki refresh scripts, log fragments, worktree-safe post-commit behavior, and cross-project wiki lookup notes.
