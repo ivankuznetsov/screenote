@@ -151,6 +151,7 @@ jobs:
           RAILS_ENV: test
           CAPYBARA_RUN_SERVER: "true"
           PARALLEL_WORKERS: "1"
+          TESTOPTS: "--verbose"
           # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test:system
