@@ -81,7 +81,7 @@ module Api
           params: { image: @image, title: "Test" }
 
         assert_response :unauthorized
-        assert_equal "Invalid or missing API key", response.parsed_body["error"]
+        assert_equal "Invalid or missing bearer token", response.parsed_body["error"]
         assert_equal "unauthorized", response.parsed_body["code"]
       end
 
@@ -161,10 +161,95 @@ module Api
         assert @api_key.reload.last_used_at > old_last_used, "last_used_at should be updated"
       end
 
+      test "oauth read token can list screenshots for a member project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_project_screenshots_path(@project), headers: auth_header(token.token)
+
+        assert_response :success
+        assert_includes response.parsed_body["screenshots"].map { |screenshot| screenshot["id"] }, screenshots(:alice_screenshot).id
+      end
+
+      test "oauth read token cannot create screenshots" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        assert_no_difference "Screenshot.count" do
+          post api_v1_screenshots_path,
+            params: { image: @image, title: "No write", project_id: @project.id },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :forbidden
+        assert_equal "insufficient_scope", response.parsed_body["code"]
+      end
+
+      test "oauth write token creates screenshots for member project with explicit project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        assert_difference "Screenshot.count", 1 do
+          post api_v1_screenshots_path,
+            params: { image: @image, title: "OAuth Upload", project_id: @project.id },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :created
+        assert_equal @project.id, Screenshot.find(response.parsed_body["screenshot_id"]).project.id
+      end
+
+      test "oauth project scoped create requires explicit project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        assert_no_difference "Screenshot.count" do
+          post api_v1_screenshots_path,
+            params: { image: @image, title: "Missing project" },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :unprocessable_entity
+        assert_equal "missing_project", response.parsed_body["code"]
+      end
+
+      test "oauth token cannot access non-member project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_project_screenshots_path(projects(:bob_project)), headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      end
+
+      test "oauth write token cannot create screenshots in a non-member project" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        assert_no_difference "Screenshot.count" do
+          post api_v1_screenshots_path,
+            params: { image: @image, title: "Trespass", project_id: projects(:bob_project).id },
+            headers: auth_header(token.token)
+        end
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      end
+
+      test "oauth requests do not touch api key last_used_at" do
+        @api_key.update_column(:last_used_at, 1.hour.ago)
+        old_last_used = @api_key.last_used_at
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+
+        get api_v1_project_screenshots_path(@project), headers: auth_header(token.token)
+
+        assert_response :success
+        assert_equal old_last_used.to_i, @api_key.reload.last_used_at.to_i
+      end
+
       private
 
       def auth_header(token)
         { "Authorization" => "Bearer #{token}" }
+      end
+
+      def oauth_token(user:, scopes: "mcp_read", expires_in: 1.year, revoked_at: nil)
+        create_oauth_token(application: create_oauth_application, user: user, scopes: scopes, expires_in: expires_in, revoked_at: revoked_at)
       end
     end
   end

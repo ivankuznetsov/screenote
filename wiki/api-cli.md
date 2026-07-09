@@ -3,19 +3,19 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-07-08
+updated: 2026-07-09
 tags: [cli, api, rest, agents]
 ---
 
 # API CLI
 
-TLDR: `cmd/screenote` is an installable Go CLI for shell and CI automation. It talks to REST `api/v1`, emits JSON to stdout by default, emits stable JSON errors to stderr, and uses project API keys.
+TLDR: `cmd/screenote` is an installable Go CLI for shell and CI automation. It talks to REST `api/v1`, emits JSON to stdout by default, emits stable JSON errors to stderr, and uses OAuth bearer tokens.
 
 Source: `README.md`, `cmd/screenote`, `internal/cli`, `internal/screenote`, `app/controllers/api/v1`
 
 ## Role
 
-MCP remains the richer agent protocol with OAuth/API-key transport and tool semantics. The CLI is the portable shell contract for non-MCP agents and CI jobs. See [[mcp-tools]] and [[routes]].
+MCP remains the richer agent protocol with OAuth/API-key transport and tool semantics. The CLI is the portable shell contract for non-MCP agents and CI jobs. CLI-facing auth is OAuth-first; server-side API keys remain available for REST/MCP compatibility. See [[mcp-tools]] and [[routes]].
 
 ## Install
 
@@ -33,25 +33,46 @@ GOFLAGS=-mod=mod go test ./...
 
 Precedence:
 
-1. Flags: `--api-key`, `--base-url`, `--project`
-2. Environment: `SCREENOTE_API_KEY`, `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
+1. Flags: `--token`, `--base-url`, `--project`
+2. Environment: `SCREENOTE_TOKEN`, `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
 3. Config: `~/.config/screenote/config.toml`
+4. Stored OAuth credentials from `screenote login`
 
-`screenote config` prints resolved config as JSON. `screenote config set` writes values noninteractively. Commands never prompt unless a future command explicitly implements `--interactive`.
+`screenote config` prints resolved config as JSON, reports `token_set` plus the token source, and never prints either explicit tokens or stored login secrets. `screenote config set` writes values noninteractively. Config writes enforce owner-only permissions even for a pre-existing hand-authored file. Ordinary commands never prompt or open a browser; only explicit `screenote login` starts browser-based OAuth.
 
 The base URL should be set explicitly. Current docs use localhost, staging/self-hosted URLs, or the canonical production host `https://screenote.ai` from `config/deploy.yml`.
+
+CI and agents should use a deterministic bearer token:
+
+```sh
+screenote config set --base-url https://screenote.ai --token "$SCREENOTE_TOKEN" --project 7
+```
+
+Developers can use the OAuth authorization-code flow with PKCE and loopback redirect:
+
+```sh
+screenote --base-url https://screenote.ai login
+screenote logout
+```
+
+Login stores the authorized base URL alongside its single credential set, so a `--base-url` or environment override becomes the configured server for later commands. When browser launch is unavailable, stderr receives a JSON `browser_open_failed` message with `authorization_url` for manual continuation. Default REST and OAuth HTTP clients use a 30-second timeout; command cancellation still propagates through OAuth discovery, registration, exchange, and refresh.
 
 ## Commands
 
 ```sh
 screenote project list
-screenote page list [--project ID]
-screenote screenshot list [--project ID] [--page ID] [--status pending|ready|failed] [--limit N] [--offset N]
-screenote screenshot create --title TITLE [--page ID_OR_NAME] [--file PATH|-]
-screenote annotation list [--project ID] [--screenshot ID] [--status open|resolved] [--viewport desktop|tablet|mobile]
-screenote annotation get --annotation ID
-screenote comment add --annotation ID --body TEXT
+screenote config
+screenote login
+screenote logout
+screenote page list --project ID
+screenote screenshot list --project ID [--page ID] [--status pending|ready|failed] [--limit N] [--offset N]
+screenote screenshot create --project ID --title TITLE [--page ID_OR_NAME] [--file PATH|-]
+screenote annotation list --project ID [--screenshot ID] [--status open|resolved] [--viewport desktop|tablet|mobile]
+screenote annotation get --project ID --annotation ID
+screenote comment add --project ID --annotation ID --body TEXT
 ```
+
+User-global commands are `project list`, `config`, `login`, and `logout`. Project-scoped commands require project selection through `--project`, `SCREENOTE_PROJECT`, or config `project`; missing project is a JSON stderr usage/config error with code `missing_project` and exit code 2.
 
 `annotation list` without `--screenshot` lists annotations across all screenshots in the resolved project. The CLI pages through screenshots and per-screenshot annotations, skips screenshots that become inaccessible during aggregation, reports the aggregate total, and applies `--limit`/`--offset` to the aggregate result.
 
@@ -67,7 +88,7 @@ Successful commands write JSON to stdout. Errors write this shape to stderr:
 {"code":"missing_base_url","error":"base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url"}
 ```
 
-Cobra flag parse errors use the stable `invalid_flag` usage error. Invalid base URLs use `invalid_base_url`.
+Cobra flag parse errors use the stable `invalid_flag` usage error. Invalid base URLs use `invalid_base_url`. Missing bearer credentials use `missing_token`. Invalid or expired tokens return exit code 3.
 
 Exit codes:
 
@@ -82,4 +103,4 @@ Exit codes:
 
 ## Deferred
 
-`annotation resolve`, `annotation reopen`, OAuth browser login, daemon/watch mode, member management, and required multi-viewport upload are future work rather than v1 ship criteria.
+`annotation resolve`, `annotation reopen`, daemon/watch mode, member management, and required multi-viewport upload are future work rather than v1 ship criteria.

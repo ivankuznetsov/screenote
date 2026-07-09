@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
+	"time"
 
 	appconfig "github.com/ivankuznetsov/screenote/internal/config"
 	"github.com/ivankuznetsov/screenote/internal/screenote"
@@ -13,13 +16,12 @@ import (
 )
 
 type app struct {
-	stdin       io.Reader
-	stdout      io.Writer
-	stderr      io.Writer
-	httpClient  *http.Client
-	flags       appconfig.Values
-	configPath  string
-	interactive bool
+	stdin      io.Reader
+	stdout     io.Writer
+	stderr     io.Writer
+	httpClient *http.Client
+	flags      appconfig.Values
+	configPath string
 }
 
 func Execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -49,14 +51,15 @@ func (a *app) rootCommand(_ context.Context) *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return usageError("invalid_flag", err.Error())
 	})
-	root.PersistentFlags().StringVar(&a.flags.APIKey, "api-key", "", "Screenote project API key")
+	root.PersistentFlags().StringVar(&a.flags.Token, "token", "", "Screenote OAuth bearer token")
 	root.PersistentFlags().StringVar(&a.flags.BaseURL, "base-url", "", "Screenote base URL")
 	root.PersistentFlags().StringVar(&a.flags.Project, "project", "", "Screenote project ID")
 	root.PersistentFlags().StringVar(&a.configPath, "config", "", "Config file path")
-	root.PersistentFlags().BoolVar(&a.interactive, "interactive", false, "Allow interactive prompts")
 
 	root.AddCommand(
 		a.configCommand(),
+		a.loginCommand(),
+		a.logoutCommand(),
 		a.projectCommand(),
 		a.pageCommand(),
 		a.screenshotCommand(),
@@ -73,7 +76,7 @@ func (a *app) resolvedConfig() (appconfig.Resolved, error) {
 	})
 }
 
-func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
+func (a *app) client(ctx context.Context) (*screenote.Client, appconfig.Resolved, error) {
 	resolved, err := a.resolvedConfig()
 	if err != nil {
 		return nil, resolved, err
@@ -81,29 +84,104 @@ func (a *app) client() (*screenote.Client, appconfig.Resolved, error) {
 	if resolved.BaseURL == "" {
 		return nil, resolved, usageError("missing_base_url", "base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url")
 	}
-	if resolved.APIKey == "" {
-		return nil, resolved, usageError("missing_api_key", "API key is required; set --api-key, SCREENOTE_API_KEY, or config api_key")
+	if resolved.Token == "" {
+		token, err := a.storedLoginToken(ctx, resolved)
+		if err != nil {
+			return nil, resolved, err
+		}
+		resolved.Token = token
 	}
 
-	client, err := screenote.NewClient(resolved.BaseURL, resolved.APIKey, a.httpClient)
+	client, err := screenote.NewClient(resolved.BaseURL, resolved.Token, a.httpClient)
 	if err != nil {
 		return nil, resolved, usageError("invalid_base_url", err.Error())
 	}
 	return client, resolved, nil
 }
 
-func (a *app) projectID(ctx context.Context, client *screenote.Client, resolved appconfig.Resolved) (string, error) {
-	if resolved.Project != "" {
-		return resolved.Project, nil
+// clientForProject resolves the required project locally before constructing a
+// client, so a missing project fails with the local usage error without first
+// triggering OAuth discovery/refresh network calls or mutating stored config.
+func (a *app) clientForProject(ctx context.Context) (*screenote.Client, string, error) {
+	resolved, err := a.resolvedConfig()
+	if err != nil {
+		return nil, "", err
 	}
-	_, projects, err := client.Projects(ctx)
+	project, err := a.projectID(resolved)
+	if err != nil {
+		return nil, "", err
+	}
+	client, _, err := a.client(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return client, project, nil
+}
+
+func (a *app) storedLoginToken(ctx context.Context, resolved appconfig.Resolved) (string, error) {
+	path := defaultConfigPath(a.configPath)
+	values, err := appconfig.LoadExpanded(path)
 	if err != nil {
 		return "", err
 	}
-	if len(projects.Projects) == 0 {
-		return "", usageError("missing_project", "project is required and could not be inferred from the API key")
+	credentials := values.Login
+	if credentials == nil || credentials.AccessToken == "" {
+		return "", usageError("missing_token", "OAuth bearer token is required; set --token, SCREENOTE_TOKEN, config token, or run screenote login")
 	}
-	return intString(projects.Projects[0].ID), nil
+	if credentials.BaseURL != "" && resolved.BaseURL != "" && !sameBaseURL(credentials.BaseURL, resolved.BaseURL) {
+		return "", authError("invalid_token", "stored login credentials are for a different base URL")
+	}
+	if credentials.ExpiresAt.IsZero() || time.Until(credentials.ExpiresAt) > time.Minute {
+		return credentials.AccessToken, nil
+	}
+	if credentials.RefreshToken == "" {
+		return "", authError("invalid_token", "stored OAuth token is expired and has no refresh token")
+	}
+
+	metadata, err := screenote.DiscoverOAuth(ctx, resolved.BaseURL, a.httpClient)
+	if err != nil {
+		return "", authError("invalid_token", "stored OAuth token refresh failed: "+err.Error())
+	}
+	if credentials.Issuer != "" && metadata.Issuer != credentials.Issuer {
+		return "", authError("invalid_token", "stored OAuth issuer does not match discovered issuer")
+	}
+	response, err := screenote.RefreshAccessToken(ctx, metadata, credentials.ClientID, credentials.RefreshToken, a.httpClient)
+	if err != nil {
+		return "", authError("invalid_token", "stored OAuth token refresh failed: "+err.Error())
+	}
+	credentials.AccessToken = response.AccessToken
+	if response.RefreshToken != "" {
+		credentials.RefreshToken = response.RefreshToken
+	}
+	credentials.ExpiresAt = screenote.ExpiresAt(response, time.Now())
+	values.Login = credentials
+	if err := appconfig.Save(path, values); err != nil {
+		return "", err
+	}
+	return credentials.AccessToken, nil
+}
+
+// sameBaseURL compares two base URLs ignoring trailing-slash differences so a
+// stored "https://x" and a resolved "https://x/" don't force an unnecessary
+// re-login. It fails closed: unparseable inputs fall back to trimmed strings.
+func sameBaseURL(a, b string) bool {
+	return normalizeBaseURL(a) == normalizeBaseURL(b)
+}
+
+func normalizeBaseURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return strings.TrimRight(raw, "/")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	return parsed.String()
+}
+
+func (a *app) projectID(resolved appconfig.Resolved) (string, error) {
+	if resolved.Project != "" {
+		return resolved.Project, nil
+	}
+	return "", usageError("missing_project", "project is required; set --project, SCREENOTE_PROJECT, or config project")
 }
 
 func writeJSON(w io.Writer, value any) error {

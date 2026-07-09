@@ -19,7 +19,7 @@ func TestProjectListCommand(t *testing.T) {
 	}))
 	defer server.Close()
 
-	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "project", "list"}, "")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "project", "list"}, "")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -46,6 +46,9 @@ func TestScreenshotCreateReadsStdin(t *testing.T) {
 		if r.FormValue("title") != "Home" {
 			t.Fatalf("title=%q", r.FormValue("title"))
 		}
+		if r.FormValue("project_id") != "7" {
+			t.Fatalf("project_id=%q", r.FormValue("project_id"))
+		}
 		file, _, err := r.FormFile("image")
 		if err != nil {
 			t.Fatal(err)
@@ -55,7 +58,7 @@ func TestScreenshotCreateReadsStdin(t *testing.T) {
 	}))
 	defer server.Close()
 
-	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "screenshot", "create", "--title", "Home"}, "image")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "--project", "7", "screenshot", "create", "--title", "Home"}, "image")
 	if code != ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -64,30 +67,28 @@ func TestScreenshotCreateReadsStdin(t *testing.T) {
 	}
 }
 
-func TestPageListInfersProject(t *testing.T) {
+func TestPageListRequiresProjectWithoutInference(t *testing.T) {
+	called := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/v1/projects":
-			_, _ = w.Write([]byte(`{"projects":[{"id":42,"name":"Demo"}]}`))
-		case "/api/v1/projects/42/pages":
-			_, _ = w.Write([]byte(`{"pages":[]}`))
-		default:
-			t.Fatalf("unexpected path %s", r.URL.Path)
-		}
+		called = true
+		t.Fatalf("unexpected request %s", r.URL.Path)
 	}))
 	defer server.Close()
 
-	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "page", "list"}, "")
-	if code != ExitOK {
+	stdout, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "page", "list"}, "")
+	if code != ExitUsage {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
-	if !strings.Contains(stdout, `"pages"`) {
-		t.Fatalf("stdout=%s", stdout)
+	if called {
+		t.Fatal("expected no project inference request")
+	}
+	if !strings.Contains(stderr, "missing_project") {
+		t.Fatalf("stdout=%s stderr=%s", stdout, stderr)
 	}
 }
 
 func TestCommentAddValidatesBody(t *testing.T) {
-	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--api-key", "key", "comment", "add", "--annotation", "1"}, "")
+	stdout, stderr, code := runCLI(t, []string{"--base-url", "http://example.test", "--token", "key", "comment", "add", "--annotation", "1"}, "")
 	if code != ExitUsage {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -107,7 +108,7 @@ func TestServerStatusExitCodes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--api-key", "key", "project", "list"}, "")
+	_, stderr, code := runCLI(t, []string{"--base-url", server.URL, "--token", "key", "project", "list"}, "")
 	if code != ExitRateLimited {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}

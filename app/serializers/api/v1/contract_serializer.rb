@@ -4,11 +4,11 @@ module Api
   module V1
     class ContractSerializer
       class << self
-        def project(project)
+        def project(project, screenshot_count: project.screenshots.count)
           {
             id: project.id,
             name: project.name,
-            screenshot_count: project.screenshots.count,
+            screenshot_count: screenshot_count,
             created_at: project.created_at.iso8601
           }
         end

@@ -119,19 +119,19 @@ All require authentication unless noted.
 
 ## REST API Routes
 
-### API v1 (Bearer token auth via ApiKey)
+### API v1 (Bearer token auth via API key or OAuth)
 
 | Method | Path | Action | Auth |
 |--------|------|--------|------|
-| GET | `/api/v1/projects` | List the project bound to the API key | API Key |
-| GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API Key |
-| GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API Key |
-| POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API Key |
-| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API Key |
-| GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API Key |
-| POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored annotation comment | API Key |
+| GET | `/api/v1/projects` | List API-key project or OAuth user's member projects | API key or OAuth `mcp_read` |
+| GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API key or OAuth `mcp_read` |
+| GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
+| POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API key or OAuth `mcp_write` |
+| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
+| GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API key or OAuth `mcp_read` |
+| POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored or OAuth-user-authored annotation comment | API key or OAuth `mcp_write` |
 
-API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries.
+API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries. OAuth project-scoped calls require explicit `project_id` where the route does not already carry it, and the authenticated user must be a project member.
 
 ### Upload API (Token-based, no persistent auth)
 

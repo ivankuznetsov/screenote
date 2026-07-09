@@ -9,7 +9,7 @@ func (a *app) projectCommand() *cobra.Command {
 		Short: "List projects",
 		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, _, err := a.client()
+			client, _, err := a.client(cmd.Context())
 			if err != nil {
 				return err
 			}

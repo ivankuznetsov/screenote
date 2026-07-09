@@ -17,11 +17,11 @@ func (a *app) commentCommand() *cobra.Command {
 			if body == "" {
 				return missingFlag("body")
 			}
-			client, _, err := a.client()
+			client, project, err := a.clientForProject(cmd.Context())
 			if err != nil {
 				return err
 			}
-			raw, err := client.AddComment(cmd.Context(), annotationID, body)
+			raw, err := client.AddComment(cmd.Context(), annotationID, project, body)
 			if err != nil {
 				return err
 			}

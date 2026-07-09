@@ -19,11 +19,7 @@ func (a *app) screenshotCommand() *cobra.Command {
 		Short: "List screenshots",
 		Args:  rejectArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, resolved, err := a.client()
-			if err != nil {
-				return err
-			}
-			project, err := a.projectID(cmd.Context(), client, resolved)
+			client, project, err := a.clientForProject(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -52,7 +48,7 @@ func (a *app) screenshotCommand() *cobra.Command {
 			if title == "" {
 				return missingFlag("title")
 			}
-			client, _, err := a.client()
+			client, project, err := a.clientForProject(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -71,7 +67,7 @@ func (a *app) screenshotCommand() *cobra.Command {
 				contentType = mime.TypeByExtension(filepath.Ext(filePath))
 			}
 
-			raw, err := client.CreateScreenshot(cmd.Context(), title, pageValue, filename, contentType, reader)
+			raw, err := client.CreateScreenshot(cmd.Context(), project, title, pageValue, filename, contentType, reader)
 			if err != nil {
 				return err
 			}
