@@ -139,6 +139,12 @@ jobs:
         with:
           bundler-cache: true
 
+      - name: Install Playwright browsers
+        run: |
+          export PLAYWRIGHT_CLI_VERSION="$(ruby -e 'require "playwright"; puts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip')"
+          npm install --no-save "playwright@$PLAYWRIGHT_CLI_VERSION"
+          npx playwright install --with-deps chromium
+
       - name: Run System Tests
         env:
           RAILS_ENV: test
