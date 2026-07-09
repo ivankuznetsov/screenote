@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_21_114232) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_14_120630) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -196,12 +196,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_114232) do
     t.datetime "created_at", null: false
     t.integer "height"
     t.integer "page_id", null: false
+    t.integer "snapshot_id"
     t.integer "status", default: 0, null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.integer "width"
     t.index ["created_at"], name: "index_screenshots_on_project_id_and_created_at"
     t.index ["page_id"], name: "index_screenshots_on_page_id"
+    t.index ["snapshot_id"], name: "index_screenshots_on_snapshot_id"
   end
 
   create_table "sessions", force: :cascade do |t|
@@ -212,6 +214,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_114232) do
     t.integer "user_id", null: false
     t.index ["created_at"], name: "index_sessions_on_created_at"
     t.index ["user_id"], name: "index_sessions_on_user_id"
+  end
+
+  create_table "snapshots", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "git_commit", limit: 40, null: false
+    t.integer "project_id", null: false
+    t.datetime "taken_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id", "taken_at"], name: "index_snapshots_on_project_id_and_taken_at"
+    t.index ["project_id"], name: "index_snapshots_on_project_id"
   end
 
   create_table "stripe_webhook_events", force: :cascade do |t|
@@ -271,6 +283,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_21_114232) do
   add_foreign_key "projects", "users"
   add_foreign_key "screenshot_images", "screenshots"
   add_foreign_key "screenshots", "pages"
+  add_foreign_key "screenshots", "snapshots", on_delete: :nullify
   add_foreign_key "sessions", "users"
+  add_foreign_key "snapshots", "projects"
   add_foreign_key "subscriptions", "users"
 end

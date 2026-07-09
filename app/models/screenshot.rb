@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 class Screenshot < ApplicationRecord
-  # Canonical constants now live on ScreenshotImage (the real owner of the blob).
+  # Canonical constants live on ScreenshotImage (the real owner of the blob).
   # Screenshot re-exposes them for the still-present has_one_attached :image
-  # (backfill code path, to be removed in PR-3 alongside todo 172).
+  # used by the legacy upload path.
   ALLOWED_CONTENT_TYPES = ScreenshotImage::ALLOWED_CONTENT_TYPES
   MAX_FILE_SIZE = ScreenshotImage::MAX_FILE_SIZE
 
   belongs_to :page
+  belongs_to :snapshot, optional: true
   has_one :project, through: :page
   has_many :annotations, dependent: :destroy
   has_many :screenshot_images, dependent: :destroy
@@ -22,11 +23,20 @@ class Screenshot < ApplicationRecord
   validates :title, presence: true, length: { maximum: 255 }
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validate :acceptable_image
+  validate :snapshot_belongs_to_same_project, if: :snapshot_id?
 
-  # Returns the ScreenshotImage to render when no specific viewport is requested.
-  # Prefers :desktop, falls back to the first available viewport, nil if none.
+  # Prefers :desktop, else lowest viewport enum int. Cold path's `order(:viewport)`
+  # also sorts by the enum int (desktop=0 < tablet=1 < mobile=2), and the
+  # unique `(screenshot_id, viewport)` index breaks ties — same shape, same
+  # result on SQLite and Postgres.
   def primary_image
-    screenshot_images.find_by(viewport: :desktop) || screenshot_images.order(:viewport).first
+    if screenshot_images.loaded?
+      images = screenshot_images.to_a
+      images.find { |si| si.viewport == "desktop" } ||
+        images.min_by { |si| ScreenshotImage.viewports[si.viewport] }
+    else
+      screenshot_images.find_by(viewport: :desktop) || screenshot_images.order(:viewport).first
+    end
   end
 
   # Returns the ScreenshotImage matching the given viewport (enum symbol or string), or nil.
@@ -45,13 +55,7 @@ class Screenshot < ApplicationRecord
     vps.include?("desktop") ? "desktop" : vps.first
   end
 
-  # Canonical factory for "new Screenshot with an image attached". Creates the
-  # Screenshot + a ScreenshotImage(:desktop) + attaches + saves everything in
-  # one transaction so validators run and partial state can't persist.
-  #
-  # Callers: web form, MCP create_screenshot, API v1, signed-upload flow.
-  # Returns the saved Screenshot (with its ScreenshotImage accessible via
-  # `screenshot.primary_image`).
+  # Canonical factory: creates Screenshot + ScreenshotImage + attaches blob in one transaction.
   def self.create_with_image!(page:, title:, io:, filename:, content_type:, viewport: :desktop)
     screenshot = nil
     transaction do
@@ -75,5 +79,13 @@ class Screenshot < ApplicationRecord
     if image.blob.byte_size > MAX_FILE_SIZE
       errors.add(:image, "is too large (max #{MAX_FILE_SIZE / 1.megabyte}MB)")
     end
+  end
+
+  # Defense-in-depth at the AR layer only; raw SQL updates bypass it.
+  def snapshot_belongs_to_same_project
+    return if snapshot.nil?
+    return if page && snapshot.project_id == page.project_id
+
+    errors.add(:snapshot, "must belong to the same project as the page")
   end
 end

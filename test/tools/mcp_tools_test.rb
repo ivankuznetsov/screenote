@@ -123,6 +123,185 @@ class McpToolsTest < ActiveSupport::TestCase
       "Filter should exclude non-mobile annotations"
   end
 
+  # CreateSnapshotTool
+  test "create_snapshot creates a snapshot for the current project" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234def567890abc1234def567890abc1234d",
+      taken_at: "2026-05-14T12:00:00Z"
+    ))
+
+    assert result["snapshot_id"].present?
+    assert_equal @project.id, result["project_id"]
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    expected_label = "#{snapshot.taken_at.utc.to_date.iso8601} · abc1234"
+    assert_equal expected_label, result["label"], "Label should be computed from the stored UTC taken_at date"
+    assert_equal "2026-05-14T12:00:00Z", result["taken_at"]
+
+    assert_equal @project, snapshot.project
+    assert_equal "abc1234def567890abc1234def567890abc1234d", snapshot.git_commit
+  end
+
+  test "create_snapshot normalizes git_commit to lowercase" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "AbC1234"
+    ))
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    assert_equal "abc1234", snapshot.git_commit,
+      "Mixed-case input should not create a snapshot distinct from its lowercase twin"
+  end
+
+  test "create_snapshot trims surrounding git_commit whitespace before validation" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "  AbC1234\n"
+    ))
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    assert_equal "abc1234", snapshot.git_commit
+  end
+
+  test "create_snapshot rejects bare date without time component" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "2026-05-14"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/ISO 8601/, result["message"])
+  end
+
+  test "create_snapshot rejects malformed taken_at" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "not-iso"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/ISO 8601/, result["message"])
+  end
+
+  test "create_snapshot rejects a timestamp without an explicit UTC offset" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "2026-05-14T12:00:00"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/ISO 8601/, result["message"])
+  end
+
+  test "create_snapshot rejects empty git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: ""
+    ))
+
+    assert_equal "invalid_arguments", result["error"], "Empty git_commit must trip validation, not silently create"
+  end
+
+  test "create_snapshot rejects sub-7-char git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc12"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/git_commit/, result["message"])
+  end
+
+  test "create_snapshot rejects over-40-char git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "a" * 41
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/git_commit/, result["message"])
+  end
+
+  test "create_snapshot rejects inaccessible project" do
+    Current.mcp_project = nil
+
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: projects(:bob_project).id,
+      git_commit: "abc1234"
+    ))
+
+    assert_equal "forbidden", result["error"]
+  end
+
+  test "create_snapshot rejects malformed git_commit" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "not-a-hash"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/git_commit/, result["message"])
+  end
+
+  test "create_snapshot defaults taken_at to now" do
+    travel_to Time.zone.parse("2026-05-14 13:15:00") do
+      result = JSON.parse(CreateSnapshotTool.new.call(
+        project_id: @project.id,
+        git_commit: "abc1234"
+      ))
+
+      snapshot = Snapshot.find(result["snapshot_id"])
+      assert_equal Time.current, snapshot.taken_at
+    end
+  end
+
+  test "create_snapshot parses provided ISO8601 taken_at" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "2026-05-14T08:30:00Z"
+    ))
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    assert_equal Time.utc(2026, 5, 14, 8, 30), snapshot.taken_at
+  end
+
+  test "create_snapshot rejects future taken_at" do
+    travel_to Time.zone.parse("2026-05-14 12:00:00") do
+      result = JSON.parse(CreateSnapshotTool.new.call(
+        project_id: @project.id,
+        git_commit: "abc1234",
+        taken_at: "2026-05-14T12:10:01Z"
+      ))
+
+      assert_equal "validation_failed", result["error"]
+      assert_match(/future/, result["message"])
+    end
+  end
+
+  test "create_snapshot accepts non-UTC offsets and keeps label/taken_at consistent" do
+    # Round-trips through `Time.iso8601(...).in_time_zone`, so a 23:00 wall time
+    # at -05:00 lands as 04:00 UTC on the next day. The label uses that stable
+    # UTC date so collaborators in different request zones see the same row.
+    travel_to Time.zone.parse("2026-05-15 05:00:00") do
+      result = JSON.parse(CreateSnapshotTool.new.call(
+        project_id: @project.id,
+        git_commit: "abc1234",
+        taken_at: "2026-05-14T23:00:00-05:00"
+      ))
+
+      snapshot = Snapshot.find(result["snapshot_id"])
+      assert_equal Time.utc(2026, 5, 15, 4, 0), snapshot.taken_at,
+        "taken_at must be normalized to UTC equivalent of the offset input"
+      assert_equal "2026-05-15 · abc1234", result["label"],
+        "label day should match the stored UTC taken_at, not the input wall time"
+    end
+  end
+
   # CreateMultiViewportScreenshotTool
   test "create_multi_viewport_screenshot returns one upload URL per requested viewport" do
     result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
@@ -142,6 +321,52 @@ class McpToolsTest < ActiveSupport::TestCase
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal 3, screenshot.screenshot_images.count
+  end
+
+  test "create_multi_viewport_screenshot links screenshot to snapshot" do
+    snapshot = snapshots(:latest)
+
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id,
+      title: "Snapshot capture",
+      snapshot_id: snapshot.id,
+      viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+    ))
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_equal snapshot, screenshot.snapshot
+    assert_equal snapshot.id, result["snapshot_id"]
+  end
+
+  test "create_multi_viewport_screenshot without snapshot_id creates ad-hoc screenshot" do
+    result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+      project_id: @project.id,
+      title: "Ad-hoc capture",
+      viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+    ))
+
+    screenshot = Screenshot.find(result["screenshot_id"])
+    assert_nil screenshot.snapshot_id
+    assert_nil result["snapshot_id"]
+  end
+
+  test "create_multi_viewport_screenshot rejects snapshot from another project" do
+    other_snapshot = projects(:bob_project).snapshots.create!(
+      git_commit: "abc1234",
+      taken_at: Time.current
+    )
+
+    assert_no_difference "Screenshot.count" do
+      result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+        project_id: @project.id,
+        title: "Wrong snapshot",
+        snapshot_id: other_snapshot.id,
+        viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+      ))
+
+      assert_equal "invalid_arguments", result["error"]
+      assert_match(/snapshot not found/, result["message"])
+    end
   end
 
   test "create_multi_viewport_screenshot with only one entry creates a single variant" do

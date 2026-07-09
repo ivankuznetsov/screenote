@@ -186,6 +186,19 @@ Append-only log of all wiki operations.
 **Maintenance scripts:** `.llm-wiki/refresh-wiki.sh` and `.llm-wiki/post-commit-refresh.sh` use bounded Codex and qmd timeouts and tell headless Codex not to run `qmd update` or `qmd embed` itself.
 **Source:** `systemctl --user list-timers`, `qmd update`, `qmd embed`, and collection-scoped `qmd search`.
 
+## [2026-05-14] snapshot model
+
+**Action:** Documented the Snapshot model and project-page snapshot filtering data model.
+**Pages created:** wiki/models/snapshot.md
+**Pages updated:** wiki/data-model.md, wiki/models/project.md, wiki/models/screenshot.md, wiki/index.md
+**Source:** Snapshot implementation in app/models, db/schema.rb, and project page controller/view changes
+
+## [2026-05-15] snapshot review hardening
+
+**Action:** Clarified snapshot duplicate-commit semantics, UTC-stable labels, future timestamp validation, and model-owned project-page snapshot queries.
+**Pages updated:** data-model.md, models/project.md, models/snapshot.md
+**Source:** Review pass 03 fixes for the snapshot feature
+
 ## [2026-07-08] OAuth-first CLI and REST OAuth auth
 
 **Action:** Updated API/CLI docs for OAuth-first CLI authentication and REST v1 dual bearer authentication.
@@ -197,3 +210,9 @@ Append-only log of all wiki operations.
 **Action:** Hardened the OAuth CLI review findings: bounded every default HTTP path, kept saved login credentials aligned with the configured server, preserved JSON-only output when browser launch fails, masked bearer tokens from `screenote config`, and enforced owner-only permissions on existing config files.
 **Pages updated:** wiki/api-cli.md, wiki/log.md
 **Source:** `internal/cli`, `internal/config`, `internal/screenote`, Go regression tests
+
+## [2026-07-09] snapshot review and current-main integration
+
+**Action:** Re-reviewed project snapshots against current main, preserved pending-only and failed-only pages in the unfiltered project view, made empty snapshot-filter states accurate, required explicit-offset MCP timestamps, echoed snapshot linkage in capture responses, regenerated the schema so its 40-character git commit limit matches the migration, made the snapshot system test target Capybara's actual in-process server, and removed unrelated historical planning/todo artifacts from the PR.
+**Pages updated:** wiki/index.md, wiki/schema-evolution.md, wiki/mcp-tools.md, wiki/models/project.md, wiki/models/snapshot.md, wiki/log.md
+**Source:** `app/models/project.rb`, `app/tools/create_snapshot_tool.rb`, `app/tools/create_multi_viewport_screenshot_tool.rb`, project views, migrations, and regression tests

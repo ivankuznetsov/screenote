@@ -52,9 +52,7 @@ class CreateAnnotationTool < ApplicationTool
     end
   end
 
+  # Visibility marker: any helper methods added below default to private so
+  # subclass authors don't silently expose internals.
   private
-
-  def invalid(message)
-    { error: "invalid_arguments", message: message }.to_json
-  end
 end

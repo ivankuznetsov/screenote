@@ -3,7 +3,7 @@ title: Project
 type: model
 source: app/models/project.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-05-15
 tags: [model, project, core]
 ---
 
@@ -35,6 +35,7 @@ Source: `app/models/project.rb`
 | pages | has_many | [[page]] (dependent: destroy) |
 | screenshots | has_many through | [[screenshot]] (via pages) |
 | api_keys | has_many | [[api-key]] (dependent: destroy) |
+| snapshots | has_many | [[snapshot]] (dependent: destroy) |
 
 ## Validations
 
@@ -51,9 +52,10 @@ Source: `app/models/project.rb`
 - `role_for(user)` -- Returns the user's role symbol (:member or :owner), or nil
 - `owner?(user)` -- Checks if user has owner role
 - `thumbnail_screenshots(limit = 4)` -- Returns up to `limit` latest ready screenshots with attached images (for project card thumbnails)
+- `pages_ordered_by_latest(snapshot: nil)` -- Returns every project page with a total-version `screenshots_count_cache`, ordered by newest ready screenshot and falling back to the page creation time. Pending-only and failed-only pages remain visible and count toward the historical version total, but do not drive ordering or thumbnails. When `snapshot:` is passed it filters and counts only ready screenshots in that snapshot.
 
 ## Notes
 
 - `_destroy_in_progress` is a transient attr_accessor used to bypass the "sole owner" check in [[project-membership]] when the entire project is being destroyed.
 
-See also: [[user]], [[page]], [[project-membership]], [[project-invitation]], [[api-key]]
+See also: [[user]], [[page]], [[snapshot]], [[project-membership]], [[project-invitation]], [[api-key]]

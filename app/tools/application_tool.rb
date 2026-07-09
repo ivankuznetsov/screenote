@@ -58,6 +58,12 @@ class ApplicationTool < FastMcp::Tool
     { error: "internal_error", message: "An unexpected error occurred" }.to_json
   end
 
+  # Shared structured response for argument-validation failures so every MCP
+  # tool returns the same envelope to the agent.
+  def invalid(message)
+    { error: "invalid_arguments", message: message }.to_json
+  end
+
   def project_annotations(project)
     Api::V1::ProjectScope.annotations(project)
   end

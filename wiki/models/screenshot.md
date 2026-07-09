@@ -9,7 +9,7 @@ tags: [model, screenshot, image, active-storage]
 
 # Screenshot
 
-TLDR: A `Screenshot` is the logical capture/version under a page. It can have one or more [[models/screenshot-image]] viewport variants, while retaining transitional legacy image columns and attachment support for the backfill path.
+TLDR: A `Screenshot` is the logical capture/version under a page. It can optionally belong to a [[models/snapshot]] capture run and can have one or more [[models/screenshot-image]] viewport variants, while retaining transitional legacy image columns and attachment support for the backfill path.
 
 Source: `app/models/screenshot.rb`
 
@@ -20,6 +20,7 @@ Source: `app/models/screenshot.rb`
 | id | integer | PK |
 | title | string | NOT NULL, max 255 |
 | page_id | integer | NOT NULL, FK to pages |
+| snapshot_id | integer | Optional FK to snapshots; null for ad-hoc screenshots |
 | status | integer | Parent status synced from child ScreenshotImages. Default: pending |
 | width | integer | Legacy/transitional parent width |
 | height | integer | Legacy/transitional parent height |
@@ -31,6 +32,7 @@ Source: `app/models/screenshot.rb`
 | Association | Type | Target |
 |-------------|------|--------|
 | page | belongs_to | [[page]] |
+| snapshot | belongs_to | [[models/snapshot]] (optional) |
 | project | has_one through | [[project]] (via page) |
 | annotations | has_many | [[annotation]] (dependent: destroy) |
 | screenshot_images | has_many | [[models/screenshot-image]] (dependent: destroy) |
@@ -45,6 +47,7 @@ Source: `app/models/screenshot.rb`
 - `title`: presence, length max 255
 - `width`, `height`: integer > 0 (allow nil for pending uploads)
 - legacy `image`: content type must be PNG or JPEG, max 20MB when attached
+- `snapshot_belongs_to_same_project`: when `snapshot_id` is set, the snapshot's `project_id` must match the page's `project_id`. Defense-in-depth at the AR layer; raw SQL updates bypass it (the DB FK doesn't constrain cross-project pairings, only existence).
 
 ## Callbacks
 
@@ -72,5 +75,6 @@ Source: `app/models/screenshot.rb`
 
 - The two-step upload flow now creates a ScreenshotImage first, returns an upload URL + token, and attaches the binary to that child image in `Api::ScreenshotUploadsController`.
 - Single-image uploads still create a desktop ScreenshotImage so old callers keep working with the new reader path.
+- Snapshot runs create one [[models/snapshot]] and pass its id into every multi-viewport screenshot upload for that run. Single-page/ad-hoc uploads omit `snapshot_id`.
 
-See also: [[page]], [[annotation]], [[models/screenshot-image]], [[services/annotation-crop-service]]
+See also: [[page]], [[models/snapshot]], [[annotation]], [[models/screenshot-image]], [[services/annotation-crop-service]]

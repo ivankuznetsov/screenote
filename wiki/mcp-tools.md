@@ -9,7 +9,7 @@ tags: [mcp, tools, api, agent]
 
 # MCP Tools
 
-TLDR: Screenote registers 17 FastMCP tools from `app/tools/`. Current tools cover projects, pages, screenshots, multi-viewport upload, annotations, comments, resolution, and collaboration; delete tools and plan/limit tools are still absent.
+TLDR: Screenote registers 18 FastMCP tools from `app/tools/`. Current tools cover projects, snapshots, pages, screenshots, multi-viewport upload, annotations, comments, resolution, and collaboration; delete tools and plan/limit tools are still absent.
 
 Source: `app/tools/**/*.rb`, `config/initializers/fast_mcp.rb`
 
@@ -32,6 +32,7 @@ The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and 
 | `list_projects` | `app/tools/list_projects_tool.rb` | List projects visible to the current user |
 | `create_project` | `app/tools/create_project_tool.rb` | Create an owned project |
 | `list_pages` | `app/tools/list_pages_tool.rb` | List project pages with version counts |
+| `create_snapshot` | `app/tools/create_snapshot_tool.rb` | Start a project capture run for a git commit and explicit-offset timestamp |
 | `list_screenshots` | `app/tools/list_screenshots_tool.rb` | List screenshots/versions with annotation counts and pagination |
 | `create_screenshot` | `app/tools/create_screenshot_tool.rb` | Upload one base64 PNG/JPEG screenshot directly through MCP |
 | `create_screenshot_upload` | `app/tools/create_screenshot_upload_tool.rb` | Create one desktop `ScreenshotImage` and return a signed upload URL |
@@ -50,6 +51,8 @@ The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and 
 ## Multi-Viewport Semantics
 
 `create_multi_viewport_screenshot` creates a parent [[screenshot]] plus one [[models/screenshot-image]] per requested viewport inside a transaction. Upload URLs are per `ScreenshotImage`, but the endpoint remains `/api/screenshots/:id/upload` for URL shape stability.
+
+For full-project capture runs, `create_snapshot` returns a `snapshot_id`; callers pass that id to each `create_multi_viewport_screenshot` call. Both tools enforce the current project boundary, and the screenshot response echoes the associated `snapshot_id`. Git commits are trimmed and normalized to lowercase before validation. A supplied `taken_at` must be an ISO 8601 timestamp ending in `Z` or an explicit `+/-HH:MM` offset so agent output is independent of the server timezone.
 
 Annotations are scoped by `Annotation#viewport`. `CreateAnnotationTool` defaults only when a screenshot has exactly one available viewport; otherwise it returns an argument error requiring an explicit viewport.
 

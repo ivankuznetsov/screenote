@@ -7,6 +7,7 @@ class Project < ApplicationRecord
   has_many :project_invitations, dependent: :destroy
   has_many :pages, dependent: :destroy
   has_many :screenshots, through: :pages
+  has_many :snapshots, dependent: :destroy
   has_many :api_keys, dependent: :destroy
 
   validates :name, presence: true, length: { maximum: 255 }
@@ -30,6 +31,39 @@ class Project < ApplicationRecord
 
   def thumbnail_screenshots(limit = 4)
     pages.lazy.filter_map { |p| p.latest_screenshot if p.latest_screenshot&.primary_image&.image&.attached? }.first(limit)
+  end
+
+  def pages_ordered_by_latest(snapshot: nil)
+    scope = pages
+    pages_table = Page.arel_table
+    screenshots_table = Screenshot.arel_table
+
+    if snapshot
+      scope = scope.joins(:screenshots)
+        .merge(Screenshot.ready)
+        .where(screenshots: { snapshot_id: snapshot.id })
+      screenshot_ids = screenshots_table[:id]
+      screenshot_times = screenshots_table[:created_at]
+    else
+      scope = scope.left_joins(:screenshots)
+      ready = screenshots_table[:status].eq(Screenshot.statuses[:ready])
+      screenshot_ids = screenshots_table[:id]
+      screenshot_times = Arel::Nodes::Case.new.when(ready).then(screenshots_table[:created_at])
+    end
+
+    screenshots_count = Arel::Nodes::NamedFunction.new("COUNT", [ screenshot_ids ])
+      .as("screenshots_count_cache")
+    latest_screenshot_at = Arel::Nodes::NamedFunction.new("MAX", [ screenshot_times ])
+    sort_timestamp = Arel::Nodes::NamedFunction.new(
+      "COALESCE", [ latest_screenshot_at, pages_table[:created_at] ]
+    )
+
+    scope = scope
+      .select(pages_table[Arel.star], screenshots_count)
+      .group(pages_table[:id])
+      .order(sort_timestamp.desc)
+
+    snapshot ? scope : scope.includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
   end
 
   private

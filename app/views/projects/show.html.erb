@@ -16,31 +16,54 @@
   </div>
 </div>
 
-<% if @pages.any? %>
-  <div class="page-grid">
-    <% @pages.each do |page| %>
-      <%= link_to page_path(page), class: "page-card", data: { testid: "page-card" } do %>
-        <div class="page-card__thumbnail">
-          <% if page.latest_screenshot&.primary_image&.image&.attached? %>
-            <%= image_tag page.latest_screenshot.primary_image.image.variant(resize_to_limit: [480, 360]), alt: page.name, loading: "lazy" %>
-          <% else %>
-            <div class="page-card__placeholder">No screenshots yet</div>
+<div class="project-detail__body">
+  <%= render "snapshot_sidebar", project: @project, snapshots: @snapshots, active_snapshot: @active_snapshot %>
+
+  <div class="project-detail__content">
+    <% if @pages.any? %>
+      <div class="page-grid">
+        <% @pages.each do |page| %>
+          <%# In filtered mode the snapshot scope is authoritative — don't fall
+              back to page.latest_screenshot, which would render an ad-hoc
+              capture from outside the selected snapshot. %>
+          <% thumbnail = if @active_snapshot
+                          @page_thumbnails[page.id]
+                        else
+                          @page_thumbnails[page.id] || page.latest_screenshot
+                        end %>
+          <% card_data = { testid: "page-card", page_id: page.id }
+             card_data[:screenshot_id] = thumbnail.id if thumbnail %>
+
+          <%= link_to page_path(page), class: "page-card", data: card_data do %>
+            <div class="page-card__thumbnail">
+              <% if thumbnail&.primary_image&.image&.attached? %>
+                <%= image_tag thumbnail.primary_image.image.variant(resize_to_limit: [480, 360]), alt: page.name, loading: "lazy" %>
+              <% else %>
+                <div class="page-card__placeholder">No screenshots yet</div>
+              <% end %>
+            </div>
+            <div class="page-card__info">
+              <div class="page-card__name" data-testid="page-card-name"><%= page.name %></div>
+              <div class="page-card__meta">
+                <% count = page.screenshots_count_cache %>
+                <% version_label = @active_snapshot ? "snapshot version" : "version" %>
+                <%= count %> <%= version_label.pluralize(count) %>
+              </div>
+            </div>
           <% end %>
-        </div>
-        <div class="page-card__info">
-          <div class="page-card__name" data-testid="page-card-name"><%= page.name %></div>
-          <div class="page-card__meta">
-            <% count = page.screenshots_count_cache %>
-            <%= count %> <%= "version".pluralize(count) %>
-          </div>
-        </div>
-      <% end %>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="empty-state" data-testid="empty-state">
+        <% if @active_snapshot %>
+          <div class="empty-state__title">No pages in this snapshot</div>
+          <div class="empty-state__description">This snapshot has no ready screenshots.</div>
+        <% else %>
+          <div class="empty-state__title">No pages yet</div>
+          <div class="empty-state__description">Create a page to start organizing screenshots.</div>
+          <%= link_to "Create first page", new_project_page_path(@project), class: "btn btn--primary" %>
+        <% end %>
+      </div>
     <% end %>
   </div>
-<% else %>
-  <div class="empty-state" data-testid="empty-state">
-    <div class="empty-state__title">No pages yet</div>
-    <div class="empty-state__description">Create a page to start organizing screenshots.</div>
-    <%= link_to "Create first page", new_project_page_path(@project), class: "btn btn--primary" %>
-  </div>
-<% end %>
+</div>
