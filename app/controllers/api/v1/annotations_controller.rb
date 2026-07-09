@@ -4,25 +4,44 @@ module Api
   module V1
     class AnnotationsController < Api::BaseController
       def index
+        limit, offset = pagination_params
         annotations = project_annotations.order(:created_at)
         annotations = annotations.where(screenshot_id: params[:screenshot_id]) if params[:screenshot_id].present?
         annotations = annotations.where(status: params[:status]) if params[:status].present?
+        annotations = annotations.where(viewport: params[:viewport]) if params[:viewport].present?
+        total = annotations.count
+        annotations = annotations.limit(limit).offset(offset)
 
         render json: {
-          annotations: annotations.map { |a| serialize(a) }
+          annotations: annotations.map { |a| serialize(a) },
+          pagination: { total: total, limit: limit, offset: offset }
         }
+      end
+
+      def show
+        annotation = project_annotations.find(params[:id])
+        cropped_base64 = begin
+          annotation.crop
+        rescue => e
+          Honeybadger.notify(e, context: {
+            annotation_id: annotation.id,
+            screenshot_id: annotation.screenshot_id,
+            viewport: annotation.viewport
+          })
+          nil
+        end
+
+        render json: Api::V1::ContractSerializer.annotation_detail(annotation, cropped_base64: cropped_base64)
       end
 
       private
 
       def project_annotations
-        Annotation.joins(screenshot: :project)
-          .where(projects: { id: current_project.id })
-          .includes(:user, :screenshot, :annotation_comments)
+        Api::V1::ProjectScope.annotations(current_project)
       end
 
       def serialize(annotation)
-        annotation.as_api_json
+        Api::V1::ContractSerializer.annotation(annotation)
       end
     end
   end

@@ -59,12 +59,10 @@ class ApplicationTool < FastMcp::Tool
   end
 
   def project_annotations(project)
-    Annotation.joins(screenshot: { page: :project })
-      .where(projects: { id: project.id })
-      .includes(:user, :screenshot, :annotation_comments)
+    Api::V1::ProjectScope.annotations(project)
   end
 
   def serialize_annotation(annotation)
-    annotation.as_api_json
+    Api::V1::ContractSerializer.annotation(annotation)
   end
 end

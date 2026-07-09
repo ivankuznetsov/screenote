@@ -23,6 +23,8 @@ Source: `app/tools/**/*.rb`, `config/initializers/fast_mcp.rb`
 
 The transport rate-limits API keys and OAuth tokens at 60 requests/minute, logs validation failures, reports unexpected errors to Honeybadger, and returns a JSON 429 for rate-limited requests.
 
+The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and CI users can automate Screenote without an MCP client.
+
 ## Tool Inventory
 
 | Tool | Source | Purpose |

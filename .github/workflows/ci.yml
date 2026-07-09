@@ -13,9 +13,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install system packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
-
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -33,9 +30,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-
-      - name: Install system packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -84,6 +78,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -96,8 +93,34 @@ jobs:
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test
 
+  test_go:
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=mod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Cross-compile CLI
+        run: |
+          for os in linux darwin; do
+            for arch in amd64 arm64; do
+              GOOS="$os" GOARCH="$arch" go build -o "tmp/screenote-${os}-${arch}" ./cmd/screenote
+            done
+          done
+
   system-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     # services:
     #  redis:
@@ -109,14 +132,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
 
+      - name: Install Playwright browsers
+        run: |
+          export PLAYWRIGHT_CLI_VERSION="$(ruby -e 'require "playwright"; puts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip')"
+          npm install --no-save "playwright@$PLAYWRIGHT_CLI_VERSION"
+          npx playwright install --with-deps chromium
+
       - name: Run System Tests
         env:
           RAILS_ENV: test
+          CAPYBARA_RUN_SERVER: "true"
+          PARALLEL_WORKERS: "1"
+          TESTOPTS: "--verbose"
           # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
           # REDIS_URL: redis://localhost:6379/0
         run: bin/rails db:test:prepare test:system

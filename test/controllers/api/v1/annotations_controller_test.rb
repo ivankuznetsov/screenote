@@ -19,6 +19,7 @@ module Api
         assert_response :success
         body = response.parsed_body
         assert body["annotations"].is_a?(Array), "Response should include annotations array"
+        assert body["pagination"].present?, "Response should include pagination"
       end
 
       test "filters annotations by status" do
@@ -30,6 +31,46 @@ module Api
         body["annotations"].each do |annotation|
           assert_equal "open", annotation["status"], "All annotations should be open"
         end
+      end
+
+      test "filters annotations by viewport and paginates" do
+        get api_v1_screenshot_annotations_path(@screenshot, viewport: "desktop", limit: 2, offset: 0),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        body = response.parsed_body
+        assert_equal 2, body["pagination"]["limit"]
+        body["annotations"].each do |annotation|
+          assert_equal "desktop", annotation["viewport"]
+        end
+      end
+
+      test "does not list annotations for another project screenshot" do
+        get api_v1_screenshot_annotations_path(screenshots(:bob_screenshot)),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        assert_empty response.parsed_body["annotations"]
+      end
+
+      test "gets annotation details with comments" do
+        get api_v1_annotation_path(annotations(:resolved_annotation)),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        body = response.parsed_body
+        assert_equal annotations(:resolved_annotation).id, body["id"]
+        assert_equal "ready", body["screenshot_status"]
+        assert_equal "image/png", body["mime_type"]
+        assert body["comments"].any? { |comment| comment["body"] == "Fixed the alignment issue" }
+      end
+
+      test "does not get annotation outside the key project" do
+        get api_v1_annotation_path(annotations(:bob_annotation)),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :not_found
+        assert_equal "not_found", response.parsed_body["code"]
       end
 
       test "returns 401 without authorization" do

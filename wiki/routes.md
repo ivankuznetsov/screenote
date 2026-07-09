@@ -123,8 +123,15 @@ All require authentication unless noted.
 
 | Method | Path | Action | Auth |
 |--------|------|--------|------|
-| POST | `/api/v1/screenshots` | Upload screenshot | API Key |
-| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations | API Key |
+| GET | `/api/v1/projects` | List the project bound to the API key | API Key |
+| GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API Key |
+| GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API Key |
+| POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API Key |
+| GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API Key |
+| GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API Key |
+| POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored annotation comment | API Key |
+
+API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries.
 
 ### Upload API (Token-based, no persistent auth)
 

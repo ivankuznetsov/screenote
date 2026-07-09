@@ -46,8 +46,15 @@ Rails.application.routes.draw do
   namespace :api do
     put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
     namespace :v1 do
+      resources :projects, only: [ :index ] do
+        resources :pages, only: [ :index ]
+        resources :screenshots, only: [ :index ]
+      end
       resources :screenshots, only: [ :create ] do
         resources :annotations, only: [ :index ]
+      end
+      resources :annotations, only: [ :show ] do
+        resources :comments, controller: "annotation_comments", only: [ :create ]
       end
     end
   end
