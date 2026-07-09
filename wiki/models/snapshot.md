@@ -55,6 +55,7 @@ Source: `app/models/snapshot.rb`
 - `screenshots.snapshot_id` is nullable. Existing and ad-hoc screenshots remain outside snapshots.
 - Deleting a snapshot nullifies linked screenshots instead of deleting them.
 - Duplicate `(project_id, git_commit)` rows are allowed: repeated captures of the same commit at different times are distinct snapshot runs.
+- MCP `taken_at` input must include `Z` or an explicit `+/-HH:MM` offset; offset-less timestamps are rejected instead of being interpreted in the server timezone.
 - The project page can filter strictly to pages that have screenshots in one selected snapshot. When filtered, each page card's thumbnail switches from the page's `latest_screenshot` to the newest ready screenshot belonging to that snapshot, so the user sees the snapshot-time look (not whatever was uploaded afterward).
 
 See also: [[project]], [[screenshot]], [[page]]

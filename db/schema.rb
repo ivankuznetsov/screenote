@@ -218,7 +218,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_14_120630) do
 
   create_table "snapshots", force: :cascade do |t|
     t.datetime "created_at", null: false
-    t.string "git_commit", null: false
+    t.string "git_commit", limit: 40, null: false
     t.integer "project_id", null: false
     t.datetime "taken_at", null: false
     t.datetime "updated_at", null: false

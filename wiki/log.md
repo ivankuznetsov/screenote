@@ -210,3 +210,9 @@ Append-only log of all wiki operations.
 **Action:** Hardened the OAuth CLI review findings: bounded every default HTTP path, kept saved login credentials aligned with the configured server, preserved JSON-only output when browser launch fails, masked bearer tokens from `screenote config`, and enforced owner-only permissions on existing config files.
 **Pages updated:** wiki/api-cli.md, wiki/log.md
 **Source:** `internal/cli`, `internal/config`, `internal/screenote`, Go regression tests
+
+## [2026-07-09] snapshot review and current-main integration
+
+**Action:** Re-reviewed project snapshots against current main, preserved pending-only and failed-only pages in the unfiltered project view, made empty snapshot-filter states accurate, required explicit-offset MCP timestamps, echoed snapshot linkage in capture responses, regenerated the schema so its 40-character git commit limit matches the migration, made the snapshot system test target Capybara's actual in-process server, and removed unrelated historical planning/todo artifacts from the PR.
+**Pages updated:** wiki/index.md, wiki/schema-evolution.md, wiki/mcp-tools.md, wiki/models/project.md, wiki/models/snapshot.md, wiki/log.md
+**Source:** `app/models/project.rb`, `app/tools/create_snapshot_tool.rb`, `app/tools/create_multi_viewport_screenshot_tool.rb`, project views, migrations, and regression tests

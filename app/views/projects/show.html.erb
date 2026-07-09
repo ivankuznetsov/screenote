@@ -55,9 +55,14 @@
       </div>
     <% else %>
       <div class="empty-state" data-testid="empty-state">
-        <div class="empty-state__title">No pages yet</div>
-        <div class="empty-state__description">Create a page to start organizing screenshots.</div>
-        <%= link_to "Create first page", new_project_page_path(@project), class: "btn btn--primary" %>
+        <% if @active_snapshot %>
+          <div class="empty-state__title">No pages in this snapshot</div>
+          <div class="empty-state__description">This snapshot has no ready screenshots.</div>
+        <% else %>
+          <div class="empty-state__title">No pages yet</div>
+          <div class="empty-state__description">Create a page to start organizing screenshots.</div>
+          <%= link_to "Create first page", new_project_page_path(@project), class: "btn btn--primary" %>
+        <% end %>
       </div>
     <% end %>
   </div>

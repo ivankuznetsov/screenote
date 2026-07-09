@@ -154,6 +154,16 @@ class McpToolsTest < ActiveSupport::TestCase
       "Mixed-case input should not create a snapshot distinct from its lowercase twin"
   end
 
+  test "create_snapshot trims surrounding git_commit whitespace before validation" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "  AbC1234\n"
+    ))
+
+    snapshot = Snapshot.find(result["snapshot_id"])
+    assert_equal "abc1234", snapshot.git_commit
+  end
+
   test "create_snapshot rejects bare date without time component" do
     result = JSON.parse(CreateSnapshotTool.new.call(
       project_id: @project.id,
@@ -170,6 +180,17 @@ class McpToolsTest < ActiveSupport::TestCase
       project_id: @project.id,
       git_commit: "abc1234",
       taken_at: "not-iso"
+    ))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_match(/ISO 8601/, result["message"])
+  end
+
+  test "create_snapshot rejects a timestamp without an explicit UTC offset" do
+    result = JSON.parse(CreateSnapshotTool.new.call(
+      project_id: @project.id,
+      git_commit: "abc1234",
+      taken_at: "2026-05-14T12:00:00"
     ))
 
     assert_equal "invalid_arguments", result["error"]
@@ -314,6 +335,7 @@ class McpToolsTest < ActiveSupport::TestCase
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal snapshot, screenshot.snapshot
+    assert_equal snapshot.id, result["snapshot_id"]
   end
 
   test "create_multi_viewport_screenshot without snapshot_id creates ad-hoc screenshot" do
@@ -325,6 +347,7 @@ class McpToolsTest < ActiveSupport::TestCase
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_nil screenshot.snapshot_id
+    assert_nil result["snapshot_id"]
   end
 
   test "create_multi_viewport_screenshot rejects snapshot from another project" do

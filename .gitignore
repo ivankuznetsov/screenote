@@ -42,5 +42,4 @@
 .mcp.json
 .qmd/
 /.llm-wiki/qmd-cache/
-.playwright-mcp/
 /.hive-state/

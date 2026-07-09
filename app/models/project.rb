@@ -35,21 +35,33 @@ class Project < ApplicationRecord
 
   def pages_ordered_by_latest(snapshot: nil)
     scope = pages
+    pages_table = Page.arel_table
+    screenshots_table = Screenshot.arel_table
 
-    scope = if snapshot
-      scope.joins(:screenshots)
+    if snapshot
+      scope = scope.joins(:screenshots)
         .merge(Screenshot.ready)
         .where(screenshots: { snapshot_id: snapshot.id })
+      screenshot_ids = screenshots_table[:id]
+      screenshot_times = screenshots_table[:created_at]
     else
-      ready_status = Screenshot.statuses[:ready]
-      scope.left_joins(:screenshots)
-        .where("screenshots.id IS NULL OR screenshots.status = ?", ready_status)
+      scope = scope.left_joins(:screenshots)
+      ready = screenshots_table[:status].eq(Screenshot.statuses[:ready])
+      screenshot_ids = screenshots_table[:id]
+      screenshot_times = Arel::Nodes::Case.new.when(ready).then(screenshots_table[:created_at])
     end
 
+    screenshots_count = Arel::Nodes::NamedFunction.new("COUNT", [ screenshot_ids ])
+      .as("screenshots_count_cache")
+    latest_screenshot_at = Arel::Nodes::NamedFunction.new("MAX", [ screenshot_times ])
+    sort_timestamp = Arel::Nodes::NamedFunction.new(
+      "COALESCE", [ latest_screenshot_at, pages_table[:created_at] ]
+    )
+
     scope = scope
-      .select("pages.*, COUNT(screenshots.id) AS screenshots_count_cache")
-      .group("pages.id")
-      .order(Arel.sql("COALESCE(MAX(screenshots.created_at), pages.created_at) DESC"))
+      .select(pages_table[Arel.star], screenshots_count)
+      .group(pages_table[:id])
+      .order(sort_timestamp.desc)
 
     snapshot ? scope : scope.includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
   end

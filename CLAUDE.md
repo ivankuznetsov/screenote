@@ -154,9 +154,6 @@ kamal logs -f            # View production logs
 kamal shell              # Bash shell on server
 ```
 
-### After Cloning
-Run `git config core.hooksPath .githooks` to enable wiki auto-update hooks.
-
 <!-- BEGIN LLM WIKI -->
 ## LLM Wiki
 

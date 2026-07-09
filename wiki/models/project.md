@@ -52,7 +52,7 @@ Source: `app/models/project.rb`
 - `role_for(user)` -- Returns the user's role symbol (:member or :owner), or nil
 - `owner?(user)` -- Checks if user has owner role
 - `thumbnail_screenshots(limit = 4)` -- Returns up to `limit` latest ready screenshots with attached images (for project card thumbnails)
-- `pages_ordered_by_latest(snapshot: nil)` -- Returns project pages with `screenshots_count_cache`, ordered by newest ready screenshot; when `snapshot:` is passed it filters and counts only ready screenshots in that snapshot.
+- `pages_ordered_by_latest(snapshot: nil)` -- Returns every project page with a total-version `screenshots_count_cache`, ordered by newest ready screenshot and falling back to the page creation time. Pending-only and failed-only pages remain visible and count toward the historical version total, but do not drive ordering or thumbnails. When `snapshot:` is passed it filters and counts only ready screenshots in that snapshot.
 
 ## Notes
 

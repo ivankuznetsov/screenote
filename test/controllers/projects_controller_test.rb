@@ -78,18 +78,25 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     project = @user.owned_projects.create!(name: "All pages project")
     first_page = project.pages.create!(name: "First")
     second_page = project.pages.create!(name: "Second")
+    pending_page = project.pages.create!(name: "Pending only")
+    failed_page = project.pages.create!(name: "Failed only")
     first_page.screenshots.create!(title: "First shot", status: :ready)
+    pending_page.screenshots.create!(title: "Pending shot", status: :pending)
+    failed_page.screenshots.create!(title: "Failed shot", status: :failed)
 
     get project_path(project)
 
     assert_response :success
-    assert_equal [ first_page.id, second_page.id ].sort, page_card_page_ids.sort
+    assert_equal [ first_page.id, second_page.id, pending_page.id, failed_page.id ].sort,
+      page_card_page_ids.sort
     # Guards the `screenshots_count_cache` SELECT alias the view reads at
     # `app/views/projects/show.html.erb`: drop the alias and the view raises
     # NoMethodError on `page.screenshots_count_cache` with every other test
     # still green.
     assert_includes page_card_version_counters, "1 version"
     assert_includes page_card_version_counters, "0 versions"
+    assert_equal "1 version", page_card_version_counter_for(pending_page)
+    assert_equal "1 version", page_card_version_counter_for(failed_page)
   end
 
   test "show renders 'No screenshots yet' placeholder when a page has no ready screenshots" do
@@ -130,6 +137,20 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     # NoMethodError in the view with every other assertion green.
     assert_equal [ "1 snapshot version", "1 snapshot version" ], page_card_version_counters,
       "All page cards should render their version counter; got #{page_card_version_counters.inspect}"
+  end
+
+  test "show explains an empty selected snapshot without suggesting a new page" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Empty snapshot project")
+    project.pages.create!(name: "Existing page")
+    snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+
+    get project_path(project, snapshot_id: snapshot.id)
+
+    assert_response :success
+    assert_select ".empty-state__title", text: "No pages in this snapshot"
+    assert_select ".empty-state__description", text: "This snapshot has no ready screenshots."
+    assert_select "a", { text: "Create first page", count: 0 }
   end
 
   test "show filtered thumbnails bound query count" do
@@ -237,6 +258,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "[data-testid='snapshot-sidebar']"
     assert_select "[data-testid='snapshot-sidebar-item']", text: "2026-05-14 · abc1234"
+    assert_select "[data-testid='snapshot-sidebar-item'][aria-current='page']", count: 1
     assert_select "[data-testid='snapshot-sidebar-clear']", text: "All screens"
   end
 
@@ -402,5 +424,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   def page_card_version_counters
     css_select("[data-testid='page-card'] .page-card__meta").map { |node| node.text.strip }
+  end
+
+  def page_card_version_counter_for(page)
+    css_select("[data-testid='page-card'][data-page-id='#{page.id}'] .page-card__meta").first.text.strip
   end
 end

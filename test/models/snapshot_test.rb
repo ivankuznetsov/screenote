@@ -3,6 +3,10 @@
 require "test_helper"
 
 class SnapshotTest < ActiveSupport::TestCase
+  test "git_commit column preserves the migration's 40-character limit" do
+    assert_equal 40, Snapshot.columns_hash.fetch("git_commit").limit
+  end
+
   test "valid snapshot with project, git commit, and taken_at" do
     snapshot = Snapshot.new(
       project: projects(:alice_project),

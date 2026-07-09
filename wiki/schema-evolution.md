@@ -3,13 +3,13 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-09
 tags: [database, migrations, schema, history]
 ---
 
 # Schema Evolution
 
-TLDR: 25 migrations across 6 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, and multi-viewport screenshots.
+TLDR: 27 migrations across 7 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, multi-viewport screenshots, and project capture snapshots.
 
 Source: `db/migrate/`
 
@@ -70,6 +70,13 @@ Source: `db/migrate/`
 | `20260421110955_add_viewport_to_annotations` | Scope annotations to desktop/tablet/mobile viewport |
 | `20260421114232_backfill_screenshot_images` | Deploy-time backfill from legacy `Screenshot#image` blobs to `ScreenshotImage(:desktop)` |
 
+### Phase 7: Project Capture Snapshots (2026-05-14)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260514120600_create_snapshots` | Project-scoped capture runs with git commit and capture time |
+| `20260514120630_add_snapshot_id_to_screenshots` | Optional screenshot-to-snapshot link with `ON DELETE SET NULL` |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -86,4 +93,6 @@ Source: `db/migrate/`
 
 7. **ScreenshotImage child rows**: A Screenshot is now a logical capture/version; ScreenshotImage owns actual viewport blobs, dimensions, status, and upload tokens.
 
-See also: [[data-model]], [[decisions]], [[models/screenshot-image]]
+8. **Snapshots are additive capture groups**: Existing and ad-hoc screenshots retain a null `snapshot_id`; deleting a snapshot preserves screenshots by nullifying that link.
+
+See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

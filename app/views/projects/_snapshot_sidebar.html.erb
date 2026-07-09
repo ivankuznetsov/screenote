@@ -14,6 +14,7 @@
         <li class="snapshot-sidebar__item <%= "snapshot-sidebar__item--active" if active_snapshot&.id == snapshot.id %>">
           <%= link_to snapshot.label,
               project_path(project, snapshot_id: snapshot.id),
+              aria: { current: ("page" if active_snapshot&.id == snapshot.id) },
               data: { testid: "snapshot-sidebar-item", snapshot_id: snapshot.id } %>
         </li>
       <% end %>

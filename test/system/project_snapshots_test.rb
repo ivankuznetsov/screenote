@@ -10,6 +10,7 @@ require "json"
 require "net/http"
 
 class ProjectSnapshotsTest < ApplicationSystemTestCase
+  include ActiveJob::TestHelper
   include Pages::AuthPage
   include Pages::ProjectsPage
   include Pages::ProjectPage
@@ -153,11 +154,16 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
   def upload_to_signed_urls(uploads)
     image_data = File.binread(TEST_IMAGE_PATH)
     uploads.each do |upload|
-      uri = URI(upload["upload_url"])
+      # Route helpers use example.com in the test environment. Keep the signed
+      # path/query from the tool response but target Capybara's actual server.
+      signed_uri = URI(upload["upload_url"])
+      uri = URI("#{app_base_url}#{signed_uri.request_uri}")
       request = Net::HTTP::Put.new(uri)
       request["Content-Type"] = "image/png"
       request.body = image_data
-      response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(request) }
+      response = perform_enqueued_jobs do
+        Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(request) }
+      end
       assert_equal "200", response.code,
         "Signed-URL upload should succeed (got #{response.code}: #{response.body})"
     end
@@ -179,7 +185,7 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
   end
 
   def call_mcp_tool(token:, tool_name:, arguments: {})
-    uri = URI("#{Capybara.app_host}/mcp/messages")
+    uri = URI("#{app_base_url}/mcp/messages")
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{token}" if token
     request["Content-Type"] = "application/json"

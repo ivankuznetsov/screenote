@@ -54,13 +54,8 @@ class ApplicationTool < FastMcp::Tool
   rescue ActiveRecord::RecordInvalid => e
     { error: "validation_failed", message: e.message, details: e.record.errors.full_messages }.to_json
   rescue StandardError => e
-    # Honeybadger.notify returns the notice UUID on delivery and `false` when
-    # the notifier is disabled, filtered, or rate-limited — the guard below
-    # treats any falsy return (UUID present? no -> skip) as "no correlation".
-    correlation_id = Honeybadger.notify(e)
-    payload = { error: "internal_error", message: "An unexpected error occurred" }
-    payload[:correlation_id] = correlation_id if correlation_id
-    payload.to_json
+    Honeybadger.notify(e)
+    { error: "internal_error", message: "An unexpected error occurred" }.to_json
   end
 
   # Shared structured response for argument-validation failures so every MCP

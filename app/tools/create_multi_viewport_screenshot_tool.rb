@@ -76,6 +76,7 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
 
       {
         screenshot_id: screenshot.id,
+        snapshot_id: screenshot.snapshot_id,
         page_id: page.id,
         annotate_url: Rails.application.routes.url_helpers.screenshot_url(screenshot),
         uploads: uploads
