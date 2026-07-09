@@ -50,6 +50,8 @@ class SubscriptionsFreeUserTest < ApplicationSystemTestCase
     visit_billing
 
     original_create = Stripe::Checkout::Session.method(:create)
+    original_price_id = ENV["STRIPE_PRO_PRICE_ID"]
+    ENV["STRIPE_PRO_PRICE_ID"] = "price_test"
     Stripe::Checkout::Session.define_singleton_method(:create) do |*_args|
       OpenStruct.new(url: "https://checkout.stripe.com/c/test_session")
     end
@@ -63,6 +65,7 @@ class SubscriptionsFreeUserTest < ApplicationSystemTestCase
       end
     ensure
       Stripe::Checkout::Session.define_singleton_method(:create, original_create)
+      ENV["STRIPE_PRO_PRICE_ID"] = original_price_id
     end
   end
 

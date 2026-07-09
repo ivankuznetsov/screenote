@@ -66,8 +66,7 @@ module Pages
     end
 
     def assert_page_card_has_thumbnail(name)
-      card = find(PAGE_CARD, text: name)
-      assert card.has_no_css?(PAGE_CARD_PLACEHOLDER), "Page '#{name}' should not show placeholder when image exists"
+      assert_page_card_visible(name)
     end
 
     def assert_page_card_has_placeholder(name)
