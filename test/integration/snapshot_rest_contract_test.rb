@@ -20,4 +20,25 @@ class SnapshotRestContractTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "file_ref"
     assert_not_includes response.body, "captures/"
   end
+
+  test "authenticated image upload exposes the stable progress contract" do
+    bytes = File.binread(Rails.root.join("test/fixtures/files/test_image.png"))
+    entry = snapshot_entry(page: "Upload contract", viewport: :desktop, seed: "upload-contract")
+    entry[:content_sha256] = Digest::SHA256.hexdigest(bytes)
+    project = projects(:alice_project)
+    snapshot = Snapshots::PrepareUpload.call(
+      project: project,
+      payload: snapshot_manifest_payload(entries: [ entry ])
+    ).snapshot
+    image = snapshot.screenshot_images.first
+
+    put api_v1_project_screenshot_image_path(project, image),
+      headers: { "Authorization" => "Bearer #{ALICE_TOKEN}", "Content-Type" => "image/png" },
+      env: { "RAW_POST_DATA" => bytes }
+
+    assert_response :success
+    assert_equal %w[attached image_id operation screenshot_id snapshot_id snapshot_state state status viewport], response.parsed_body.keys.sort
+    assert_equal "uploaded", response.parsed_body["operation"]
+    assert_equal "processing", response.parsed_body["state"]
+  end
 end

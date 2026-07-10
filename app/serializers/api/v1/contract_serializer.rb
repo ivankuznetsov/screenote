@@ -81,6 +81,21 @@ module Api
           }
         end
 
+        def screenshot_image_upload(image, operation:)
+          snapshot = image.screenshot.snapshot
+          {
+            operation: operation,
+            snapshot_id: snapshot.id,
+            screenshot_id: image.screenshot_id,
+            image_id: image.id,
+            viewport: image.viewport,
+            state: screenshot_image_state(image),
+            status: image.status,
+            attached: image.image.attached?,
+            snapshot_state: snapshot.aggregate_state
+          }
+        end
+
         def annotation(annotation)
           annotation.as_api_json
         end

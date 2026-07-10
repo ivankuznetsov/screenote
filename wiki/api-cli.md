@@ -107,6 +107,8 @@ The private service now exposes project-scoped prepare and show resources for a 
 
 An identical request resumes the same graph and returns image-level `awaiting_upload`, `processing`, `failed`, or `ready` state plus a snapshot-filtered project review URL. A changed contract gets a different manifest identity; a stored graph that no longer matches its identity returns `manifest_conflict`. Readable client file paths never enter the REST request or response.
 
+Prepared image bytes upload through a separate bearer-authenticated raw-body route. It uses bounded disk-backed streaming, verifies actual PNG/JPEG bytes against the declared and prepared type, verifies SHA-256 content identity, and treats an identical retry as success. Failed dimension processing can be retried without creating another blob. The existing MCP signed-upload route remains unchanged.
+
 The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. The private copy remains temporarily present only until the snapshot command, public release, production smoke, and final cleanup gate complete.
 
 ## Deferred

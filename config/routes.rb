@@ -50,6 +50,7 @@ Rails.application.routes.draw do
         resources :pages, only: [ :index ]
         resources :screenshots, only: [ :index ]
         resources :snapshots, only: [ :create, :show ]
+        resources :screenshot_images, only: [ :update ]
       end
       resources :screenshots, only: [ :create ] do
         resources :annotations, only: [ :index ]
