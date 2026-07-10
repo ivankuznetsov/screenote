@@ -3,7 +3,7 @@ title: Screenshot
 type: model
 source: app/models/screenshot.rb
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-10
 tags: [model, screenshot, image, active-storage]
 ---
 
@@ -21,6 +21,7 @@ Source: `app/models/screenshot.rb`
 | title | string | NOT NULL, max 255 |
 | page_id | integer | NOT NULL, FK to pages |
 | snapshot_id | integer | Optional FK to snapshots; null for ad-hoc screenshots |
+| manifest_entry_digest | string | Optional 64-character identity; required inside a manifest-backed snapshot |
 | status | integer | Parent status synced from child ScreenshotImages. Default: pending |
 | width | integer | Legacy/transitional parent width |
 | height | integer | Legacy/transitional parent height |
@@ -48,6 +49,7 @@ Source: `app/models/screenshot.rb`
 - `width`, `height`: integer > 0 (allow nil for pending uploads)
 - legacy `image`: content type must be PNG or JPEG, max 20MB when attached
 - `snapshot_belongs_to_same_project`: when `snapshot_id` is set, the snapshot's `project_id` must match the page's `project_id`. Defense-in-depth at the AR layer; raw SQL updates bypass it (the DB FK doesn't constrain cross-project pairings, only existence).
+- `manifest_entry_digest`: normalized SHA-256 hex, required and unique within a manifest-backed snapshot, and rejected on legacy/ad-hoc capture rows.
 
 ## Callbacks
 
@@ -76,5 +78,6 @@ Source: `app/models/screenshot.rb`
 - The two-step upload flow now creates a ScreenshotImage first, returns an upload URL + token, and attaches the binary to that child image in `Api::ScreenshotUploadsController`.
 - Single-image uploads still create a desktop ScreenshotImage so old callers keep working with the new reader path.
 - Snapshot runs create one [[models/snapshot]] and pass its id into every multi-viewport screenshot upload for that run. Single-page/ad-hoc uploads omit `snapshot_id`.
+- The partial unique `(snapshot_id, manifest_entry_digest)` index prevents duplicate prepared entries while leaving existing nullable rows unchanged.
 
 See also: [[page]], [[models/snapshot]], [[annotation]], [[models/screenshot-image]], [[services/annotation-crop-service]]

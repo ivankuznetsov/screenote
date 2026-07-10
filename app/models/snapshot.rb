@@ -2,18 +2,26 @@
 
 class Snapshot < ApplicationRecord
   GIT_COMMIT_FORMAT = /\A[0-9a-f]{7,40}\z/
+  SHA256_FORMAT = /\A[0-9a-f]{64}\z/
+  SHA256_ERROR_MESSAGE = "must be a 64-character hexadecimal SHA-256"
   FUTURE_SKEW = 5.minutes
 
   belongs_to :project
   has_many :screenshots, dependent: :nullify
+  has_many :screenshot_images, through: :screenshots
 
   before_validation :default_taken_at
   before_validation :normalize_git_commit
+  before_validation :normalize_manifest_digest
 
   validates :git_commit, presence: true,
     format: { with: GIT_COMMIT_FORMAT, allow_blank: true,
               message: "must be 7-40 hexadecimal characters" }
   validates :taken_at, presence: true
+  validates :manifest_digest,
+    format: { with: SHA256_FORMAT, message: SHA256_ERROR_MESSAGE },
+    uniqueness: { scope: :project_id },
+    allow_nil: true
   validate :taken_at_not_in_future
 
   # Unbounded by design — callers must `.limit(...)` before rendering. Tie-break
@@ -44,6 +52,20 @@ class Snapshot < ApplicationRecord
     end
   end
 
+  def manifest_backed?
+    manifest_digest.present?
+  end
+
+  def aggregate_state
+    images = screenshot_images
+    return "awaiting_upload" unless images.exists?
+    return "awaiting_upload" if images.where.missing(:image_attachment).exists?
+    return "failed" if images.status_failed.exists?
+    return "processing" if images.where.not(status: :ready).exists?
+
+    "ready"
+  end
+
   private
 
   def default_taken_at
@@ -54,6 +76,10 @@ class Snapshot < ApplicationRecord
     return if git_commit.nil?
 
     self.git_commit = git_commit.strip.downcase
+  end
+
+  def normalize_manifest_digest
+    self.manifest_digest = manifest_digest.to_s.strip.downcase.presence
   end
 
   def taken_at_not_in_future

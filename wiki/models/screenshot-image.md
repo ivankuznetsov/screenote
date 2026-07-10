@@ -3,7 +3,7 @@ title: ScreenshotImage
 type: model
 source: app/models/screenshot_image.rb
 created: 2026-05-14
-updated: 2026-05-14
+updated: 2026-07-10
 tags: [model, screenshot, image, viewport, active-storage]
 ---
 
@@ -23,6 +23,7 @@ Source: `app/models/screenshot_image.rb`, `db/migrate/20260421110931_create_scre
 | status | integer | Enum: pending(0), ready(1), failed(2). Default: pending |
 | width | integer | Pixel width from Active Storage analysis |
 | height | integer | Pixel height from Active Storage analysis |
+| content_sha256 | string | Optional 64-character content hash; required for manifest-backed captures |
 | created_at | datetime | |
 | updated_at | datetime | |
 
@@ -43,6 +44,7 @@ Source: `app/models/screenshot_image.rb`, `db/migrate/20260421110931_create_scre
 - `viewport`: unique within `screenshot_id`
 - `width`, `height`: integer > 0 when present
 - `image`: PNG or JPEG, max 20MB
+- `content_sha256`: normalized SHA-256 hex; required when the parent screenshot belongs to a manifest-backed snapshot and optional for legacy upload paths
 
 ## Callbacks
 

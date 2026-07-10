@@ -5,6 +5,10 @@ require "test_helper"
 class ScreenshotImageTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
+  MANIFEST_DIGEST = "a" * 64
+  ENTRY_DIGEST = "b" * 64
+  CONTENT_DIGEST = "c" * 64
+
   test "valid with screenshot and viewport" do
     si = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :mobile)
     assert si.valid?, "Should be valid with screenshot + viewport"
@@ -90,6 +94,45 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     si.image.attach(io: StringIO.new("junk"), filename: "test.gif", content_type: "image/gif")
     assert_not si.valid?
     assert_includes si.errors[:image].join, "PNG or JPEG"
+  end
+
+  test "content SHA is optional for legacy images" do
+    image = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :mobile)
+
+    assert image.valid?
+    assert_nil image.content_sha256
+  end
+
+  test "manifest-backed image requires a normalized content SHA" do
+    snapshot = projects(:alice_project).snapshots.create!(
+      git_commit: "abc1234",
+      manifest_digest: MANIFEST_DIGEST
+    )
+    screenshot = snapshot.screenshots.create!(
+      page: pages(:alice_page),
+      title: "Prepared",
+      manifest_entry_digest: ENTRY_DIGEST
+    )
+    image = screenshot.screenshot_images.build(viewport: :mobile)
+
+    assert_not image.valid?
+    assert_includes image.errors[:content_sha256], "can't be blank"
+
+    image.content_sha256 = "  #{CONTENT_DIGEST.upcase}\n"
+    assert image.valid?
+    image.save!
+    assert_equal CONTENT_DIGEST, image.content_sha256
+  end
+
+  test "content SHA must be a SHA-256 hex digest" do
+    image = ScreenshotImage.new(
+      screenshot: screenshots(:alice_screenshot),
+      viewport: :mobile,
+      content_sha256: "not-a-digest"
+    )
+
+    assert_not image.valid?
+    assert_includes image.errors[:content_sha256], "must be a 64-character hexadecimal SHA-256"
   end
 
   test "after_create_commit does not enqueue dimension job when no image attached" do

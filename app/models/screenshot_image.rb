@@ -21,13 +21,19 @@ class ScreenshotImage < ApplicationRecord
   enum :viewport, { desktop: 0, tablet: 1, mobile: 2 }, prefix: :viewport
   enum :status, { pending: 0, ready: 1, failed: 2 }, default: :pending, prefix: :status
 
+  before_validation :normalize_content_sha256
+
   generates_token_for :upload, expires_in: 5.minutes do
     image.attached?.to_s
   end
 
   validates :viewport, uniqueness: { scope: :screenshot_id }
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+  validates :content_sha256,
+    format: { with: Snapshot::SHA256_FORMAT, message: Snapshot::SHA256_ERROR_MESSAGE },
+    allow_nil: true
   validate :acceptable_image
+  validate :manifest_content_identity
 
   after_create_commit :extract_dimensions_later
   # Keep Screenshot#status in sync with children so queries like
@@ -153,6 +159,16 @@ class ScreenshotImage < ApplicationRecord
   private_class_method :move_blob_to_screenshot!
 
   private
+
+  def normalize_content_sha256
+    self.content_sha256 = content_sha256.to_s.strip.downcase.presence
+  end
+
+  def manifest_content_identity
+    return unless screenshot&.snapshot&.manifest_backed?
+
+    errors.add(:content_sha256, :blank) if content_sha256.blank?
+  end
 
   # Only enqueue dimension extraction when there's something to analyze AND
   # the record isn't already :ready:

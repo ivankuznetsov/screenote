@@ -16,14 +16,21 @@ class Screenshot < ApplicationRecord
 
   enum :status, { pending: 0, ready: 1, failed: 2 }, default: :pending
 
+  before_validation :normalize_manifest_entry_digest
+
   generates_token_for :upload, expires_in: 5.minutes do
     image.attached?.to_s
   end
 
   validates :title, presence: true, length: { maximum: 255 }
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+  validates :manifest_entry_digest,
+    format: { with: Snapshot::SHA256_FORMAT, message: Snapshot::SHA256_ERROR_MESSAGE },
+    uniqueness: { scope: :snapshot_id },
+    allow_nil: true
   validate :acceptable_image
   validate :snapshot_belongs_to_same_project, if: :snapshot_id?
+  validate :manifest_identity_matches_snapshot
 
   # Prefers :desktop, else lowest viewport enum int. Cold path's `order(:viewport)`
   # also sorts by the enum int (desktop=0 < tablet=1 < mobile=2), and the
@@ -68,6 +75,18 @@ class Screenshot < ApplicationRecord
   end
 
   private
+
+  def normalize_manifest_entry_digest
+    self.manifest_entry_digest = manifest_entry_digest.to_s.strip.downcase.presence
+  end
+
+  def manifest_identity_matches_snapshot
+    if snapshot&.manifest_backed?
+      errors.add(:manifest_entry_digest, :blank) if manifest_entry_digest.blank?
+    elsif manifest_entry_digest.present?
+      errors.add(:manifest_entry_digest, "requires a manifest-backed snapshot")
+    end
+  end
 
   def acceptable_image
     return unless image.attached?
