@@ -117,11 +117,14 @@ class ScreenshotImageTest < ActiveSupport::TestCase
 
     assert_not image.valid?
     assert_includes image.errors[:content_sha256], "can't be blank"
+    assert_includes image.errors[:expected_content_type], "can't be blank"
 
     image.content_sha256 = "  #{CONTENT_DIGEST.upcase}\n"
+    image.expected_content_type = " IMAGE/PNG\n"
     assert image.valid?
     image.save!
     assert_equal CONTENT_DIGEST, image.content_sha256
+    assert_equal "image/png", image.expected_content_type
   end
 
   test "content SHA must be a SHA-256 hex digest" do

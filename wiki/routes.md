@@ -126,6 +126,8 @@ All require authentication unless noted.
 | GET | `/api/v1/projects` | List API-key project or OAuth user's member projects | API key or OAuth `mcp_read` |
 | GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API key or OAuth `mcp_read` |
 | GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
+| POST | `/api/v1/projects/:project_id/snapshots` | Prepare or resume a manifest-backed snapshot graph | API key or OAuth `mcp_write` |
+| GET | `/api/v1/projects/:project_id/snapshots/:id` | Read snapshot and image recovery state | API key or OAuth `mcp_read` |
 | POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API key or OAuth `mcp_write` |
 | GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
 | GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API key or OAuth `mcp_read` |

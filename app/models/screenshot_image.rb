@@ -32,6 +32,7 @@ class ScreenshotImage < ApplicationRecord
   validates :content_sha256,
     format: { with: Snapshot::SHA256_FORMAT, message: Snapshot::SHA256_ERROR_MESSAGE },
     allow_nil: true
+  validates :expected_content_type, inclusion: { in: ALLOWED_CONTENT_TYPES }, allow_nil: true
   validate :acceptable_image
   validate :manifest_content_identity
 
@@ -162,12 +163,14 @@ class ScreenshotImage < ApplicationRecord
 
   def normalize_content_sha256
     self.content_sha256 = content_sha256.to_s.strip.downcase.presence
+    self.expected_content_type = expected_content_type.to_s.strip.downcase.presence
   end
 
   def manifest_content_identity
     return unless screenshot&.snapshot&.manifest_backed?
 
     errors.add(:content_sha256, :blank) if content_sha256.blank?
+    errors.add(:expected_content_type, :blank) if expected_content_type.blank?
   end
 
   # Only enqueue dimension extraction when there's something to analyze AND

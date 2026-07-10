@@ -48,6 +48,39 @@ module Api
           }
         end
 
+        def snapshot_upload(snapshot, operation:, url_options: {})
+          entries = snapshot.screenshots.sort_by(&:id).flat_map do |screenshot|
+            screenshot.screenshot_images.sort_by { |image| ScreenshotImage.viewports.fetch(image.viewport) }.map do |image|
+              {
+                screenshot_id: screenshot.id,
+                manifest_entry_digest: screenshot.manifest_entry_digest,
+                page_id: screenshot.page_id,
+                page: screenshot.page.name,
+                title: screenshot.title,
+                image_id: image.id,
+                viewport: image.viewport,
+                mime_type: image.expected_content_type,
+                content_sha256: image.content_sha256,
+                state: screenshot_image_state(image),
+                status: image.status,
+                attached: image.image.attached?
+              }
+            end
+          end
+
+          {
+            operation: operation,
+            snapshot_id: snapshot.id,
+            project_id: snapshot.project_id,
+            manifest_digest: snapshot.manifest_digest,
+            git_commit: snapshot.git_commit,
+            taken_at: snapshot.taken_at.utc.iso8601(6),
+            state: snapshot.aggregate_state,
+            review_url: routes.project_url(snapshot.project, url_options.merge(snapshot_id: snapshot.id)),
+            entries: entries
+          }
+        end
+
         def annotation(annotation)
           annotation.as_api_json
         end
@@ -90,6 +123,14 @@ module Api
             height: image.height,
             attached: image.image.attached?
           }
+        end
+
+        def screenshot_image_state(image)
+          return "awaiting_upload" unless image.image.attached?
+          return "failed" if image.status_failed?
+          return "ready" if image.status_ready?
+
+          "processing"
         end
 
         def routes

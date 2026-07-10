@@ -5,6 +5,7 @@ class AddManifestIdentityToSnapshots < ActiveRecord::Migration[8.1]
     add_column :snapshots, :manifest_digest, :string, limit: 64
     add_column :screenshots, :manifest_entry_digest, :string, limit: 64
     add_column :screenshot_images, :content_sha256, :string, limit: 64
+    add_column :screenshot_images, :expected_content_type, :string
 
     add_index :snapshots, [ :project_id, :manifest_digest ],
       unique: true,

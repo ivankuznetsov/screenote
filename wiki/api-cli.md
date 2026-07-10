@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-07-09
+updated: 2026-07-10
 tags: [cli, api, rest, agents]
 ---
 
@@ -100,6 +100,14 @@ Exit codes:
 | 3 | Auth/forbidden |
 | 4 | Not found |
 | 5 | Rate limited |
+
+## Snapshot REST Foundation
+
+The private service now exposes project-scoped prepare and show resources for a manifest-driven public CLI. Preparation accepts normalized page/title/viewport entries, expected PNG/JPEG types, image content SHA-256 values, and opaque relative-file reference hashes. The server verifies the aggregate manifest identity before creating the complete Snapshot -> Screenshot -> ScreenshotImage graph in one transaction.
+
+An identical request resumes the same graph and returns image-level `awaiting_upload`, `processing`, `failed`, or `ready` state plus a snapshot-filtered project review URL. A changed contract gets a different manifest identity; a stored graph that no longer matches its identity returns `manifest_conflict`. Readable client file paths never enter the REST request or response.
+
+The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. The private copy remains temporarily present only until the snapshot command, public release, production smoke, and final cleanup gate complete.
 
 ## Deferred
 

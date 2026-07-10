@@ -72,7 +72,7 @@ erDiagram
 | `pages` | Groups screenshots within a project | name, project_id |
 | `snapshots` | Capture-run records for a project | project_id, git_commit, taken_at, optional manifest_digest |
 | `screenshots` | Logical capture/version under a page | title, page_id, snapshot_id, optional manifest_entry_digest, derived status, legacy width/height during migration |
-| `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), content_sha256, width, height |
+| `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), content_sha256, expected_content_type, width, height |
 | `annotations` | Feedback pinned to screenshot regions | x_percent, y_percent, width_percent, height_percent, viewport, comment, status (enum), screenshot_id, user_id |
 | `annotation_comments` | Threaded comments on annotations | body, action (enum), annotation_id, user_id, api_key_id, notified_at |
 

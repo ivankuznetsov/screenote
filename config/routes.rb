@@ -49,6 +49,7 @@ Rails.application.routes.draw do
       resources :projects, only: [ :index ] do
         resources :pages, only: [ :index ]
         resources :screenshots, only: [ :index ]
+        resources :snapshots, only: [ :create, :show ]
       end
       resources :screenshots, only: [ :create ] do
         resources :annotations, only: [ :index ]

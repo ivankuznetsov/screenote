@@ -183,6 +183,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_10_120000) do
   create_table "screenshot_images", force: :cascade do |t|
     t.string "content_sha256", limit: 64
     t.datetime "created_at", null: false
+    t.string "expected_content_type"
     t.integer "height"
     t.integer "screenshot_id", null: false
     t.integer "status", default: 0, null: false

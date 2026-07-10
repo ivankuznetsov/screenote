@@ -158,8 +158,12 @@ class SnapshotTest < ActiveSupport::TestCase
       snapshot: snapshot,
       manifest_entry_digest: "b" * 64
     )
-    desktop = screenshot.screenshot_images.create!(viewport: :desktop, content_sha256: "c" * 64)
-    mobile = screenshot.screenshot_images.create!(viewport: :mobile, content_sha256: "d" * 64)
+    desktop = screenshot.screenshot_images.create!(
+      viewport: :desktop, content_sha256: "c" * 64, expected_content_type: "image/png"
+    )
+    mobile = screenshot.screenshot_images.create!(
+      viewport: :mobile, content_sha256: "d" * 64, expected_content_type: "image/png"
+    )
 
     assert_equal "awaiting_upload", snapshot.aggregate_state
 
