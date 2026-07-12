@@ -7,7 +7,7 @@ Screenote is a Rails visual feedback app for screenshots, annotations, and agent
 Install:
 
 ```sh
-go install github.com/ivankuznetsov/screenote/cmd/screenote@latest
+go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
 ```
 
 Configure a self-hosted, local, staging, or production base URL explicitly. CI and agents can use a pre-provisioned OAuth bearer token:
@@ -48,7 +48,10 @@ screenote --project 7 screenshot list --status ready --limit 25
 screenote --project 7 annotation list --screenshot 123 --status open
 screenote --project 7 annotation get --annotation 456
 screenote --project 7 comment add --annotation 456 --body "Fix pushed in abc123"
+screenote --project 7 snapshot --manifest snapshot.json
 ```
+
+`snapshot` publishes a browser-free multi-page capture from locally produced PNG/JPEG files. An unchanged manifest is resumable after upload, transport, or processing failures; see the public CLI's [snapshot manifest reference](https://github.com/ivankuznetsov/screenote-cli/blob/main/docs/snapshot-manifest.md) for the versioned contract.
 
 Successful commands write JSON to stdout. Errors write JSON to stderr:
 

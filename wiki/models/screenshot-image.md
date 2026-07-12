@@ -3,7 +3,7 @@ title: ScreenshotImage
 type: model
 source: app/models/screenshot_image.rb
 created: 2026-05-14
-updated: 2026-05-14
+updated: 2026-07-10
 tags: [model, screenshot, image, viewport, active-storage]
 ---
 
@@ -23,6 +23,8 @@ Source: `app/models/screenshot_image.rb`, `db/migrate/20260421110931_create_scre
 | status | integer | Enum: pending(0), ready(1), failed(2). Default: pending |
 | width | integer | Pixel width from Active Storage analysis |
 | height | integer | Pixel height from Active Storage analysis |
+| content_sha256 | string | Optional 64-character content hash; required for manifest-backed captures |
+| expected_content_type | string | Prepared PNG/JPEG type for content-bound CLI uploads |
 | created_at | datetime | |
 | updated_at | datetime | |
 
@@ -43,11 +45,14 @@ Source: `app/models/screenshot_image.rb`, `db/migrate/20260421110931_create_scre
 - `viewport`: unique within `screenshot_id`
 - `width`, `height`: integer > 0 when present
 - `image`: PNG or JPEG, max 20MB
+- `content_sha256`: normalized SHA-256 hex; required when the parent screenshot belongs to a manifest-backed snapshot and optional for legacy upload paths
+- `expected_content_type`: normalized `image/png` or `image/jpeg`; required alongside content SHA for manifest-backed captures
 
 ## Callbacks
 
-- `after_create_commit :extract_dimensions_later` enqueues `ScreenshotDimensionJob` only when an image is already attached and the image is not ready.
+- `after_create_commit :ensure_dimension_processing` enqueues `ScreenshotDimensionJob` only when an image is already attached and the image is not ready. Manifest replay reuses the same public method.
 - `after_save :sync_parent_status` and `after_destroy :sync_parent_status` keep the parent [[screenshot]] status derived from child variants.
+- Manifest replay schedules attached pending images again to recover a lost enqueue. `ScreenshotDimensionJob` keys Solid Queue concurrency by ScreenshotImage and attachment blob generation: duplicate work for one blob is discarded, replacement blobs remain schedulable, and completion rechecks the generation before updating dimensions.
 
 ## Upload Tokens
 

@@ -91,6 +91,10 @@ module Api
       [ limit, offset ]
     end
 
+    def serializer_url_options
+      { host: request.host, port: request.optional_port, protocol: request.protocol }
+    end
+
     # Coerce only scalar pagination values; structured params such as
     # `limit[x]=1` or `offset[]=2` are treated as absent rather than raising.
     def integer_param(key, default)

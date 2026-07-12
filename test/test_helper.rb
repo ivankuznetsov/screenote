@@ -18,6 +18,7 @@ end
 require_relative "../config/environment"
 require "rails/test_help"
 require_relative "support/oauth_test_helper"
+require_relative "support/snapshot_manifest_contract_helper"
 
 module ActiveSupport
   class TestCase
@@ -32,6 +33,7 @@ module ActiveSupport
 
     parallelize(workers: workers)
     fixtures :all
+    include SnapshotManifestContractHelper
   end
 end
 

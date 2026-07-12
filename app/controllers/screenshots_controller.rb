@@ -117,8 +117,10 @@ class ScreenshotsController < ApplicationController
   # re-analysis so Screenshot#status ends up :ready after the job finishes.
   def attach_replacement_image!(image_param)
     si = @screenshot.primary_image || @screenshot.screenshot_images.create!(viewport: :desktop)
-    si.image.attach(image_param)
-    si.update!(status: :pending, width: nil, height: nil)
-    ScreenshotDimensionJob.perform_later(si)
+    si.with_lock do
+      si.image.attach(image_param)
+      si.update!(status: :pending, width: nil, height: nil)
+    end
+    si.ensure_dimension_processing
   end
 end

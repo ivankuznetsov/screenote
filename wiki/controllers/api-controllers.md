@@ -3,7 +3,7 @@ title: API Controllers
 type: controller
 source: app/controllers/api/
 created: 2026-04-10
-updated: 2026-07-08
+updated: 2026-07-10
 tags: [controller, api, rest, bearer-auth]
 ---
 
@@ -75,6 +75,35 @@ Source: `app/controllers/api/v1/screenshots_controller.rb`
 - List supports `page_id`, `status`, `limit`, and `offset`
 - Create returns `screenshot_id`, `page_id`, `status`, `annotate_url`, and primary image metadata
 - OAuth list requires `mcp_read`; OAuth create requires `mcp_write` and explicit `project_id`
+
+## Api::V1::SnapshotsController
+
+Source: `app/controllers/api/v1/snapshots_controller.rb`, `app/services/snapshots/prepare_upload.rb`
+
+| Action | Method | Path | Notes |
+|--------|--------|------|-------|
+| create | POST | `/api/v1/projects/:project_id/snapshots` | Validates and atomically prepares or resumes a manifest-backed capture graph |
+| show | GET | `/api/v1/projects/:project_id/snapshots/:id` | Returns aggregate lifecycle, image-level recovery state, and review URL |
+
+- Create requires API-key access or OAuth `mcp_write`; show requires API-key access or OAuth `mcp_read`.
+- The preparation service normalizes the flat manifest contract, verifies a language-neutral length-prefixed SHA-256 digest, groups page/title viewport entries, and performs no writes until the full contract passes validation.
+- Identical requests return the existing graph. Database uniqueness plus replay verification handle lost responses and concurrent callers; replay also re-enqueues dimension processing for attached pending images so a queue failure after attachment commit cannot strand the capture. Stored membership drift returns JSON `manifest_conflict` rather than repairing or mixing graphs.
+- Preparation is limited per authenticated bearer/project, with unauthenticated attempts keyed by IP and project.
+- Responses expose stable snapshot, screenshot, and ScreenshotImage identities without returning local file references.
+
+## Api::V1::ScreenshotImagesController
+
+Source: `app/controllers/api/v1/screenshot_images_controller.rb`, `app/services/snapshots/attach_image.rb`
+
+| Action | Method | Path | Notes |
+|--------|--------|------|-------|
+| update | PUT | `/api/v1/projects/:project_id/screenshot_images/:id` | Streams and attaches prepared manifest image bytes |
+
+- Requires API-key project access or OAuth `mcp_write` membership.
+- Rejects a declared body over 20 MB before reading and stops a chunked body as soon as it crosses the bound. All bodies stream through an automatically unlinked temporary file while SHA-256 is computed.
+- Marcel detects actual bytes without trusting extensions or the declared header. The detected type must be PNG/JPEG and match both `Content-Type` and the prepared expected type; the computed SHA must match the prepared content identity.
+- A row lock makes identical concurrent or lost-response retries converge on one Active Storage attachment. An attached pending/ready image returns `already_uploaded`; an attached failed image returns to pending and re-enqueues dimension processing without replacing its blob.
+- The authenticated-project upload budget is 250 requests/hour, covering a 100-image manifest plus a full retry with margin. Unauthenticated attempts are keyed by IP and project.
 
 ---
 

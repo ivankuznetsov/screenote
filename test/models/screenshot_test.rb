@@ -3,6 +3,9 @@
 require "test_helper"
 
 class ScreenshotTest < ActiveSupport::TestCase
+  MANIFEST_DIGEST = "a" * 64
+  ENTRY_DIGEST = "b" * 64
+
   test "valid screenshot with title and project" do
     screenshot = Screenshot.new(title: "Test", page: pages(:alice_page))
     assert screenshot.valid?, "Screenshot should be valid with title and project"
@@ -77,6 +80,56 @@ class ScreenshotTest < ActiveSupport::TestCase
 
     assert_not screenshot.valid?, "Screenshot should be invalid with mismatched snapshot/page project"
     assert screenshot.errors[:snapshot].any?, "Error should attach to :snapshot"
+  end
+
+  test "manifest-backed snapshot requires a normalized entry digest" do
+    snapshot = projects(:alice_project).snapshots.create!(
+      git_commit: "abc1234",
+      manifest_digest: MANIFEST_DIGEST
+    )
+    screenshot = Screenshot.new(title: "Prepared", page: pages(:alice_page), snapshot: snapshot)
+
+    assert_not screenshot.valid?
+    assert_includes screenshot.errors[:manifest_entry_digest], "can't be blank"
+
+    screenshot.manifest_entry_digest = "  #{ENTRY_DIGEST.upcase}\n"
+    assert screenshot.valid?
+    screenshot.save!
+    assert_equal ENTRY_DIGEST, screenshot.manifest_entry_digest
+  end
+
+  test "manifest entry digest is rejected outside a manifest-backed snapshot" do
+    legacy_snapshot = projects(:alice_project).snapshots.create!(git_commit: "abc1234")
+    screenshot = Screenshot.new(
+      title: "Legacy",
+      page: pages(:alice_page),
+      snapshot: legacy_snapshot,
+      manifest_entry_digest: ENTRY_DIGEST
+    )
+
+    assert_not screenshot.valid?
+    assert_includes screenshot.errors[:manifest_entry_digest], "requires a manifest-backed snapshot"
+  end
+
+  test "manifest entry digest is unique within its snapshot" do
+    snapshot = projects(:alice_project).snapshots.create!(
+      git_commit: "abc1234",
+      manifest_digest: MANIFEST_DIGEST
+    )
+    snapshot.screenshots.create!(
+      title: "First",
+      page: pages(:alice_page),
+      manifest_entry_digest: ENTRY_DIGEST
+    )
+    duplicate = snapshot.screenshots.build(
+      title: "Second",
+      page: pages(:alice_page),
+      manifest_entry_digest: ENTRY_DIGEST
+    )
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:manifest_entry_digest], "has already been taken"
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save!(validate: false) }
   end
 
   test "has many annotations" do

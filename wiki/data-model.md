@@ -3,7 +3,7 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-10
 tags: [database, schema, models, relationships]
 ---
 
@@ -11,7 +11,7 @@ tags: [database, schema, models, relationships]
 
 TLDR: Screenote has 14 application tables (plus 3 Active Storage tables and 3 Doorkeeper OAuth tables). The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and Doorkeeper OAuth tokens.
 
-Source: `db/schema.rb` (schema version `2026_05_14_120630`)
+Source: `db/schema.rb` (schema version `2026_07_10_120000`)
 
 ## ER Diagram
 
@@ -70,9 +70,9 @@ erDiagram
 | `users` | User accounts with auth | email, password_digest, confirmed_at, oauth_provider, oauth_uid |
 | `projects` | Top-level container | name, description, user_id (creator) |
 | `pages` | Groups screenshots within a project | name, project_id |
-| `snapshots` | Capture-run records for a project | project_id, git_commit, taken_at |
-| `screenshots` | Logical capture/version under a page | title, page_id, snapshot_id, derived status, legacy width/height during migration |
-| `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), width, height |
+| `snapshots` | Capture-run records for a project | project_id, git_commit, taken_at, optional manifest_digest |
+| `screenshots` | Logical capture/version under a page | title, page_id, snapshot_id, optional manifest_entry_digest, derived status, legacy width/height during migration |
+| `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), content_sha256, expected_content_type, width, height |
 | `annotations` | Feedback pinned to screenshot regions | x_percent, y_percent, width_percent, height_percent, viewport, comment, status (enum), screenshot_id, user_id |
 | `annotation_comments` | Threaded comments on annotations | body, action (enum), annotation_id, user_id, api_key_id, notified_at |
 
@@ -118,7 +118,9 @@ erDiagram
 - `users.email` -- unique
 - `pages.(project_id, LOWER(name))` -- unique, case-insensitive
 - `snapshots.(project_id, taken_at)` -- powers the project-page "recent snapshots" sidebar (`Snapshot.recent` within a project scope). The id-equality `find_by(id:)` path used elsewhere is served by the PK, not this composite.
+- `snapshots.(project_id, manifest_digest)` -- partial unique identity for resumable manifest-backed captures.
 - `screenshots.snapshot_id` -- snapshot filtering
+- `screenshots.(snapshot_id, manifest_entry_digest)` -- partial unique identity for prepared screenshot entries.
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique
 - `subscriptions.user_id` -- unique (one subscription per user)

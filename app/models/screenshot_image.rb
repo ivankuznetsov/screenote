@@ -21,15 +21,22 @@ class ScreenshotImage < ApplicationRecord
   enum :viewport, { desktop: 0, tablet: 1, mobile: 2 }, prefix: :viewport
   enum :status, { pending: 0, ready: 1, failed: 2 }, default: :pending, prefix: :status
 
+  before_validation :normalize_content_sha256
+
   generates_token_for :upload, expires_in: 5.minutes do
     image.attached?.to_s
   end
 
   validates :viewport, uniqueness: { scope: :screenshot_id }
   validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+  validates :content_sha256,
+    format: { with: Snapshot::SHA256_FORMAT, message: Snapshot::SHA256_ERROR_MESSAGE },
+    allow_nil: true
+  validates :expected_content_type, inclusion: { in: ALLOWED_CONTENT_TYPES }, allow_nil: true
   validate :acceptable_image
+  validate :manifest_content_identity
 
-  after_create_commit :extract_dimensions_later
+  after_create_commit :ensure_dimension_processing
   # Keep Screenshot#status in sync with children so queries like
   # `Page.screenshots.where(status: :ready)` and readers like
   # `Screenshot#status` reflect the actual analysis state of the image
@@ -152,8 +159,6 @@ class ScreenshotImage < ApplicationRecord
   end
   private_class_method :move_blob_to_screenshot!
 
-  private
-
   # Only enqueue dimension extraction when there's something to analyze AND
   # the record isn't already :ready:
   #   - The signed-upload flow creates a blank ScreenshotImage first and the
@@ -162,11 +167,25 @@ class ScreenshotImage < ApplicationRecord
   #     and the upload controller enqueues a second (real) job after attach.
   #   - The backfill Rake task copies width/height/status=:ready from the
   #     parent; those records don't need re-analysis.
-  def extract_dimensions_later
+  def ensure_dimension_processing
     return unless image.attached?
     return if status_ready?
 
-    ScreenshotDimensionJob.perform_later(self)
+    ScreenshotDimensionJob.perform_later(self, image.blob.id)
+  end
+
+  private
+
+  def normalize_content_sha256
+    self.content_sha256 = content_sha256.to_s.strip.downcase.presence
+    self.expected_content_type = expected_content_type.to_s.strip.downcase.presence
+  end
+
+  def manifest_content_identity
+    return unless screenshot&.snapshot&.manifest_backed?
+
+    errors.add(:content_sha256, :blank) if content_sha256.blank?
+    errors.add(:expected_content_type, :blank) if expected_content_type.blank?
   end
 
   # :ready iff every sibling variant is :ready; :failed if any is :failed;

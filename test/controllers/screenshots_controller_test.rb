@@ -249,9 +249,10 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
     new_image = fixture_file_upload("test_image.png", "image/png")
 
-    assert_enqueued_with(job: ScreenshotDimensionJob) do
-      patch screenshot_path(@screenshot), params: { screenshot: { image: new_image } }
-    end
+    patch screenshot_path(@screenshot), params: { screenshot: { image: new_image } }
+
+    si = @screenshot.reload.primary_image
+    assert_enqueued_with(job: ScreenshotDimensionJob, args: [ si, si.image.blob.id ])
   end
 
   # Destroy

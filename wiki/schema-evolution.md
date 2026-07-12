@@ -9,7 +9,7 @@ tags: [database, migrations, schema, history]
 
 # Schema Evolution
 
-TLDR: 27 migrations across 7 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, multi-viewport screenshots, and project capture snapshots.
+TLDR: 28 migrations across 8 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, multi-viewport screenshots, project capture snapshots, and resumable manifest identity.
 
 Source: `db/migrate/`
 
@@ -77,6 +77,12 @@ Source: `db/migrate/`
 | `20260514120600_create_snapshots` | Project-scoped capture runs with git commit and capture time |
 | `20260514120630_add_snapshot_id_to_screenshots` | Optional screenshot-to-snapshot link with `ON DELETE SET NULL` |
 
+### Phase 8: Resumable CLI Snapshot Identity (2026-07-10)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260710120000_add_manifest_identity_to_snapshots` | Nullable SHA-256 identity columns plus partial unique indexes for snapshots and prepared screenshot entries |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -94,5 +100,7 @@ Source: `db/migrate/`
 7. **ScreenshotImage child rows**: A Screenshot is now a logical capture/version; ScreenshotImage owns actual viewport blobs, dimensions, status, and upload tokens.
 
 8. **Snapshots are additive capture groups**: Existing and ad-hoc screenshots retain a null `snapshot_id`; deleting a snapshot preserves screenshots by nullifying that link.
+
+9. **Manifest identity is nullable and server-owned**: legacy and MCP rows need no backfill, while manifest-backed snapshots and entries use partial unique indexes to make retries deterministic without changing duplicate commit semantics.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

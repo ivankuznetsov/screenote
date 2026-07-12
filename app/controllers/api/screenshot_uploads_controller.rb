@@ -54,7 +54,7 @@ module Api
       # (todo 166 — security review finding on PR-1).
       screenshot_image.save!
 
-      ScreenshotDimensionJob.perform_later(screenshot_image)
+      screenshot_image.ensure_dimension_processing
 
       annotate_url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
 

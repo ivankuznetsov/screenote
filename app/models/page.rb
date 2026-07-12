@@ -17,8 +17,9 @@ class Page < ApplicationRecord
   # Case-insensitive find-or-create that handles concurrent race conditions.
   # Uses LOWER() to match the database index and retries on unique constraint violations.
   def self.find_or_create_by_name!(project, name)
-    project.pages.where("LOWER(name) = LOWER(?)", name).first ||
+    project.pages.where("LOWER(name) = LOWER(?)", name).first || transaction(requires_new: true) {
       project.pages.create!(name: name)
+    }
   rescue ActiveRecord::RecordNotUnique
     project.pages.where("LOWER(name) = LOWER(?)", name).first!
   end

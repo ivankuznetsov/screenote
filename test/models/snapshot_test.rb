@@ -3,6 +3,8 @@
 require "test_helper"
 
 class SnapshotTest < ActiveSupport::TestCase
+  MANIFEST_DIGEST = "a" * 64
+
   test "git_commit column preserves the migration's 40-character limit" do
     assert_equal 40, Snapshot.columns_hash.fetch("git_commit").limit
   end
@@ -105,6 +107,81 @@ class SnapshotTest < ActiveSupport::TestCase
       project.snapshots.create!(git_commit: "abc1234", taken_at: 2.hours.ago)
       project.snapshots.create!(git_commit: "abc1234", taken_at: 1.hour.ago)
     end
+  end
+
+  test "manifest digest is optional for legacy snapshots and normalized when present" do
+    legacy = projects(:alice_project).snapshots.create!(git_commit: "abc1234")
+    manifest = projects(:alice_project).snapshots.create!(
+      git_commit: "def5678",
+      manifest_digest: "  #{MANIFEST_DIGEST.upcase}\n"
+    )
+
+    assert_nil legacy.manifest_digest
+    assert_equal MANIFEST_DIGEST, manifest.manifest_digest
+  end
+
+  test "manifest digest must be a SHA-256 hex digest" do
+    snapshot = projects(:alice_project).snapshots.build(
+      git_commit: "abc1234",
+      manifest_digest: "not-a-digest"
+    )
+
+    assert_not snapshot.valid?
+    assert_includes snapshot.errors[:manifest_digest], "must be a 64-character hexadecimal SHA-256"
+  end
+
+  test "manifest digest is unique per project at validation and database levels" do
+    project = projects(:alice_project)
+    project.snapshots.create!(git_commit: "abc1234", manifest_digest: MANIFEST_DIGEST)
+
+    duplicate = project.snapshots.build(git_commit: "def5678", manifest_digest: MANIFEST_DIGEST)
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:manifest_digest], "has already been taken"
+
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      duplicate.save!(validate: false)
+    end
+  end
+
+  test "same manifest digest is allowed in different projects" do
+    projects(:alice_project).snapshots.create!(git_commit: "abc1234", manifest_digest: MANIFEST_DIGEST)
+    snapshot = projects(:bob_project).snapshots.build(git_commit: "abc1234", manifest_digest: MANIFEST_DIGEST)
+
+    assert snapshot.valid?
+  end
+
+  test "aggregate state follows expected image attachment and processing state" do
+    project = projects(:alice_project)
+    snapshot = project.snapshots.create!(git_commit: "abc1234", manifest_digest: MANIFEST_DIGEST)
+    screenshot = project.pages.first.screenshots.create!(
+      title: "Manifest capture",
+      snapshot: snapshot,
+      manifest_entry_digest: "b" * 64
+    )
+    desktop = screenshot.screenshot_images.create!(
+      viewport: :desktop, content_sha256: "c" * 64, expected_content_type: "image/png"
+    )
+    mobile = screenshot.screenshot_images.create!(
+      viewport: :mobile, content_sha256: "d" * 64, expected_content_type: "image/png"
+    )
+
+    assert_equal "awaiting_upload", snapshot.aggregate_state
+
+    [ desktop, mobile ].each do |image|
+      image.image.attach(
+        io: StringIO.new(File.binread(Rails.root.join("test/fixtures/files/test_image.png"))),
+        filename: "#{image.viewport}.png",
+        content_type: "image/png"
+      )
+    end
+    assert_equal "processing", snapshot.aggregate_state
+
+    mobile.update!(status: :failed)
+    assert_equal "failed", snapshot.aggregate_state
+
+    desktop.update!(status: :ready)
+    mobile.update!(status: :ready)
+    assert_equal "ready", snapshot.aggregate_state
   end
 
   test "recent scope returns full ordered array newest first" do

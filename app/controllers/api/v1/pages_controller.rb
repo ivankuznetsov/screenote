@@ -11,15 +11,9 @@ module Api
 
         render json: {
           pages: Api::V1::ProjectScope.pages(project).map do |page|
-            Api::V1::ContractSerializer.page(page, url_options: url_options)
+            Api::V1::ContractSerializer.page(page, url_options: serializer_url_options)
           end
         }
-      end
-
-      private
-
-      def url_options
-        { host: request.host, port: request.optional_port, protocol: request.protocol }
       end
     end
   end

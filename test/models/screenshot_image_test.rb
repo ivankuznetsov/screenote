@@ -5,6 +5,10 @@ require "test_helper"
 class ScreenshotImageTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
+  MANIFEST_DIGEST = "a" * 64
+  ENTRY_DIGEST = "b" * 64
+  CONTENT_DIGEST = "c" * 64
+
   test "valid with screenshot and viewport" do
     si = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :mobile)
     assert si.valid?, "Should be valid with screenshot + viewport"
@@ -92,6 +96,48 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     assert_includes si.errors[:image].join, "PNG or JPEG"
   end
 
+  test "content SHA is optional for legacy images" do
+    image = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :mobile)
+
+    assert image.valid?
+    assert_nil image.content_sha256
+  end
+
+  test "manifest-backed image requires a normalized content SHA" do
+    snapshot = projects(:alice_project).snapshots.create!(
+      git_commit: "abc1234",
+      manifest_digest: MANIFEST_DIGEST
+    )
+    screenshot = snapshot.screenshots.create!(
+      page: pages(:alice_page),
+      title: "Prepared",
+      manifest_entry_digest: ENTRY_DIGEST
+    )
+    image = screenshot.screenshot_images.build(viewport: :mobile)
+
+    assert_not image.valid?
+    assert_includes image.errors[:content_sha256], "can't be blank"
+    assert_includes image.errors[:expected_content_type], "can't be blank"
+
+    image.content_sha256 = "  #{CONTENT_DIGEST.upcase}\n"
+    image.expected_content_type = " IMAGE/PNG\n"
+    assert image.valid?
+    image.save!
+    assert_equal CONTENT_DIGEST, image.content_sha256
+    assert_equal "image/png", image.expected_content_type
+  end
+
+  test "content SHA must be a SHA-256 hex digest" do
+    image = ScreenshotImage.new(
+      screenshot: screenshots(:alice_screenshot),
+      viewport: :mobile,
+      content_sha256: "not-a-digest"
+    )
+
+    assert_not image.valid?
+    assert_includes image.errors[:content_sha256], "must be a 64-character hexadecimal SHA-256"
+  end
+
   test "after_create_commit does not enqueue dimension job when no image attached" do
     # Blank ScreenshotImage (signed-upload flow — blob arrives later). Without
     # the guard, the job would fire, log a warning, and exit — pure noise.
@@ -113,6 +159,20 @@ class ScreenshotImageTest < ActiveSupport::TestCase
         filename: "m.png", content_type: "image/png"
       )
       si.save!
+    end
+  end
+
+  test "ensure_dimension_processing enqueues the current attachment generation" do
+    screenshot = screenshots(:alice_screenshot)
+    si = screenshot.screenshot_images.create!(viewport: :mobile)
+    si.image.attach(
+      io: StringIO.new(File.binread(Rails.root.join("test/fixtures/files/test_image.png"))),
+      filename: "generation.png",
+      content_type: "image/png"
+    )
+
+    assert_enqueued_with(job: ScreenshotDimensionJob, args: [ si, si.image.blob.id ]) do
+      si.ensure_dimension_processing
     end
   end
 

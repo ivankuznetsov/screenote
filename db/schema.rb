@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_14_120630) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_10_120000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -181,7 +181,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_14_120630) do
   end
 
   create_table "screenshot_images", force: :cascade do |t|
+    t.string "content_sha256", limit: 64
     t.datetime "created_at", null: false
+    t.string "expected_content_type"
     t.integer "height"
     t.integer "screenshot_id", null: false
     t.integer "status", default: 0, null: false
@@ -195,6 +197,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_14_120630) do
   create_table "screenshots", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "height"
+    t.string "manifest_entry_digest", limit: 64
     t.integer "page_id", null: false
     t.integer "snapshot_id"
     t.integer "status", default: 0, null: false
@@ -203,6 +206,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_14_120630) do
     t.integer "width"
     t.index ["created_at"], name: "index_screenshots_on_project_id_and_created_at"
     t.index ["page_id"], name: "index_screenshots_on_page_id"
+    t.index ["snapshot_id", "manifest_entry_digest"], name: "idx_screenshots_snapshot_entry_digest", unique: true, where: "manifest_entry_digest IS NOT NULL"
     t.index ["snapshot_id"], name: "index_screenshots_on_snapshot_id"
   end
 
@@ -219,9 +223,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_14_120630) do
   create_table "snapshots", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "git_commit", limit: 40, null: false
+    t.string "manifest_digest", limit: 64
     t.integer "project_id", null: false
     t.datetime "taken_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["project_id", "manifest_digest"], name: "idx_snapshots_project_manifest_digest", unique: true, where: "manifest_digest IS NOT NULL"
     t.index ["project_id", "taken_at"], name: "index_snapshots_on_project_id_and_taken_at"
     t.index ["project_id"], name: "index_snapshots_on_project_id"
   end
