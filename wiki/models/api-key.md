@@ -3,7 +3,7 @@ title: ApiKey
 type: model
 source: app/models/api_key.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-07-12
 tags: [model, auth, api, security]
 ---
 
@@ -68,5 +68,6 @@ Source: `app/models/api_key.rb`
 - The `raw_token` is flashed to the user once via `flash[:api_key_token]` in the controller and never shown again.
 - Used by `Api::BaseController` for bearer token authentication on REST API endpoints.
 - Also used as the author of annotation comments when agents resolve/reopen annotations.
+- `20260712153000_repair_legacy_api_key_token_storage` repairs databases that ran the original plaintext-token create migration before it was rewritten. It hashes any legacy values, removes the plaintext column, and is intentionally irreversible.
 
 See also: [[project]], [[controllers/api-controllers]], [[annotation-comment]]

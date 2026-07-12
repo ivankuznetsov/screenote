@@ -3,13 +3,13 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-07-09
+updated: 2026-07-12
 tags: [database, migrations, schema, history]
 ---
 
 # Schema Evolution
 
-TLDR: 28 migrations across 8 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, multi-viewport screenshots, project capture snapshots, and resumable manifest identity.
+TLDR: 29 migrations across 9 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, multi-viewport screenshots, project capture snapshots, resumable manifest identity, and a production schema-drift repair.
 
 Source: `db/migrate/`
 
@@ -83,6 +83,12 @@ Source: `db/migrate/`
 |-----------|---------|
 | `20260710120000_add_manifest_identity_to_snapshots` | Nullable SHA-256 identity columns plus partial unique indexes for snapshots and prepared screenshot entries |
 
+### Phase 9: API Key Schema Drift Repair (2026-07-12)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260712153000_repair_legacy_api_key_token_storage` | Forward-only repair for databases that still have plaintext `api_keys.token`; backfills SHA-256 digests and prefixes, enforces the secure index, and removes plaintext |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -102,5 +108,7 @@ Source: `db/migrate/`
 8. **Snapshots are additive capture groups**: Existing and ad-hoc screenshots retain a null `snapshot_id`; deleting a snapshot preserves screenshots by nullifying that link.
 
 9. **Manifest identity is nullable and server-owned**: legacy and MCP rows need no backfill, while manifest-backed snapshots and entries use partial unique indexes to make retries deterministic without changing duplicate commit semantics.
+
+10. **Applied migrations are append-only**: `20260212071431_create_api_keys` was rewritten after one production database had already run its plaintext-token form, while its forward digest migration was deleted. Fresh SQLite databases looked correct, but production PostgreSQL retained the old columns. Repairs must use a new timestamp and an upgrade-path test; never rewrite an applied migration based only on fresh-schema checks. The API-key repair test runs in both SQLite and a dedicated PostgreSQL 16 CI job so adapter-specific production behavior stays covered.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]
