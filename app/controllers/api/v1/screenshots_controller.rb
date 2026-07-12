@@ -18,7 +18,7 @@ module Api
         screenshots = screenshots.limit(limit).offset(offset)
 
         render json: {
-          screenshots: screenshots.map { |screenshot| Api::V1::ContractSerializer.screenshot(screenshot, url_options: url_options) },
+          screenshots: screenshots.map { |screenshot| Api::V1::ContractSerializer.screenshot(screenshot, url_options: serializer_url_options) },
           pagination: { total: total, limit: limit, offset: offset }
         }
       end
@@ -44,7 +44,7 @@ module Api
           content_type: image.content_type
         )
 
-        render json: Api::V1::ContractSerializer.screenshot_create(screenshot, url_options: url_options), status: :created
+        render json: Api::V1::ContractSerializer.screenshot_create(screenshot, url_options: serializer_url_options), status: :created
       end
 
       private
@@ -61,10 +61,6 @@ module Api
         return Page.find_or_create_by_name!(project, page_id) if page_id.present?
 
         Page.find_or_create_by_name!(project, title)
-      end
-
-      def url_options
-        { host: request.host, port: request.optional_port, protocol: request.protocol }
       end
     end
   end

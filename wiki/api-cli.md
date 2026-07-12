@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-07-10
+updated: 2026-07-12
 tags: [cli, api, rest, agents]
 ---
 
@@ -20,7 +20,7 @@ MCP remains the richer agent protocol with OAuth/API-key transport and tool sema
 ## Install
 
 ```sh
-go install github.com/ivankuznetsov/screenote/cmd/screenote@latest
+go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
 ```
 
 Because the Rails repo has a top-level Ruby `vendor/` directory, local Go test/build commands should use:
@@ -70,6 +70,7 @@ screenote screenshot create --project ID --title TITLE [--page ID_OR_NAME] [--fi
 screenote annotation list --project ID [--screenshot ID] [--status open|resolved] [--viewport desktop|tablet|mobile]
 screenote annotation get --project ID --annotation ID
 screenote comment add --project ID --annotation ID --body TEXT
+screenote snapshot --project ID --manifest PATH
 ```
 
 User-global commands are `project list`, `config`, `login`, and `logout`. Project-scoped commands require project selection through `--project`, `SCREENOTE_PROJECT`, or config `project`; missing project is a JSON stderr usage/config error with code `missing_project` and exit code 2.
@@ -105,11 +106,11 @@ Exit codes:
 
 The private service now exposes project-scoped prepare and show resources for a manifest-driven public CLI. Preparation accepts normalized page/title/viewport entries, expected PNG/JPEG types, image content SHA-256 values, and opaque relative-file reference hashes. The server verifies the aggregate manifest identity before creating the complete Snapshot -> Screenshot -> ScreenshotImage graph in one transaction.
 
-An identical request resumes the same graph and returns image-level `awaiting_upload`, `processing`, `failed`, or `ready` state plus a snapshot-filtered project review URL. A changed contract gets a different manifest identity; a stored graph that no longer matches its identity returns `manifest_conflict`. Readable client file paths never enter the REST request or response.
+An identical request resumes the same graph and returns image-level `awaiting_upload`, `processing`, `failed`, or `ready` state plus a snapshot-filtered project review URL. Replay also ensures every attached pending image has dimension processing scheduled, recovering when attachment commit succeeded but the original queue enqueue failed. Overlapping jobs for the same attachment blob generation are discarded by the production queue; a replacement blob receives a distinct generation, and stale analysis cannot update it. A changed contract gets a different manifest identity; a stored graph that no longer matches its identity returns `manifest_conflict`. Readable client file paths never enter the REST request or response.
 
 Prepared image bytes upload through a separate bearer-authenticated raw-body route. It uses bounded disk-backed streaming, verifies actual PNG/JPEG bytes against the declared and prepared type, verifies SHA-256 content identity, and treats an identical retry as success. Failed dimension processing can be retried without creating another blob. The existing MCP signed-upload route remains unchanged.
 
-The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. The private copy remains temporarily present only until the snapshot command, public release, production smoke, and final cleanup gate complete.
+The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. Its language-neutral digest vectors are executed by both Go and the production Rails digest implementation. Blocking service CI pins exact supported public CLI commits; a scheduled service workflow checks the public CLI `main` branch for forward drift. The private copy remains temporarily present only until the snapshot command, public release, production smoke, and final cleanup gate complete.
 
 ## Deferred
 

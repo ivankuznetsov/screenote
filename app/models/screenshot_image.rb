@@ -36,7 +36,7 @@ class ScreenshotImage < ApplicationRecord
   validate :acceptable_image
   validate :manifest_content_identity
 
-  after_create_commit :extract_dimensions_later
+  after_create_commit :ensure_dimension_processing
   # Keep Screenshot#status in sync with children so queries like
   # `Page.screenshots.where(status: :ready)` and readers like
   # `Screenshot#status` reflect the actual analysis state of the image
@@ -159,6 +159,21 @@ class ScreenshotImage < ApplicationRecord
   end
   private_class_method :move_blob_to_screenshot!
 
+  # Only enqueue dimension extraction when there's something to analyze AND
+  # the record isn't already :ready:
+  #   - The signed-upload flow creates a blank ScreenshotImage first and the
+  #     agent PUTs the blob later. Without this guard, the create-time
+  #     callback enqueues a useless job that only logs a warning and exits,
+  #     and the upload controller enqueues a second (real) job after attach.
+  #   - The backfill Rake task copies width/height/status=:ready from the
+  #     parent; those records don't need re-analysis.
+  def ensure_dimension_processing
+    return unless image.attached?
+    return if status_ready?
+
+    ScreenshotDimensionJob.perform_later(self, image.blob.id)
+  end
+
   private
 
   def normalize_content_sha256
@@ -171,21 +186,6 @@ class ScreenshotImage < ApplicationRecord
 
     errors.add(:content_sha256, :blank) if content_sha256.blank?
     errors.add(:expected_content_type, :blank) if expected_content_type.blank?
-  end
-
-  # Only enqueue dimension extraction when there's something to analyze AND
-  # the record isn't already :ready:
-  #   - The signed-upload flow creates a blank ScreenshotImage first and the
-  #     agent PUTs the blob later. Without this guard, the create-time
-  #     callback enqueues a useless job that only logs a warning and exits,
-  #     and the upload controller enqueues a second (real) job after attach.
-  #   - The backfill Rake task copies width/height/status=:ready from the
-  #     parent; those records don't need re-analysis.
-  def extract_dimensions_later
-    return unless image.attached?
-    return if status_ready?
-
-    ScreenshotDimensionJob.perform_later(self)
   end
 
   # :ready iff every sibling variant is :ready; :failed if any is :failed;

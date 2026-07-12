@@ -50,8 +50,9 @@ Source: `app/models/screenshot_image.rb`, `db/migrate/20260421110931_create_scre
 
 ## Callbacks
 
-- `after_create_commit :extract_dimensions_later` enqueues `ScreenshotDimensionJob` only when an image is already attached and the image is not ready.
+- `after_create_commit :ensure_dimension_processing` enqueues `ScreenshotDimensionJob` only when an image is already attached and the image is not ready. Manifest replay reuses the same public method.
 - `after_save :sync_parent_status` and `after_destroy :sync_parent_status` keep the parent [[screenshot]] status derived from child variants.
+- Manifest replay schedules attached pending images again to recover a lost enqueue. `ScreenshotDimensionJob` keys Solid Queue concurrency by ScreenshotImage and attachment blob generation: duplicate work for one blob is discarded, replacement blobs remain schedulable, and completion rechecks the generation before updating dimensions.
 
 ## Upload Tokens
 

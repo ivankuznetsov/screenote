@@ -4,6 +4,14 @@ require "test_helper"
 
 module Snapshots
   class PrepareUploadTest < ActiveSupport::TestCase
+    include ActiveJob::TestHelper
+
+    class FailingQueueAdapter < ActiveJob::QueueAdapters::TestAdapter
+      def enqueue(_job)
+        raise "queue unavailable"
+      end
+    end
+
     test "creates a complete multi-page multi-viewport graph atomically" do
       payload = snapshot_manifest_payload
 
@@ -24,12 +32,69 @@ module Snapshots
       payload = snapshot_manifest_payload
       first = PrepareUpload.call(project: projects(:alice_project), payload: payload)
 
-      assert_no_difference [ "Snapshot.count", "Screenshot.count", "ScreenshotImage.count", "Page.count" ] do
+      assert_no_enqueued_jobs(only: ScreenshotDimensionJob) do
+        assert_no_difference [ "Snapshot.count", "Screenshot.count", "ScreenshotImage.count", "Page.count" ] do
+          replay = PrepareUpload.call(project: projects(:alice_project), payload: payload)
+
+          assert_not replay.created
+          assert_equal first.snapshot.id, replay.snapshot.id
+          assert_equal first.snapshot.screenshots.order(:id).ids, replay.snapshot.screenshots.order(:id).ids
+        end
+      end
+    end
+
+    test "identical replay re-enqueues attached pending images after a lost enqueue" do
+      bytes = file_fixture("test_image.png").binread
+      entry = snapshot_entry(page: "Recover upload", viewport: :desktop, seed: "recover-upload")
+      entry[:content_sha256] = Digest::SHA256.hexdigest(bytes)
+      payload = snapshot_manifest_payload(entries: [ entry ])
+      first = PrepareUpload.call(project: projects(:alice_project), payload: payload)
+      image = first.snapshot.screenshot_images.sole
+
+      original_adapter = ScreenshotDimensionJob.queue_adapter
+      ScreenshotDimensionJob.queue_adapter = FailingQueueAdapter.new
+
+      begin
+        assert_raises(RuntimeError, match: /queue unavailable/) do
+          AttachImage.call(
+            image: image,
+            io: StringIO.new(bytes),
+            declared_content_type: "image/png",
+            declared_length: bytes.bytesize
+          )
+        end
+      ensure
+        ScreenshotDimensionJob.queue_adapter = original_adapter
+      end
+
+      assert image.reload.image.attached?
+      assert image.status_pending?
+      clear_enqueued_jobs
+
+      assert_enqueued_with(job: ScreenshotDimensionJob, args: [ image, image.image.blob.id ]) do
         replay = PrepareUpload.call(project: projects(:alice_project), payload: payload)
 
         assert_not replay.created
         assert_equal first.snapshot.id, replay.snapshot.id
-        assert_equal first.snapshot.screenshots.order(:id).ids, replay.snapshot.screenshots.order(:id).ids
+      end
+    end
+
+    test "identical replay does not re-enqueue an attached ready image" do
+      payload = snapshot_manifest_payload(entries: [ snapshot_entry(page: "Ready upload", viewport: :desktop, seed: "ready-upload") ])
+      first = PrepareUpload.call(project: projects(:alice_project), payload: payload)
+      image = first.snapshot.screenshot_images.sole
+      image.image.attach(
+        io: file_fixture("test_image.png").open,
+        filename: "test_image.png",
+        content_type: "image/png"
+      )
+      image.update!(status: :ready, width: 10, height: 10)
+      clear_enqueued_jobs
+
+      assert_no_enqueued_jobs(only: ScreenshotDimensionJob) do
+        replay = PrepareUpload.call(project: projects(:alice_project), payload: payload)
+
+        assert_not replay.created
       end
     end
 

@@ -29,7 +29,7 @@ module Api
         render json: Api::V1::ContractSerializer.snapshot_upload(
           result.snapshot,
           operation: operation,
-          url_options: url_options
+          url_options: serializer_url_options
         ), status: result.created ? :created : :ok
       end
 
@@ -43,7 +43,7 @@ module Api
         render json: Api::V1::ContractSerializer.snapshot_upload(
           snapshot,
           operation: "status",
-          url_options: url_options
+          url_options: serializer_url_options
         )
       end
 
@@ -54,10 +54,6 @@ module Api
           :version, :git_commit, :taken_at, :manifest_digest,
           entries: [ :page, :title, :viewport, :mime_type, :content_sha256, :file_ref_sha256 ]
         ).to_h
-      end
-
-      def url_options
-        { host: request.host, port: request.optional_port, protocol: request.protocol }
       end
     end
   end

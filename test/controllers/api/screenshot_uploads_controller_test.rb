@@ -124,13 +124,12 @@ module Api
     test "enqueues dimension job targeting the ScreenshotImage after upload" do
       screenshot, si, token = create_screenshot_with_upload_token
 
-      assert_enqueued_with(job: ScreenshotDimensionJob, args: [ si ]) do
-        put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
-          headers: { "Content-Type" => "image/png" },
-          env: { "RAW_POST_DATA" => @image_data }
-      end
+      put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
+        headers: { "Content-Type" => "image/png" },
+        env: { "RAW_POST_DATA" => @image_data }
 
       assert_response :ok
+      assert_enqueued_with(job: ScreenshotDimensionJob, args: [ si, si.reload.image.blob.id ])
     end
 
     private

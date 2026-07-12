@@ -162,6 +162,20 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     end
   end
 
+  test "ensure_dimension_processing enqueues the current attachment generation" do
+    screenshot = screenshots(:alice_screenshot)
+    si = screenshot.screenshot_images.create!(viewport: :mobile)
+    si.image.attach(
+      io: StringIO.new(File.binread(Rails.root.join("test/fixtures/files/test_image.png"))),
+      filename: "generation.png",
+      content_type: "image/png"
+    )
+
+    assert_enqueued_with(job: ScreenshotDimensionJob, args: [ si, si.image.blob.id ]) do
+      si.ensure_dimension_processing
+    end
+  end
+
   test "rollback_to_screenshots! restores Screenshot width/height/status from the variant" do
     screenshot = screenshots(:alice_screenshot)
     screenshot.image.purge if screenshot.image.attached?

@@ -87,7 +87,7 @@ Source: `app/controllers/api/v1/snapshots_controller.rb`, `app/services/snapshot
 
 - Create requires API-key access or OAuth `mcp_write`; show requires API-key access or OAuth `mcp_read`.
 - The preparation service normalizes the flat manifest contract, verifies a language-neutral length-prefixed SHA-256 digest, groups page/title viewport entries, and performs no writes until the full contract passes validation.
-- Identical requests return the existing graph. Database uniqueness plus replay verification handle lost responses and concurrent callers; stored membership drift returns JSON `manifest_conflict` rather than repairing or mixing graphs.
+- Identical requests return the existing graph. Database uniqueness plus replay verification handle lost responses and concurrent callers; replay also re-enqueues dimension processing for attached pending images so a queue failure after attachment commit cannot strand the capture. Stored membership drift returns JSON `manifest_conflict` rather than repairing or mixing graphs.
 - Preparation is limited per authenticated bearer/project, with unauthenticated attempts keyed by IP and project.
 - Responses expose stable snapshot, screenshot, and ScreenshotImage identities without returning local file references.
 

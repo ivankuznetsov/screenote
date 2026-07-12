@@ -9,7 +9,7 @@ module Snapshots
     Result = Data.define(:snapshot, :created)
     Entry = Data.define(:page, :title, :viewport, :mime_type, :content_sha256, :file_ref_sha256)
     Group = Data.define(:digest, :page, :title, :entries)
-    Contract = Data.define(:version, :git_commit, :taken_at, :manifest_digest, :entries, :groups)
+    Contract = Data.define(:git_commit, :taken_at, :manifest_digest, :groups)
 
     class Error < StandardError
       attr_reader :code, :details
@@ -58,12 +58,12 @@ module Snapshots
     def call
       contract = normalize_contract
       existing = project.snapshots.find_by(manifest_digest: contract.manifest_digest)
-      return Result.new(snapshot: verify_existing!(existing, contract), created: false) if existing
+      return resume_existing(existing, contract) if existing
 
       Result.new(snapshot: create_graph!(contract), created: true)
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
       existing = project.snapshots.find_by(manifest_digest: contract&.manifest_digest)
-      return Result.new(snapshot: verify_existing!(existing, contract), created: false) if existing
+      return resume_existing(existing, contract) if existing
 
       @attempts += 1
       retry if @attempts == 1
@@ -74,6 +74,12 @@ module Snapshots
     private
 
     attr_reader :project, :payload
+
+    def resume_existing(existing, contract)
+      snapshot = verify_existing!(existing, contract)
+      EnsureProcessing.call(snapshot: snapshot)
+      Result.new(snapshot: snapshot, created: false)
+    end
 
     def normalize_contract
       raw = payload.respond_to?(:to_h) ? payload.to_h.deep_symbolize_keys : {}
@@ -92,11 +98,9 @@ module Snapshots
       invalid!("manifest_digest does not match the normalized contract") unless supplied_digest == expected_digest
 
       Contract.new(
-        version: VERSION,
         git_commit: git_commit,
         taken_at: taken_at,
         manifest_digest: supplied_digest,
-        entries: entries,
         groups: groups
       )
     rescue EncodingError, TypeError, ArgumentError => e

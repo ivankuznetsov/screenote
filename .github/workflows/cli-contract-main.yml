@@ -1,0 +1,39 @@
+name: Public CLI main contract
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cli-contract-main:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout service
+        uses: actions/checkout@v6
+
+      - name: Checkout public CLI main
+        uses: actions/checkout@v6
+        with:
+          repository: ivankuznetsov/screenote-cli
+          ref: main
+          path: tmp/screenote-cli
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Run public CLI digest contract
+        env:
+          RAILS_ENV: test
+          SCREENOTE_CLI_CONTRACT_PATH: ${{ github.workspace }}/tmp/screenote-cli/testdata/contracts/snapshot-digests-v1.json
+        run: |
+          test -s "$SCREENOTE_CLI_CONTRACT_PATH"
+          bin/rails db:test:prepare
+          bin/rails test test/integration/public_cli_digest_contract_test.rb

@@ -21,11 +21,10 @@ module Api
       end
 
       test "uploads valid prepared bytes and enqueues processing" do
-        assert_enqueued_with(job: ScreenshotDimensionJob, args: [ @image ]) do
-          upload(@image_data)
-        end
+        upload(@image_data)
 
         assert_response :ok
+        assert_enqueued_with(job: ScreenshotDimensionJob, args: [ @image, @image.reload.image.blob.id ])
         assert_equal "uploaded", response.parsed_body["operation"]
         assert_equal "processing", response.parsed_body["state"]
         assert @image.reload.image.attached?
@@ -53,7 +52,7 @@ module Api
         clear_enqueued_jobs
 
         assert_no_difference [ "ActiveStorage::Attachment.count", "ActiveStorage::Blob.count" ] do
-          assert_enqueued_with(job: ScreenshotDimensionJob, args: [ @image ]) do
+          assert_enqueued_with(job: ScreenshotDimensionJob, args: [ @image, @image.image.blob.id ]) do
             upload(@image_data)
           end
         end

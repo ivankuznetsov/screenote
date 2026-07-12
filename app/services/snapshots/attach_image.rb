@@ -95,7 +95,6 @@ module Snapshots
       enqueue_processing = false
 
       image.with_lock do
-        image.reload
         ensure_manifest_identity!
 
         if image.image.attached?
@@ -120,7 +119,7 @@ module Snapshots
         end
       end
 
-      ScreenshotDimensionJob.perform_later(image) if enqueue_processing
+      image.ensure_dimension_processing if enqueue_processing
       Result.new(image: image.reload, operation: operation)
     end
 
