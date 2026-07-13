@@ -123,6 +123,58 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".page-card__placeholder", text: "No screenshots yet"
   end
 
+  test "show links a page card directly to its only usable screenshot" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Single screenshot project")
+    page = project.pages.create!(name: "Only screen")
+    screenshot = create_ready_screenshot_with_image(page, title: "Only version")
+
+    get project_path(project)
+
+    assert_response :success
+    assert_select "a[data-testid='page-card'][href='#{screenshot_path(screenshot)}']", count: 1
+  end
+
+  test "show keeps page cards pointed at the version grid when there is not exactly one usable screenshot" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Mixed screenshot project")
+    empty_page = project.pages.create!(name: "Empty")
+    pending_page = project.pages.create!(name: "Pending")
+    failed_page = project.pages.create!(name: "Failed")
+    attachment_missing_page = project.pages.create!(name: "Attachment missing")
+    multiple_page = project.pages.create!(name: "Multiple")
+
+    pending_page.screenshots.create!(title: "Pending", status: :pending)
+    failed_page.screenshots.create!(title: "Failed", status: :failed)
+    attachment_missing_screenshot = attachment_missing_page.screenshots.create!(
+      title: "Attachment missing",
+      status: :ready
+    )
+    attachment_missing_screenshot.screenshot_images.create!(viewport: :desktop, status: :ready)
+    create_ready_screenshot_with_image(multiple_page, title: "First")
+    create_ready_screenshot_with_image(multiple_page, title: "Second")
+
+    get project_path(project)
+
+    assert_response :success
+    [ empty_page, pending_page, failed_page, attachment_missing_page, multiple_page ].each do |page|
+      assert_select "a[data-testid='page-card'][data-page-id='#{page.id}'][href='#{page_path(page)}']", count: 1
+    end
+  end
+
+  test "show links a single logical screenshot with multiple viewport images directly" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Responsive screenshot project")
+    page = project.pages.create!(name: "Responsive screen")
+    screenshot = create_ready_screenshot_with_image(page, title: "Responsive", viewport: :desktop)
+    attach_test_image(screenshot.screenshot_images.create!(viewport: :mobile, status: :ready))
+
+    get project_path(project)
+
+    assert_response :success
+    assert_select "a[data-testid='page-card'][href='#{screenshot_path(screenshot)}']", count: 1
+  end
+
   test "show filters to pages captured in the selected snapshot" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Snapshot project")
@@ -223,6 +275,20 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal snapshot_screenshot.id, page_card_screenshot_ids.fetch(page.id)
     assert_not_equal ad_hoc_screenshot.id, page_card_screenshot_ids.fetch(page.id)
+  end
+
+  test "show links directly to the sole screenshot in the selected snapshot" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Snapshot destination project")
+    snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+    page = project.pages.create!(name: "Shared page")
+    snapshot_screenshot = create_ready_screenshot_with_image(page, title: "Snapshot version", snapshot: snapshot)
+    create_ready_screenshot_with_image(page, title: "Newer ad-hoc version")
+
+    get project_path(project, snapshot_id: snapshot.id)
+
+    assert_response :success
+    assert_select "a[data-testid='page-card'][href='#{screenshot_path(snapshot_screenshot)}']", count: 1
   end
 
   test "show ignores unknown snapshot filter" do
@@ -424,6 +490,21 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def create_ready_screenshot_with_image(page, title:, viewport: :desktop, snapshot: nil)
+    screenshot = page.screenshots.create!(title: title, status: :ready, snapshot: snapshot)
+    image = screenshot.screenshot_images.create!(viewport: viewport, status: :ready)
+    attach_test_image(image)
+    screenshot
+  end
+
+  def attach_test_image(screenshot_image)
+    screenshot_image.image.attach(
+      io: StringIO.new(file_fixture("test_image.png").binread),
+      filename: "test_image.png",
+      content_type: "image/png"
+    )
+  end
 
   def page_card_page_ids
     css_select("[data-testid='page-card']").map { |node| node["data-page-id"].to_i }

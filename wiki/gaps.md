@@ -32,8 +32,8 @@ Areas where documentation is missing or incomplete. Updated from current source,
 
 ### Views and Layouts
 - Three layouts mentioned (`application`, `auth`, `landing`) but not documented in a dedicated page.
-- The annotation UI (Figma-style comments, point vs region drawing, viewport switcher) is a key feature with no dedicated UI page.
-- The CLI-first public help and dashboard onboarding are summarized in [[active-areas]] and [[controllers/web-controllers]], but the broader annotation UI still has no dedicated view/layout documentation page.
+- The screenshot annotation and viewport interaction contract is documented in [[frontend-review-ui]]. The three layouts and the remaining non-review views still need dedicated coverage.
+- The CLI-first public help and dashboard onboarding are summarized in [[active-areas]] and [[controllers/web-controllers]].
 
 ### Configuration / Initializers
 - `config/initializers/rails_simple_auth.rb` -- auth configuration details

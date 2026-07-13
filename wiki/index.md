@@ -3,15 +3,15 @@ title: screenote Wiki
 type: index
 source: wiki/**/*.md
 created: 2026-05-14
-updated: 2026-07-09
+updated: 2026-07-13
 tags: [index, wiki]
 ---
 
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 38
-Updated: 2026-07-09
+Page count: 39
+Updated: 2026-07-13
 
 ## Core Architecture
 
@@ -32,6 +32,7 @@ Updated: 2026-07-09
 - [[controllers/api-controllers]] — REST and signed-upload API controllers.
 - [[controllers/oauth-controllers]] — Doorkeeper, DCR, and OAuth metadata controllers.
 - [[services/annotation-crop-service]] — Cropped annotation image generation.
+- [[frontend-review-ui]] — Project-card navigation, sticky annotation workflow, viewport centering, and pin geometry.
 
 ## Models
 

@@ -33,8 +33,10 @@
                         end %>
           <% card_data = { testid: "page-card", page_id: page.id }
              card_data[:screenshot_id] = thumbnail.id if thumbnail %>
+          <% direct_screenshot = page.screenshots_count_cache.to_i == 1 && thumbnail&.primary_image&.image&.attached?
+             card_path = direct_screenshot ? screenshot_path(thumbnail) : page_path(page) %>
 
-          <%= link_to page_path(page), class: "page-card", data: card_data do %>
+          <%= link_to card_path, class: "page-card", data: card_data do %>
             <div class="page-card__thumbnail">
               <% if thumbnail&.primary_image&.image&.attached? %>
                 <%= image_tag thumbnail.primary_image.image.variant(resize_to_limit: [480, 360]), alt: page.name, loading: "lazy" %>
