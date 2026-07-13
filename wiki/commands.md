@@ -1,9 +1,9 @@
 ---
 title: Interaction Surface
 type: commands
-source: app/controllers/**, cmd/screenote, internal/cli, internal/screenote, config/routes.rb, bin/brakeman, bin/bundler-audit
+source: app/controllers/**, github.com/ivankuznetsov/screenote-cli, config/routes.rb, bin/brakeman, bin/bundler-audit
 created: 2026-05-14
-updated: 2026-07-08
+updated: 2026-07-13
 tags: [commands, api]
 ---
 
@@ -11,25 +11,27 @@ tags: [commands, api]
 
 ## Go CLI
 
-Source: `cmd/screenote`, `internal/cli`, `internal/screenote`
+Canonical source: the public `github.com/ivankuznetsov/screenote-cli` repository. The private `cmd/screenote` and `internal/` copy is transitional and is not the installation source.
 
-The installable CLI is available at:
+With Go 1.26 or newer installed, install the CLI with:
 
 ```sh
-go install github.com/ivankuznetsov/screenote/cmd/screenote@latest
+go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
 ```
 
-The CLI talks to the REST API, not MCP. It emits JSON to stdout for successful commands and stable JSON errors to stderr. See [[api-cli]] for command examples, config precedence, and exit codes.
+The CLI talks to the REST API, not MCP. Public CLI authentication is OAuth-only: `screenote login` uses authorization code with PKCE, while `screenote login --device` supports SSH, tmux, containers, and other headless sessions without port forwarding. It emits JSON to stdout for successful commands and stable JSON errors to stderr. See [[api-cli]] for command examples, config precedence, and exit codes.
 
 Implemented command groups:
 
 | Command | Purpose |
 | --- | --- |
 | `screenote config` / `screenote config set` | Print or write noninteractive config |
-| `screenote project list` | List the API key's project |
-| `screenote page list` | List pages for a project, inferring from the API key when possible |
+| `screenote login [--device]` / `screenote logout` | Create or remove refreshable OAuth credentials |
+| `screenote project list` | List projects available to the signed-in user |
+| `screenote page list` | List pages for the selected project |
 | `screenote screenshot list` | List screenshots with filters and pagination |
 | `screenote screenshot create` | Multipart upload from file or stdin |
+| `screenote snapshot` | Validate, publish, and resume a manifest-driven multi-page capture |
 | `screenote annotation list` | List screenshot annotations, or traverse project screenshots when `--screenshot` is omitted |
 | `screenote annotation get` | Get annotation details plus comments and crop data |
 | `screenote comment add` | Add an annotation comment |

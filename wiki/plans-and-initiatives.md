@@ -3,7 +3,7 @@ title: Plans and Initiatives
 type: architecture
 source: plans/ directory (6 files)
 created: 2026-04-11
-updated: 2026-05-14
+updated: 2026-07-13
 tags: [plans, roadmap, features, initiatives]
 ---
 
@@ -15,9 +15,9 @@ Summary of all active plans from the `plans/` directory. These are the major fea
 
 ### Visual Feedback Tool for AI Agents (plans/screenote-visual-feedback-for-ai-agents.md)
 
-**Status:** Foundational -- the "master plan" that defines the product.
+**Status:** Foundational product history. Its MCP delivery design predates the public CLI, which is now the supported agent and automation surface.
 
-Screenote's core thesis: humans leave Figma-style visual comments on screenshots, and AI agents consume those comments via MCP **with the actual cropped image region**. Three workflows:
+Screenote's core thesis remains: humans leave Figma-style visual comments on screenshots, and AI agents consume those comments with the actual cropped image region. The original plan specified MCP; current onboarding and new integrations use the public Screenote CLI. Three workflows:
 
 1. **Upload screenshot** -- user uploads, annotates, agent collects via MCP
 2. **Enter URL** -- server-side capture (deferred to post-launch)
@@ -58,20 +58,20 @@ See also: [[models/page]], [[models/screenshot]], [[data-model]]
 
 **Status:** Implemented in current source.
 
-Current source has `StaticPagesController`, public `/help`, extracted static page help partials, guest nav, and dynamic MCP tool reference. The plan bundled:
+Current source has `StaticPagesController`, public `/help`, extracted static-page partials, guest nav, and CLI/OAuth/snapshot guidance. The original plan bundled:
 1. **Make help page public** -- currently behind authentication, blocking potential users from evaluating Screenote
 2. **Expand Claude Code quick start** -- fix command syntax, show full feedback loop
-3. **Add MCP connection documentation** -- endpoint URL, OAuth 2.1 and API key auth methods, project_id behavior differences
+3. **Add MCP connection documentation** -- historical requirement, superseded on public pages by OAuth-only CLI installation and device-login guidance
 
 Also fixes: guest navigation (Help | Sign In | Get Started), logo link for guests, landing page footer help link, and the same broken-nav issue on /terms and /privacy.
 
-Implementation: split help.html.erb into partials (quick_start, workflows, mcp), minimal CSS additions, test updates.
+Current implementation: partialized CLI quick start, workflows, command reference, OAuth browser/device login, and test coverage. MCP remains a server compatibility surface pending its separately scoped sunset, not a public help-page path.
 
 See also: [[controllers/web-controllers]], [[routes]]
 
 ### Claude Code Skill (plans/screenote-claude-code-skill.md)
 
-**Status:** Ready to implement.
+**Status:** Design requires revision before implementation. A future skill should invoke the public CLI rather than add new MCP coupling.
 
 A SKILL.md file at `.claude/skills/screenote/SKILL.md` with two modes:
 - **Capture** (`/screenote [url]`): Playwright MCP screenshots the page, uploads via `create_screenshot` with `image_path` parameter (avoids base64 through context window), returns annotation URL
@@ -79,7 +79,7 @@ A SKILL.md file at `.claude/skills/screenote/SKILL.md` with two modes:
 
 Prerequisite: add `image_path` parameter to `CreateScreenshotTool` (alternative to `image_base64`, reads file from disk directly).
 
-Current source has not added `image_path`; it instead provides signed-upload tools that can avoid base64 transfer. Reconcile the skill implementation with that actual API before building it.
+Current public CLI provides `screenote snapshot --manifest` for file-based, resumable capture publishing. Reframe the skill around that contract rather than adding `image_path` to MCP tools.
 
 Key decisions: no base64 through context, viewport-only screenshots (not fullPage), resolve is opt-in (ask user first), single skill with two modes.
 
@@ -90,10 +90,10 @@ Page/Version Hierarchy
   └── Implemented: StaticPagesController + Project -> Page -> Screenshot
 
 Help Page Redesign
-  └── Implemented: public help + MCP docs + partials
+  └── Implemented: public help + OAuth CLI docs + partials
 
 Claude Code Skill
-  └── Requires: reconcile image_path plan with current signed-upload tools
+  └── Requires: reframe historical MCP design around the public CLI
   └── Independent of other plans
 
 Multi-Viewport Screenshots
