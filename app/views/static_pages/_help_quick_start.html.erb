@@ -31,8 +31,9 @@
     <span class="guide__step-number">3</span>
     <div class="guide__step-content">
       <h2 class="guide__step-title">Choose a project</h2>
-      <p class="guide__step-desc">Create a project in the <%= link_to "dashboard", dashboard_path %> first. Then list your projects and save the one your agent should use:</p>
+      <p class="guide__step-desc">Create a project from the terminal, or use the <%= link_to "dashboard", dashboard_path %>. Then save the project ID your agent should use:</p>
       <%= render "static_pages/help_terminal", commands: [
+        'screenote project create --name "My app"',
         "screenote project list",
         "screenote config set --project <PROJECT_ID>"
       ] %>
