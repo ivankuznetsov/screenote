@@ -15,14 +15,14 @@
   </div>
 
   <div class="guide__cli-block">
-    <h3 class="guide__cli-label">Non-interactive agent and CI access</h3>
+    <h3 class="guide__cli-label">Headless and remote sessions</h3>
     <div class="guide__cli-method">
-      <p class="guide__cli-method-desc">Create an API key from a project's <strong>API Keys</strong> page, then configure the CLI without opening a browser:</p>
+      <p class="guide__cli-method-desc">On SSH, tmux, or a remote agent host, sign in with the OAuth device flow. Open the printed link on any browser and approve the one-time code:</p>
       <%= render "static_pages/help_terminal", commands: [
-        'screenote config set --base-url https://screenote.ai --token "$SCREENOTE_TOKEN" --project <PROJECT_ID>',
-        "screenote config"
+        "screenote --base-url https://screenote.ai login --device",
+        "screenote config set --project <PROJECT_ID>"
       ] %>
-      <p class="guide__cli-method-desc">Keep the token in your secret manager. <code>screenote config</code> confirms that a token is set without printing it.</p>
+      <p class="guide__cli-method-desc">The CLI stores the OAuth credentials locally with owner-only permissions. It does not need a callback listener or SSH port forward.</p>
     </div>
   </div>
 

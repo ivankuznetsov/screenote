@@ -9,13 +9,13 @@ tags: [cli, api, rest, agents]
 
 # API CLI
 
-TLDR: `cmd/screenote` is an installable Go CLI for shell and CI automation. It talks to REST `api/v1`, emits JSON to stdout by default, emits stable JSON errors to stderr, and uses OAuth bearer tokens.
+TLDR: `cmd/screenote` is an installable Go CLI for shell and automation. It talks to REST `api/v1`, emits JSON to stdout by default, emits stable JSON errors to stderr, and signs in through OAuth.
 
 Source: `README.md`, `cmd/screenote`, `internal/cli`, `internal/screenote`, `app/controllers/api/v1`
 
 ## Role
 
-MCP remains the richer agent protocol with OAuth/API-key transport and tool semantics. The CLI is the portable shell contract for non-MCP agents and CI jobs. CLI-facing auth is OAuth-first; server-side API keys remain available for REST/MCP compatibility. See [[mcp-tools]] and [[routes]].
+The CLI is the portable shell contract for agents and automation. CLI-facing authentication is OAuth-only in user documentation; server-side API keys remain available for direct REST integrations. See [[routes]].
 
 ## Install
 
@@ -33,27 +33,29 @@ GOFLAGS=-mod=mod go test ./...
 
 Precedence:
 
-1. Flags: `--token`, `--base-url`, `--project`
-2. Environment: `SCREENOTE_TOKEN`, `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
+1. Flags: `--base-url`, `--project`
+2. Environment: `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
 3. Config: `~/.config/screenote/config.toml`
-4. Stored OAuth credentials from `screenote login`
+4. OAuth credentials stored by `screenote login`
 
-`screenote config` prints resolved config as JSON, reports `token_set` plus the token source, and never prints either explicit tokens or stored login secrets. `screenote config set` writes values noninteractively. Config writes enforce owner-only permissions even for a pre-existing hand-authored file. Ordinary commands never prompt or open a browser; only explicit `screenote login` starts browser-based OAuth.
+`screenote config` prints resolved non-secret config as JSON and never prints stored login secrets. `screenote config set` writes values noninteractively. Config writes enforce owner-only permissions even for a pre-existing hand-authored file. Ordinary commands never prompt or open a browser; only explicit `screenote login` starts an interactive OAuth flow.
 
 The base URL should be set explicitly. Current docs use localhost, staging/self-hosted URLs, or the canonical production host `https://screenote.ai` from `config/deploy.yml`.
 
-CI and agents should use a deterministic bearer token:
-
-```sh
-screenote config set --base-url https://screenote.ai --token "$SCREENOTE_TOKEN" --project 7
-```
-
-Developers can use the OAuth authorization-code flow with PKCE and loopback redirect:
+The default login uses the OAuth authorization-code flow with PKCE and a loopback redirect:
 
 ```sh
 screenote --base-url https://screenote.ai login
 screenote logout
 ```
+
+SSH, tmux, and other headless sessions can use the device-authorization flow instead:
+
+```sh
+screenote --base-url https://screenote.ai login --device
+```
+
+The device flow prints a one-time code and authorization link for approval on any device, then waits for authorization in the terminal. It does not bind a local callback port or require SSH port forwarding.
 
 Login stores the authorized base URL alongside its single credential set, so a `--base-url` or environment override becomes the configured server for later commands. When browser launch is unavailable, stderr receives a JSON `browser_open_failed` message with `authorization_url` for manual continuation. Default REST and OAuth HTTP clients use a 30-second timeout; command cancellation still propagates through OAuth discovery, registration, exchange, and refresh.
 
@@ -62,7 +64,7 @@ Login stores the authorized base URL alongside its single credential set, so a `
 ```sh
 screenote project list
 screenote config
-screenote login
+screenote login [--device]
 screenote logout
 screenote page list --project ID
 screenote screenshot list --project ID [--page ID] [--status pending|ready|failed] [--limit N] [--offset N]
@@ -89,7 +91,7 @@ Successful commands write JSON to stdout. Errors write this shape to stderr:
 {"code":"missing_base_url","error":"base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url"}
 ```
 
-Cobra flag parse errors use the stable `invalid_flag` usage error. Invalid base URLs use `invalid_base_url`. Missing bearer credentials use `missing_token`. Invalid or expired tokens return exit code 3.
+Cobra flag parse errors use the stable `invalid_flag` usage error. Invalid base URLs use `invalid_base_url`. Missing or expired OAuth credentials return exit code 3.
 
 Exit codes:
 

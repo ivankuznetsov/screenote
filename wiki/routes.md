@@ -3,7 +3,7 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-07-09
+updated: 2026-07-13
 tags: [routes, api, endpoints, auth]
 ---
 
@@ -152,6 +152,9 @@ The upload route keeps the parent screenshot URL shape, but the signed token res
 | POST | `/oauth/token` | Token endpoint |
 | POST | `/oauth/revoke` | Token revocation |
 | POST | `/oauth/register` | Dynamic client registration (RFC 7591) |
+| POST | `/oauth/authorize_device` | Start an OAuth device authorization (RFC 8628, public clients, IP limited) |
+| GET | `/oauth/device` | Authenticated one-time-code entry and approval page |
+| POST | `/oauth/device` | CSRF-protected explicit approval or denial |
 | POST | `/oauth/test_token` | Secret-gated non-interactive MCP CI token minting |
 | GET | `/.well-known/oauth-protected-resource` | Resource metadata (RFC 9728) |
 | GET | `/.well-known/oauth-authorization-server` | Server metadata (RFC 8414) |
@@ -162,7 +165,7 @@ The upload route keeps the parent screenshot URL shape, but the signed token res
 |--------|------|--------|
 | GET | `/` | Landing page (redirects to dashboard if authenticated) |
 | GET | `/dashboard` | Project index |
-| GET | `/help` | Help page with MCP docs |
+| GET | `/help` | CLI install, OAuth sign-in, and command guide |
 | GET | `/terms` | Terms of Service |
 | GET | `/privacy` | Privacy Policy |
 

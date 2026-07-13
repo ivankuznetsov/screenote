@@ -37,7 +37,7 @@ class SubscriptionsFreeUserTest < ApplicationSystemTestCase
       assert_text "1 project"
       assert_text "1 team member"
       assert_text "Screenote CLI access"
-      assert_text "OAuth login and API key automation"
+      assert_text "OAuth CLI sign-in and direct API automation"
     end
 
     within(PRO_PLAN) do

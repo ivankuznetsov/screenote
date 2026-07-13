@@ -3,15 +3,15 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-07-10
+updated: 2026-07-13
 tags: [database, schema, models, relationships]
 ---
 
 # Data Model
 
-TLDR: Screenote has 14 application tables (plus 3 Active Storage tables and 3 Doorkeeper OAuth tables). The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and Doorkeeper OAuth tokens.
+TLDR: Screenote has 14 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth.
 
-Source: `db/schema.rb` (schema version `2026_07_10_120000`)
+Source: `db/schema.rb` (schema version `2026_07_13_160000`)
 
 ## ER Diagram
 
@@ -57,8 +57,10 @@ erDiagram
 
     OAuthApplication ||--o{ OAuthAccessGrant : "has many"
     OAuthApplication ||--o{ OAuthAccessToken : "has many"
+    OAuthApplication ||--o{ OAuthDeviceGrant : "has many"
     OAuthAccessGrant }o--o| Project : "scoped to"
     OAuthAccessToken }o--o| Project : "scoped to"
+    OAuthDeviceGrant }o--o| User : "approved or denied by"
 ```
 
 ## Tables
@@ -104,6 +106,7 @@ erDiagram
 | `oauth_applications` | Registered OAuth clients (supports dynamic registration) |
 | `oauth_access_grants` | Authorization codes with PKCE |
 | `oauth_access_tokens` | Bearer tokens scoped to project |
+| `oauth_device_grants` | Short-lived RFC 8628 device requests with hashed device code, human code, polling state, and approval/denial state |
 
 ### Active Storage
 
@@ -123,6 +126,9 @@ erDiagram
 - `screenshots.(snapshot_id, manifest_entry_digest)` -- partial unique identity for prepared screenshot entries.
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique
+- `oauth_device_grants.device_code` -- unique SHA-256 digest; the raw device credential is never stored
+- `oauth_device_grants.user_code` -- unique short-lived human verification code
+- `oauth_device_grants.expires_at` -- indexed absolute expiry used for request validation and scheduled bulk cleanup after a bounded terminal-error retention period
 - `subscriptions.user_id` -- unique (one subscription per user)
 - `subscriptions.stripe_customer_id` -- unique
 - `stripe_webhook_events.stripe_event_id` -- unique
@@ -140,6 +146,7 @@ erDiagram
 - `annotations -> resolved_by_api_key`: ON DELETE SET NULL
 - `oauth_access_grants/tokens -> oauth_applications`: ON DELETE CASCADE
 - `oauth_access_grants/tokens -> projects`: ON DELETE SET NULL
+- `oauth_device_grants -> oauth_applications/users`: ON DELETE CASCADE so ephemeral grants cannot block client or account deletion and approved grants cannot outlive their user
 - `screenshots -> snapshots`: ON DELETE SET NULL
 - `screenshot_images -> screenshots`: no database cascade; Rails `dependent: :destroy` preserves Active Storage purge callbacks
 - Duplicate snapshots for the same `(project_id, git_commit)` are allowed because repeated `/snapshot` captures of one commit can be useful at different times; `taken_at` distinguishes the runs.

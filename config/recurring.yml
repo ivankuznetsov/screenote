@@ -14,6 +14,10 @@ production:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
 
+  clear_expired_oauth_device_grants:
+    command: "OauthDeviceGrant.cleanup_expired!"
+    schedule: every 15 minutes
+
   send_digest_notifications:
     class: SendDigestNotificationsJob
     schedule: every hour at minute 0

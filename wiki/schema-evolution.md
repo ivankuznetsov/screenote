@@ -3,13 +3,13 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-07-12
+updated: 2026-07-13
 tags: [database, migrations, schema, history]
 ---
 
 # Schema Evolution
 
-TLDR: 29 migrations across 9 phases of development, from initial Rails 8 setup through MCP OAuth integration, team collaboration, annotation threading, Stripe webhook hardening, multi-viewport screenshots, project capture snapshots, resumable manifest identity, and a production schema-drift repair.
+TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, and headless device authorization.
 
 Source: `db/migrate/`
 
@@ -89,6 +89,12 @@ Source: `db/migrate/`
 |-----------|---------|
 | `20260712153000_repair_legacy_api_key_token_storage` | Forward-only repair for databases that still have plaintext `api_keys.token`; backfills SHA-256 digests and prefixes, enforces the secure index, and removes plaintext |
 
+### Phase 10: OAuth Device Authorization (2026-07-13)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260713160000_create_oauth_device_grants` | Short-lived RFC 8628 grants with digest-only device credentials, indexed absolute expiry, polling cadence, explicit approval/denial state, and scheduled cleanup support |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -110,5 +116,7 @@ Source: `db/migrate/`
 9. **Manifest identity is nullable and server-owned**: legacy and MCP rows need no backfill, while manifest-backed snapshots and entries use partial unique indexes to make retries deterministic without changing duplicate commit semantics.
 
 10. **Applied migrations are append-only**: `20260212071431_create_api_keys` was rewritten after one production database had already run its plaintext-token form, while its forward digest migration was deleted. Fresh SQLite databases looked correct, but production PostgreSQL retained the old columns. Repairs must use a new timestamp and an upgrade-path test; never rewrite an applied migration based only on fresh-schema checks. The API-key repair test runs in both SQLite and a dedicated PostgreSQL 16 CI job so adapter-specific production behavior stays covered.
+
+11. **Device credentials are short-lived and digest-only**: RFC 8628 device codes are stored as SHA-256 digests and consumed under a row lock during final exchange. Human codes remain lookupable but use 50 bits of entropy, an indexed 10-minute absolute expiry, fail-closed throttled verification, and scheduled cleanup for abandoned grants after 15 minutes of terminal-error retention.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

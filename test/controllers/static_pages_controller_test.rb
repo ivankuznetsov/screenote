@@ -24,6 +24,11 @@ class StaticPagesControllerTest < ActionDispatch::IntegrationTest
     assert_select "#install-cli", count: 1, message: "Help should lead with CLI installation"
     assert_select "code", text: "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest"
     assert_select "code", text: "screenote --base-url https://screenote.ai login"
+    assert_select "code", text: "screenote --base-url https://screenote.ai login --device"
+    assert_match(/SSH, tmux, or another headless session/, response.body)
+    assert_match(/prints a one-time code and authorization link/, response.body)
+    assert_match(/No callback port or SSH forwarding is required/, response.body)
+    assert_no_match(/--token|SCREENOTE_TOKEN|Create an API key from a project's/, response.body)
     assert_select "code", text: "screenote snapshot --manifest snapshot.json"
     assert_select "a[href='https://github.com/ivankuznetsov/screenote-cli']", minimum: 1
     assert_select "a[href='#{dashboard_path}']", text: "dashboard"

@@ -3,6 +3,7 @@
 module Oauth
   class RegistrationsController < ActionController::API
     rate_limit to: 10, within: 1.hour, by: -> { request.remote_ip }, with: -> { head :too_many_requests }
+    wrap_parameters false
 
     # POST /oauth/register (RFC 7591 Dynamic Client Registration)
     def create
@@ -12,7 +13,7 @@ module Oauth
         return render json: { error: "invalid_client_metadata", error_description: "redirect_uris is required" }, status: :bad_request
       end
 
-      client_name = registration_params[:client_name].presence || "MCP Client"
+      client_name = registration_params[:client_name].presence || "OAuth Client"
 
       if client_name.length > 255
         return render json: { error: "invalid_client_metadata", error_description: "client_name must be 255 characters or fewer" }, status: :bad_request
@@ -41,7 +42,7 @@ module Oauth
         client_id: application.uid,
         client_name: application.name,
         redirect_uris: redirect_uris,
-        grant_types: [ "authorization_code" ],
+        grant_types: [ "authorization_code", ScreenoteOauth::DeviceCodeGrant::GRANT_TYPE, "refresh_token" ],
         token_endpoint_auth_method: "none",
         response_types: [ "code" ],
         client_id_issued_at: application.created_at.to_i,
