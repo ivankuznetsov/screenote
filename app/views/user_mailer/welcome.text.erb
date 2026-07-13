@@ -3,19 +3,19 @@ Welcome to Screenote
 
 Your account is ready. Here's how to get started.
 
-Screenote is a visual feedback tool for AI agents. Upload screenshots, annotate them, and let your AI agent read the feedback directly via MCP.
+Screenote is a visual feedback tool for AI agents. Publish captures with the Screenote CLI, annotate them, and let your agent retrieve precise feedback.
 
 Getting started:
 
 1. Create a project — group your screenshots by project, feature, or sprint.
-2. Upload screenshots — upload manually or let your AI agent capture them via MCP.
-3. Annotate with feedback — click anywhere on a screenshot to pin visual feedback.
-4. Connect your AI agent — your agent reads annotations with cropped image context via MCP.
+2. Install the Screenote CLI — go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
+3. Publish screenshots — upload agent-produced PNG/JPEG files or a complete snapshot manifest.
+4. Annotate and iterate — mark what is wrong, then let your agent retrieve annotations and cropped images through the CLI.
 
 Go to your dashboard:
 <%= main_app.dashboard_url %>
 
-Need help? Visit our setup guide: <%= main_app.help_url %>
+Need help? Visit our CLI setup guide: <%= main_app.help_url(anchor: "install-cli") %>
 
 --
 Screenote — Visual feedback for AI agents

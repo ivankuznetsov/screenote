@@ -3,7 +3,7 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-13
 tags: [controller, web, ui, auth]
 ---
 
@@ -210,7 +210,7 @@ Source: `app/controllers/static_pages_controller.rb`
 
 - **Public** (skips `require_authentication`)
 - `landing` -- Redirects authenticated users to dashboard
-- `help` -- Lists MCP tools from `ApplicationTool.descendants`
+- `help` -- Renders static CLI installation, authentication, project setup, snapshot publishing, and command-reference documentation; it no longer enumerates `ApplicationTool.descendants`
 
 ---
 

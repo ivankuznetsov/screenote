@@ -130,12 +130,15 @@ class UserMailerTest < ActionMailer::TestCase
 
     assert_includes html_body, "Welcome to Screenote", "HTML body should contain the title"
     assert_includes html_body, "Create a project", "HTML body should contain step 1"
-    assert_includes html_body, "Upload screenshots", "HTML body should contain step 2"
-    assert_includes html_body, "Annotate with feedback", "HTML body should contain step 3"
-    assert_includes html_body, "Connect your AI agent", "HTML body should contain step 4"
+    assert_includes html_body, "Install the Screenote CLI", "HTML body should contain step 2"
+    assert_includes html_body, "Publish screenshots", "HTML body should contain step 3"
+    assert_includes html_body, "Annotate and iterate", "HTML body should contain step 4"
+    assert_includes html_body.gsub("<wbr>", ""), "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest"
+    assert_not_includes html_body, "word-break"
+    assert_not_includes html_body, "via MCP"
     assert_includes html_body, "Go to Dashboard", "HTML body should contain the CTA text"
     assert_match %r{href="[^"]*dashboard"}, html_body, "HTML body should contain dashboard URL"
-    assert_match %r{href="[^"]*help"}, html_body, "HTML body should contain help URL"
+    assert_match %r{href="[^"]*help#install-cli"}, html_body, "HTML body should contain CLI help URL"
   end
 
   test "welcome email text body contains getting started steps" do
@@ -144,9 +147,11 @@ class UserMailerTest < ActionMailer::TestCase
 
     assert_includes text_body, "Welcome to Screenote", "Text body should contain the heading"
     assert_includes text_body, "Create a project", "Text body should contain step 1"
-    assert_includes text_body, "Upload screenshots", "Text body should contain step 2"
-    assert_includes text_body, "Annotate with feedback", "Text body should contain step 3"
-    assert_includes text_body, "Connect your AI agent", "Text body should contain step 4"
+    assert_includes text_body, "Install the Screenote CLI", "Text body should contain step 2"
+    assert_includes text_body, "Publish screenshots", "Text body should contain step 3"
+    assert_includes text_body, "Annotate and iterate", "Text body should contain step 4"
+    assert_includes text_body, "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest"
+    assert_not_includes text_body, "via MCP"
     assert_match %r{https?://.*dashboard}, text_body, "Text body should contain dashboard URL"
     assert_match %r{https?://.*help}, text_body, "Text body should contain help URL"
   end

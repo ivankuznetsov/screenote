@@ -5,6 +5,7 @@
       Screenote
     </div>
     <nav class="landing-nav__links">
+      <%= link_to "Install CLI", help_path(anchor: "install-cli"), class: "landing-nav__link" %>
       <%= link_to "Sign In", new_session_path, class: "landing-nav__link" %>
       <%= link_to "Get Started", sign_up_path, class: "landing-nav__cta" %>
     </nav>
@@ -31,19 +32,18 @@
   </div>
 
   <div class="hero__content">
-    <p class="hero__eyebrow">UI review for AI agents</p>
+    <p class="hero__eyebrow">Visual feedback from the terminal</p>
     <h1 class="hero__title">
       Point at the bug.<br>
-      <span class="hero__highlight">Claude</span> fixes it.
+      <span class="hero__highlight">Your agent</span> fixes it.
     </h1>
     <p class="hero__subtitle">
-      Mark areas on your screen, write what's wrong. Your AI agent reads
-      the annotations with the actual cropped image and fixes what you pointed at.
-      No more describing UI issues in words.
+      Publish captures with the Screenote CLI, mark what is wrong, and let any AI agent
+      retrieve annotations with the actual cropped images. No more describing UI issues in words.
     </p>
     <div class="hero__actions">
       <%= link_to "Start for Free", sign_up_path, class: "hero__btn hero__btn--primary" %>
-      <a href="#how-it-works" class="hero__btn hero__btn--ghost">See How It Works</a>
+      <%= link_to "Install CLI", help_path(anchor: "install-cli"), class: "hero__btn hero__btn--ghost" %>
     </div>
   </div>
 </section>
@@ -61,8 +61,8 @@
             <path d="m21 15-5-5L5 21"/>
           </svg>
         </div>
-        <h3 class="workflow__step-title">Screenshot</h3>
-        <p class="workflow__step-desc">Upload a screenshot yourself, or type <code>/screenote</code> in Claude Code and it takes one for you automatically.</p>
+        <h3 class="workflow__step-title">Capture</h3>
+        <p class="workflow__step-desc">Your agent or automation saves PNG/JPEG captures, then the Screenote CLI publishes them as one reviewable snapshot.</p>
       </div>
       <div class="workflow__step">
         <div class="workflow__step-number">02</div>
@@ -85,7 +85,7 @@
           </svg>
         </div>
         <h3 class="workflow__step-title">Agent Fixes</h3>
-        <p class="workflow__step-desc">Your AI reads each annotation with the cropped image region. It sees exactly what you see and fixes it.</p>
+        <p class="workflow__step-desc">Your agent retrieves each annotation and cropped image through the CLI. It sees exactly what you see and fixes it.</p>
       </div>
     </div>
   </div>
@@ -104,20 +104,20 @@
     </div>
     <div class="features__card">
       <div class="features__card-label">Killer Feature</div>
-      <h3 class="features__card-title">Agent screenshots its own work, you review, agent iterates</h3>
+      <h3 class="features__card-title">Your agent captures, the CLI publishes, you review</h3>
       <p class="features__card-desc">
-        Type <code>/screenote</code> in Claude Code. The agent screenshots localhost,
-        uploads it, you mark what's wrong, then the agent reads your feedback
-        and fixes it. Repeat until it's perfect.
+        Run <code>screenote snapshot --manifest snapshot.json</code> after your agent creates
+        its captures. Screenote returns one review URL; you annotate it, the agent retrieves
+        your feedback, and the loop repeats without duplicate uploads.
       </p>
     </div>
     <div class="features__card">
-      <div class="features__card-label">How It Connects</div>
-      <h3 class="features__card-title">MCP protocol — your agent reads annotations natively</h3>
+      <div class="features__card-label">Install once</div>
+      <h3 class="features__card-title">One public CLI for any agent or automation</h3>
       <p class="features__card-desc">
-        No copy-pasting feedback. Your AI agent connects via Model Context Protocol
-        and gets each annotation with the actual cropped screenshot region.
-        It sees what you see.
+        Install from the public Go module, sign in with OAuth, and use the same commands
+        locally or in CI. No agent-specific plugin is required.
+        <code class="features__install-command">go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest</code>
       </p>
     </div>
   </div>

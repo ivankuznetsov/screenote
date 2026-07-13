@@ -1,29 +1,14 @@
-<%# ── Quick Start with Claude Code ── %>
-<section class="guide__section" id="quick-start">
+<%# ── Quick Start with the Screenote CLI ── %>
+<section class="guide__section" id="install-cli">
 
   <%# Step 1: Install %>
   <div class="guide__step">
     <span class="guide__step-number">1</span>
     <div class="guide__step-content">
-      <h2 class="guide__step-title">Install the plugin</h2>
-      <p class="guide__step-desc">Run these two commands in Claude Code:</p>
-      <div class="guide__terminal">
-        <div class="guide__terminal-bar">
-          <span class="guide__terminal-dot"></span>
-          <span class="guide__terminal-dot"></span>
-          <span class="guide__terminal-dot"></span>
-        </div>
-        <div class="guide__terminal-body">
-          <div class="guide__terminal-line">
-            <span class="guide__terminal-prompt">$</span>
-            <code>/plugin marketplace add ivankuznetsov/claude-screenote</code>
-          </div>
-          <div class="guide__terminal-line">
-            <span class="guide__terminal-prompt">$</span>
-            <code>/plugin install claude-screenote@screenote-marketplace</code>
-          </div>
-        </div>
-      </div>
+      <h2 class="guide__step-title">Install the CLI</h2>
+      <p class="guide__step-desc">With Go 1.26 or newer installed, run:</p>
+      <%= render "static_pages/help_terminal", commands: [ "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest" ] %>
+      <p class="guide__step-desc">If your shell cannot find <code>screenote</code>, add <code>$(go env GOPATH)/bin</code> to your <code>PATH</code>. The <%= link_to "CLI source and documentation", "https://github.com/ivankuznetsov/screenote-cli" %> are public.</p>
     </div>
   </div>
 
@@ -31,42 +16,37 @@
   <div class="guide__step">
     <span class="guide__step-number">2</span>
     <div class="guide__step-content">
-      <h2 class="guide__step-title">Authorize</h2>
-      <p class="guide__step-desc">On first use, a browser window opens to connect your Screenote account. Sign in and grant access &mdash; this only happens once.</p>
+      <h2 class="guide__step-title">Sign in</h2>
+      <p class="guide__step-desc">Authorize the CLI with your Screenote account:</p>
+      <%= render "static_pages/help_terminal", commands: [ "screenote --base-url https://screenote.ai login" ] %>
+      <p class="guide__step-desc">A browser window opens for OAuth approval. Your credentials are saved locally with owner-only permissions.</p>
     </div>
   </div>
 
-  <%# Step 3: Capture & Review %>
+  <%# Step 3: Select a project %>
   <div class="guide__step">
     <span class="guide__step-number">3</span>
     <div class="guide__step-content">
-      <h2 class="guide__step-title">Capture &amp; review</h2>
-      <p class="guide__step-desc">Your agent can now capture screenshots and read your visual feedback:</p>
-      <div class="guide__terminal">
-        <div class="guide__terminal-bar">
-          <span class="guide__terminal-dot"></span>
-          <span class="guide__terminal-dot"></span>
-          <span class="guide__terminal-dot"></span>
-        </div>
-        <div class="guide__terminal-body">
-          <div class="guide__terminal-line">
-            <span class="guide__terminal-prompt">$</span>
-            <code>/screenote &lt;url&gt;</code>
-            <span class="guide__terminal-comment"># desktop screenshot (1440&times;900)</span>
-          </div>
-          <div class="guide__terminal-line">
-            <span class="guide__terminal-prompt">$</span>
-            <code>/screenote mobile &lt;url&gt;</code>
-            <span class="guide__terminal-comment"># mobile screenshot (393&times;852)</span>
-          </div>
-          <div class="guide__terminal-line">
-            <span class="guide__terminal-prompt">$</span>
-            <code>/screenote feedback</code>
-            <span class="guide__terminal-comment"># retrieve your annotations</span>
-          </div>
-        </div>
-      </div>
-      <p class="guide__step-desc">The agent captures a page, you annotate it in Screenote, then the agent reads your feedback with the cropped image regions and fixes what you pointed at.</p>
+      <h2 class="guide__step-title">Choose a project</h2>
+      <p class="guide__step-desc">Create a project in the <%= link_to "dashboard", dashboard_path %> first. Then list your projects and save the one your agent should use:</p>
+      <%= render "static_pages/help_terminal", commands: [
+        "screenote project list",
+        "screenote config set --project <PROJECT_ID>"
+      ] %>
+    </div>
+  </div>
+
+  <%# Step 4: Publish %>
+  <div class="guide__step">
+    <span class="guide__step-number">4</span>
+    <div class="guide__step-content">
+      <h2 class="guide__step-title">Publish a capture</h2>
+      <p class="guide__step-desc">The CLI uploads PNG or JPEG files already produced by your agent or capture tool. Publish one image or a complete multi-page snapshot:</p>
+      <%= render "static_pages/help_terminal", commands: [
+        'screenote screenshot create --title "Homepage" --file screenshot.png',
+        "screenote snapshot --manifest snapshot.json"
+      ] %>
+      <p class="guide__step-desc">A successful snapshot returns a review URL. See the <%= link_to "snapshot manifest guide", "https://github.com/ivankuznetsov/screenote-cli/blob/main/docs/snapshot-manifest.md" %> for the versioned JSON format.</p>
     </div>
   </div>
 

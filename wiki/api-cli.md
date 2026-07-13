@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-07-12
+updated: 2026-07-13
 tags: [cli, api, rest, agents]
 ---
 
@@ -114,4 +114,4 @@ The CLI source is now canonical in the public `github.com/ivankuznetsov/screenot
 
 ## Deferred
 
-`annotation resolve`, `annotation reopen`, daemon/watch mode, member management, and required multi-viewport upload are future work rather than v1 ship criteria.
+`annotation resolve`, `annotation reopen`, project creation, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload are future work rather than v1 ship criteria. The public help page therefore sends project creation to the dashboard, describes annotation comments without implying that they resolve feedback, and identifies snapshot screenshots by their manifest page/title names in the current project-wide lists.

@@ -1321,8 +1321,8 @@ turbo-frame {
   font-weight: 600;
 }
 
-/* MCP Banner */
-.mcp-banner {
+/* CLI Banner */
+.cli-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1334,13 +1334,13 @@ turbo-frame {
   margin-bottom: 1.5rem;
 }
 
-.mcp-banner__content {
+.cli-banner__content {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 
-.mcp-banner__icon {
+.cli-banner__icon {
   width: 2.5rem;
   height: 2.5rem;
   background: var(--color-primary);
@@ -1349,30 +1349,32 @@ turbo-frame {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
-.mcp-banner__title {
+.cli-banner__title {
   font-weight: 600;
   font-size: 0.9375rem;
   color: var(--color-text);
 }
 
-.mcp-banner__description {
+.cli-banner__description {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   margin-top: 0.125rem;
 }
 
-.mcp-banner__actions {
+.cli-banner__actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
 }
 
-.mcp-banner__dismiss {
+.cli-banner__dismiss {
   background: none;
   border: none;
   font-size: 1.25rem;
@@ -1382,7 +1384,7 @@ turbo-frame {
   line-height: 1;
 }
 
-.mcp-banner__dismiss:hover {
+.cli-banner__dismiss:hover {
   color: var(--color-text);
 }
 
@@ -1486,6 +1488,7 @@ turbo-frame {
 
 .guide__terminal-body {
   padding: 1rem 1.25rem;
+  overflow-x: auto;
 }
 
 .guide__terminal-line {
@@ -1511,13 +1514,6 @@ turbo-frame {
   color: #e5a31e;
   font-weight: 600;
   user-select: none;
-}
-
-.guide__terminal-comment {
-  color: #555570;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  white-space: nowrap;
 }
 
 /* Divider */
@@ -1623,104 +1619,39 @@ turbo-frame {
   border-left: 2px solid var(--color-primary);
 }
 
-/* MCP connection section */
-.guide__mcp-block {
+/* CLI reference section */
+.guide__cli-block {
   margin-bottom: 1.5rem;
 }
 
-.guide__mcp-label {
+.guide__cli-label {
   font-size: 1rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
 }
 
-.guide__mcp-method {
+.guide__cli-method {
   margin-bottom: 1.25rem;
   padding-left: 0.75rem;
   border-left: 2px solid var(--color-border);
 }
 
-.guide__mcp-method-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  margin-bottom: 0.375rem;
-}
-
-.guide__mcp-method-desc {
+.guide__cli-method-desc {
   font-size: 0.875rem;
   color: var(--color-text-secondary);
   line-height: 1.5;
   margin-bottom: 0.625rem;
 }
 
-.guide__mcp-list {
+.guide__cli-list {
   font-size: 0.875rem;
   line-height: 1.6;
   padding-left: 1.25rem;
   margin-bottom: 0.625rem;
 }
 
-.guide__mcp-list li {
+.guide__cli-list li {
   padding: 0.125rem 0;
-}
-
-/* Tools reference grid */
-.guide__tools-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 0.75rem;
-}
-
-.guide__tool {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 1.25rem;
-}
-
-.guide__tool-name {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #0b0f1a;
-  margin-bottom: 0.375rem;
-}
-
-.guide__tool-desc {
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  line-height: 1.4;
-  margin-bottom: 0.75rem;
-}
-
-.guide__tool-params {
-  margin-bottom: 0.5rem;
-}
-
-.guide__tool-params-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.25rem;
-}
-
-.guide__tool-params-list {
-  list-style: none;
-  font-size: 0.8125rem;
-}
-
-.guide__tool-params-list li {
-  padding: 0.1875rem 0;
-  line-height: 1.4;
-}
-
-.guide__tool-required {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--color-danger);
-  text-transform: uppercase;
 }
 
 /* App footer */
@@ -1745,17 +1676,20 @@ turbo-frame {
 
 /* Responsive */
 @media (max-width: 640px) {
+  .cli-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cli-banner__actions .btn {
+    flex: 1;
+    text-align: center;
+  }
+
   .guide__workflow-grid {
     grid-template-columns: 1fr;
   }
 
-  .guide__tools-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .guide__terminal-comment {
-    display: none;
-  }
 }
 
 /* Page header actions */

@@ -9,14 +9,15 @@
           <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
         </svg>
       </div>
-      <h3 class="guide__workflow-title">Agent Feedback Loop</h3>
-      <p class="guide__workflow-desc">The agent screenshots its own work, you review and annotate, it reads your feedback and iterates. Each iteration is saved as a new version under the same page.</p>
+      <h3 class="guide__workflow-title">Snapshot review loop</h3>
+      <p class="guide__workflow-desc">Your agent captures its work to local files, the CLI publishes them, and the returned review URL opens the complete capture in Screenote.</p>
       <ol class="guide__workflow-steps">
-        <li>Type <code>/screenote &lt;url&gt;</code> &mdash; agent captures the page</li>
-        <li>Open the screenshot and mark what's wrong</li>
-        <li>Type <code>/screenote feedback</code> &mdash; agent reads your annotations with the cropped images</li>
-        <li>Agent fixes the issues, re-screenshots to the same page, and repeats</li>
+        <li>Agent or automation creates PNG/JPEG files and a snapshot manifest</li>
+        <li>Run <code>screenote snapshot --manifest snapshot.json</code></li>
+        <li>Open the returned review URL and mark what is wrong</li>
+        <li>Agent matches the manifest's page and title names in <code>screenote screenshot list</code>, retrieves annotations, fixes the issues, and repeats</li>
       </ol>
+      <p class="guide__workflow-desc">The CLI currently lists project feedback rather than filtering results by snapshot.</p>
     </div>
 
     <div class="guide__workflow">
@@ -25,13 +26,13 @@
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
       </div>
-      <h3 class="guide__workflow-title">Capture &amp; Annotate</h3>
-      <p class="guide__workflow-desc">You upload a screenshot, mark what's wrong, and your AI agent picks up the feedback.</p>
+      <h3 class="guide__workflow-title">Single screenshot loop</h3>
+      <p class="guide__workflow-desc">Publish one capture without creating a manifest, then let your agent pull the visual feedback.</p>
       <ol class="guide__workflow-steps">
-        <li>Upload a screenshot in the Screenote UI</li>
+        <li>Run <code>screenote screenshot create --title "Homepage" --file screenshot.png</code></li>
         <li>Draw rectangles around problems and write comments</li>
-        <li>Your agent reads the annotations with the cropped image</li>
-        <li>Agent fixes the issue and marks it resolved</li>
+        <li>Use <code>screenote annotation list --screenshot &lt;ID&gt; --status open</code></li>
+        <li>Agent opens each annotation, applies the fix, and adds a comment</li>
       </ol>
     </div>
   </div>
@@ -51,6 +52,6 @@
         <strong>Version</strong> &mdash; each screenshot upload, so you can track iterations over time
       </div>
     </div>
-    <p class="guide__concepts-desc">When an agent uploads a screenshot, it's automatically grouped under a page. Multiple uploads to the same page become versions, giving you a visual history of changes.</p>
+    <p class="guide__concepts-desc">When the CLI uploads a screenshot, it is grouped under a page. Multiple uploads to the same page become versions, giving you a visual history of changes.</p>
   </div>
 </section>

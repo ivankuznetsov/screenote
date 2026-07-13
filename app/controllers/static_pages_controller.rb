@@ -9,9 +9,7 @@ class StaticPagesController < ApplicationController
     redirect_to dashboard_path if Current.user
   end
 
-  def help
-    @tools = ApplicationTool.descendants.sort_by(&:tool_name)
-  end
+  def help; end
 
   def terms; end
 
