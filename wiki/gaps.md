@@ -32,8 +32,8 @@ Areas where documentation is missing or incomplete. Updated from current source,
 
 ### Views and Layouts
 - Three layouts mentioned (`application`, `auth`, `landing`) but not documented in a dedicated page.
-- The annotation UI (Figma-style comments, point vs region drawing, viewport switcher) is a key feature with no dedicated UI page.
-- The CLI-first public help and dashboard onboarding are summarized in [[active-areas]] and [[controllers/web-controllers]], but the broader annotation UI still has no dedicated view/layout documentation page.
+- The screenshot annotation and viewport interaction contract is documented in [[frontend-review-ui]]. The three layouts and the remaining non-review views still need dedicated coverage.
+- The CLI-first public help and dashboard onboarding are summarized in [[active-areas]] and [[controllers/web-controllers]].
 
 ### Configuration / Initializers
 - `config/initializers/rails_simple_auth.rb` -- auth configuration details
@@ -48,7 +48,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - **NEW:** Specific test coverage gaps identified: CreateScreenshotTool (#056), SQL injection testing (#149), OAuth test helpers (#102).
 
 ### API CLI
-- [[api-cli]] now documents the Go REST CLI surface, including OAuth browser login, aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. Remaining deferred product scope includes `annotation resolve`, `annotation reopen`, project creation, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload.
+- [[api-cli]] now documents the Go REST CLI surface, including OAuth browser login, aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. REST parity now covers project creation and idempotent annotation resolution; remaining deferred product scope includes `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload.
 
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.
@@ -60,7 +60,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - Admin dashboard only has 3 stats. If there are admin-only features beyond the dashboard, they are not documented.
 
 ### OAuth Token Scoping
-- Doorkeeper tokens can be scoped to projects (`project_id` FK on oauth_access_tokens). How this scoping works is unclear.
+- Doorkeeper tokens can be scoped to projects (`project_id` FK on oauth_access_tokens). REST project authorization and listing bind such a token to that project, and project deletion removes its scoped grants/tokens instead of widening them; the broader product decision about when to issue user-scoped versus project-scoped tokens remains open.
 - **NEW:** Todo #108 proposes fundamentally rethinking this: user-scoped vs project-scoped tokens. The current architecture may change.
 
 ### Todo / Source Status Drift

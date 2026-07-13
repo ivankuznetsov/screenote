@@ -54,6 +54,11 @@ module Api
         return nil
       end
 
+      if current_oauth_token.project_id.present? && current_oauth_token.project_id.to_s != project_id.to_s
+        render_error("Project is not accessible with this OAuth token", code: "forbidden", status: :forbidden)
+        return nil
+      end
+
       project = Project.find_by(id: project_id)
       if project&.member?(current_user)
         @current_project = project

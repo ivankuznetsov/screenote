@@ -51,7 +51,7 @@ Rails.application.routes.draw do
   namespace :api do
     put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
     namespace :v1 do
-      resources :projects, only: [ :index ] do
+      resources :projects, only: [ :index, :create ] do
         resources :pages, only: [ :index ]
         resources :screenshots, only: [ :index ]
         resources :snapshots, only: [ :create, :show ]
@@ -63,6 +63,8 @@ Rails.application.routes.draw do
       resources :annotations, only: [ :show ] do
         resources :comments, controller: "annotation_comments", only: [ :create ]
       end
+      post "annotations/:annotation_id/resolve", to: "annotation_resolutions#create",
+        as: :annotation_resolve
     end
   end
 

@@ -275,6 +275,40 @@ class AnnotationTest < ActiveSupport::TestCase
     end
   end
 
+  test "resolve! reloads a stale instance under lock before changing state" do
+    first_writer = Annotation.find(annotations(:point_annotation).id)
+    stale_writer = Annotation.find(first_writer.id)
+
+    first_writer.resolve!(user: users(:alice), body: "First resolution")
+
+    assert_no_difference "AnnotationComment.count" do
+      assert_raises(ActiveRecord::RecordNotFound) do
+        stale_writer.resolve!(user: users(:bob), body: "Stale duplicate")
+      end
+    end
+  end
+
+  test "resolve_idempotently! returns the original comment for a stale replay" do
+    first_writer = Annotation.find(annotations(:point_annotation).id)
+    stale_writer = Annotation.find(first_writer.id)
+
+    first_operation, first_comment = first_writer.resolve_idempotently!(
+      user: users(:alice),
+      body: "First resolution"
+    )
+
+    assert_no_difference "AnnotationComment.count" do
+      replay_operation, replay_comment = stale_writer.resolve_idempotently!(
+        user: users(:bob),
+        body: "Retry must not replace the audit comment"
+      )
+
+      assert_equal "already_resolved", replay_operation
+      assert_equal first_comment, replay_comment
+    end
+    assert_equal "resolved", first_operation
+  end
+
   test "has_many annotation_comments" do
     annotation = annotations(:resolved_annotation)
     assert_respond_to annotation, :annotation_comments

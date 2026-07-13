@@ -61,15 +61,33 @@ class Annotation < ApplicationRecord
   end
 
   def resolve!(user: nil, api_key: nil, body: "Marked as resolved")
-    raise ActiveRecord::RecordNotFound, "Annotation is not open" unless open?
+    with_lock do
+      raise ActiveRecord::RecordNotFound, "Annotation is not open" unless open?
 
-    transaction do
-      update!(status: :resolved, resolved_by_user: user, resolved_by_api_key: api_key)
-      annotation_comments.create!(user: user, api_key: api_key, body: body, action: :resolved)
+      create_resolution!(user: user, api_key: api_key, body: body)
+    end
+  end
+
+  def resolve_idempotently!(user: nil, api_key: nil, body: "Marked as resolved")
+    with_lock do
+      if resolved?
+        [ "already_resolved", latest_resolution_comment ]
+      else
+        [ "resolved", create_resolution!(user: user, api_key: api_key, body: body) ]
+      end
     end
   end
 
   private
+
+  def create_resolution!(user:, api_key:, body:)
+    update!(status: :resolved, resolved_by_user: user, resolved_by_api_key: api_key)
+    annotation_comments.create!(user: user, api_key: api_key, body: body, action: :resolved)
+  end
+
+  def latest_resolution_comment
+    annotation_comments.where(action: :resolved).order(:created_at, :id).last
+  end
 
   def region_within_bounds
     if width_percent && x_percent && x_percent + width_percent > 100.0

@@ -44,6 +44,7 @@ Implemented command groups:
 - `app/controllers/api/base_controller.rb`
 - `app/controllers/api/screenshot_uploads_controller.rb`
 - `app/controllers/api/v1/annotation_comments_controller.rb`
+- `app/controllers/api/v1/annotation_resolutions_controller.rb`
 - `app/controllers/api/v1/annotations_controller.rb`
 - `app/controllers/api/v1/pages_controller.rb`
 - `app/controllers/api/v1/projects_controller.rb`

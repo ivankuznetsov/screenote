@@ -53,7 +53,7 @@ Source: `app/controllers/projects_controller.rb`
 | Action | Auth | Notes |
 |--------|------|-------|
 | index | Member | Lists user's projects ordered by updated_at, includes pages with thumbnails |
-| show | Member | Shows pages with screenshot counts and open annotation counts |
+| show | Member | Shows pages with screenshot counts and open annotation counts; a card direct-opens its lone usable screenshot, otherwise it opens the page/version grid |
 | new/create | Member + quota | Checks `can_create_project?` (Free: 1 project limit) |
 | edit/update | Owner | |
 | destroy | Owner | |
@@ -82,6 +82,8 @@ Source: `app/controllers/screenshots_controller.rb`
 - `show` -- Resolves the active viewport, loads the matching `ScreenshotImage`, and filters annotations by status and active viewport.
 - `viewports/:viewport` -- Same action as show; constrained to desktop/tablet/mobile and rendered through the `screenshot_canvas` Turbo Frame switcher.
 - Permits: `title`, `image`
+
+The review layout and Annotorious interaction rules are documented in [[frontend-review-ui]].
 
 ---
 

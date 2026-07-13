@@ -123,7 +123,8 @@ All require authentication unless noted.
 
 | Method | Path | Action | Auth |
 |--------|------|--------|------|
-| GET | `/api/v1/projects` | List API-key project or OAuth user's member projects | API key or OAuth `mcp_read` |
+| GET | `/api/v1/projects` | List API-key project, user-scoped OAuth member projects, or the one project bound to project-scoped OAuth | API key or OAuth `mcp_read` |
+| POST | `/api/v1/projects` | Create an owned project within the user's plan quota | User-scoped OAuth `mcp_write` only |
 | GET | `/api/v1/projects/:project_id/pages` | List pages with version counts | API key or OAuth `mcp_read` |
 | GET | `/api/v1/projects/:project_id/screenshots` | List screenshots with `page_id`, `status`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
 | POST | `/api/v1/projects/:project_id/snapshots` | Prepare or resume a manifest-backed snapshot graph | API key or OAuth `mcp_write` |
@@ -133,8 +134,13 @@ All require authentication unless noted.
 | GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
 | GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API key or OAuth `mcp_read` |
 | POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored or OAuth-user-authored annotation comment | API key or OAuth `mcp_write` |
+| POST | `/api/v1/annotations/:annotation_id/resolve` | Idempotently resolve an annotation and create its audit comment | API key or OAuth `mcp_write` |
 
-API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries. OAuth project-scoped calls require explicit `project_id` where the route does not already carry it, and the authenticated user must be a project member.
+API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries. OAuth project-scoped calls require explicit `project_id` where the route does not already carry it, and the authenticated user must be a project member. Project listing also returns only the bound project for a project-scoped token. Deleting that project deletes its scoped OAuth grants and tokens rather than widening them to user scope.
+
+Project creation is intentionally different from project-scoped operations: API keys and project-scoped OAuth tokens cannot create another project. A user-scoped OAuth token needs `mcp_write`; successful creation returns `201` with the standard project representation and `role: "owner"`. Free-plan quota exhaustion returns `403` with `code: "project_limit_reached"`.
+
+Annotation resolution accepts optional string `comment`; an omitted or blank value records `Marked as resolved`, while arrays and objects receive `422 validation_failed`. A first resolution returns `operation: "resolved"`, while a retry returns `operation: "already_resolved"` without creating another audit comment. Locking lives at the shared annotation model boundary so stale REST, web, and legacy MCP writers cannot duplicate a resolution comment. Project-scoped OAuth tokens are bound to the project recorded on the token and cannot select another project through `project_id`.
 
 ### Upload API (Token-based, no persistent auth)
 

@@ -3,7 +3,7 @@ title: Project
 type: model
 source: app/models/project.rb
 created: 2026-04-10
-updated: 2026-05-15
+updated: 2026-07-13
 tags: [model, project, core]
 ---
 
@@ -36,6 +36,8 @@ Source: `app/models/project.rb`
 | screenshots | has_many through | [[screenshot]] (via pages) |
 | api_keys | has_many | [[api-key]] (dependent: destroy) |
 | snapshots | has_many | [[snapshot]] (dependent: destroy) |
+| oauth_access_grants | has_many | Doorkeeper::AccessGrant (project-scoped, dependent: delete_all) |
+| oauth_access_tokens | has_many | Doorkeeper::AccessToken (project-scoped, dependent: delete_all) |
 
 ## Validations
 
@@ -57,5 +59,6 @@ Source: `app/models/project.rb`
 ## Notes
 
 - `_destroy_in_progress` is a transient attr_accessor used to bypass the "sole owner" check in [[project-membership]] when the entire project is being destroyed.
+- Destroying a project deletes its project-scoped OAuth grants and access tokens before the database can nullify their `project_id`; a formerly scoped bearer therefore cannot become user-scoped after project deletion.
 
 See also: [[user]], [[page]], [[snapshot]], [[project-membership]], [[project-invitation]], [[api-key]]

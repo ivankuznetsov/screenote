@@ -53,7 +53,6 @@ export default class extends Controller {
   handleCreate(annotation) {
     if (this.disposed) return
     if (this.pendingAnnotationId === annotation.id) return
-    this.pendingAnnotationId = annotation.id
 
     const selector = annotation.target?.selector
     if (!selector) return
@@ -61,7 +60,7 @@ export default class extends Controller {
     const coords = this.parseSelector(selector)
     if (!coords) return
 
-    this.showAnnotationForm(coords)
+    this.showAnnotationForm(coords, annotation.id)
   }
 
   parseSelector(selector) {
@@ -92,12 +91,14 @@ export default class extends Controller {
     }
   }
 
-  showAnnotationForm(coords) {
+  showAnnotationForm(coords, annotationId) {
     if (this.hasFormTarget && this.commentTarget.value.trim() !== "") {
+      this.anno?.removeAnnotation(annotationId)
       return
     }
 
     this.cancelForm()
+    this.pendingAnnotationId = annotationId
 
     const template = this.formTemplateTarget
     const clone = template.content.cloneNode(true)
@@ -108,7 +109,9 @@ export default class extends Controller {
     this.yPercentTarget.value = coords.y_percent
     this.widthPercentTarget.value = coords.width_percent || ""
     this.heightPercentTarget.value = coords.height_percent || ""
-    this.commentTarget.focus()
+    const sidebar = this.formTarget.closest(".annotation-sidebar")
+    if (sidebar) sidebar.scrollTop = 0
+    this.commentTarget.focus({ preventScroll: true })
   }
 
   cancelForm() {
@@ -126,10 +129,11 @@ export default class extends Controller {
 
     if (!this.hasCanvasTarget) return
 
+    const pinContainer = this.imageTarget.parentElement || this.canvasTarget
     const annotations = this.element.querySelectorAll(".annotation-item")
     annotations.forEach((item, index) => {
       const pin = this.createPin(item, index + 1)
-      if (pin) this.canvasTarget.appendChild(pin)
+      if (pin) pinContainer.appendChild(pin)
     })
   }
 

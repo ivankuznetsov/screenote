@@ -104,6 +104,143 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_selector ANNOTATION_PIN, minimum: 1, wait: 10
   end
 
+  test "a typed draft survives a second drawing without retaining the transient annotation" do
+    click_on_image_to_annotate
+    assert_annotation_form_visible
+    fill_annotation_comment("Keep this draft")
+
+    with_playwright_page do |pw_page|
+      initial_state = annotorious_state(pw_page)
+      assert_equal 1, initial_state["annotationIds"].size
+      assert_equal initial_state["pendingAnnotationId"], initial_state["annotationIds"].first
+
+      pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          window.__createdAnnotationIds = []
+          controller.anno.on("createAnnotation", annotation => window.__createdAnnotationIds.push(annotation.id))
+          controller.anno.setSelected()
+        })()
+      JS
+
+      draw_annotation(pw_page, x_ratio: 0.65, y_ratio: 0.55)
+      pw_page.wait_for_function("() => window.__createdAnnotationIds?.length > 0", timeout: 10_000)
+      pw_page.wait_for_function(<<~JS, timeout: 10_000)
+        () => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          return controller.anno.getAnnotations().length === 1
+        }
+      JS
+
+      final_state = annotorious_state(pw_page)
+      transient_id = pw_page.evaluate("window.__createdAnnotationIds.at(-1)")
+
+      assert_equal initial_state["pendingAnnotationId"], final_state["pendingAnnotationId"]
+      assert_equal initial_state["annotationIds"], final_state["annotationIds"]
+      assert_equal "Keep this draft", final_state["comment"]
+      assert_equal 1, final_state["formCount"]
+      refute_includes final_state["annotationIds"], transient_id
+    end
+  end
+
+  test "comment form follows a long screenshot without stealing the canvas scroll position" do
+    upload_tall_screenshot
+
+    with_playwright_page do |pw_page|
+      canvas = pw_page.locator(".screenshot-canvas")
+      canvas.wait_for(state: "visible", timeout: 10_000)
+      canvas_top = canvas.evaluate("element => element.getBoundingClientRect().top + window.scrollY")
+      pw_page.evaluate("window.scrollTo(0, #{canvas_top.to_f + 900})")
+
+      scroll_before = pw_page.evaluate("window.scrollY")
+      sidebar_before = pw_page.locator(".annotation-sidebar").evaluate(<<~JS)
+        element => ({
+          position: getComputedStyle(element).position,
+          top: element.getBoundingClientRect().top,
+          bottom: element.getBoundingClientRect().bottom
+        })
+      JS
+
+      assert_equal "sticky", sidebar_before["position"]
+      assert_operator sidebar_before["top"], :>=, 0
+      assert_operator sidebar_before["bottom"], :<=, 720
+
+      sidebar_scroll_before = pw_page.locator(".annotation-sidebar").evaluate(<<~JS)
+        element => {
+          const spacer = document.createElement("div")
+          spacer.dataset.testid = "sidebar-scroll-spacer"
+          spacer.style.height = "1200px"
+          element.querySelector(".annotation-sidebar__list").appendChild(spacer)
+          element.scrollTop = element.scrollHeight
+          return element.scrollTop
+        }
+      JS
+      assert_operator sidebar_scroll_before, :>, 0
+
+      draw_visible_annotation(pw_page)
+      pw_page.locator(ANNOTATION_FORM).wait_for(state: "visible", timeout: 10_000)
+
+      scroll_after = pw_page.evaluate("window.scrollY")
+      form_bounds = pw_page.locator(ANNOTATION_FORM).evaluate(<<~JS)
+        element => ({
+          top: element.getBoundingClientRect().top,
+          bottom: element.getBoundingClientRect().bottom,
+          focused: element.querySelector("textarea") === document.activeElement
+        })
+      JS
+
+      assert_in_delta scroll_before, scroll_after, 1
+      assert form_bounds["focused"], "The new annotation textarea should retain keyboard focus"
+      assert_equal 0, pw_page.locator(".annotation-sidebar").evaluate("element => element.scrollTop")
+      assert_operator form_bounds["top"], :>=, 0
+      assert_operator form_bounds["bottom"], :<=, 720
+
+      pw_page.locator(COMMENT_FIELD).fill("Long screenshot comment")
+      pw_page.locator(SAVE_BUTTON).click
+      pw_page.locator(ANNOTATION_FORM).wait_for(state: "detached", timeout: 10_000)
+      pw_page.locator(ANNOTATION_ITEM).filter(hasText: "Long screenshot comment").wait_for(
+        state: "visible",
+        timeout: 10_000
+      )
+
+      scroll_after_save = pw_page.evaluate("window.scrollY")
+      assert_in_delta scroll_before, scroll_after_save, 1
+    end
+  ensure
+    FileUtils.rm_f(@tall_image_path) if @tall_image_path
+  end
+
+  test "narrow screenshots and their annotation pins share a centered coordinate box" do
+    create_annotation("Centered pin")
+
+    with_playwright_page do |pw_page|
+      geometry = pw_page.evaluate(<<~JS)
+        (() => {
+          const canvas = document.querySelector(".screenshot-canvas")
+          const image = document.querySelector("[data-testid='screenshot-image']")
+          const wrapper = image.parentElement
+          const pin = document.querySelector(".annotation-pin")
+          const canvasRect = canvas.getBoundingClientRect()
+          const wrapperRect = wrapper.getBoundingClientRect()
+
+          return {
+            canvasCenter: canvasRect.left + canvasRect.width / 2,
+            wrapperCenter: wrapperRect.left + wrapperRect.width / 2,
+            wrapperWidth: wrapperRect.width,
+            canvasWidth: canvasRect.width,
+            pinSharesWrapper: pin.parentElement === wrapper
+          }
+        })()
+      JS
+
+      assert_in_delta geometry["canvasCenter"], geometry["wrapperCenter"], 1
+      assert_operator geometry["wrapperWidth"], :<=, geometry["canvasWidth"]
+      assert geometry["pinSharesWrapper"], "Pins must use the centered image wrapper as their percentage coordinate box"
+    end
+  end
+
   private
 
   def create_screenshot_for_annotation
@@ -143,5 +280,54 @@ class AnnotationsTest < ApplicationSystemTestCase
       pw_page.mouse.move(start_x + 80, start_y + 60)
       pw_page.mouse.up
     end
+  end
+
+  def upload_tall_screenshot
+    require_vips!
+    @tall_image_path = Rails.root.join("tmp", "annotation-scroll-#{SecureRandom.hex(6)}.png")
+    Vips::Image.black(400, 2400).pngsave(@tall_image_path.to_s)
+
+    within find(BREADCRUMB) do
+      all("a").last.click
+    end
+    wait_for_turbo
+    click_link "Upload version"
+    fill_screenshot_form(title: "Tall annotation test", image_path: @tall_image_path.to_s)
+    submit_screenshot_form
+    assert_on_screenshot_show
+    assert_screenshot_image_loaded
+  end
+
+  def draw_visible_annotation(pw_page)
+    draw_annotation(pw_page, x_ratio: 0.3, viewport_y: 300)
+  end
+
+  def draw_annotation(pw_page, x_ratio:, y_ratio: nil, viewport_y: nil)
+    overlay = pw_page.locator(ANNOTORIOUS_OVERLAY).first
+    overlay.wait_for(state: "visible", timeout: 10_000)
+    box = overlay.bounding_box
+    start_x = box["x"] + (box["width"] * x_ratio)
+    start_y = viewport_y || box["y"] + (box["height"] * y_ratio)
+
+    pw_page.mouse.move(start_x, start_y)
+    pw_page.mouse.down
+    pw_page.mouse.move(start_x + 80, start_y + 60)
+    pw_page.mouse.up
+  end
+
+  def annotorious_state(pw_page)
+    pw_page.evaluate(<<~JS)
+      (() => {
+        const workspace = document.querySelector("[data-controller~='annotorious']")
+        const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+
+        return {
+          pendingAnnotationId: controller.pendingAnnotationId,
+          annotationIds: controller.anno.getAnnotations().map(annotation => annotation.id),
+          comment: document.querySelector(#{COMMENT_FIELD.to_json})?.value,
+          formCount: document.querySelectorAll(#{ANNOTATION_FORM.to_json}).length
+        }
+      })()
+    JS
   end
 end

@@ -749,6 +749,7 @@ turbo-frame {
   border-radius: var(--radius);
   overflow: hidden;
   position: relative;
+  text-align: center;
 }
 
 .screenshot-canvas__image {
@@ -762,8 +763,10 @@ turbo-frame {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 2rem);
   overflow-y: auto;
+  position: sticky;
+  top: 1rem;
 }
 
 .annotation-sidebar__header {
