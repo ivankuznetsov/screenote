@@ -4,6 +4,8 @@ require "test_helper"
 
 module Oauth
   class RegistrationsControllerTest < ActionDispatch::IntegrationTest
+    DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
+
     test "creates a client with valid parameters" do
       assert_difference "Doorkeeper::Application.count", 1 do
         post oauth_register_path, params: {
@@ -18,7 +20,7 @@ module Oauth
       assert_equal "Test MCP Client", json["client_name"]
       assert_equal [ "http://localhost:3000/callback" ], json["redirect_uris"]
       assert json["client_id"].present?, "Should return a client_id"
-      assert_equal [ "authorization_code" ], json["grant_types"]
+      assert_equal [ "authorization_code", DEVICE_GRANT_TYPE, "refresh_token" ], json["grant_types"]
       assert_equal "none", json["token_endpoint_auth_method"]
 
       app = Doorkeeper::Application.last
@@ -33,7 +35,7 @@ module Oauth
 
       assert_response :created
       json = JSON.parse(response.body)
-      assert_equal "MCP Client", json["client_name"]
+      assert_equal "OAuth Client", json["client_name"]
     end
 
     test "returns error when redirect_uris is missing" do

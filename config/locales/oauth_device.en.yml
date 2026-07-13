@@ -1,0 +1,7 @@
+en:
+  doorkeeper:
+    errors:
+      messages:
+        authorization_pending: The authorization request is still pending.
+        slow_down: Polling is happening too quickly.
+        expired_token: The device code has expired.

@@ -1,6 +1,6 @@
 # Screenote
 
-Screenote is a Rails visual feedback app for screenshots, annotations, and agent workflows. The browser app is the review surface, MCP is the rich agent protocol, and the Go CLI is the shell/CI REST contract.
+Screenote is a Rails visual feedback app for screenshots, annotations, and agent workflows. The browser app is the review surface, and the Go CLI is the shell and automation contract.
 
 ## Go CLI
 
@@ -10,37 +10,33 @@ Install:
 go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
 ```
 
-Configure a self-hosted, local, staging, or production base URL explicitly. CI and agents can use a pre-provisioned OAuth bearer token:
-
-```sh
-screenote config set --base-url https://screenote.ai --token "$SCREENOTE_TOKEN"
-screenote config
-```
-
-`screenote config` reports whether a token is set and where it came from, but never prints the bearer token itself.
-
-Developers can also store OAuth login credentials explicitly:
+Authorize the CLI with OAuth against a self-hosted, local, staging, or production base URL:
 
 ```sh
 screenote --base-url https://screenote.ai login
-screenote logout
 ```
 
-Login aligns the saved base URL with the authorized server and stores the config with owner-only permissions. If the browser cannot be opened, the CLI writes a JSON message containing `authorization_url` to stderr so the URL can be opened manually.
+The default login opens a browser and uses PKCE with a loopback callback. SSH, tmux, and other headless sessions can use the OAuth device flow instead:
 
-Configuration precedence is:
+```sh
+screenote --base-url https://screenote.ai login --device
+```
 
-1. Flags: `--token`, `--base-url`, `--project`
-2. Environment: `SCREENOTE_TOKEN`, `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
+Device login prints a one-time code and authorization link that can be approved in any browser. It does not bind a callback port or require SSH forwarding. Both login methods store OAuth credentials with owner-only permissions; `screenote logout` removes them.
+
+Configuration precedence for non-secret settings is:
+
+1. Flags: `--base-url`, `--project`
+2. Environment: `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
 3. Config file: `~/.config/screenote/config.toml`
-4. Stored login credentials from `screenote login`
 
-Ordinary commands never prompt or open a browser. Project-scoped commands require `--project`, `SCREENOTE_PROJECT`, or config `project`.
+Ordinary commands never prompt or open a browser. Only explicit `screenote login` starts OAuth. Project-scoped commands require `--project`, `SCREENOTE_PROJECT`, or config `project`.
 
 Examples:
 
 ```sh
-screenote --base-url http://localhost:3005 --token "$SCREENOTE_TOKEN" project list
+screenote --base-url http://localhost:3005 login
+screenote project list
 screenote --project 7 page list
 screenote --project 7 screenshot create --title "Homepage" --file screenshot.png
 cat screenshot.png | screenote --project 7 screenshot create --title "Homepage"
@@ -66,7 +62,7 @@ Exit codes:
 | 0 | OK |
 | 1 | Generic error |
 | 2 | Usage/config error |
-| 3 | Auth/forbidden, including invalid or expired tokens |
+| 3 | Authentication or authorization failed |
 | 4 | Not found |
 | 5 | Rate limited |
 

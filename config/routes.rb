@@ -13,6 +13,11 @@ Rails.application.routes.draw do
   # Dynamic Client Registration (RFC 7591)
   post "oauth/register", to: "oauth/registrations#create"
 
+  # OAuth Device Authorization Grant (RFC 8628)
+  post "oauth/authorize_device", to: "oauth/device_authorization_requests#create", as: :oauth_authorize_device
+  get "oauth/device", to: "oauth/device_authorizations#show", as: :oauth_device
+  post "oauth/device", to: "oauth/device_authorizations#update"
+
   # Non-interactive MCP test-token endpoint (hive OAuth/MCP integration tests).
   # Gated entirely on ENV["SCREENOTE_MCP_TEST_TOKEN_SECRET"]; responds 404 when
   # the secret is unset or unmatched. See Oauth::TestTokensController.

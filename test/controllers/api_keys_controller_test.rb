@@ -52,14 +52,15 @@ class ApiKeysControllerTest < ActionDispatch::IntegrationTest
     assert_select ".api-key-item__name", { text: api_keys(:bob_key).name, count: 0 }
   end
 
-  test "empty index explains API keys as CLI automation credentials" do
+  test "empty index reserves API keys for direct API integrations" do
     sign_in(@user)
     project = projects(:alice_second_project)
 
     get project_api_keys_path(project)
 
     assert_response :success
-    assert_select ".empty-state__description", text: /Screenote CLI and agent automation/
+    assert_select ".empty-state__description", text: /direct REST API integration/
+    assert_select ".empty-state__description", text: /CLI signs in with OAuth/
     assert_no_match(/via MCP/, response.body)
   end
 

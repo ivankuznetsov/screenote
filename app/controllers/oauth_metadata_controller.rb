@@ -18,12 +18,17 @@ class OauthMetadataController < ApplicationController
     render json: {
       issuer: base_url,
       authorization_endpoint: "#{base_url}/oauth/authorize",
+      device_authorization_endpoint: "#{base_url}/oauth/authorize_device",
       token_endpoint: "#{base_url}/oauth/token",
       registration_endpoint: "#{base_url}/oauth/register",
       revocation_endpoint: "#{base_url}/oauth/revoke",
       response_types_supported: [ "code" ],
       response_modes_supported: [ "query" ],
-      grant_types_supported: %w[authorization_code refresh_token],
+      grant_types_supported: [
+        "authorization_code",
+        ScreenoteOauth::DeviceCodeGrant::GRANT_TYPE,
+        "refresh_token"
+      ],
       code_challenge_methods_supported: [ "S256" ],
       token_endpoint_auth_methods_supported: %w[none client_secret_post],
       scopes_supported: %w[mcp_read mcp_write],

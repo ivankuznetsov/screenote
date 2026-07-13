@@ -20,6 +20,9 @@
       <p class="guide__step-desc">Authorize the CLI with your Screenote account:</p>
       <%= render "static_pages/help_terminal", commands: [ "screenote --base-url https://screenote.ai login" ] %>
       <p class="guide__step-desc">A browser window opens for OAuth approval. Your credentials are saved locally with owner-only permissions.</p>
+      <p class="guide__step-desc">On SSH, tmux, or another headless session, use device authorization instead:</p>
+      <%= render "static_pages/help_terminal", commands: [ "screenote --base-url https://screenote.ai login --device" ] %>
+      <p class="guide__step-desc">Screenote prints a one-time code and authorization link. Open the link on any device, enter the code, and return to your terminal. No callback port or SSH forwarding is required.</p>
     </div>
   </div>
 

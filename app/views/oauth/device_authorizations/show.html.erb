@@ -1,0 +1,33 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Authorize device</h1>
+  <p class="auth-card__subtitle">
+    <strong data-testid="device-client-name"><%= @device_grant.application.name %></strong>
+    wants to use your Screenote account.
+  </p>
+
+  <p class="oauth-consent__explanation">
+    Confirm that this code matches the one shown by the device you are signing in:
+    <strong data-testid="device-user-code"><%= @device_grant.user_code %></strong>
+  </p>
+
+  <div class="oauth-consent__scopes">
+    <p class="oauth-consent__scopes-label">This application will be able to:</p>
+    <ul class="oauth-consent__scopes-list">
+      <% @device_grant.scopes.split.each do |scope| %>
+        <li class="oauth-consent__scope-item" data-testid="device-scope-<%= scope.tr('_', '-') %>">
+          <%= scope == "mcp_read" ? "Read your screenshots and annotations" : "Create screenshots, annotations, and projects" %>
+        </li>
+      <% end %>
+    </ul>
+  </div>
+
+  <%= form_with url: oauth_device_path, method: :post, class: "oauth-consent__form", data: { turbo: false } do %>
+    <%= hidden_field_tag :user_code, @device_grant.user_code %>
+    <div class="oauth-consent__actions">
+      <%= button_tag "Approve", type: "submit", name: "decision", value: "approve", class: "auth-card__submit" %>
+    </div>
+    <div class="oauth-consent__deny">
+      <%= button_tag "Deny", type: "submit", name: "decision", value: "deny", class: "auth-card__magic-link" %>
+    </div>
+  <% end %>
+</div>

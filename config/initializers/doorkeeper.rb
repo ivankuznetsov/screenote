@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+require Rails.root.join("lib/screenote_oauth/device_code_grant")
+
+Doorkeeper::GrantFlow.register(
+  :device_code,
+  grant_type_matches: ScreenoteOauth::DeviceCodeGrant::GRANT_TYPE,
+  grant_type_strategy: ScreenoteOauth::DeviceCodeGrant::Strategy
+)
+
 Doorkeeper.configure do
   orm :active_record
 
@@ -28,8 +36,8 @@ Doorkeeper.configure do
   # Native OAuth clients like Claude Code use http://localhost callbacks.
   force_ssl_in_redirect_uri { |uri| !uri.host.in?(%w[localhost 127.0.0.1]) }
 
-  # Only authorization_code grant flow (OAuth 2.1)
-  grant_flows %w[authorization_code]
+  # Browser-based PKCE remains the default; RFC 8628 supports headless clients.
+  grant_flows %w[authorization_code device_code]
 
   # Skip consent screen for previously-authorized client+scope combinations
   skip_authorization do |resource_owner, client|
