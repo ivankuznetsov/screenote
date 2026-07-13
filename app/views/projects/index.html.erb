@@ -1,14 +1,14 @@
-<div class="mcp-banner" hidden data-controller="dismissible" data-dismissible-key-value="mcp-banner-dismissed" data-testid="mcp-banner">
-  <div class="mcp-banner__content">
-    <div class="mcp-banner__icon">&#9654;</div>
+<div class="cli-banner" hidden data-controller="dismissible" data-dismissible-key-value="cli-banner-dismissed" data-testid="cli-banner">
+  <div class="cli-banner__content">
+    <div class="cli-banner__icon" aria-hidden="true">&gt;_</div>
     <div>
-      <div class="mcp-banner__title">Connect your AI agent via MCP</div>
-      <div class="mcp-banner__description">Let your AI agent capture screenshots, read annotations, and iterate on feedback — all through the MCP protocol.</div>
+      <div class="cli-banner__title">Install the Screenote CLI</div>
+      <div class="cli-banner__description">Publish screenshot captures and retrieve visual feedback from any agent or automation.</div>
     </div>
   </div>
-  <div class="mcp-banner__actions">
-    <%= link_to "Learn how", help_path, class: "btn btn--secondary btn--small", data: { testid: "mcp-banner-cta" } %>
-    <button class="mcp-banner__dismiss" data-action="dismissible#dismiss" aria-label="Dismiss" data-testid="mcp-banner-dismiss">&times;</button>
+  <div class="cli-banner__actions">
+    <%= link_to "Install CLI", help_path(anchor: "install-cli"), class: "btn btn--secondary btn--small", data: { testid: "cli-banner-cta" } %>
+    <button class="cli-banner__dismiss" data-action="dismissible#dismiss" aria-label="Dismiss CLI installation prompt" data-testid="cli-banner-dismiss">&times;</button>
   </div>
 </div>
 

@@ -59,6 +59,25 @@ class OauthFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.location, "session", "Should redirect to login"
   end
 
+  test "authorization consent uses application wording for the Screenote CLI" do
+    client = create_oauth_application(name: "Screenote CLI", redirect_uri: "http://localhost:9999/callback")
+    _verifier, code_challenge = generate_pkce_challenge
+    sign_in(@user)
+
+    get "/oauth/authorize", params: {
+      client_id: client.uid,
+      redirect_uri: "http://localhost:9999/callback",
+      response_type: "code",
+      scope: "mcp_read mcp_write",
+      code_challenge: code_challenge,
+      code_challenge_method: "S256"
+    }
+
+    assert_response :success
+    assert_select ".oauth-consent__explanation", text: /This application is requesting permission/
+    assert_no_match(/Model Context Protocol/, response.body)
+  end
+
   test "token exchange fails without PKCE verifier" do
     client_id = register_oauth_client
     code_verifier, code_challenge = generate_pkce_challenge

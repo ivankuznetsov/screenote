@@ -52,6 +52,17 @@ class ApiKeysControllerTest < ActionDispatch::IntegrationTest
     assert_select ".api-key-item__name", { text: api_keys(:bob_key).name, count: 0 }
   end
 
+  test "empty index explains API keys as CLI automation credentials" do
+    sign_in(@user)
+    project = projects(:alice_second_project)
+
+    get project_api_keys_path(project)
+
+    assert_response :success
+    assert_select ".empty-state__description", text: /Screenote CLI and agent automation/
+    assert_no_match(/via MCP/, response.body)
+  end
+
   test "cannot access other users project keys" do
     sign_in(@user)
     get project_api_keys_path(projects(:bob_project))
@@ -64,6 +75,7 @@ class ApiKeysControllerTest < ActionDispatch::IntegrationTest
     get new_project_api_key_path(@project)
     assert_response :success
     assert_select "form"
+    assert_select "input[placeholder='e.g. CI snapshot uploader']"
   end
 
   # Create

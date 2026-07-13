@@ -1,0 +1,15 @@
+<div class="guide__terminal">
+  <div class="guide__terminal-bar" aria-hidden="true">
+    <span class="guide__terminal-dot"></span>
+    <span class="guide__terminal-dot"></span>
+    <span class="guide__terminal-dot"></span>
+  </div>
+  <div class="guide__terminal-body">
+    <% commands.each do |command| %>
+      <div class="guide__terminal-line">
+        <span class="guide__terminal-prompt" aria-hidden="true">$</span>
+        <code><%= command %></code>
+      </div>
+    <% end %>
+  </div>
+</div>

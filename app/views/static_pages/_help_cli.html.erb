@@ -1,0 +1,36 @@
+<%# ── CLI command and automation reference ── %>
+<section class="guide__section" id="cli-reference">
+  <h2 class="guide__section-heading">CLI reference</h2>
+  <p class="guide__section-desc">Use these commands directly from an agent, a shell, or CI. Commands emit machine-readable JSON so automation can consume the result.</p>
+
+  <div class="guide__cli-block">
+    <h3 class="guide__cli-label">Read and comment on feedback</h3>
+    <%= render "static_pages/help_terminal", commands: [
+      "screenote screenshot list --status ready",
+      "screenote annotation list --screenshot <SCREENSHOT_ID> --status open",
+      "screenote annotation get --annotation <ANNOTATION_ID>",
+      'screenote comment add --annotation <ANNOTATION_ID> --body "Fix applied"'
+    ] %>
+    <p class="guide__cli-method-desc">Adding a comment records what the agent changed. Resolve or reopen the annotation from the Screenote web review for now.</p>
+  </div>
+
+  <div class="guide__cli-block">
+    <h3 class="guide__cli-label">Non-interactive agent and CI access</h3>
+    <div class="guide__cli-method">
+      <p class="guide__cli-method-desc">Create an API key from a project's <strong>API Keys</strong> page, then configure the CLI without opening a browser:</p>
+      <%= render "static_pages/help_terminal", commands: [
+        'screenote config set --base-url https://screenote.ai --token "$SCREENOTE_TOKEN" --project <PROJECT_ID>',
+        "screenote config"
+      ] %>
+      <p class="guide__cli-method-desc">Keep the token in your secret manager. <code>screenote config</code> confirms that a token is set without printing it.</p>
+    </div>
+  </div>
+
+  <div class="guide__cli-block">
+    <h3 class="guide__cli-label">Full documentation</h3>
+    <ul class="guide__cli-list">
+      <li><%= link_to "Public Screenote CLI repository", "https://github.com/ivankuznetsov/screenote-cli" %></li>
+      <li><%= link_to "Snapshot manifest format", "https://github.com/ivankuznetsov/screenote-cli/blob/main/docs/snapshot-manifest.md" %></li>
+    </ul>
+  </div>
+</section>

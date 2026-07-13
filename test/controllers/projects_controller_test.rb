@@ -36,6 +36,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".project-card__name", text: /Alice's Project/
   end
 
+  test "index promotes CLI installation with a fresh dismissal key" do
+    sign_in(@user)
+
+    get projects_path
+
+    assert_response :success
+    assert_select "[data-testid='cli-banner'][data-dismissible-key-value='cli-banner-dismissed']", count: 1 do
+      assert_select ".cli-banner__title", text: "Install the Screenote CLI"
+      assert_select "a[href='#{help_path(anchor: "install-cli")}']", text: "Install CLI"
+    end
+    assert_no_match(/MCP protocol|via MCP/, response.body)
+  end
+
   # Show
   test "show displays project" do
     sign_in(@user)

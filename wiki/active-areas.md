@@ -3,13 +3,13 @@ title: Active Areas
 type: architecture
 source: git log --since="6 months ago"
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-13
 tags: [active, development, roadmap, recent]
 ---
 
 # Active Areas
 
-TLDR: Recent development focused on multi-viewport screenshot capture, Stripe webhook hardening, help/MCP documentation, and LLM wiki automation. The core product loop now supports upload -> per-viewport annotation -> agent reads cropped feedback.
+TLDR: Recent development focused on multi-viewport screenshot capture, Stripe webhook hardening, CLI-first onboarding, and LLM wiki automation. The public product loop now points users to the standalone Screenote CLI for publishing captures and retrieving visual feedback.
 
 Source: `git log --all --oneline --since="6 months ago"` (112 commits)
 
@@ -29,11 +29,12 @@ Source: `git log --all --oneline --since="6 months ago"` (112 commits)
 - Reads `current_period_end` from Stripe subscription items for API 2026-01-28
 - Commits: `e6d620a`, `cd99da2`, `898fb4c`
 
-### Help and MCP Documentation
-- Static pages now live under `StaticPagesController`
-- `/help` is public and split into quick start, workflows, and MCP partials
-- Help page dynamically renders tools from `ApplicationTool.descendants`
-- Source: `app/controllers/static_pages_controller.rb`, `app/views/static_pages/_help_mcp.html.erb`
+### CLI-First Website and Help
+- The landing page, dashboard install banner, billing and API-key screens, OAuth consent, legal pages, and welcome email now present the standalone Screenote CLI as the public agent interface.
+- `/help` is public and documents the verified Go install command, OAuth login, project selection, capture publishing, snapshot manifests, and feedback commands.
+- The help page is static and no longer exposes the internal MCP tool registry through `ApplicationTool.descendants`.
+- The MCP runtime and its existing OAuth scope identifiers remain in place; retiring that transport is a separate effort.
+- Source: `app/controllers/static_pages_controller.rb`, `app/views/static_pages/_help_cli.html.erb`, `app/views/static_pages/_help_quick_start.html.erb`, `app/views/projects/index.html.erb`
 
 ### LLM Wiki Automation
 - Added managed AGENTS/CLAUDE wiki instructions, `.llm-wiki/config.json`, refresh scripts, and post-commit hook wiring
@@ -80,6 +81,7 @@ Source: `git log --all --oneline --since="6 months ago"` (112 commits)
 |------|--------|
 | Core annotation workflow | Stable, production-ready |
 | Multi-viewport screenshot workflow | Recently added, maturing |
+| Public CLI | Canonical public agent interface, onboarding added |
 | MCP integration (OAuth 2.1/API keys) | Stable, production-ready |
 | REST API (v1) | Stable, minimal surface |
 | Team collaboration | Stable, recently polished |
@@ -97,7 +99,7 @@ Cross-referenced with `plans/` (6 files), `todos/` (176 files), and current sour
 
 3. **MCP tool completeness** -- Source now includes create/reopen/comment annotation tools, create_project, and invitation/membership tools. Remaining visible gaps are delete_screenshot (#054), delete_annotation (#055), batch feedback retrieval (#053), and plan/status or usage-limit tools (#120). See [[mcp-tools]].
 
-4. **Claude Code skill** -- `/screenote` slash command for capture + feedback retrieval. Requires file-path upload support or use of the signed-upload/multi-viewport tools.
+4. **CLI adoption** -- Keep install and workflow documentation aligned with the public `screenote-cli` repository as packaging and capture capabilities expand.
 
 5. **Frontend convention cleanup** -- Pending todos cover inline styles, imperative JS, CDN dependencies, px vs rem, missing ARIA attributes.
 

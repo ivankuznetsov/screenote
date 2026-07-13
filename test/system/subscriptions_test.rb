@@ -36,7 +36,8 @@ class SubscriptionsFreeUserTest < ApplicationSystemTestCase
     within(FREE_PLAN) do
       assert_text "1 project"
       assert_text "1 team member"
-      assert_text "Claude Code plugin"
+      assert_text "Screenote CLI access"
+      assert_text "OAuth login and API key automation"
     end
 
     within(PRO_PLAN) do

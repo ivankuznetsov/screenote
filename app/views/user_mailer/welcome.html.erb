@@ -10,7 +10,7 @@
 
 <!-- Body text -->
 <p style="margin: 0 0 24px 0; font-size: 15px; color: #b0b0c0; line-height: 1.7;">
-  Screenote is a visual feedback tool for AI agents. Upload screenshots, annotate them, and let your AI agent read the feedback directly via MCP.
+  Screenote is a visual feedback tool for AI agents. Publish captures with the Screenote CLI, annotate them, and let your agent retrieve precise feedback.
 </p>
 
 <!-- Steps -->
@@ -38,8 +38,8 @@
             <div style="width: 28px; height: 28px; border-radius: 50%; background-color: #e5a31e; color: #0a0a0f; font-size: 14px; font-weight: 700; text-align: center; line-height: 28px;">2</div>
           </td>
           <td valign="top">
-            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Upload screenshots</p>
-            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Upload manually or let your AI agent capture them via MCP.</p>
+            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Install the Screenote CLI</p>
+            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;"><code>go install github.com/<wbr>ivankuznetsov/<wbr>screenote-cli/<wbr>cmd/<wbr>screenote@latest</code></p>
           </td>
         </tr>
       </table>
@@ -53,8 +53,8 @@
             <div style="width: 28px; height: 28px; border-radius: 50%; background-color: #e5a31e; color: #0a0a0f; font-size: 14px; font-weight: 700; text-align: center; line-height: 28px;">3</div>
           </td>
           <td valign="top">
-            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Annotate with feedback</p>
-            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Click anywhere on a screenshot to pin visual feedback.</p>
+            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Publish screenshots</p>
+            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Upload agent-produced PNG/JPEG files or a complete snapshot manifest.</p>
           </td>
         </tr>
       </table>
@@ -68,8 +68,8 @@
             <div style="width: 28px; height: 28px; border-radius: 50%; background-color: #e5a31e; color: #0a0a0f; font-size: 14px; font-weight: 700; text-align: center; line-height: 28px;">4</div>
           </td>
           <td valign="top">
-            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Connect your AI agent</p>
-            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Your agent reads annotations with cropped image context via MCP.</p>
+            <p style="margin: 0 0 2px 0; font-size: 15px; font-weight: 600; color: #e8e8ed;">Annotate and iterate</p>
+            <p style="margin: 0; font-size: 13px; color: #8888a0; line-height: 1.5;">Mark what is wrong, then let your agent retrieve annotations and cropped images through the CLI.</p>
           </td>
         </tr>
       </table>
@@ -81,5 +81,5 @@
 
 <!-- Help note -->
 <p style="margin: 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
-  Need help connecting your AI agent? Check our <a href="<%= main_app.help_url %>" style="color: #e5a31e; text-decoration: none;">setup guide</a> for step-by-step instructions.
+  Need help setting up the Screenote CLI? Check our <a href="<%= main_app.help_url(anchor: "install-cli") %>" style="color: #e5a31e; text-decoration: none;">setup guide</a> for step-by-step instructions.
 </p>

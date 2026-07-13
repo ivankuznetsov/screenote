@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-07-08
+updated: 2026-07-13
 tags: [gaps, documentation, todo]
 ---
 
@@ -33,7 +33,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 ### Views and Layouts
 - Three layouts mentioned (`application`, `auth`, `landing`) but not documented in a dedicated page.
 - The annotation UI (Figma-style comments, point vs region drawing, viewport switcher) is a key feature with no dedicated UI page.
-- Help page redesign has landed in `app/views/static_pages/*`; no dedicated wiki page documents the public help/MCP docs UI yet.
+- The CLI-first public help and dashboard onboarding are summarized in [[active-areas]] and [[controllers/web-controllers]], but the broader annotation UI still has no dedicated view/layout documentation page.
 
 ### Configuration / Initializers
 - `config/initializers/rails_simple_auth.rb` -- auth configuration details
@@ -48,7 +48,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - **NEW:** Specific test coverage gaps identified: CreateScreenshotTool (#056), SQL injection testing (#149), OAuth test helpers (#102).
 
 ### API CLI
-- [[api-cli]] now documents the Go REST CLI surface from `add-a-go-cli-for-260708-edec`, including aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. The remaining uncertainty is product scope: `annotation resolve`, `annotation reopen`, OAuth browser login, daemon/watch mode, member management, and required multi-viewport upload are explicitly deferred rather than confirmed CLI ship criteria.
+- [[api-cli]] now documents the Go REST CLI surface, including OAuth browser login, aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. Remaining deferred product scope includes `annotation resolve`, `annotation reopen`, project creation, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload.
 
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.

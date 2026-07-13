@@ -34,7 +34,7 @@
           <% else %>
             <%= button_to "Revoke", project_api_key_path(@project, api_key), method: :delete,
                 class: "btn btn--danger btn--small",
-                data: { turbo_confirm: "Revoke this API key? Agents using it will lose access.", testid: "revoke-api-key-button" } %>
+                data: { turbo_confirm: "Revoke this API key? CLI sessions and automations using it will lose access.", testid: "revoke-api-key-button" } %>
           <% end %>
         </div>
       </div>
@@ -43,7 +43,7 @@
 <% else %>
   <div class="empty-state" data-testid="empty-state">
     <div class="empty-state__title">No API keys yet</div>
-    <div class="empty-state__description">Create an API key to let AI agents connect to this project via MCP.</div>
+    <div class="empty-state__description">Create an API key for non-interactive Screenote CLI and agent automation.</div>
     <%= link_to "Create your first API key", new_project_api_key_path(@project), class: "btn btn--primary" %>
   </div>
 <% end %>
