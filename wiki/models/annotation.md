@@ -3,7 +3,7 @@ title: Annotation
 type: model
 source: app/models/annotation.rb
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-07-13
 tags: [model, annotation, feedback, core]
 ---
 
@@ -58,7 +58,8 @@ Source: `app/models/annotation.rb`
 
 - `point?` -- Returns true if width_percent is nil (point annotation vs region)
 - `crop` -- Looks up the matching `ScreenshotImage` for the annotation viewport and returns a cached cropped image when that image is ready.
-- `resolve!(user: nil, api_key: nil, body:)` -- Transactional: updates status to resolved, records who resolved it, creates an annotation_comment with action `:resolved`. Raises if not open.
+- `resolve!(user: nil, api_key: nil, body:)` -- Locks and reloads the annotation, then transactionally updates status, records who resolved it, and creates an annotation_comment with action `:resolved`. Raises if the locked row is not open.
+- `resolve_idempotently!(user: nil, api_key: nil, body:)` -- Uses the same row lock and returns `resolved` plus the new audit comment, or `already_resolved` plus the existing latest resolution comment without another write.
 - `reopen!(user: nil, api_key: nil, body:)` -- Transactional: updates status to open, clears resolved_by, creates an annotation_comment with action `:reopened`. Raises if not resolved.
 - `as_api_json` -- Serializes for API/MCP response (id, screenshot_id, viewport, type, coordinates, comment, status, author email, comments_count)
 

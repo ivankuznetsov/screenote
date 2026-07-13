@@ -9,6 +9,16 @@ class Project < ApplicationRecord
   has_many :screenshots, through: :pages
   has_many :snapshots, dependent: :destroy
   has_many :api_keys, dependent: :destroy
+  has_many :oauth_access_grants,
+    class_name: "Doorkeeper::AccessGrant",
+    foreign_key: :project_id,
+    inverse_of: false,
+    dependent: :delete_all
+  has_many :oauth_access_tokens,
+    class_name: "Doorkeeper::AccessToken",
+    foreign_key: :project_id,
+    inverse_of: false,
+    dependent: :delete_all
 
   validates :name, presence: true, length: { maximum: 255 }
 

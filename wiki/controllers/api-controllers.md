@@ -40,9 +40,11 @@ Base class for authenticated API endpoints. Inherits from `ActionController::API
 
 Source: `app/controllers/api/v1/projects_controller.rb`
 
-**Actions:** index
+**Actions:** index, create
 
-API-key auth returns the project bound to the API key with role `api_key`. OAuth with `mcp_read` returns all projects visible through the authenticated user's memberships with membership roles.
+API-key auth returns the project bound to the API key with role `api_key`. User-scoped OAuth with `mcp_read` returns all projects visible through the authenticated user's memberships with membership roles; project-scoped OAuth returns only its bound project after rechecking membership.
+
+Creation accepts a flat `name`, requires a user-scoped OAuth token with `mcp_write`, serializes the created project with `role: owner`, and relies on the Project callback to create the owner membership. The check and write run under the user row lock so concurrent free-plan requests cannot exceed the project quota. API keys and project-scoped OAuth tokens receive `forbidden`; quota exhaustion receives `project_limit_reached`.
 
 ---
 
@@ -138,6 +140,25 @@ Source: `app/controllers/api/v1/annotation_comments_controller.rb`
 | create | POST | `/api/v1/annotations/:annotation_id/comments` | Creates an API-key-authored or OAuth-user-authored annotation comment |
 
 - OAuth requests require `mcp_write` and explicit `project_id`
+
+---
+
+## Api::V1::AnnotationResolutionsController
+
+Source: `app/controllers/api/v1/annotation_resolutions_controller.rb`
+
+**Actions:** create
+
+| Action | Method | Path | Notes |
+|--------|--------|------|-------|
+| create | POST | `/api/v1/annotations/:annotation_id/resolve` | Idempotently resolves project-scoped feedback and returns the standard annotation plus resolution comment |
+
+- Requires API-key access or OAuth `mcp_write`; OAuth callers pass explicit `project_id`.
+- Attributes the transactional resolution comment to the current API key or OAuth user.
+- Delegates to the model's locked resolution boundary so REST, web, and legacy MCP writers cannot create duplicate resolved audit comments from stale instances.
+- Rejects non-string `comment` parameters with the stable `validation_failed` HTTP `422` envelope; omitted and blank strings retain the default comment.
+- Returns `operation: resolved` on the state transition and `operation: already_resolved` on replay.
+- Project-scoped OAuth tokens cannot select a different project even when the user belongs to both projects.
 
 ---
 

@@ -43,6 +43,31 @@ class ProjectTest < ActiveSupport::TestCase
       "Should create owner membership for creator"
   end
 
+  test "destroy removes project-scoped oauth grants and tokens" do
+    user = users(:alice)
+    project = user.owned_projects.create!(name: "Disposable OAuth project")
+    application = create_oauth_application(name: "Disposable OAuth app")
+    token = create_oauth_token(
+      application: application,
+      user: user,
+      scopes: "mcp_read"
+    )
+    token.update_column(:project_id, project.id)
+    grant = Doorkeeper::AccessGrant.create!(
+      application: application,
+      resource_owner_id: user.id,
+      project_id: project.id,
+      expires_in: 10.minutes.to_i,
+      redirect_uri: application.redirect_uri,
+      scopes: "mcp_read"
+    )
+
+    project.destroy!
+
+    assert_not Doorkeeper::AccessToken.exists?(token.id)
+    assert_not Doorkeeper::AccessGrant.exists?(grant.id)
+  end
+
   test "member? returns true for members" do
     project = projects(:alice_project)
     assert project.member?(users(:alice)), "Creator should be a member"
