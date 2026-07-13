@@ -216,3 +216,9 @@ Append-only log of all wiki operations.
 **Action:** Re-reviewed project snapshots against current main, preserved pending-only and failed-only pages in the unfiltered project view, made empty snapshot-filter states accurate, required explicit-offset MCP timestamps, echoed snapshot linkage in capture responses, regenerated the schema so its 40-character git commit limit matches the migration, made the snapshot system test target Capybara's actual in-process server, and removed unrelated historical planning/todo artifacts from the PR.
 **Pages updated:** wiki/index.md, wiki/schema-evolution.md, wiki/mcp-tools.md, wiki/models/project.md, wiki/models/snapshot.md, wiki/log.md
 **Source:** `app/models/project.rb`, `app/tools/create_snapshot_tool.rb`, `app/tools/create_multi_viewport_screenshot_tool.rb`, project views, migrations, and regression tests
+
+## [2026-07-13] public help command parity
+
+**Action:** Updated the public help workflow after production verification so CLI project creation, annotation crop extraction, and idempotent annotation resolution are documented instead of the superseded dashboard-only and web-only limits.
+**Pages updated:** wiki/active-areas.md, wiki/log.md
+**Source:** `app/views/static_pages/_help_quick_start.html.erb`, `app/views/static_pages/_help_cli.html.erb`, public CLI merge `c28ac8b`

@@ -31,7 +31,7 @@ Source: `git log --all --oneline --since="6 months ago"` (112 commits)
 
 ### CLI-First Website and Help
 - The landing page, dashboard install banner, billing and API-key screens, OAuth consent, legal pages, and welcome email now present the standalone Screenote CLI as the public agent interface.
-- `/help` is public and documents the verified Go install command, OAuth login, project selection, capture publishing, snapshot manifests, and feedback commands.
+- `/help` is public and documents the verified Go install command, OAuth login, CLI project creation and selection, capture publishing, snapshot manifests, crop extraction, comments, and idempotent annotation resolution.
 - The help page is static and no longer exposes the internal MCP tool registry through `ApplicationTool.descendants`.
 - The MCP runtime and its existing OAuth scope identifiers remain in place; retiring that transport is a separate effort.
 - Source: `app/controllers/static_pages_controller.rb`, `app/views/static_pages/_help_cli.html.erb`, `app/views/static_pages/_help_quick_start.html.erb`, `app/views/projects/index.html.erb`

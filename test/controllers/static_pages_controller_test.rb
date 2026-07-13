@@ -29,10 +29,14 @@ class StaticPagesControllerTest < ActionDispatch::IntegrationTest
     assert_match(/prints a one-time code and authorization link/, response.body)
     assert_match(/No callback port or SSH forwarding is required/, response.body)
     assert_no_match(/--token|SCREENOTE_TOKEN|Create an API key from a project's/, response.body)
+    assert_select "code", text: 'screenote project create --name "My app"'
     assert_select "code", text: "screenote snapshot --manifest snapshot.json"
+    assert_select "code", text: "screenote annotation get --annotation <ANNOTATION_ID> --crop-file annotation.png"
+    assert_select "code", text: 'screenote annotation resolve --annotation <ANNOTATION_ID> --comment "Verified and resolved"'
     assert_select "a[href='https://github.com/ivankuznetsov/screenote-cli']", minimum: 1
     assert_select "a[href='#{dashboard_path}']", text: "dashboard"
-    assert_match(/Resolve or reopen the annotation from the Screenote web review/, response.body)
+    assert_match(/resolve the annotation idempotently/, response.body)
+    assert_no_match(/Resolve or reopen the annotation from the Screenote web review/, response.body)
     assert_match(/lists project feedback rather than filtering results by snapshot/, response.body)
     assert_no_match(/Model Context Protocol|\/plugin install|\/screenote feedback/, response.body)
   end

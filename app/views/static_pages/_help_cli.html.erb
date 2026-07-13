@@ -8,10 +8,11 @@
     <%= render "static_pages/help_terminal", commands: [
       "screenote screenshot list --status ready",
       "screenote annotation list --screenshot <SCREENSHOT_ID> --status open",
-      "screenote annotation get --annotation <ANNOTATION_ID>",
-      'screenote comment add --annotation <ANNOTATION_ID> --body "Fix applied"'
+      "screenote annotation get --annotation <ANNOTATION_ID> --crop-file annotation.png",
+      'screenote comment add --annotation <ANNOTATION_ID> --body "Fix applied in abc1234"',
+      'screenote annotation resolve --annotation <ANNOTATION_ID> --comment "Verified and resolved"'
     ] %>
-    <p class="guide__cli-method-desc">Adding a comment records what the agent changed. Resolve or reopen the annotation from the Screenote web review for now.</p>
+    <p class="guide__cli-method-desc"><code>--crop-file</code> saves the annotated image region with owner-only permissions. Add a comment to record what changed, then resolve the annotation idempotently with an optional resolution note.</p>
   </div>
 
   <div class="guide__cli-block">
