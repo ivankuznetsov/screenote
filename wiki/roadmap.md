@@ -3,13 +3,13 @@ title: Roadmap
 type: architecture
 source: plans/, todos/, git log
 created: 2026-04-11
-updated: 2026-05-14
+updated: 2026-07-13
 tags: [roadmap, direction, priorities]
 ---
 
 # Roadmap
 
-High-level project direction synthesized from plans, todos, and recent git history. Screenote is a working product in production -- the core loop (upload, annotate, agent reads via MCP) is complete, and recent work extended it to multi-viewport responsive review.
+High-level project direction synthesized from plans, todos, recent git history, and current product decisions. Screenote is a working product in production: agents publish captures and retrieve visual feedback through the public Screenote CLI, while humans annotate in the browser. The server still exposes MCP compatibility, but its sunset is a separate migration task rather than the public onboarding path.
 
 ## Recently Completed
 
@@ -27,7 +27,9 @@ Based on [[active-areas]] and completed todos:
 - **Welcome email** and **branded error pages**
 - **Stripe webhook hardening** -- idempotency ledger, locked model-owned transitions, item-level period end handling
 - **Multi-viewport screenshots** -- ScreenshotImage child model, viewport switcher, viewport-scoped annotations, multi-viewport MCP signed-upload flow
-- **Public help/MCP docs** -- StaticPagesController, partialized help page, dynamic MCP tool reference
+- **Public CLI and snapshot command** -- separate public repository, manifest-driven resumable uploads, OAuth login, and stable JSON contracts
+- **Headless OAuth device login** -- RFC 8628 approval for SSH, tmux, containers, and agents without callback forwarding
+- **Public help/CLI docs** -- CLI-first landing page, dashboard banner, welcome email, and OAuth-only installation guidance
 
 ~90 todos marked complete across security fixes, CSS cleanup, MCP improvements, Stripe hardening, and test quality.
 
@@ -45,17 +47,11 @@ The OAuth 2.1 implementation has 7 ready P1/P2 security items that should be add
 
 Additionally: fetch redirect injection (#143), silent catch-all error swallowing (#144), and file upload validation (#001).
 
-### MCP Tool Completeness
+### CLI Adoption And MCP Sunset
 
-The agent-facing API has narrowed gaps. Source now includes `create_annotation`, `reopen_annotation`, `add_annotation_comment`, `create_project`, and collaboration tools, despite some older todo filenames/frontmatter still suggesting otherwise.
+The public CLI is the supported agent and automation surface. Remaining CLI gaps include snapshot-scoped feedback retrieval, annotation resolve/reopen, and wider distribution beyond `go install`; see [[api-cli]].
 
-Remaining visible gaps:
-
-- `delete_screenshot` (#054), `delete_annotation` (#055)
-- plan/status tools (#120)
-- batch feedback retrieval (#053)
-
-Batch feedback retrieval (#053) would reduce agent round-trips. See [[mcp-tools]].
+MCP remains in the server for compatibility while a separately scoped sunset task removes clients, metadata, and runtime code safely. Do not expand the MCP tool surface as part of CLI work. Historical tool coverage remains documented in [[mcp-tools]] until that migration lands.
 
 ### Data Integrity
 
@@ -65,11 +61,11 @@ Four separate todos for missing `on_delete` cascade strategies on foreign keys (
 
 ### Near-term: Multi-Viewport Cleanup
 
-Finish follow-up work around the new ScreenshotImage architecture: remove or retire transitional `Screenshot#image` assumptions once safe, resolve the PR-specific todo cluster (#166-#178), and keep MCP/create flows aligned with per-viewport semantics.
+Finish follow-up work around the new ScreenshotImage architecture: remove or retire transitional `Screenshot#image` assumptions once safe, resolve the PR-specific todo cluster (#166-#178), and keep REST/CLI capture flows aligned with per-viewport semantics.
 
 ### Near-term: Claude Code Skill
 
-Ship `/screenote` slash command for Claude Code. The older plan asks for `image_path` support on `CreateScreenshotTool`; current source also offers signed-upload flows that avoid base64 through MCP context.
+Reframe the older `/screenote` slash-command plan around invoking the public CLI and `screenote snapshot --manifest`. New integrations should not depend on MCP-specific `image_path` or signed-upload tools.
 
 ### Medium-term: Performance & Scaling
 
@@ -93,8 +89,8 @@ From the master plan's "future phases":
 
 1. **Security hardening** -- OAuth IDOR, rate limits, fetch redirect injection
 2. **Multi-viewport cleanup** -- stabilize ScreenshotImage transition and remove legacy assumptions
-3. **MCP tool completeness** -- fill remaining delete/status/batch gaps in agent API surface
-4. **Claude Code skill** -- developer experience and discoverability
+3. **CLI adoption and MCP sunset** -- complete public distribution and remove MCP through its separately scoped migration
+4. **Agent integrations** -- build skills and automation on the public CLI contract
 5. **Performance** -- pagination, N+1 fixes, indexes
 6. **Frontend conventions** -- inline styles, Stimulus patterns, accessibility
 

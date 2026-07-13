@@ -19,6 +19,8 @@ The CLI is the portable shell contract for agents and automation. CLI-facing aut
 
 ## Install
 
+Go 1.26 or newer is required.
+
 ```sh
 go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
 ```
@@ -112,7 +114,7 @@ An identical request resumes the same graph and returns image-level `awaiting_up
 
 Prepared image bytes upload through a separate bearer-authenticated raw-body route. It uses bounded disk-backed streaming, verifies actual PNG/JPEG bytes against the declared and prepared type, verifies SHA-256 content identity, and treats an identical retry as success. Failed dimension processing can be retried without creating another blob. The existing MCP signed-upload route remains unchanged.
 
-The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. Its language-neutral digest vectors are executed by both Go and the production Rails digest implementation. Blocking service CI pins exact supported public CLI commits; a scheduled service workflow checks the public CLI `main` branch for forward drift. The private copy remains temporarily present only until the snapshot command, public release, production smoke, and final cleanup gate complete.
+The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. Its language-neutral digest vectors are executed by both Go and the production Rails digest implementation. Blocking service CI pins exact supported public CLI commits; a scheduled service workflow checks the public CLI `main` branch for forward drift. The private copy remains temporarily present until the separately scoped cleanup removes it after public CLI merge and production verification.
 
 ## Deferred
 
