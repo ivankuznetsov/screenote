@@ -33,7 +33,7 @@
                         end %>
           <% card_data = { testid: "page-card", page_id: page.id }
              card_data[:screenshot_id] = thumbnail.id if thumbnail %>
-          <% card_path = thumbnail ? page_path(page, version_id: thumbnail.id) : page_path(page) %>
+          <% card_path = thumbnail ? page_workspace_path_for(thumbnail) : page_path(page) %>
 
           <%= link_to card_path, class: "page-card", data: card_data do %>
             <div class="page-card__thumbnail">

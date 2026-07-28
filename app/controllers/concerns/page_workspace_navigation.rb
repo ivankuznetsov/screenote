@@ -15,7 +15,7 @@ module PageWorkspaceNavigation
     options[:viewport] = validated_viewport if validated_viewport
     options.merge!(query.compact)
 
-    page_path(screenshot.page, **options)
+    page_path(screenshot.page_id, **options)
   end
 
   def page_workspace_viewport_for(screenshot, requested_viewport)

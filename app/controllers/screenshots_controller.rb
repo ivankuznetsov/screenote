@@ -6,7 +6,7 @@ class ScreenshotsController < ApplicationController
 
   def show
     viewport = validated_workspace_viewport(@screenshot, params[:viewport])
-    status = params[:status] if params[:status].in?(%w[open resolved])
+    status = params[:status] if Annotation.statuses.key?(params[:status])
 
     redirect_to page_workspace_path_for(@screenshot, viewport: viewport, status: status)
   end

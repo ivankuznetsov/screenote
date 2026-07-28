@@ -237,6 +237,52 @@ class SnapshotTest < ActiveSupport::TestCase
     end
   end
 
+  test "thumbnails load only the newest ready screenshot per page" do
+    project = users(:alice).owned_projects.create!(name: "Snapshot thumbnails")
+    snapshot = project.snapshots.create!(git_commit: "abc1234")
+    first_page = project.pages.create!(name: "First")
+    second_page = project.pages.create!(name: "Second")
+    first_page.screenshots.create!(
+      title: "Older",
+      snapshot: snapshot,
+      status: :ready,
+      created_at: 2.hours.ago
+    )
+    newest = first_page.screenshots.create!(
+      title: "Newest",
+      snapshot: snapshot,
+      status: :ready,
+      created_at: 1.hour.ago
+    )
+    tied_at = 30.minutes.ago.change(usec: 0)
+    second_page.screenshots.create!(
+      title: "Lower id",
+      snapshot: snapshot,
+      status: :ready,
+      created_at: tied_at
+    )
+    higher_id = second_page.screenshots.create!(
+      title: "Higher id",
+      snapshot: snapshot,
+      status: :ready,
+      created_at: tied_at
+    )
+
+    instantiated_screenshots = 0
+    callback = lambda do |*, payload|
+      instantiated_screenshots += payload[:record_count] if payload[:class_name] == "Screenshot"
+    end
+    thumbnails = nil
+    ActiveSupport::Notifications.subscribed(callback, "instantiation.active_record") do
+      thumbnails = snapshot.thumbnails_for([ first_page, second_page ])
+    end
+
+    assert_equal newest, thumbnails.fetch(first_page.id)
+    assert_equal higher_id, thumbnails.fetch(second_page.id)
+    assert_equal 2, instantiated_screenshots,
+      "Thumbnail lookup should instantiate only one selected screenshot per page"
+  end
+
   test "destroying snapshot nullifies screenshots via Rails dependent: :nullify" do
     snapshot = snapshots(:latest)
     screenshot = screenshots(:alice_screenshot)

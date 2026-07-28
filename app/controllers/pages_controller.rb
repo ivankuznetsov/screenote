@@ -69,7 +69,7 @@ class PagesController < ApplicationController
     @annotations = @screenshot.annotations
       .includes(:user, annotation_comments: [ :user, :api_key ])
       .order(:created_at)
-    @annotations = @annotations.where(status: params[:status]) if params[:status].in?(%w[open resolved])
+    @annotations = @annotations.where(status: params[:status]) if Annotation.statuses.key?(params[:status])
     @annotations = @annotations.where(viewport: @active_viewport) if @active_viewport
   end
 end
