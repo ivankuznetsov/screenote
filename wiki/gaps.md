@@ -43,8 +43,11 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - MCP server configuration
 
 ### Tests
-- Test structure and patterns are not documented.
-- E2E test setup with Capybara + Playwright is not covered.
+- [[testing-and-ci]] now covers the Minitest and Capybara/Playwright commands,
+  serialization, libvips requirements, coverage gate, overview performance
+  contracts, and the 1x/2x responsive-image browser proof.
+- Page-object organization, fixture conventions, and the broader system-test
+  helper surface are not yet documented in depth.
 - **NEW:** Specific test coverage gaps identified: CreateScreenshotTool (#056), SQL injection testing (#149), OAuth test helpers (#102).
 
 ### API CLI

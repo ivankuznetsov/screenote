@@ -10,7 +10,7 @@ tags: [index, wiki]
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 39
+Page count: 40
 Updated: 2026-07-28
 
 ## Core Architecture
@@ -59,6 +59,7 @@ Updated: 2026-07-28
 - [[plans-and-initiatives]] — Active plans and implemented plan status.
 - [[roadmap]] — Current product/engineering priorities.
 - [[technical-debt]] — Todo-derived debt, cross-checked against source drift.
+- [[testing-and-ci]] — Minitest, Capybara/Playwright, responsive-image proof, overview performance contracts, and local CI commands.
 - [[gaps]] — Missing coverage and uncertainty.
 - [[index]] — This catalog.
 - [[log]] — Append-only wiki changelog.
