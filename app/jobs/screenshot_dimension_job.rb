@@ -43,17 +43,21 @@ class ScreenshotDimensionJob < ApplicationJob
     # Analysis can be slow. Serialize the final generation check with the
     # replacement paths and never apply dimensions produced for a detached
     # blob to the ScreenshotImage's newer attachment.
+    dimensions_applied = false
     screenshot_image.with_lock do
       return unless blob_id.to_s == attached_blob_id(screenshot_image).to_s
 
       if width.present? && height.present?
         screenshot_image.update!(width: width, height: height, status: :ready)
+        dimensions_applied = true
       else
         Honeybadger.notify("ScreenshotImage dimension extraction failed",
           context: { screenshot_image_id: screenshot_image.id, metadata: metadata })
         screenshot_image.update!(status: :failed)
       end
     end
+
+    enqueue_primary_thumbnail_warming(screenshot_image) if dimensions_applied
   end
 
   private
@@ -65,6 +69,19 @@ class ScreenshotDimensionJob < ApplicationJob
 
   def attached_blob_id(screenshot_image)
     screenshot_image.image_attachment&.blob_id
+  end
+
+  # The final sibling to finish makes the logical Screenshot ready. Resolve
+  # its primary image after the dimension transaction commits: desktop wins
+  # even when a mobile/tablet sibling happened to finish last.
+  def enqueue_primary_thumbnail_warming(screenshot_image)
+    screenshot = Screenshot.includes(:screenshot_images).find_by(id: screenshot_image.screenshot_id)
+    return unless screenshot&.ready?
+
+    primary_image = screenshot.primary_image
+    return unless primary_image&.image&.attached?
+
+    ScreenshotThumbnailJob.perform_later(primary_image, primary_image.image.blob.id)
   end
 
   def resolve_target(record)

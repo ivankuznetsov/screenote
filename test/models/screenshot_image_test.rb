@@ -53,6 +53,23 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     assert ScreenshotImage.new.status_pending?
   end
 
+  test "declares the named overview variants at their exact output dimensions" do
+    variants = ScreenshotImage.attachment_reflections.fetch("image").named_variants
+
+    assert_equal(
+      { resize_to_fill: [ 480, 270 ] },
+      variants.fetch(:page_card_1x).transformations
+    )
+    assert_equal(
+      { resize_to_fill: [ 960, 540 ] },
+      variants.fetch(:page_card_2x).transformations
+    )
+    assert_equal(
+      { resize_to_fill: [ 240, 160 ] },
+      variants.fetch(:project_strip).transformations
+    )
+  end
+
   test "width must be positive integer when present" do
     si = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :tablet, width: -1)
     assert_not si.valid?

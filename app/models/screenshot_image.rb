@@ -11,12 +11,18 @@ class ScreenshotImage < ApplicationRecord
   # has_one_attached :image is dropped (todo 172).
   ALLOWED_CONTENT_TYPES = %w[image/png image/jpeg].freeze
   MAX_FILE_SIZE = 20.megabytes
+  THUMBNAIL_VARIANT_NAMES = %i[page_card_1x page_card_2x project_strip].freeze
 
   BackfillResult = Struct.new(:already_backfilled, :backfilled, :no_image, :errors, keyword_init: true)
   RollbackResult = Struct.new(:already_rolled_back, :rolled_back, :no_image, :errors, keyword_init: true)
+  ThumbnailWarmResult = Struct.new(:candidates, :skipped, :processed, :failed, keyword_init: true)
 
   belongs_to :screenshot
-  has_one_attached :image
+  has_one_attached :image do |attachable|
+    attachable.variant :page_card_1x, resize_to_fill: [ 480, 270 ]
+    attachable.variant :page_card_2x, resize_to_fill: [ 960, 540 ]
+    attachable.variant :project_strip, resize_to_fill: [ 240, 160 ]
+  end
 
   enum :viewport, { desktop: 0, tablet: 1, mobile: 2 }, prefix: :viewport
   enum :status, { pending: 0, ready: 1, failed: 2 }, default: :pending, prefix: :status
@@ -117,6 +123,36 @@ class ScreenshotImage < ApplicationRecord
     RollbackResult.new(**stats)
   end
 
+  # Warms the named overview variants for every current, ready primary image.
+  # Dry-run is the default: eligible records are counted as candidates but no
+  # image processing or Active Storage writes occur.
+  def self.warm_thumbnails!(apply: false, batch_size: 1000, logger: $stdout)
+    stats = { candidates: 0, skipped: 0, processed: 0, failed: 0 }
+
+    find_each(batch_size: batch_size) do |screenshot_image|
+      blob_id = screenshot_image.image_attachment&.blob_id
+
+      unless blob_id &&
+          screenshot_image.thumbnail_warmable?(blob_id:) &&
+          !screenshot_image.thumbnail_variants_warmed?
+        stats[:skipped] += 1
+        next
+      end
+
+      stats[:candidates] += 1
+      logger.puts "+ ScreenshotImage##{screenshot_image.id} blob=#{blob_id}"
+      next unless apply
+
+      result = ScreenshotThumbnailJob.perform_now(screenshot_image, blob_id)
+      stats[result == :processed ? :processed : :skipped] += 1
+    rescue StandardError => e
+      logger.puts "x ScreenshotImage##{screenshot_image.id}: #{e.class}: #{e.message}"
+      stats[:failed] += 1
+    end
+
+    ThumbnailWarmResult.new(**stats)
+  end
+
   def self.move_blob_from_screenshot!(screenshot, existing)
     Screenshot.transaction do
       blob = screenshot.image.blob
@@ -172,6 +208,30 @@ class ScreenshotImage < ApplicationRecord
     return if status_ready?
 
     ScreenshotDimensionJob.perform_later(self, image.blob.id)
+  end
+
+  def thumbnail_variants
+    return [] unless image.attached?
+
+    THUMBNAIL_VARIANT_NAMES.map { |name| image.variant(name) }
+  end
+
+  def thumbnail_variants_warmed?
+    variants = thumbnail_variants
+    return false unless variants.size == THUMBNAIL_VARIANT_NAMES.size
+
+    digests = variants.map { |variant| variant.variation.digest }
+    image.blob.variant_records.where(variation_digest: digests).distinct.count == digests.size
+  end
+
+  # Re-resolves the parent and its image association on every call so queued
+  # jobs cannot warm a replaced blob or a viewport that is no longer primary.
+  def thumbnail_warmable?(blob_id:)
+    return false unless persisted? && status_ready? && image.attached?
+    return false unless image_attachment.blob_id.to_s == blob_id.to_s
+
+    parent = Screenshot.includes(:screenshot_images).find_by(id: screenshot_id)
+    parent&.ready? && parent.primary_image&.id == id
   end
 
   private
