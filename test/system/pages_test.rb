@@ -53,7 +53,7 @@ class PagesTest < ApplicationSystemTestCase
     submit_page_form
     assert_on_page_show(page_name)
 
-    click_link "Edit"
+    click_link "Edit page"
     assert_selector PAGE_TITLE, text: "Edit page", wait: 10
 
     updated_name = "Updated #{page_name}"
@@ -90,10 +90,9 @@ class PagesTest < ApplicationSystemTestCase
     click_page(page_name)
     assert_on_page_show(page_name)
 
-    # Navigate back via breadcrumb
-    within '[data-testid="breadcrumb"]' do
-      click_link "Demo Project"
-    end
+    # The breadcrumb intentionally contains only the page URL. Browser history
+    # remains the direct way back to the project overview.
+    page.go_back
     wait_for_turbo
 
     assert_on_project_show("Demo Project")
@@ -138,11 +137,9 @@ class PagesTest < ApplicationSystemTestCase
     submit_page_form
     assert_on_page_show(page_name)
 
-    # Go back and create another with the same name
-    within '[data-testid="breadcrumb"]' do
-      click_link "Demo Project"
-    end
-    wait_for_turbo
+    # Return through project navigation; the page breadcrumb contains only the
+    # canonical page URL.
+    navigate_to_demo_project
 
     click_new_page
     fill_page_form(name: page_name)
@@ -160,11 +157,7 @@ class PagesTest < ApplicationSystemTestCase
     submit_page_form
     assert_on_page_show(page_name)
 
-    # Navigate back to project show
-    within '[data-testid="breadcrumb"]' do
-      click_link "Demo Project"
-    end
-    wait_for_turbo
+    navigate_to_demo_project
 
     assert_page_card_has_placeholder(page_name)
     assert_page_version_count(page_name, 0)
@@ -186,11 +179,7 @@ class PagesTest < ApplicationSystemTestCase
     submit_screenshot_form
     assert_on_screenshot_show
 
-    # Navigate back to project show via breadcrumb
-    within find('[data-testid="breadcrumb"]') do
-      click_link "Demo Project"
-    end
-    wait_for_turbo
+    navigate_to_demo_project
 
     assert_page_card_has_thumbnail(page_name)
     assert_page_version_count(page_name, 1)
@@ -211,23 +200,13 @@ class PagesTest < ApplicationSystemTestCase
     submit_screenshot_form
     assert_on_screenshot_show
 
-    # Navigate back to page show via breadcrumb
-    within find('[data-testid="breadcrumb"]') do
-      all("a").last.click
-    end
-    wait_for_turbo
-
-    # Upload a second screenshot
+    # The upload returns directly to this page's selected-version workspace.
     click_link "Upload version"
     fill_screenshot_form(title: "V2", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show
 
-    # Navigate back to project show
-    within find('[data-testid="breadcrumb"]') do
-      click_link "Demo Project"
-    end
-    wait_for_turbo
+    navigate_to_demo_project
 
     assert_page_card_has_thumbnail(page_name)
     assert_page_version_count(page_name, 2)
