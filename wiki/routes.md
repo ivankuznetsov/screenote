@@ -3,7 +3,7 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-07-28
 tags: [routes, api, endpoints, auth]
 ---
 
@@ -56,6 +56,14 @@ All require authentication unless noted.
 | PATCH | `/pages/:id` | update | Member |
 | DELETE | `/pages/:id` | destroy | Member |
 
+`GET /pages/:id` is the canonical review URL. Optional page-scoped query state
+selects a version and viewport:
+
+- `version_id=<screenshot id>` selects that page's exact version; missing,
+  deleted, or cross-page ids fall back to the newest version.
+- `viewport=desktop|tablet|mobile` selects a viewport when that version has it;
+  otherwise the version's default viewport is used.
+
 ### Screenshots (nested under pages for create, standalone for show/edit/destroy)
 
 | Method | Path | Action | Auth |
@@ -67,6 +75,10 @@ All require authentication unless noted.
 | GET | `/screenshots/:id/edit` | edit | Member |
 | PATCH | `/screenshots/:id` | update | Member |
 | DELETE | `/screenshots/:id` | destroy | Member |
+
+The two screenshot GET routes remain stable compatibility links. They redirect
+to `/pages/:page_id?version_id=:id` and preserve a valid viewport rather than
+rendering a second workspace.
 
 ### Annotations (nested under screenshots)
 

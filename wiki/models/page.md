@@ -3,13 +3,14 @@ title: Page
 type: model
 source: app/models/page.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-07-28
 tags: [model, page, hierarchy]
 ---
 
 # Page
 
-TLDR: Groups screenshots within a project. Added in Phase 4 (commit `dea90b0`) to organize screenshots by logical grouping (e.g., URL, feature area). Names are case-insensitively unique within a project.
+TLDR: Groups captured versions within a project and owns their canonical review
+workspace. Names are case-insensitively unique within a project.
 
 Source: `app/models/page.rb`
 
@@ -46,7 +47,19 @@ Source: `app/models/page.rb`
 
 ## Notes
 
-- The `latest_screenshot` association uses a subquery to find the MAX(id) ready screenshot per page. This powers thumbnail previews in the project view.
+- The `latest_screenshot` association uses a subquery to find the MAX(id) ready
+  screenshot per page. Project overviews preload that screenshot's
+  `ScreenshotImage` children, Active Storage blobs, and tracked variant records
+  so thumbnail rendering does not query per card.
+- `/pages/:id` opens the newest screenshot version directly. Older screenshot
+  versions are selectable from the workspace sidebar via page-scoped
+  `version_id`; these versions may or may not belong to a capture `Snapshot`.
+- Project cards keep the exact selected screenshot id in their page-workspace
+  href, including snapshot-filtered cards; they do not route through the
+  compatibility screenshot URL.
+- Page-card previews use the named 480x270 and 960x540 variants with responsive
+  `srcset`/`sizes`. Empty pages render a placeholder without requesting image
+  processing.
 - The `LOWER(name)` unique index is created in migration `20260221064533`.
 
 See also: [[project]], [[screenshot]]

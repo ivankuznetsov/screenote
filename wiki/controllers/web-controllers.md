@@ -3,7 +3,7 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-07-28
 tags: [controller, web, ui, auth]
 ---
 
@@ -52,11 +52,16 @@ Source: `app/controllers/projects_controller.rb`
 
 | Action | Auth | Notes |
 |--------|------|-------|
-| index | Member | Lists user's projects ordered by updated_at, includes pages with thumbnails |
-| show | Member | Shows pages with screenshot counts and open annotation counts; a card direct-opens its lone usable screenshot, otherwise it opens the page/version grid |
+| index | Member | Lists user's projects ordered by updated_at with up to four prewarmed `project_strip` thumbnails |
+| show | Member | Shows pages with version counts; each card opens the canonical page workspace at its exact selected version |
 | new/create | Member + quota | Checks `can_create_project?` (Free: 1 project limit) |
 | edit/update | Owner | |
 | destroy | Owner | |
+
+Both overview actions preload `ScreenshotImage` attachments, blobs, tracked
+variant records, and their attached output blobs. Rendering a project card or
+page card therefore stays on loaded associations and only emits representation
+URLs; image processing remains in `ScreenshotThumbnailJob`.
 
 ---
 
@@ -67,7 +72,10 @@ Source: `app/controllers/pages_controller.rb`
 **Actions:** show, new, create, edit, update, destroy
 
 - `new/create` -- Scoped to project via `params[:project_id]`
-- `show` -- Lists screenshots with annotation counts (total and open) using aggregate queries
+- `show` -- Canonical screenshot review workspace for a logical page. It selects
+  the newest version by `created_at, id` unless a page-scoped `version_id` is
+  supplied, preserves viewport when available, and lists older versions in a
+  text-only sidebar.
 - `edit/update/destroy` -- Finds page by ID, verifies project membership
 
 ---
@@ -79,8 +87,10 @@ Source: `app/controllers/screenshots_controller.rb`
 **Actions:** show, new, create, edit, update, destroy
 
 - `new/create` -- Scoped to page via `params[:page_id]`
-- `show` -- Resolves the active viewport, loads the matching `ScreenshotImage`, and filters annotations by status and active viewport.
-- `viewports/:viewport` -- Same action as show; constrained to desktop/tablet/mobile and rendered through the `screenshot_canvas` Turbo Frame switcher.
+- `show` -- Compatibility endpoint that redirects to the owning page workspace
+  with the screenshot encoded as `version_id`.
+- `viewports/:viewport` -- Compatibility endpoint that redirects to the same
+  page workspace while preserving the constrained desktop/tablet/mobile viewport.
 - Permits: `title`, `image`
 
 The review layout and Annotorious interaction rules are documented in [[frontend-review-ui]].

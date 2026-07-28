@@ -45,7 +45,7 @@ class Snapshot < ApplicationRecord
       .ready
       .where(page_id: page_ids)
       .order(created_at: :desc, id: :desc)
-      .includes(screenshot_images: { image_attachment: :blob })
+      .includes(screenshot_images: ScreenshotImage::OVERVIEW_IMAGE_PRELOAD)
 
     candidates.each_with_object({}) do |screenshot, acc|
       acc[screenshot.page_id] ||= screenshot

@@ -12,6 +12,16 @@ class ScreenshotImage < ApplicationRecord
   ALLOWED_CONTENT_TYPES = %w[image/png image/jpeg].freeze
   MAX_FILE_SIZE = 20.megabytes
   THUMBNAIL_VARIANT_NAMES = %i[page_card_1x page_card_2x project_strip].freeze
+  OVERVIEW_IMAGE_PRELOAD = {
+    image_attachment: {
+      blob: {
+        variant_records: { image_attachment: :blob },
+        preview_image_attachment: {
+          blob: { variant_records: { image_attachment: :blob } }
+        }
+      }
+    }
+  }.freeze
 
   BackfillResult = Struct.new(:already_backfilled, :backfilled, :no_image, :errors, keyword_init: true)
   RollbackResult = Struct.new(:already_rolled_back, :rolled_back, :no_image, :errors, keyword_init: true)

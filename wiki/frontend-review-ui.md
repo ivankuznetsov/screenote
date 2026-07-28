@@ -3,25 +3,47 @@ title: Screenshot Review UI
 type: ui
 source: app/views/, app/javascript/controllers/annotorious_controller.js, app/assets/stylesheets/application.css
 created: 2026-07-13
-updated: 2026-07-13
+updated: 2026-07-28
 tags: [ui, screenshots, annotations, viewports]
 ---
 
 # Screenshot Review UI
 
-TLDR: Project cards open a lone usable screenshot directly, while pages with multiple versions retain the version grid. The screenshot viewer keeps a sticky annotation sidebar beside the image, preserves scroll position when a drawing opens its comment form, and uses the Annotorious image wrapper as the coordinate box for viewport-scoped pins.
+TLDR: Project cards open the canonical page workspace at a selected version,
+with history in a text sidebar. The viewer keeps a sticky annotation sidebar
+beside the image, preserves scroll position when a drawing opens its comment
+form, and uses the Annotorious image wrapper as the coordinate box for
+viewport-scoped pins.
 
-Source: `app/views/projects/show.html.erb`, `app/views/screenshots/show.html.erb`, `app/javascript/controllers/annotorious_controller.js`, `app/assets/stylesheets/application.css`
+Source: `app/views/projects/show.html.erb`, `app/views/pages/show.html.erb`,
+`app/views/screenshots/_workspace.html.erb`,
+`app/javascript/controllers/annotorious_controller.js`,
+`app/assets/stylesheets/application.css`
 
 ## Project-to-screenshot navigation
 
 A page is a logical screen and a screenshot is a captured version; see [[decisions]] ADR-009 and ADR-014.
 
-- A project page card links straight to the screenshot viewer when the page has exactly one screenshot in the active project/snapshot scope and that screenshot has an attached primary image.
-- Pages with multiple versions still link to `PagesController#show`, where the user can choose a version and use page management controls.
-- Empty, pending-only, failed-only, or attachment-missing pages retain the page-detail link.
+- Every project page card links to `PagesController#show`, the canonical review
+  workspace. When a ready version is selected, its id is encoded as the
+  page-scoped `version_id`.
+- The workspace opens that version immediately and keeps newest-first history
+  as text links in a bounded sidebar; it never renders a thumbnail grid before
+  review.
+- Empty, pending-only, failed-only, or attachment-missing pages retain the bare
+  page route and management state.
 - Desktop, tablet, and mobile `ScreenshotImage` children count as variants of one logical screenshot, not separate versions.
-- When a project is filtered to a snapshot, the direct link targets that snapshot's selected screenshot rather than a newer ad-hoc capture.
+- When a project is filtered to a snapshot, the page-workspace link targets
+  that snapshot's selected screenshot rather than a newer ad-hoc capture.
+
+## Overview image delivery
+
+Project-strip thumbnails use a prewarmed 240x160 named variant rendered at
+120x80. Page cards use prewarmed 480x270 and 960x540 named variants with a
+responsive `srcset` and grid-aware `sizes`. Overview requests only construct
+representation URLs: they neither process images nor enqueue jobs. Nested
+preloads keep page cards, snapshot cards, and project strips at constant query
+cost as their counts grow.
 
 ## Long-image annotation behavior
 
@@ -39,6 +61,14 @@ Custom annotation pins are children of the same wrapper. Their percentage positi
 
 ## Regression coverage
 
-Controller tests cover direct-link behavior for single, multiple, empty, pending, failed, attachment-missing, snapshot-selected, and multi-viewport cases. Browser tests cover a tall screenshot without scroll jumps through draft creation and save, typed-draft preservation when a second drawing is discarded, a visible sticky form, centered mobile geometry, pin placement against the Annotorious wrapper, out-and-back boundary drags, clamping on all four edges, reverse drags, zero-area cleanup, and pointer lifecycle cleanup across Turbo replacement.
+Controller tests cover page-workspace links for single, multiple, empty,
+pending, failed, attachment-missing, snapshot-selected, and multi-viewport
+cases; responsive variant markup; request-time processing absence; and bounded
+SQL for filtered, unfiltered, and growing project lists. Browser tests cover a
+tall screenshot without scroll jumps through draft creation and save, typed
+draft preservation when a second drawing is discarded, a visible sticky form,
+centered mobile geometry, pin placement against the Annotorious wrapper,
+out-and-back boundary drags, clamping on all four edges, reverse drags,
+zero-area cleanup, and pointer lifecycle cleanup across Turbo replacement.
 
 See also: [[controllers/web-controllers]], [[models/page]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]

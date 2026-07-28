@@ -69,6 +69,14 @@ The `image` attachment declares three named, tracked Active Storage variants:
 
 `bin/rails screenshots:warm_thumbnails` scans existing rows in batches and is a dry-run unless `APPLY=1` is supplied. Its summary reports `candidates`, `skipped`, `processed`, and `failed`; `BATCH_SIZE` defaults to 1000. Apply mode invokes the same job synchronously for exact accounting and remains idempotent because tracked records are reused.
 
+Overview requests never call `processed` or enqueue thumbnail work. Project
+lists render `project_strip` at 120x80 CSS/intrinsic dimensions from its 240x160
+source, while page cards emit 480w and 960w candidates with a grid-aware
+`sizes` contract and 480x270 intrinsic dimensions. Controllers and model scopes
+preload the child image attachment, source blob, tracked variant records, and
+variant output attachments in fixed query batches, including snapshot-filtered
+cards.
+
 ## Upload Tokens
 
 `ScreenshotImage` generates 5-minute upload tokens keyed on whether its `image` is already attached. The signed upload endpoint still uses the parent screenshot URL shape, but resolves the token back to the exact `ScreenshotImage` so desktop, tablet, and mobile uploads can complete independently.
