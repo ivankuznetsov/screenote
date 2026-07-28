@@ -85,6 +85,41 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_thread_body("Will be unresolved", "Still broken on mobile")
   end
 
+  test "mobile annotation mutations keep the mobile page workspace active" do
+    screenshot = Screenshot.order(:created_at, :id).last
+    mobile = screenshot.screenshot_images.create!(viewport: :mobile, status: :ready)
+    mobile.image.attach(
+      io: File.open(TEST_IMAGE_PATH),
+      filename: File.basename(TEST_IMAGE_PATH),
+      content_type: "image/png"
+    )
+    screenshot.annotations.create!(
+      user: users(:test_user),
+      viewport: :mobile,
+      x_percent: 30,
+      y_percent: 30,
+      comment: "Mobile viewport feedback"
+    )
+
+    visit page_path(screenshot.page, version_id: screenshot.id, viewport: :mobile)
+    assert_selector "[data-testid='viewport-switcher-mobile'][aria-selected='true']", wait: 10
+    assert_screenshot_image_loaded
+    assert_annotation_visible("Mobile viewport feedback")
+
+    resolve_annotation("Mobile viewport feedback")
+    wait_for_turbo
+    assert_match(
+      %r{\A/pages/#{screenshot.page_id}\?version_id=#{screenshot.id}&viewport=mobile\z},
+      URI.parse(current_url).request_uri
+    )
+    assert_selector "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
+
+    unresolve_annotation("Mobile viewport feedback", reason: "Still broken on mobile")
+    wait_for_turbo
+    assert_selector "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
+    assert_annotation_open("Mobile viewport feedback")
+  end
+
   test "delete an annotation" do
     create_annotation("Will be deleted")
 

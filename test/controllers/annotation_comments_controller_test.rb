@@ -20,6 +20,8 @@ class AnnotationCommentsControllerTest < ActionDispatch::IntegrationTest
 
   test "reopen annotation with comment" do
     sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :tablet)
+    @resolved_annotation.update!(viewport: :tablet)
 
     assert_difference "AnnotationComment.count", 1 do
       post screenshot_annotation_annotation_comments_path(
@@ -29,7 +31,7 @@ class AnnotationCommentsControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_redirected_to screenshot_path(@screenshot)
+    assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id, viewport: :tablet)
     assert_equal "open", @resolved_annotation.reload.status
     assert_nil @resolved_annotation.resolved_by_user
 
@@ -41,6 +43,8 @@ class AnnotationCommentsControllerTest < ActionDispatch::IntegrationTest
 
   test "add plain comment to annotation" do
     sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    @annotation.update!(viewport: :mobile)
 
     assert_difference "AnnotationComment.count", 1 do
       post screenshot_annotation_annotation_comments_path(
@@ -50,7 +54,7 @@ class AnnotationCommentsControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_redirected_to screenshot_path(@screenshot)
+    assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id, viewport: :mobile)
     assert_equal "open", @annotation.reload.status
 
     comment = @annotation.annotation_comments.last
@@ -70,6 +74,37 @@ class AnnotationCommentsControllerTest < ActionDispatch::IntegrationTest
       }
     end
     assert_response :not_found
+  end
+
+  test "comment validation failure preserves the annotation viewport" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    @annotation.update!(viewport: :mobile)
+
+    assert_no_difference "AnnotationComment.count" do
+      post screenshot_annotation_annotation_comments_path(
+        @screenshot, @annotation
+      ), params: {
+        annotation_comment: { body: "" }
+      }
+    end
+
+    assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id, viewport: :mobile)
+  end
+
+  test "comment falls back to the screenshot default when persisted viewport is unavailable" do
+    sign_in(@user)
+    mobile = @screenshot.screenshot_images.create!(viewport: :mobile)
+    @annotation.update!(viewport: :mobile)
+    mobile.destroy!
+
+    post screenshot_annotation_annotation_comments_path(
+      @screenshot, @annotation
+    ), params: {
+      annotation_comment: { body: "Still visible on desktop" }
+    }
+
+    assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id)
   end
 
   test "reopen on other users project returns not found" do

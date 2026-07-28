@@ -123,7 +123,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".page-card__placeholder", text: "No screenshots yet"
   end
 
-  test "show links a page card directly to its only usable screenshot" do
+  test "show links a page card to its selected version in the page workspace" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Single screenshot project")
     page = project.pages.create!(name: "Only screen")
@@ -132,10 +132,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     get project_path(project)
 
     assert_response :success
-    assert_select "a[data-testid='page-card'][href='#{screenshot_path(screenshot)}']", count: 1
+    assert_select "a[data-testid='page-card'][href='#{page_path(page, version_id: screenshot.id)}']", count: 1
   end
 
-  test "show keeps page cards pointed at the version grid when there is not exactly one usable screenshot" do
+  test "show uses a bare page route only when no ready version is selected" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Mixed screenshot project")
     empty_page = project.pages.create!(name: "Empty")
@@ -152,14 +152,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     )
     attachment_missing_screenshot.screenshot_images.create!(viewport: :desktop, status: :ready)
     create_ready_screenshot_with_image(multiple_page, title: "First")
-    create_ready_screenshot_with_image(multiple_page, title: "Second")
+    selected_multiple = create_ready_screenshot_with_image(multiple_page, title: "Second")
 
     get project_path(project)
 
     assert_response :success
-    [ empty_page, pending_page, failed_page, attachment_missing_page, multiple_page ].each do |page|
+    [ empty_page, pending_page, failed_page ].each do |page|
       assert_select "a[data-testid='page-card'][data-page-id='#{page.id}'][href='#{page_path(page)}']", count: 1
     end
+    assert_select(
+      "a[data-testid='page-card'][data-page-id='#{attachment_missing_page.id}']" \
+        "[href='#{page_path(attachment_missing_page, version_id: attachment_missing_screenshot.id)}']",
+      count: 1
+    )
+    assert_select(
+      "a[data-testid='page-card'][data-page-id='#{multiple_page.id}']" \
+        "[href='#{page_path(multiple_page, version_id: selected_multiple.id)}']",
+      count: 1
+    )
   end
 
   test "show links a single logical screenshot with multiple viewport images directly" do
@@ -172,7 +182,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     get project_path(project)
 
     assert_response :success
-    assert_select "a[data-testid='page-card'][href='#{screenshot_path(screenshot)}']", count: 1
+    assert_select "a[data-testid='page-card'][href='#{page_path(page, version_id: screenshot.id)}']", count: 1
   end
 
   test "show filters to pages captured in the selected snapshot" do
@@ -288,7 +298,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     get project_path(project, snapshot_id: snapshot.id)
 
     assert_response :success
-    assert_select "a[data-testid='page-card'][href='#{screenshot_path(snapshot_screenshot)}']", count: 1
+    assert_select(
+      "a[data-testid='page-card'][href='#{page_path(page, version_id: snapshot_screenshot.id)}']",
+      count: 1
+    )
   end
 
   test "show ignores unknown snapshot filter" do

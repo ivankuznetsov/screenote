@@ -16,7 +16,7 @@ class PageScreenshotsOrderTest < ApplicationSystemTestCase
     login_as_test_user
   end
 
-  test "page show lists newest screenshots first" do
+  test "page workspace lists newest versions first in the sidebar" do
     project_name = "Order Project #{SecureRandom.hex(4)}"
     page_name = "Order Page #{SecureRandom.hex(4)}"
     older_title = "Older Version #{SecureRandom.hex(4)}"
@@ -29,11 +29,12 @@ class PageScreenshotsOrderTest < ApplicationSystemTestCase
     assert_on_page_show(page_name)
 
     upload_version(older_title)
-    navigate_from_screenshot_to_page
     upload_version(newer_title)
-    navigate_from_screenshot_to_page
 
-    assert_equal [ newer_title, older_title ], all(SCREENSHOT_CARD_TITLE, minimum: 2).map(&:text).first(2)
+    assert_equal [ newer_title, older_title ],
+      all(VERSION_SIDEBAR_ITEM, minimum: 2).map { |item| item.find(".version-sidebar__item-title").text }.first(2)
+    assert_selector "#{VERSION_SIDEBAR_ITEM}[aria-current='page']", text: newer_title, count: 1
+    assert_no_selector "[data-testid='version-sidebar'] img"
   end
 
   private
@@ -53,13 +54,6 @@ class PageScreenshotsOrderTest < ApplicationSystemTestCase
     fill_screenshot_form(title: title, image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show
-  end
-
-  def navigate_from_screenshot_to_page
-    within find(BREADCRUMB) do
-      all("a").last.click
-    end
-    wait_for_turbo
-    assert_on_page_show
+    assert_match %r{\A/pages/\d+\?version_id=\d+\z}, URI.parse(current_url).request_uri
   end
 end

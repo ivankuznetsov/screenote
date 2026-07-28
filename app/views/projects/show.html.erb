@@ -33,8 +33,7 @@
                         end %>
           <% card_data = { testid: "page-card", page_id: page.id }
              card_data[:screenshot_id] = thumbnail.id if thumbnail %>
-          <% direct_screenshot = page.screenshots_count_cache.to_i == 1 && thumbnail&.primary_image&.image&.attached?
-             card_path = direct_screenshot ? screenshot_path(thumbnail) : page_path(page) %>
+          <% card_path = thumbnail ? page_path(page, version_id: thumbnail.id) : page_path(page) %>
 
           <%= link_to card_path, class: "page-card", data: card_data do %>
             <div class="page-card__thumbnail">

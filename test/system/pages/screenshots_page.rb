@@ -4,10 +4,12 @@ module Pages
   module ScreenshotsPage
     # --- Selectors ---
 
-    SCREENSHOT_CARD_TITLE = '[data-testid="screenshot-card-title"]'
+    VERSION_SIDEBAR_ITEM = '[data-testid="version-sidebar-item"]'
+    SCREENSHOT_CARD_TITLE = VERSION_SIDEBAR_ITEM
     SCREENSHOT_FORM = '[data-testid="screenshot-form"]'
     SCREENSHOT_FORM_ERRORS = '[data-testid="screenshot-form-errors"]'
     BREADCRUMB = '[data-testid="breadcrumb"]'
+    DELETE_SCREENSHOT_BUTTON = '[data-testid="delete-screenshot-button"]'
     SCREENSHOT_WORKSPACE = '[data-testid="screenshot-workspace"]'
     SCREENSHOT_IMAGE = '[data-testid="screenshot-image"]'
     ANNOTATION_SIDEBAR = '[data-testid="annotation-sidebar"]'
@@ -32,7 +34,7 @@ module Pages
     end
 
     def assert_screenshot_title_in_breadcrumb(title)
-      assert_selector BREADCRUMB, text: title, wait: 10
+      assert_selector "#{VERSION_SIDEBAR_ITEM}[aria-current='page']", text: title, wait: 10
     end
 
     def assert_annotation_sidebar_empty

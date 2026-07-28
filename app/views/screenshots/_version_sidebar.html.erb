@@ -1,0 +1,26 @@
+<aside class="version-sidebar" data-testid="version-sidebar">
+  <h2 class="version-sidebar__title">Versions</h2>
+
+  <ol class="version-sidebar__list">
+    <% screenshots.each do |screenshot| %>
+      <% selected = screenshot.id == selected_screenshot.id %>
+      <li class="version-sidebar__item <%= "version-sidebar__item--active" if selected %>">
+        <%= link_to page_workspace_path_for(screenshot, viewport: active_viewport),
+            aria: { current: ("page" if selected) },
+            data: {
+              turbo_frame: "_top",
+              testid: "version-sidebar-item",
+              version_id: screenshot.id
+            } do %>
+          <span class="version-sidebar__item-title"><%= screenshot.title %></span>
+          <span class="version-sidebar__item-meta">
+            <%= time_tag screenshot.created_at, screenshot.created_at.to_fs(:short) %>
+            <span class="version-sidebar__status version-sidebar__status--<%= screenshot.status %>">
+              <%= screenshot.status.humanize %>
+            </span>
+          </span>
+        <% end %>
+      </li>
+    <% end %>
+  </ol>
+</aside>

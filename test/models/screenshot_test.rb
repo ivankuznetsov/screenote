@@ -224,10 +224,40 @@ class ScreenshotTest < ActiveSupport::TestCase
     assert_nil screenshot.image_for(:mobile)
   end
 
+  test "image_for uses a preloaded screenshot image association" do
+    screenshot = screenshots(:alice_screenshot)
+    tablet = screenshot.screenshot_images.create!(viewport: :tablet)
+    loaded = Screenshot.includes(:screenshot_images).find(screenshot.id)
+
+    assert loaded.screenshot_images.loaded?
+    assert_equal tablet, loaded.image_for(:tablet)
+  end
+
   test "available_viewports lists viewports that have ScreenshotImage rows" do
     screenshot = screenshots(:alice_screenshot)
     screenshot.screenshot_images.create!(viewport: :mobile)
     assert_equal %w[desktop mobile], screenshot.available_viewports
+  end
+
+  test "available_viewports keeps enum order on a preloaded association" do
+    screenshot = screenshots(:alice_screenshot)
+    screenshot.screenshot_images.create!(viewport: :mobile)
+    screenshot.screenshot_images.create!(viewport: :tablet)
+    loaded = Screenshot.includes(:screenshot_images).find(screenshot.id)
+
+    assert loaded.screenshot_images.loaded?
+    assert_equal %w[desktop tablet mobile], loaded.available_viewports
+  end
+
+  test "recent_first orders tied timestamps by descending id" do
+    page = pages(:alice_page)
+    timestamp = 1.hour.ago.change(usec: 0)
+    lower_id = page.screenshots.create!(title: "Lower id", created_at: timestamp)
+    higher_id = page.screenshots.create!(title: "Higher id", created_at: timestamp)
+
+    ordered_ids = page.screenshots.where(id: [ lower_id.id, higher_id.id ]).recent_first.ids
+
+    assert_equal [ higher_id.id, lower_id.id ], ordered_ids
   end
 
   test "default_viewport is desktop when desktop variant exists" do
