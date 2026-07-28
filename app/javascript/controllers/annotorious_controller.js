@@ -8,34 +8,45 @@ export default class extends Controller {
     if (!this.hasImageTarget) return
 
     this.disposed = false
+    this.handleImageLoad ||= () => {
+      if (this.disposed) return
 
-    if (this.imageTarget.complete && this.imageTarget.naturalWidth > 0) {
       this.initAnnotorious()
       this.renderExistingPins()
+    }
+
+    if (this.imageTarget.complete && this.imageTarget.naturalWidth > 0) {
+      this.handleImageLoad()
     } else {
-      this.imageTarget.addEventListener("load", () => {
-        this.initAnnotorious()
-        this.renderExistingPins()
-      }, { once: true })
+      this.imageTarget.addEventListener("load", this.handleImageLoad, { once: true })
     }
   }
 
   disconnect() {
     this.disposed = true
+    if (this.hasImageTarget && this.handleImageLoad) {
+      this.imageTarget.removeEventListener("load", this.handleImageLoad)
+    }
+    this.releaseBoundaryPointerCapture()
+    this.removeBoundaryPointerTracking()
 
     if (this.anno) {
       this.anno.destroy()
+      this.anno = null
     }
     this.removePins()
   }
 
   initAnnotorious() {
+    if (this.disposed || this.anno) return
+
     this.pendingAnnotationId = null
 
     this.anno = createImageAnnotator(this.imageTarget, {
       drawingEnabled: true,
       drawingMode: "drag"
     })
+    this.installBoundaryPointerTracking()
 
     this.anno.on("createAnnotation", (annotation) => {
       this.handleCreate(annotation)
@@ -58,7 +69,10 @@ export default class extends Controller {
     if (!selector) return
 
     const coords = this.parseSelector(selector)
-    if (!coords) return
+    if (!coords) {
+      this.anno?.removeAnnotation(annotation.id)
+      return
+    }
 
     this.showAnnotationForm(coords, annotation.id)
   }
@@ -68,27 +82,119 @@ export default class extends Controller {
     const geometry = selector.geometry
     if (!geometry) return null
 
-    const naturalW = this.imageTarget.naturalWidth
-    const naturalH = this.imageTarget.naturalHeight
+    const naturalW = Number(this.imageTarget.naturalWidth)
+    const naturalH = Number(this.imageTarget.naturalHeight)
+    const x = Number(geometry.x)
+    const y = Number(geometry.y)
+    const w = Number(geometry.w)
+    const h = Number(geometry.h)
+    const values = [naturalW, naturalH, x, y, w, h]
 
-    const x = geometry.x
-    const y = geometry.y
-    const w = geometry.w
-    const h = geometry.h
+    if (!values.every(Number.isFinite) || naturalW <= 0 || naturalH <= 0) return null
 
-    const xPercent = (x / naturalW) * 100
-    const yPercent = (y / naturalH) * 100
-    const wPercent = (w / naturalW) * 100
-    const hPercent = (h / naturalH) * 100
+    const clamp = (value, maximum) => Math.min(Math.max(value, 0), maximum)
+    const left = clamp(Math.min(x, x + w), naturalW)
+    const right = clamp(Math.max(x, x + w), naturalW)
+    const top = clamp(Math.min(y, y + h), naturalH)
+    const bottom = clamp(Math.max(y, y + h), naturalH)
 
-    const isPoint = wPercent < 1 && hPercent < 1
+    if (right <= left || bottom <= top) return null
+
+    const roundPercent = (value, total) => Math.round(((value / total) * 100) * 100) / 100
+    const xPercent = roundPercent(left, naturalW)
+    const yPercent = roundPercent(top, naturalH)
+    const rightPercent = roundPercent(right, naturalW)
+    const bottomPercent = roundPercent(bottom, naturalH)
+    const wPercent = rightPercent - xPercent
+    const hPercent = bottomPercent - yPercent
+    const rawWPercent = ((right - left) / naturalW) * 100
+    const rawHPercent = ((bottom - top) / naturalH) * 100
+    const isPoint = rawWPercent < 1 && rawHPercent < 1
+
+    if (!isPoint && (wPercent <= 0 || hPercent <= 0)) return null
 
     return {
-      x_percent: Math.round(xPercent * 100) / 100,
-      y_percent: Math.round(yPercent * 100) / 100,
-      width_percent: isPoint ? null : Math.round(wPercent * 100) / 100,
-      height_percent: isPoint ? null : Math.round(hPercent * 100) / 100
+      x_percent: xPercent,
+      y_percent: yPercent,
+      width_percent: isPoint ? null : wPercent,
+      height_percent: isPoint ? null : hPercent
     }
+  }
+
+  installBoundaryPointerTracking() {
+    if (!this.hasCanvasTarget || this.boundaryPointerTrackingInstalled) return
+
+    this.handleBoundaryPointerDown ||= this.onBoundaryPointerDown.bind(this)
+    this.handleBoundaryPointerEnd ||= this.onBoundaryPointerEnd.bind(this)
+    this.handleLostPointerCapture ||= this.onLostPointerCapture.bind(this)
+
+    this.canvasTarget.addEventListener("pointerdown", this.handleBoundaryPointerDown, true)
+    this.canvasTarget.addEventListener("pointerup", this.handleBoundaryPointerEnd, true)
+    this.canvasTarget.addEventListener("pointercancel", this.handleBoundaryPointerEnd, true)
+    this.boundaryPointerTrackingInstalled = true
+  }
+
+  removeBoundaryPointerTracking() {
+    if (!this.hasCanvasTarget || !this.boundaryPointerTrackingInstalled) return
+
+    this.canvasTarget.removeEventListener("pointerdown", this.handleBoundaryPointerDown, true)
+    this.canvasTarget.removeEventListener("pointerup", this.handleBoundaryPointerEnd, true)
+    this.canvasTarget.removeEventListener("pointercancel", this.handleBoundaryPointerEnd, true)
+    this.boundaryPointerTrackingInstalled = false
+  }
+
+  onBoundaryPointerDown(event) {
+    if (this.disposed || event.button !== 0 || event.isPrimary === false) return
+
+    const target = event.target
+    if (!target || typeof target.setPointerCapture !== "function") return
+
+    this.releaseBoundaryPointerCapture()
+
+    try {
+      target.setPointerCapture(event.pointerId)
+    } catch {
+      return
+    }
+
+    this.capturedPointerId = event.pointerId
+    this.capturedPointerTarget = target
+    target.addEventListener("lostpointercapture", this.handleLostPointerCapture, { once: true })
+  }
+
+  onBoundaryPointerEnd(event) {
+    if (event.pointerId !== this.capturedPointerId) return
+
+    this.releaseBoundaryPointerCapture()
+  }
+
+  onLostPointerCapture(event) {
+    if (event.pointerId !== this.capturedPointerId) return
+
+    this.clearBoundaryPointerCapture()
+  }
+
+  releaseBoundaryPointerCapture() {
+    const target = this.capturedPointerTarget
+    const pointerId = this.capturedPointerId
+
+    this.clearBoundaryPointerCapture()
+
+    if (!target || pointerId == null || typeof target.releasePointerCapture !== "function") return
+
+    try {
+      if (typeof target.hasPointerCapture !== "function" || target.hasPointerCapture(pointerId)) {
+        target.releasePointerCapture(pointerId)
+      }
+    } catch {
+      // The browser may already have released capture after pointerup.
+    }
+  }
+
+  clearBoundaryPointerCapture() {
+    this.capturedPointerTarget?.removeEventListener("lostpointercapture", this.handleLostPointerCapture)
+    this.capturedPointerTarget = null
+    this.capturedPointerId = null
   }
 
   showAnnotationForm(coords, annotationId) {

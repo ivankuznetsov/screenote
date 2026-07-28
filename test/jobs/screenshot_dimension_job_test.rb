@@ -3,6 +3,8 @@
 require "test_helper"
 
 class ScreenshotDimensionJobTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   setup do
     @page = pages(:alice_page)
   end
@@ -17,12 +19,49 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
       filename: "test.png", content_type: "image/png"
     )
 
-    ScreenshotDimensionJob.perform_now(si, si.image.blob.id)
+    blob_id = si.image.blob.id
+    assert_enqueued_with(job: ScreenshotThumbnailJob, args: [ si, blob_id ]) do
+      ScreenshotDimensionJob.perform_now(si, blob_id)
+    end
 
     si.reload
     assert si.status_ready?
     assert si.width.present?
     assert si.height.present?
+  end
+
+  test "warming targets the desktop primary after the final mobile dimension finishes" do
+    screenshot = @page.screenshots.create!(title: "Primary thumbnail")
+    desktop = ready_image(screenshot, :desktop, filename: "desktop.png")
+    mobile = screenshot.screenshot_images.create!(viewport: :mobile)
+    attach_test_image(mobile, filename: "mobile.png")
+    screenshot.reload
+    assert screenshot.pending?
+
+    job = job_with_dimensions
+    clear_enqueued_jobs
+    assert_enqueued_with(
+      job: ScreenshotThumbnailJob,
+      args: [ desktop, desktop.image.blob.id ]
+    ) do
+      job.perform(mobile, mobile.image.blob.id)
+    end
+
+    assert_equal 1, enqueued_jobs.count { |job| job[:job] == ScreenshotThumbnailJob }
+    assert screenshot.reload.ready?
+  end
+
+  test "mobile-only screenshots warm their mobile primary" do
+    screenshot = @page.screenshots.create!(title: "Mobile thumbnail")
+    mobile = screenshot.screenshot_images.create!(viewport: :mobile)
+    attach_test_image(mobile, filename: "mobile.png")
+
+    assert_enqueued_with(
+      job: ScreenshotThumbnailJob,
+      args: [ mobile, mobile.image.blob.id ]
+    ) do
+      job_with_dimensions.perform(mobile, mobile.image.blob.id)
+    end
   end
 
   test "same blob jobs share a concurrency key but replacement blob jobs do not" do
@@ -115,5 +154,25 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
       filename: filename,
       content_type: "image/png"
     )
+  end
+
+  def ready_image(screenshot, viewport, filename:)
+    screenshot_image = screenshot.screenshot_images.build(
+      viewport: viewport,
+      status: :ready,
+      width: 100,
+      height: 100
+    )
+    attach_test_image(screenshot_image, filename:)
+    screenshot_image.save!
+    screenshot_image
+  end
+
+  def job_with_dimensions
+    ScreenshotDimensionJob.new.tap do |job|
+      job.define_singleton_method(:analyze_blob) do |_blob|
+        { "width" => 100, "height" => 100 }
+      end
+    end
   end
 end

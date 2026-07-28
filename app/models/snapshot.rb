@@ -41,15 +41,29 @@ class Snapshot < ApplicationRecord
     page_ids = pages.map(&:id)
     return {} if page_ids.empty?
 
+    screenshots_table = Screenshot.arel_table
+    newer_screenshots = screenshots_table.alias("newer_screenshots")
+    newer_version = newer_screenshots[:created_at].gt(screenshots_table[:created_at]).or(
+      newer_screenshots[:created_at].eq(screenshots_table[:created_at]).and(
+        newer_screenshots[:id].gt(screenshots_table[:id])
+      )
+    )
+    newer_ready_screenshot = screenshots_table
+      .project(Arel.sql("1"))
+      .from(newer_screenshots)
+      .where(newer_screenshots[:snapshot_id].eq(screenshots_table[:snapshot_id]))
+      .where(newer_screenshots[:page_id].eq(screenshots_table[:page_id]))
+      .where(newer_screenshots[:status].eq(Screenshot.statuses[:ready]))
+      .where(newer_version)
+
     candidates = screenshots
       .ready
       .where(page_id: page_ids)
+      .where(Arel::Nodes::Not.new(newer_ready_screenshot.exists))
       .order(created_at: :desc, id: :desc)
-      .includes(screenshot_images: { image_attachment: :blob })
+      .includes(screenshot_images: ScreenshotImage::OVERVIEW_IMAGE_PRELOAD)
 
-    candidates.each_with_object({}) do |screenshot, acc|
-      acc[screenshot.page_id] ||= screenshot
-    end
+    candidates.index_by(&:page_id)
   end
 
   def manifest_backed?

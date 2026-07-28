@@ -33,15 +33,27 @@
                         end %>
           <% card_data = { testid: "page-card", page_id: page.id }
              card_data[:screenshot_id] = thumbnail.id if thumbnail %>
-          <% direct_screenshot = page.screenshots_count_cache.to_i == 1 && thumbnail&.primary_image&.image&.attached?
-             card_path = direct_screenshot ? screenshot_path(thumbnail) : page_path(page) %>
+          <% card_path = thumbnail ? page_workspace_path_for(thumbnail) : page_path(page) %>
 
           <%= link_to card_path, class: "page-card", data: card_data do %>
             <div class="page-card__thumbnail">
-              <% if thumbnail&.primary_image&.image&.attached? %>
-                <%= image_tag thumbnail.primary_image.image.variant(resize_to_limit: [480, 360]), alt: page.name, loading: "lazy" %>
+              <% if thumbnail&.primary_image&.overview_variants_warmed? %>
+                <% primary_image = thumbnail.primary_image
+                   card_1x = primary_image.image.variant(:page_card_1x)
+                   card_2x = primary_image.image.variant(:page_card_2x) %>
+                <%= image_tag card_1x,
+                      srcset: "#{url_for(card_1x)} 480w, #{url_for(card_2x)} 960w",
+                      sizes: "(max-width: 627px) calc(100vw - 3rem), " \
+                        "(max-width: 760px) calc((100vw - 4.25rem) / 2), " \
+                        "(max-width: 875px) calc(100vw - 18.5rem), " \
+                        "(max-width: 960px) calc((100vw - 19.75rem) / 2), 322px",
+                      width: 480,
+                      height: 270,
+                      alt: page.name,
+                      loading: "lazy",
+                      decoding: "async" %>
               <% else %>
-                <div class="page-card__placeholder">No screenshots yet</div>
+                <div class="page-card__placeholder"><%= thumbnail ? "Thumbnail processing" : "No screenshots yet" %></div>
               <% end %>
             </div>
             <div class="page-card__info">

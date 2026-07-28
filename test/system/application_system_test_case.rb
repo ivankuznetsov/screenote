@@ -24,7 +24,8 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   driven_by :playwright, screen_size: [ 1280, 720 ], options: {
     browser_type: ENV.fetch("PLAYWRIGHT_BROWSER", "chromium").to_sym,
-    headless: ENV["HEADED"] != "true"
+    headless: ENV["HEADED"] != "true",
+    deviceScaleFactor: Float(ENV.fetch("DEVICE_SCALE_FACTOR", "1"))
   }
 
   teardown do

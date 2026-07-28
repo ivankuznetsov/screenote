@@ -5,36 +5,45 @@ class AnnotationsController < ApplicationController
   before_action :set_annotation, only: %i[update destroy]
 
   def create
+    return redirect_invalid_viewport unless submitted_viewport_valid?
+
     @annotation = @screenshot.annotations.build(annotation_params)
     @annotation.user = Current.user
 
     if @annotation.save
-      redirect_to screenshot_path(@screenshot), notice: "Annotation added."
+      redirect_to page_workspace_path_for(@screenshot, viewport: @annotation.viewport), notice: "Annotation added."
     else
-      redirect_to screenshot_path(@screenshot), alert: "Could not save annotation."
+      redirect_to page_workspace_path_for(@screenshot, viewport: @annotation.viewport),
+        alert: "Could not save annotation."
     end
   end
 
   def update
+    original_viewport = @annotation.viewport
+    return redirect_invalid_viewport(viewport: original_viewport) unless submitted_viewport_valid?
+
     if resolving?
       @annotation.resolve!(user: Current.user, body: "Marked as resolved")
-      redirect_to screenshot_path(@screenshot), notice: "Annotation updated."
+      redirect_to page_workspace_path_for(@screenshot, viewport: original_viewport), notice: "Annotation updated."
     else
       @annotation.assign_attributes(annotation_params)
 
       if @annotation.save
-        redirect_to screenshot_path(@screenshot), notice: "Annotation updated."
+        redirect_to page_workspace_path_for(@screenshot, viewport: @annotation.viewport), notice: "Annotation updated."
       else
-        redirect_to screenshot_path(@screenshot), alert: "Could not update annotation."
+        redirect_to page_workspace_path_for(@screenshot, viewport: original_viewport),
+          alert: "Could not update annotation."
       end
     end
   rescue ActiveRecord::RecordInvalid
-    redirect_to screenshot_path(@screenshot), alert: "Could not update annotation."
+    redirect_to page_workspace_path_for(@screenshot, viewport: original_viewport),
+      alert: "Could not update annotation."
   end
 
   def destroy
+    viewport = @annotation.viewport
     @annotation.destroy
-    redirect_to screenshot_path(@screenshot), notice: "Annotation deleted."
+    redirect_to page_workspace_path_for(@screenshot, viewport: viewport), notice: "Annotation deleted."
   end
 
   private
@@ -49,10 +58,23 @@ class AnnotationsController < ApplicationController
   end
 
   def annotation_params
-    params.require(:annotation).permit(:x_percent, :y_percent, :width_percent, :height_percent, :comment, :viewport)
+    permitted_params = params.require(:annotation).permit(
+      :x_percent, :y_percent, :width_percent, :height_percent, :comment, :viewport
+    )
+    permitted_params.delete(:viewport) if permitted_params[:viewport].blank?
+    permitted_params
   end
 
   def resolving?
     params.dig(:annotation, :status)&.to_s == "resolved" && @annotation.open?
+  end
+
+  def submitted_viewport_valid?
+    viewport = params.dig(:annotation, :viewport)
+    viewport.blank? || @screenshot.available_viewports.include?(viewport.to_s)
+  end
+
+  def redirect_invalid_viewport(viewport: nil)
+    redirect_to page_workspace_path_for(@screenshot, viewport: viewport), alert: "Could not save annotation."
   end
 end

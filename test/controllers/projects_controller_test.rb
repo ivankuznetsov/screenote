@@ -49,6 +49,45 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/MCP protocol|via MCP/, response.body)
   end
 
+  test "index renders named project strip variants at half their source dimensions" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Project strip variants")
+    page = project.pages.create!(name: "Overview")
+    screenshot = create_ready_screenshot_with_image(page, title: "Overview strip")
+    primary_image = screenshot.primary_image
+    warm_overview_variants(primary_image)
+
+    get projects_path
+
+    assert_response :success
+    assert_select "a[href='#{project_path(project)}'] img.project-card__thumbnail", count: 1 do |images|
+      image = images.first
+      assert_equal "120", image["width"]
+      assert_equal "80", image["height"]
+      assert_equal "lazy", image["loading"]
+      assert_equal "async", image["decoding"]
+      assert_includes image["src"], primary_image.image.variant(:project_strip).variation.key
+    end
+  end
+
+  test "index overview query count grows by only a constant amount" do
+    sign_in(@user)
+    create_thumbnail_project("Baseline thumbnails")
+
+    get projects_path
+    baseline_queries = capture_app_queries { get projects_path }
+
+    8.times { |index| create_thumbnail_project("Additional thumbnails #{index}") }
+    expanded_queries = capture_app_queries { get projects_path }
+
+    assert_response :success
+    assert expanded_queries.size <= baseline_queries.size + 1,
+      "Project index queries should not scale with cards " \
+      "(baseline=#{baseline_queries.size}, expanded=#{expanded_queries.size}): #{expanded_queries.inspect}"
+    assert_variant_records_preloaded(baseline_queries)
+    assert_variant_records_preloaded(expanded_queries)
+  end
+
   # Show
   test "show displays project" do
     sign_in(@user)
@@ -123,19 +162,23 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".page-card__placeholder", text: "No screenshots yet"
   end
 
-  test "show links a page card directly to its only usable screenshot" do
+  test "show links a page card to its selected version in the page workspace" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Single screenshot project")
     page = project.pages.create!(name: "Only screen")
     screenshot = create_ready_screenshot_with_image(page, title: "Only version")
+    primary_image = screenshot.primary_image
+    warm_overview_variants(primary_image)
 
     get project_path(project)
 
     assert_response :success
-    assert_select "a[data-testid='page-card'][href='#{screenshot_path(screenshot)}']", count: 1
+    assert_select "a[data-testid='page-card'][href='#{page_path(page, version_id: screenshot.id)}']", count: 1 do
+      assert_responsive_page_card_image(primary_image)
+    end
   end
 
-  test "show keeps page cards pointed at the version grid when there is not exactly one usable screenshot" do
+  test "show uses a bare page route only when no ready version is selected" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Mixed screenshot project")
     empty_page = project.pages.create!(name: "Empty")
@@ -152,14 +195,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     )
     attachment_missing_screenshot.screenshot_images.create!(viewport: :desktop, status: :ready)
     create_ready_screenshot_with_image(multiple_page, title: "First")
-    create_ready_screenshot_with_image(multiple_page, title: "Second")
+    selected_multiple = create_ready_screenshot_with_image(multiple_page, title: "Second")
 
     get project_path(project)
 
     assert_response :success
-    [ empty_page, pending_page, failed_page, attachment_missing_page, multiple_page ].each do |page|
+    [ empty_page, pending_page, failed_page ].each do |page|
       assert_select "a[data-testid='page-card'][data-page-id='#{page.id}'][href='#{page_path(page)}']", count: 1
     end
+    assert_select(
+      "a[data-testid='page-card'][data-page-id='#{attachment_missing_page.id}']" \
+        "[href='#{page_path(attachment_missing_page, version_id: attachment_missing_screenshot.id)}']",
+      count: 1
+    )
+    assert_select(
+      "a[data-testid='page-card'][data-page-id='#{multiple_page.id}']" \
+        "[href='#{page_path(multiple_page, version_id: selected_multiple.id)}']",
+      count: 1
+    )
   end
 
   test "show links a single logical screenshot with multiple viewport images directly" do
@@ -172,7 +225,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     get project_path(project)
 
     assert_response :success
-    assert_select "a[data-testid='page-card'][href='#{screenshot_path(screenshot)}']", count: 1
+    assert_select "a[data-testid='page-card'][href='#{page_path(page, version_id: screenshot.id)}']", count: 1
   end
 
   test "show filters to pages captured in the selected snapshot" do
@@ -229,18 +282,14 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     8.times do |i|
       page = project.pages.create!(name: "Page #{i}")
       screenshot = page.screenshots.create!(title: "Shot #{i}", snapshot: snapshot, status: :ready)
-      %i[desktop tablet mobile].each { |vp| screenshot.screenshot_images.create!(viewport: vp) }
+      primary_image = screenshot.screenshot_images.create!(viewport: :desktop, status: :ready)
+      attach_test_image(primary_image)
+      warm_overview_variants(primary_image)
+      %i[tablet mobile].each { |vp| screenshot.screenshot_images.create!(viewport: vp, status: :ready) }
     end
 
     get project_path(project, snapshot_id: snapshot.id) # warm caches
-    Rails.cache.clear # cold cache between requests so a per-card Solid Cache
-    # hit can't mask a per-card SQL query the second time through.
-
-    # Wrap the second call so a refactor that drops the page_thumbnails
-    # subselect and resolves thumbnails per-card can't silently regress R2.
-    queries = []
-    callback = ->(*, payload) { queries << payload[:sql] unless /SCHEMA|TRANSACTION/i.match?(payload[:name].to_s) }
-    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+    queries = capture_app_queries do
       get project_path(project, snapshot_id: snapshot.id)
     end
 
@@ -250,6 +299,29 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     # trip the assertion well before they double-up.
     assert queries.size <= 14,
       "Filtered show should not issue per-page thumbnail queries (saw #{queries.size}): #{queries.last(40).inspect}"
+    assert_variant_records_preloaded(queries)
+  end
+
+  test "show unfiltered thumbnails bound query count" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Bounded unfiltered project")
+
+    8.times do |index|
+      page = project.pages.create!(name: "Page #{index}")
+      screenshot = page.screenshots.create!(title: "Shot #{index}", status: :ready)
+      primary_image = screenshot.screenshot_images.create!(viewport: :desktop, status: :ready)
+      attach_test_image(primary_image)
+      warm_overview_variants(primary_image)
+      %i[tablet mobile].each { |viewport| screenshot.screenshot_images.create!(viewport: viewport, status: :ready) }
+    end
+
+    get project_path(project)
+    queries = capture_app_queries { get project_path(project) }
+
+    assert_response :success
+    assert queries.size <= 14,
+      "Unfiltered show should not issue per-page thumbnail queries (saw #{queries.size}): #{queries.last(40).inspect}"
+    assert_variant_records_preloaded(queries)
   end
 
   test "show renders snapshot screenshot as thumbnail when filtered" do
@@ -283,12 +355,59 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
     page = project.pages.create!(name: "Shared page")
     snapshot_screenshot = create_ready_screenshot_with_image(page, title: "Snapshot version", snapshot: snapshot)
+    primary_image = snapshot_screenshot.primary_image
+    warm_overview_variants(primary_image)
     create_ready_screenshot_with_image(page, title: "Newer ad-hoc version")
 
     get project_path(project, snapshot_id: snapshot.id)
 
     assert_response :success
-    assert_select "a[data-testid='page-card'][href='#{screenshot_path(snapshot_screenshot)}']", count: 1
+    assert_select(
+      "a[data-testid='page-card'][href='#{page_path(page, version_id: snapshot_screenshot.id)}']",
+      count: 1
+    ) do
+      assert_responsive_page_card_image(primary_image)
+    end
+  end
+
+  test "unwarmed overview cards omit representation URLs and do not process thumbnail variants" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Unwarmed overview")
+    page = project.pages.create!(name: "Overview")
+    project.pages.create!(name: "Empty overview")
+    screenshot = create_ready_screenshot_with_image(page, title: "Unwarmed")
+    blob = screenshot.primary_image.image.blob
+
+    assert_equal 0, blob.variant_records.count
+    assert_no_enqueued_jobs do
+      assert_no_difference -> { blob.variant_records.reload.count } do
+        get project_path(project)
+      end
+    end
+
+    assert_response :success
+    assert_select ".page-card__placeholder", text: "Thumbnail processing", count: 1
+    assert_select ".page-card__thumbnail img", count: 0
+    assert_no_match(/rails\/active_storage\/representations/, response.body)
+  end
+
+  test "unwarmed project strips omit representation URLs and do not process thumbnail variants" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Unwarmed project strip")
+    page = project.pages.create!(name: "Overview")
+    screenshot = create_ready_screenshot_with_image(page, title: "Unwarmed")
+    blob = screenshot.primary_image.image.blob
+
+    assert_equal 0, blob.variant_records.count
+    assert_no_enqueued_jobs do
+      assert_no_difference -> { blob.variant_records.reload.count } do
+        get projects_path
+      end
+    end
+
+    assert_response :success
+    assert_select "a[href='#{project_path(project)}'] img.project-card__thumbnail", count: 0
+    assert_no_match(/rails\/active_storage\/representations/, response.body)
   end
 
   test "show ignores unknown snapshot filter" do
@@ -504,6 +623,63 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       filename: "test_image.png",
       content_type: "image/png"
     )
+  end
+
+  def warm_overview_variants(screenshot_image)
+    screenshot_image.thumbnail_variants.each do |variant|
+      screenshot_image.image.blob.variant_records.create!(variation_digest: variant.variation.digest)
+    end
+  end
+
+  def create_thumbnail_project(name)
+    project = @user.owned_projects.create!(name: name)
+    page = project.pages.create!(name: "Overview")
+    screenshot = create_ready_screenshot_with_image(page, title: "#{name} screenshot")
+    warm_overview_variants(screenshot.primary_image)
+    project
+  end
+
+  def capture_app_queries
+    Rails.cache.clear
+    ActiveRecord::Base.connection.clear_query_cache
+    queries = []
+    callback = lambda do |*, payload|
+      queries << payload[:sql] unless /SCHEMA|TRANSACTION/i.match?(payload[:name].to_s)
+    end
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    queries
+  end
+
+  def assert_variant_records_preloaded(queries)
+    variant_queries = queries.grep(/active_storage_variant_records/i)
+    assert_equal 1, variant_queries.size,
+      "Expected exactly one bulk variant-record preload, saw #{variant_queries.size}: #{variant_queries.inspect}"
+  end
+
+  def assert_responsive_page_card_image(primary_image)
+    assert_select ".page-card__thumbnail img", count: 1 do |images|
+      image = images.first
+      one_x = primary_image.image.variant(:page_card_1x)
+      two_x = primary_image.image.variant(:page_card_2x)
+
+      assert_equal "480", image["width"]
+      assert_equal "270", image["height"]
+      assert_equal "lazy", image["loading"]
+      assert_equal "async", image["decoding"]
+      assert_equal(
+        "(max-width: 627px) calc(100vw - 3rem), " \
+          "(max-width: 760px) calc((100vw - 4.25rem) / 2), " \
+          "(max-width: 875px) calc(100vw - 18.5rem), " \
+          "(max-width: 960px) calc((100vw - 19.75rem) / 2), 322px",
+        image["sizes"]
+      )
+      assert_includes image["src"], one_x.variation.key
+      assert_includes image["srcset"], "#{one_x.variation.key}"
+      assert_includes image["srcset"], "480w"
+      assert_includes image["srcset"], "#{two_x.variation.key}"
+      assert_includes image["srcset"], "960w"
+    end
   end
 
   def page_card_page_ids

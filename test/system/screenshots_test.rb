@@ -45,7 +45,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
     original_title = "Original Title #{Time.now.to_i}"
     create_screenshot(original_title)
 
-    click_link "Edit"
+    click_link "Edit version"
     assert_selector PAGE_TITLE, text: "Edit version", wait: 10
 
     updated_title = "Updated Title #{Time.now.to_i}"
@@ -60,7 +60,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
     create_screenshot("Delete Me #{Time.now.to_i}")
 
     accept_confirm do
-      click_button "Delete"
+      find(DELETE_SCREENSHOT_BUTTON).click
     end
 
     assert_flash_notice "Screenshot deleted."
@@ -78,8 +78,8 @@ class ScreenshotsTest < ApplicationSystemTestCase
     assert_screenshot_form_error
   end
 
-  test "screenshot appears in page version grid" do
-    screenshot_title = "Grid Test #{Time.now.to_i}"
+  test "screenshot appears in the page version sidebar" do
+    screenshot_title = "Sidebar Test #{Time.now.to_i}"
     create_screenshot(screenshot_title)
 
     # Navigate back to page via breadcrumb
@@ -91,12 +91,15 @@ class ScreenshotsTest < ApplicationSystemTestCase
     assert_selector SCREENSHOT_CARD_TITLE, text: screenshot_title, wait: 10
   end
 
-  test "screenshot breadcrumb shows project, page, and version" do
-    create_screenshot("Breadcrumb Test #{Time.now.to_i}")
+  test "screenshot breadcrumb shows only the page url" do
+    screenshot_title = "Breadcrumb Test #{Time.now.to_i}"
+    create_screenshot(screenshot_title)
 
     breadcrumb = find(BREADCRUMB)
-    assert breadcrumb.has_text?("Demo Project"), "Breadcrumb should include project name"
-    assert breadcrumb.has_text?("Breadcrumb Test"), "Breadcrumb should include screenshot title"
+    assert_equal 1, breadcrumb.all("a").size
+    assert_equal breadcrumb.find("a").text, breadcrumb.text
+    assert_no_text "Demo Project", exact: true, wait: 0
+    refute_includes breadcrumb.text, screenshot_title
   end
 
   private

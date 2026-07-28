@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-07-28
 tags: [gaps, documentation, todo]
 ---
 
@@ -43,8 +43,8 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - MCP server configuration
 
 ### Tests
-- Test structure and patterns are not documented.
-- E2E test setup with Capybara + Playwright is not covered.
+- Minitest structure, focused commands, Capybara + Playwright setup, overview
+  SQL budgets, and the local CI gate are documented in [[testing-and-ci]].
 - **NEW:** Specific test coverage gaps identified: CreateScreenshotTool (#056), SQL injection testing (#149), OAuth test helpers (#102).
 
 ### API CLI

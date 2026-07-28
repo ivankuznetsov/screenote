@@ -17,11 +17,28 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Show
-  test "show displays screenshot" do
+  test "show redirects legacy screenshot urls to the page workspace" do
     sign_in(@user)
     get screenshot_path(@screenshot)
-    assert_response :success
-    assert_select ".screenshot-header__breadcrumb", /#{@screenshot.title}/
+    assert_redirected_to page_path(@page, version_id: @screenshot.id)
+  end
+
+  test "show redirects a valid legacy viewport url to equivalent page workspace state" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_redirected_to page_path(@page, version_id: @screenshot.id, viewport: :mobile)
+  end
+
+  test "show drops an unavailable viewport from a legacy compatibility redirect" do
+    sign_in(@user)
+    assert_equal %w[desktop], @screenshot.available_viewports
+
+    get viewport_screenshot_path(@screenshot, :mobile)
+
+    assert_redirected_to page_path(@page, version_id: @screenshot.id)
   end
 
   test "show returns not found for other users screenshot" do
@@ -41,8 +58,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(bob)
     get screenshot_path(@screenshot)
 
-    assert_response :success
-    assert_select ".screenshot-header__breadcrumb", /#{@screenshot.title}/
+    assert_redirected_to page_path(@page, version_id: @screenshot.id)
   end
 
   # Viewport switcher
@@ -51,7 +67,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     @screenshot.screenshot_images.create!(viewport: :mobile)
     @screenshot.screenshot_images.create!(viewport: :tablet)
 
-    get screenshot_path(@screenshot)
+    get page_path(@page, version_id: @screenshot.id)
 
     assert_response :success
     assert_select ".viewport-switcher"
@@ -64,7 +80,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
     assert_equal 1, @screenshot.screenshot_images.count
 
-    get screenshot_path(@screenshot)
+    get page_path(@page, version_id: @screenshot.id)
 
     assert_response :success
     assert_select ".viewport-switcher", 0, "No switcher when only one viewport exists"
@@ -75,7 +91,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     @screenshot.screenshot_images.create!(viewport: :mobile)
     annotations(:point_annotation).update!(viewport: :mobile)
 
-    get viewport_screenshot_path(@screenshot, :mobile)
+    get page_path(@page, version_id: @screenshot.id, viewport: :mobile)
 
     assert_response :success
     assert_select "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
@@ -85,19 +101,18 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
     assert_equal %w[desktop], @screenshot.available_viewports
 
-    get viewport_screenshot_path(@screenshot, :mobile)
+    get page_path(@page, version_id: @screenshot.id, viewport: :mobile)
 
-    # No redirect, no flash — the canonical /screenshots/:id would show the same
-    # desktop canvas. Silent fallback > jarring redirect for a URL no human typed.
     assert_response :success
     assert_select ".screenshot-workspace"
+    assert_select "[data-testid='viewport-switcher-desktop'][aria-selected='true']", count: 0
   end
 
   test "annotation form carries the active viewport so drawn annotations stick to it" do
     sign_in(@user)
     @screenshot.screenshot_images.create!(viewport: :mobile)
 
-    get viewport_screenshot_path(@screenshot, :mobile)
+    get page_path(@page, version_id: @screenshot.id, viewport: :mobile)
 
     assert_response :success
     # Hidden field inside the annotation form should carry mobile so new
@@ -109,19 +124,19 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
     @screenshot.screenshot_images.create!(viewport: :mobile)
 
-    get viewport_screenshot_path(@screenshot, :mobile)
+    get page_path(@page, version_id: @screenshot.id, viewport: :mobile)
 
     assert_response :success
     # Filter links should point at the same viewport, not fall back to default.
-    assert_select "a.annotation-filter[href='#{viewport_screenshot_path(@screenshot, :mobile, status: :open)}']"
-    assert_select "a.annotation-filter[href='#{viewport_screenshot_path(@screenshot, :mobile, status: :resolved)}']"
+    assert_select "a.annotation-filter[href='#{page_path(@page, version_id: @screenshot.id, viewport: :mobile, status: :open)}']"
+    assert_select "a.annotation-filter[href='#{page_path(@page, version_id: @screenshot.id, viewport: :mobile, status: :resolved)}']"
   end
 
   test "viewport switcher lives inside the turbo frame so active state re-renders on nav" do
     sign_in(@user)
     @screenshot.screenshot_images.create!(viewport: :mobile)
 
-    get screenshot_path(@screenshot)
+    get page_path(@page, version_id: @screenshot.id)
 
     assert_response :success
     # Frame must contain the switcher so a viewport click re-renders the
@@ -134,7 +149,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     @screenshot.screenshot_images.create!(viewport: :mobile)
     annotations(:point_annotation).update!(viewport: :mobile)
 
-    get viewport_screenshot_path(@screenshot, :desktop)
+    get page_path(@page, version_id: @screenshot.id, viewport: :desktop)
 
     # Mobile annotation should NOT appear on desktop
     assert_select "[data-annotation-id='#{annotations(:point_annotation).id}']", 0
@@ -158,7 +173,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     end
 
     screenshot = Screenshot.last
-    assert_redirected_to screenshot_path(screenshot)
+    assert_redirected_to page_path(@page, version_id: screenshot.id)
     assert_equal "New Screenshot", screenshot.title
     assert screenshot.primary_image.image.attached?, "Image should be attached to the desktop ScreenshotImage"
   end
@@ -170,7 +185,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
       post page_screenshots_path(@page), params: { screenshot: { title: "No Image Screenshot" } }
     end
 
-    assert_redirected_to screenshot_path(Screenshot.last)
+    assert_redirected_to page_path(@page, version_id: Screenshot.last.id)
   end
 
   test "create without image does not enqueue ScreenshotDimensionJob" do
@@ -202,7 +217,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
   test "update with valid params" do
     sign_in(@user)
     patch screenshot_path(@screenshot), params: { screenshot: { title: "Updated Title" } }
-    assert_redirected_to screenshot_path(@screenshot)
+    assert_redirected_to page_path(@page, version_id: @screenshot.id)
     assert_equal "Updated Title", @screenshot.reload.title
   end
 
@@ -237,7 +252,7 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     original_blob_id = si.image.blob.id
 
     patch screenshot_path(@screenshot), params: { screenshot: { image: new_image } }
-    assert_redirected_to screenshot_path(@screenshot)
+    assert_redirected_to page_path(@page, version_id: @screenshot.id)
 
     si.reload
     assert si.image.attached?, "Primary image should still have an attachment"

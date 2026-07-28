@@ -16,7 +16,7 @@
     <% %w[desktop tablet mobile].each do |vp| %>
       <% next unless available.include?(vp) %>
       <% is_active = vp == active_viewport %>
-      <%= link_to viewport_screenshot_path(screenshot, vp),
+      <%= link_to page_workspace_path_for(screenshot, viewport: vp, status: local_assigns[:status]),
           class: "viewport-switcher__btn #{'viewport-switcher__btn--active' if is_active}",
           role: "tab",
           aria: { selected: is_active, label: vp.capitalize },
@@ -25,7 +25,7 @@
             turbo_action: "advance",
             testid: "viewport-switcher-#{vp}"
           } do %>
-        <%= render "#{vp}_icon" %>
+        <%= render "screenshots/#{vp}_icon" %>
         <span class="viewport-switcher__label"><%= vp.capitalize %></span>
       <% end %>
     <% end %>

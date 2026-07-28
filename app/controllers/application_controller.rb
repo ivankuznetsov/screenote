@@ -3,6 +3,7 @@
 class ApplicationController < ActionController::Base
   include RailsSimpleAuth::Controllers::Concerns::Authentication
   include RailsSimpleAuth::Controllers::Concerns::SessionManagement
+  include PageWorkspaceNavigation
 
   allow_browser versions: :modern
   stale_when_importmap_changes

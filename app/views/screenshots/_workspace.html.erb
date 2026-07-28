@@ -1,0 +1,60 @@
+<%# Keep the switcher, canvas, and annotations in one frame so viewport and
+    filter navigation update every viewport-scoped part of the workspace. %>
+<%= turbo_frame_tag "screenshot_canvas" do %>
+  <%= render "screenshots/viewport_switcher",
+      screenshot: @screenshot,
+      active_viewport: @active_viewport,
+      status: params[:status] %>
+
+  <div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
+    <div class="screenshot-canvas" data-annotorious-target="canvas">
+      <% if @screenshot_image&.image&.attached? %>
+        <%= image_tag @screenshot_image.image,
+            class: "screenshot-canvas__image",
+            alt: @screenshot.title,
+            data: { annotorious_target: "image", testid: "screenshot-image" } %>
+      <% end %>
+    </div>
+
+    <% filter_path = ->(status) {
+      page_workspace_path_for(
+        @screenshot,
+        viewport: @active_viewport,
+        status: status
+      )
+    } %>
+
+    <aside class="annotation-sidebar" data-testid="annotation-sidebar">
+      <div class="annotation-sidebar__header">
+        <h2 class="annotation-sidebar__title" data-testid="sidebar-title">Annotations</h2>
+        <div class="annotation-sidebar__filters">
+          <%= link_to "All", filter_path.call(nil),
+              class: "annotation-filter #{'annotation-filter--active' unless params[:status]}",
+              data: { turbo_frame: "screenshot_canvas", turbo_action: "advance" } %>
+          <%= link_to "Open", filter_path.call(:open),
+              class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'open'}",
+              data: { turbo_frame: "screenshot_canvas", turbo_action: "advance" } %>
+          <%= link_to "Resolved", filter_path.call(:resolved),
+              class: "annotation-filter #{'annotation-filter--active' if params[:status] == 'resolved'}",
+              data: { turbo_frame: "screenshot_canvas", turbo_action: "advance" } %>
+        </div>
+      </div>
+
+      <div class="annotation-sidebar__list" data-annotorious-target="list">
+        <template data-annotorious-target="formTemplate">
+          <%= render "annotations/form", screenshot: @screenshot, active_viewport: @active_viewport %>
+        </template>
+
+        <% @annotations.each.with_index(1) do |annotation, index| %>
+          <%= render "annotations/annotation", annotation: annotation, index: index %>
+        <% end %>
+
+        <% if @annotations.empty? %>
+          <div class="annotation-sidebar__empty" data-testid="sidebar-empty">
+            No annotations yet. Click on the image to add one.
+          </div>
+        <% end %>
+      </div>
+    </aside>
+  </div>
+<% end %>

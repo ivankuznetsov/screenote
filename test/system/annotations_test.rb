@@ -85,6 +85,41 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_thread_body("Will be unresolved", "Still broken on mobile")
   end
 
+  test "mobile annotation mutations keep the mobile page workspace active" do
+    screenshot = Screenshot.order(:created_at, :id).last
+    mobile = screenshot.screenshot_images.create!(viewport: :mobile, status: :ready)
+    mobile.image.attach(
+      io: File.open(TEST_IMAGE_PATH),
+      filename: File.basename(TEST_IMAGE_PATH),
+      content_type: "image/png"
+    )
+    screenshot.annotations.create!(
+      user: users(:test_user),
+      viewport: :mobile,
+      x_percent: 30,
+      y_percent: 30,
+      comment: "Mobile viewport feedback"
+    )
+
+    visit page_path(screenshot.page, version_id: screenshot.id, viewport: :mobile)
+    assert_selector "[data-testid='viewport-switcher-mobile'][aria-selected='true']", wait: 10
+    assert_screenshot_image_loaded
+    assert_annotation_visible("Mobile viewport feedback")
+
+    resolve_annotation("Mobile viewport feedback")
+    wait_for_turbo
+    assert_match(
+      %r{\A/pages/#{screenshot.page_id}\?version_id=#{screenshot.id}&viewport=mobile\z},
+      URI.parse(current_url).request_uri
+    )
+    assert_selector "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
+
+    unresolve_annotation("Mobile viewport feedback", reason: "Still broken on mobile")
+    wait_for_turbo
+    assert_selector "[data-testid='viewport-switcher-mobile'][aria-selected='true']"
+    assert_annotation_open("Mobile viewport feedback")
+  end
+
   test "delete an annotation" do
     create_annotation("Will be deleted")
 
@@ -142,6 +177,296 @@ class AnnotationsTest < ApplicationSystemTestCase
       assert_equal "Keep this draft", final_state["comment"]
       assert_equal 1, final_state["formCount"]
       refute_includes final_state["annotationIds"], transient_id
+    end
+  end
+
+  test "a drag can leave the right edge and return before completing" do
+    with_playwright_page do |pw_page|
+      overlay = pw_page.locator(ANNOTORIOUS_OVERLAY).first
+      overlay.wait_for(state: "visible", timeout: 10_000)
+      box = overlay.bounding_box
+      start_x = box["x"] + (box["width"] * 0.7)
+      start_y = box["y"] + (box["height"] * 0.35)
+
+      pw_page.mouse.move(start_x, start_y)
+      pw_page.mouse.down
+      pw_page.mouse.move(box["x"] + box["width"] + 40, start_y + 40)
+
+      capture = pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          const target = controller.capturedPointerTarget
+          const pointerId = controller.capturedPointerId
+
+          return {
+            pointerId,
+            captured: Boolean(target && pointerId != null && target.hasPointerCapture(pointerId))
+          }
+        })()
+      JS
+
+      assert capture["pointerId"], "The active drawing pointer should be tracked"
+      assert capture["captured"], "The drawing target should retain pointer capture outside the screenshot"
+
+      pw_page.mouse.move(
+        box["x"] + (box["width"] * 0.85),
+        box["y"] + (box["height"] * 0.55)
+      )
+      pw_page.mouse.up
+      pw_page.locator(ANNOTATION_FORM).wait_for(state: "visible", timeout: 10_000)
+
+      coords = annotation_form_coords(pw_page)
+      assert_operator coords["x"], :>=, 0
+      assert_operator coords["y"], :>=, 0
+      assert_operator coords["x"] + coords["width"], :<=, 100
+      assert_operator coords["y"] + coords["height"], :<=, 100
+    end
+  end
+
+  test "annotation geometry clamps every edge and normalizes reverse drags" do
+    with_playwright_page do |pw_page|
+      geometries = pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          const width = controller.imageTarget.naturalWidth
+          const height = controller.imageTarget.naturalHeight
+          const parse = geometry => controller.parseSelector({ geometry })
+
+          return {
+            left: parse({ x: -width * 0.25, y: height * 0.25, w: width * 0.5, h: height * 0.5 }),
+            right: parse({ x: width * 0.75, y: height * 0.25, w: width * 0.5, h: height * 0.5 }),
+            top: parse({ x: width * 0.25, y: -height * 0.25, w: width * 0.5, h: height * 0.5 }),
+            bottom: parse({ x: width * 0.25, y: height * 0.75, w: width * 0.5, h: height * 0.5 }),
+            reverse: parse({ x: width * 0.75, y: height * 0.75, w: -width * 0.5, h: -height * 0.5 }),
+            fullyOutside: parse({ x: -width * 0.2, y: height * 0.2, w: width * 0.1, h: height * 0.2 }),
+            zeroAtEdge: parse({ x: width, y: height * 0.2, w: width * 0.2, h: height * 0.2 }),
+            roundedZero: parse({ x: width * 0.5, y: height * 0.2, w: width * 0.00001, h: height * 0.2 }),
+            tinyPoint: parse({ x: width * 0.5, y: height * 0.5, w: width * 0.005, h: height * 0.005 })
+          }
+        })()
+      JS
+
+      assert_equal(
+        { "x_percent" => 0, "y_percent" => 25, "width_percent" => 25, "height_percent" => 50 },
+        geometries["left"]
+      )
+      assert_equal(
+        { "x_percent" => 75, "y_percent" => 25, "width_percent" => 25, "height_percent" => 50 },
+        geometries["right"]
+      )
+      assert_equal(
+        { "x_percent" => 25, "y_percent" => 0, "width_percent" => 50, "height_percent" => 25 },
+        geometries["top"]
+      )
+      assert_equal(
+        { "x_percent" => 25, "y_percent" => 75, "width_percent" => 50, "height_percent" => 25 },
+        geometries["bottom"]
+      )
+      assert_equal(
+        { "x_percent" => 25, "y_percent" => 25, "width_percent" => 50, "height_percent" => 50 },
+        geometries["reverse"]
+      )
+      assert_nil geometries["fullyOutside"]
+      assert_nil geometries["zeroAtEdge"]
+      assert_nil geometries["roundedZero"]
+      assert_equal(
+        { "x_percent" => 50, "y_percent" => 50, "width_percent" => nil, "height_percent" => nil },
+        geometries["tinyPoint"]
+      )
+    end
+  end
+
+  test "a clamped zero-area transient is removed before the next drawing" do
+    with_playwright_page do |pw_page|
+      discarded_ids = pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          const originalRemove = controller.anno.removeAnnotation.bind(controller.anno)
+          const discardedIds = []
+
+          controller.anno.removeAnnotation = id => {
+            discardedIds.push(id)
+            return originalRemove(id)
+          }
+
+          controller.handleCreate({
+            id: "fully-outside",
+            target: {
+              selector: {
+                geometry: {
+                  x: -controller.imageTarget.naturalWidth * 0.2,
+                  y: controller.imageTarget.naturalHeight * 0.2,
+                  w: controller.imageTarget.naturalWidth * 0.1,
+                  h: controller.imageTarget.naturalHeight * 0.2
+                }
+              }
+            }
+          })
+
+          return discardedIds
+        })()
+      JS
+
+      assert_equal [ "fully-outside" ], discarded_ids
+      assert_no_selector ANNOTATION_FORM
+
+      draw_annotation(pw_page, x_ratio: 0.3, y_ratio: 0.3)
+      pw_page.locator(ANNOTATION_FORM).wait_for(state: "visible", timeout: 10_000)
+    end
+  end
+
+  test "pointer tracking is released on cancel and reconnects without duplicate listeners" do
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          workspace.dataset.pointerLifecycleInstance = "before-turbo"
+          window.__pointerLifecycle = {
+            beforeTurbo: { setCalls: 0, releaseCalls: 0, active: new Set() },
+            afterTurbo: { setCalls: 0, releaseCalls: 0, active: new Set() }
+          }
+
+          const exercise = (target, state, pointerIds) => {
+            target.setPointerCapture = pointerId => {
+              state.setCalls += 1
+              state.active.add(pointerId)
+            }
+            target.hasPointerCapture = pointerId => state.active.has(pointerId)
+            target.releasePointerCapture = pointerId => {
+              state.releaseCalls += 1
+              state.active.delete(pointerId)
+            }
+
+            controller.installBoundaryPointerTracking()
+            controller.installBoundaryPointerTracking()
+
+            target.dispatchEvent(new PointerEvent("pointerdown", {
+              bubbles: true,
+              button: 0,
+              isPrimary: true,
+              pointerId: pointerIds[0]
+            }))
+            target.dispatchEvent(new PointerEvent("pointercancel", {
+              bubbles: true,
+              pointerId: pointerIds[0]
+            }))
+            target.dispatchEvent(new PointerEvent("pointerdown", {
+              bubbles: true,
+              button: 0,
+              isPrimary: true,
+              pointerId: pointerIds[1]
+            }))
+          }
+
+          const firstTarget = document.querySelector(#{ANNOTORIOUS_OVERLAY.to_json})
+          exercise(firstTarget, window.__pointerLifecycle.beforeTurbo, [41, 42])
+          document.querySelector(".annotation-filter").click()
+        })()
+      JS
+
+      pw_page.wait_for_function(<<~JS, timeout: 10_000)
+        () => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          return workspace &&
+            workspace.dataset.pointerLifecycleInstance !== "before-turbo" &&
+            window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+        }
+      JS
+
+      lifecycle = pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          const target = document.querySelector(#{ANNOTORIOUS_OVERLAY.to_json})
+          const state = window.__pointerLifecycle.afterTurbo
+
+          target.setPointerCapture = pointerId => {
+            state.setCalls += 1
+            state.active.add(pointerId)
+          }
+          target.hasPointerCapture = pointerId => state.active.has(pointerId)
+          target.releasePointerCapture = pointerId => {
+            state.releaseCalls += 1
+            state.active.delete(pointerId)
+          }
+
+          controller.installBoundaryPointerTracking()
+          controller.installBoundaryPointerTracking()
+          target.dispatchEvent(new PointerEvent("pointerdown", {
+            bubbles: true,
+            button: 0,
+            isPrimary: true,
+            pointerId: 51
+          }))
+          target.dispatchEvent(new PointerEvent("pointercancel", {
+            bubbles: true,
+            pointerId: 51
+          }))
+
+          const serialize = value => ({
+            setCalls: value.setCalls,
+            releaseCalls: value.releaseCalls,
+            active: value.active.size
+          })
+
+          return {
+            beforeTurbo: serialize(window.__pointerLifecycle.beforeTurbo),
+            afterTurbo: serialize(window.__pointerLifecycle.afterTurbo)
+          }
+        })()
+      JS
+
+      assert_equal(
+        { "setCalls" => 2, "releaseCalls" => 2, "active" => 0 },
+        lifecycle["beforeTurbo"]
+      )
+      assert_equal(
+        { "setCalls" => 1, "releaseCalls" => 1, "active" => 0 },
+        lifecycle["afterTurbo"]
+      )
+    end
+  end
+
+  test "a workspace without an attached image disconnects cleanly during Turbo replacement" do
+    screenshot = Screenshot.order(:created_at, :id).last
+    screenshot.primary_image.image.purge
+    visit page_path(screenshot.page, version_id: screenshot.id)
+    assert_no_selector "[data-testid='screenshot-image']"
+
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          workspace.dataset.pointerLifecycleInstance = "no-image-before-turbo"
+          window.__annotoriousLifecycleErrors = []
+          window.__originalConsoleError = console.error
+          console.error = (...args) => {
+            window.__annotoriousLifecycleErrors.push(args.map(String).join(" "))
+            window.__originalConsoleError(...args)
+          }
+          document.querySelector(".annotation-filter").click()
+        })()
+      JS
+
+      pw_page.wait_for_function(<<~JS, timeout: 10_000)
+        () => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          return workspace && workspace.dataset.pointerLifecycleInstance !== "no-image-before-turbo"
+        }
+      JS
+
+      errors = pw_page.evaluate(<<~JS)
+        (() => {
+          console.error = window.__originalConsoleError
+          return window.__annotoriousLifecycleErrors
+        })()
+      JS
+
+      assert_empty errors
     end
   end
 
@@ -287,10 +612,6 @@ class AnnotationsTest < ApplicationSystemTestCase
     @tall_image_path = Rails.root.join("tmp", "annotation-scroll-#{SecureRandom.hex(6)}.png")
     Vips::Image.black(400, 2400).pngsave(@tall_image_path.to_s)
 
-    within find(BREADCRUMB) do
-      all("a").last.click
-    end
-    wait_for_turbo
     click_link "Upload version"
     fill_screenshot_form(title: "Tall annotation test", image_path: @tall_image_path.to_s)
     submit_screenshot_form
@@ -326,6 +647,21 @@ class AnnotationsTest < ApplicationSystemTestCase
           annotationIds: controller.anno.getAnnotations().map(annotation => annotation.id),
           comment: document.querySelector(#{COMMENT_FIELD.to_json})?.value,
           formCount: document.querySelectorAll(#{ANNOTATION_FORM.to_json}).length
+        }
+      })()
+    JS
+  end
+
+  def annotation_form_coords(pw_page)
+    pw_page.evaluate(<<~JS)
+      (() => {
+        const value = name => Number(document.querySelector(`[name="${name}"]`).value)
+
+        return {
+          x: value("annotation[x_percent]"),
+          y: value("annotation[y_percent]"),
+          width: value("annotation[width_percent]"),
+          height: value("annotation[height_percent]")
         }
       })()
     JS

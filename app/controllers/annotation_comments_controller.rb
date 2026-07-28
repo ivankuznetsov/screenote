@@ -5,19 +5,21 @@ class AnnotationCommentsController < ApplicationController
   before_action :set_annotation
 
   def create
+    viewport = @annotation.viewport
+
     if reopen_action?
       @annotation.reopen!(user: Current.user, body: comment_body)
-      redirect_to screenshot_path(@screenshot), notice: "Annotation unresolved."
+      redirect_to page_workspace_path_for(@screenshot, viewport: viewport), notice: "Annotation unresolved."
     else
       @annotation.annotation_comments.create!(
         user: Current.user,
         body: comment_body,
         action: :comment
       )
-      redirect_to screenshot_path(@screenshot), notice: "Comment added."
+      redirect_to page_workspace_path_for(@screenshot, viewport: viewport), notice: "Comment added."
     end
   rescue ActiveRecord::RecordInvalid
-    redirect_to screenshot_path(@screenshot), alert: "Could not save comment."
+    redirect_to page_workspace_path_for(@screenshot, viewport: viewport), alert: "Could not save comment."
   end
 
   private

@@ -5,11 +5,10 @@ class ScreenshotsController < ApplicationController
   before_action :set_screenshot, only: %i[show edit update destroy]
 
   def show
-    @active_viewport = resolve_active_viewport
-    @screenshot_image = @screenshot.image_for(@active_viewport) if @active_viewport
-    @annotations = @screenshot.annotations.includes(:user, annotation_comments: [ :user, :api_key ]).order(:created_at)
-    @annotations = @annotations.where(status: params[:status]) if params[:status].in?(%w[open resolved])
-    @annotations = @annotations.where(viewport: @active_viewport) if @active_viewport
+    viewport = validated_workspace_viewport(@screenshot, params[:viewport])
+    status = params[:status] if Annotation.statuses.key?(params[:status])
+
+    redirect_to page_workspace_path_for(@screenshot, viewport: viewport, status: status)
   end
 
   def new
@@ -31,7 +30,7 @@ class ScreenshotsController < ApplicationController
       @page.screenshots.create!(title: title)
     end
 
-    redirect_to screenshot_path(@screenshot), notice: "Screenshot uploaded."
+    redirect_to page_workspace_path_for(@screenshot), notice: "Screenshot uploaded."
   rescue ActiveRecord::RecordInvalid => e
     @screenshot = recover_invalid_screenshot(e)
     render :new, status: :unprocessable_entity
@@ -48,7 +47,7 @@ class ScreenshotsController < ApplicationController
       attach_replacement_image!(image_param) if image_param
     end
 
-    redirect_to screenshot_path(@screenshot), notice: "Screenshot updated."
+    redirect_to page_workspace_path_for(@screenshot), notice: "Screenshot updated."
   rescue ActiveRecord::RecordInvalid => e
     @screenshot = recover_invalid_screenshot(e)
     render :edit, status: :unprocessable_entity
@@ -85,16 +84,6 @@ class ScreenshotsController < ApplicationController
 
   def screenshot_params
     params.require(:screenshot).permit(:title, :image)
-  end
-
-  # Returns the viewport to render. The explicit :viewport param wins when the
-  # screenshot has that variant; otherwise silently falls back to
-  # default_viewport (:desktop if present, else first available). Silent
-  # fallback beats a redirect-with-flash for a URL no human typed and there's
-  # no user-facing difference.
-  def resolve_active_viewport
-    requested = params[:viewport].presence
-    @screenshot.available_viewports.include?(requested) ? requested : @screenshot.default_viewport
   end
 
   # When upload validation fails on ScreenshotImage (e.g. GIF or oversized

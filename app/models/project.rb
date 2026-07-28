@@ -73,7 +73,13 @@ class Project < ApplicationRecord
       .group(pages_table[:id])
       .order(sort_timestamp.desc)
 
-    snapshot ? scope : scope.includes(latest_screenshot: { screenshot_images: { image_attachment: :blob } })
+    return scope if snapshot
+
+    scope.includes(
+      latest_screenshot: {
+        screenshot_images: ScreenshotImage::OVERVIEW_IMAGE_PRELOAD
+      }
+    )
   end
 
   private
