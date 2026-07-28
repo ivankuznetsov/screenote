@@ -3,7 +3,7 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-07-28
 tags: [controller, web, ui, auth]
 ---
 
@@ -44,6 +44,18 @@ Shared by controllers that need project-level access control.
 
 ---
 
+## PageWorkspaceNavigation (Concern)
+
+Source: `app/controllers/concerns/page_workspace_navigation.rb`
+
+Shared by `ApplicationController` and exposed to views as `page_workspace_path_for`.
+
+- Builds the canonical page workspace route from `screenshot.page_id` with the screenshot id in `version_id`, avoiding an association load just to generate the URL.
+- Includes a requested `viewport` only when it exists in the screenshot's available viewport set, and otherwise lets the page workspace choose the screenshot's default viewport.
+- Compacts optional query values before generating the route; callers validate status filters against `Annotation.statuses`.
+
+---
+
 ## ProjectsController
 
 Source: `app/controllers/projects_controller.rb`
@@ -53,7 +65,7 @@ Source: `app/controllers/projects_controller.rb`
 | Action | Auth | Notes |
 |--------|------|-------|
 | index | Member | Lists user's projects ordered by updated_at, includes pages with thumbnails |
-| show | Member | Shows pages with screenshot counts and open annotation counts; a card direct-opens its lone usable screenshot, otherwise it opens the page/version grid |
+| show | Member | Shows recent snapshots and ordered pages; cards with a selected thumbnail open that version in the canonical page workspace, while cards without one use the bare page route |
 | new/create | Member + quota | Checks `can_create_project?` (Free: 1 project limit) |
 | edit/update | Owner | |
 | destroy | Owner | |
@@ -67,7 +79,7 @@ Source: `app/controllers/pages_controller.rb`
 **Actions:** show, new, create, edit, update, destroy
 
 - `new/create` -- Scoped to project via `params[:project_id]`
-- `show` -- Lists screenshots with annotation counts (total and open) using aggregate queries
+- `show` -- Loads screenshots newest-first, selects the requested page-owned `version_id` or falls back to the newest version, resolves the active viewport, and filters annotations only for a key in `Annotation.statuses` and the active viewport
 - `edit/update/destroy` -- Finds page by ID, verifies project membership
 
 ---
@@ -79,8 +91,9 @@ Source: `app/controllers/screenshots_controller.rb`
 **Actions:** show, new, create, edit, update, destroy
 
 - `new/create` -- Scoped to page via `params[:page_id]`
-- `show` -- Resolves the active viewport, loads the matching `ScreenshotImage`, and filters annotations by status and active viewport.
-- `viewports/:viewport` -- Same action as show; constrained to desktop/tablet/mobile and rendered through the `screenshot_canvas` Turbo Frame switcher.
+- `show` -- Redirects a legacy screenshot URL to the canonical page workspace with that screenshot selected. It forwards only a viewport available on the screenshot and only a status present in `Annotation.statuses`.
+- `viewports/:viewport` -- Uses the same redirect action; the route constrains the path segment to desktop/tablet/mobile, and screenshot availability is checked before forwarding it.
+- `create/update` -- Redirect to the canonical page workspace with the created or updated screenshot selected.
 - Permits: `title`, `image`
 
 The review layout and Annotorious interaction rules are documented in [[frontend-review-ui]].

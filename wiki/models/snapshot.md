@@ -3,7 +3,7 @@ title: Snapshot
 type: model
 source: app/models/snapshot.rb
 created: 2026-05-14
-updated: 2026-07-10
+updated: 2026-07-28
 tags: [model, snapshot, project, screenshot]
 ---
 
@@ -11,7 +11,7 @@ tags: [model, snapshot, project, screenshot]
 
 TLDR: Captures a project at a moment in time for `/snapshot` runs. A snapshot stores the git commit and capture timestamp, and screenshots uploaded during that run optionally point back to it.
 
-Source: `app/models/snapshot.rb`
+Source: `app/models/snapshot.rb`, `test/models/snapshot_test.rb`
 
 ## Columns
 
@@ -52,7 +52,7 @@ Source: `app/models/snapshot.rb`
 
 - `short_commit` -- first seven characters of `git_commit`.
 - `label` -- `YYYY-MM-DD · short_commit`, used by the project-page snapshot sidebar. Date is computed from `taken_at.utc.to_date` so collaborators in different request zones see the same snapshot label.
-- `thumbnails_for(pages)` -- returns the newest ready screenshot per page for this snapshot, including preloaded viewport images for project-page rendering.
+- `thumbnails_for(pages)` -- returns the newest ready screenshot per requested page for this snapshot, including preloaded viewport images for project-page rendering. A correlated `NOT EXISTS` selection eliminates older ready versions in SQL, with higher `id` winning when `created_at` ties, so only the chosen Screenshot rows are instantiated before indexing them by `page_id`.
 - `manifest_backed?` -- true when the snapshot carries a resumable manifest identity.
 - `aggregate_state` -- derives `awaiting_upload`, `processing`, `failed`, or `ready` from expected ScreenshotImage attachments and statuses.
 

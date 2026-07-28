@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-07-28
 tags: [gaps, documentation, todo]
 ---
 
@@ -81,7 +81,7 @@ The following gaps from the original bootstrap have been partially or fully addr
 3. How is the digest notification job scheduled? (Solid Queue cron? Rake task?)
 4. **NEW:** Should OAuth be user-scoped or project-scoped? (#108 -- architectural decision pending)
 5. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
-6. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was not present during the 2026-07-08 refresh; neither were the default fallback paths `~/wikis/main/wiki/`, `../wikis/master/wiki/`, or `../wikis/main/wiki/`. `qmd search` returned no matching project-wiki results for the CLI/API refresh query. Cross-project context may be incomplete until the path is restored or config is updated.
+6. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was still not present during the 2026-07-28 refresh. The default fallback paths were also absent and `qmd search` returned no matching project-wiki results during the earlier 2026-07-08 refresh. Cross-project context remains incomplete until the configured path is restored or updated.
 7. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
 
 See also: [[architecture]], [[active-areas]], [[plans-and-initiatives]], [[technical-debt]]
