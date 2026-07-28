@@ -1,0 +1,9 @@
+## [2026-07-28T17:27:45Z] Overview thumbnail and viewport-write guards
+
+**Action:** Refreshed overview-thumbnail delivery and annotation-write documentation after the review hardening commit made request rendering depend on preloaded tracked variants, made partial thumbnail processing retryable, and bound annotation viewport writes to the selected screenshot.
+**Pages updated:** `wiki/models/screenshot-image.md`, `wiki/controllers/web-controllers.md`, `wiki/frontend-review-ui.md`, `wiki/gaps.md`, `wiki/index.md`
+**Index:** Page count remains 39; the ScreenshotImage and review-UI entries now expose the new overview-thumbnail coverage.
+**Behavior:** Overview GETs emit no Active Storage representation URL until all three named variants are present in the current blob's preloaded variant records. Unwarmed page cards show `Thumbnail processing`, project strips omit the image, and neither path processes variants or enqueues work. `ScreenshotThumbnailJob` uses a 10-second, three-attempt retry for processing failures and skips already tracked variant digests on a later attempt. Annotation create/update rejects any nonblank viewport missing from the selected screenshot, while blank input preserves the create default or persisted update value.
+**Source:** commit `b1681b0e7babb6e26cc7e0bec8bed9935a1f5f35`; `app/controllers/annotations_controller.rb`, `app/jobs/screenshot_thumbnail_job.rb`, `app/models/screenshot_image.rb`, `app/views/projects/index.html.erb`, `app/views/projects/show.html.erb`, and their controller, job, model, and system tests read with `git show`.
+**Uncertainty:** The configured main wiki path `/home/asterio/wikis/master/wiki` remains unavailable, so cross-project context could not be searched; the ongoing gap remains recorded in `wiki/gaps.md`.
+**Notes:** Updated only files under `wiki/`. Did not run QMD or edit compiled `wiki/log.md`.

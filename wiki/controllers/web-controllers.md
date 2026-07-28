@@ -110,6 +110,10 @@ Source: `app/controllers/annotations_controller.rb`
 - `create` -- Builds annotation, assigns `Current.user`
 - `update` -- Handles two paths: (1) resolve if `status=resolved`, (2) standard attribute update
 - Permits: `x_percent`, `y_percent`, `width_percent`, `height_percent`, `comment`, `viewport`
+- A nonblank submitted viewport must exist on the selected screenshot, not merely
+  in the global annotation enum. Blank viewport input is removed from the
+  permitted attributes, so create retains the model's desktop default and
+  update retains the annotation's persisted viewport.
 
 ---
 

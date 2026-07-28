@@ -18,7 +18,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - Source confirms `create_annotation`, `reopen_annotation`, `add_annotation_comment`, `create_project`, and invitation/membership tools now exist. Remaining missing tools are `delete_screenshot`, `delete_annotation`, plan/status or usage-limit tools, and batch feedback retrieval. See [[technical-debt]].
 
 ### Background Jobs
-- `ScreenshotDimensionJob` now accepts `ScreenshotImage` and legacy `Screenshot`, but there is still no dedicated jobs wiki page covering dimension extraction, retry behavior, or digest scheduling.
+- `ScreenshotDimensionJob` and `ScreenshotThumbnailJob` are summarized in [[models/screenshot-image]], but there is still no dedicated jobs wiki page covering dimension extraction, thumbnail retry/concurrency behavior, or digest scheduling.
 - The hourly digest notification job scheduling mechanism is undocumented.
 - **NEW:** Token cleanup job (#105) is proposed but not yet implemented.
 

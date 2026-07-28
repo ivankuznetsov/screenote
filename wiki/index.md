@@ -3,7 +3,7 @@ title: screenote Wiki
 type: index
 source: wiki/**/*.md
 created: 2026-05-14
-updated: 2026-07-13
+updated: 2026-07-28
 tags: [index, wiki]
 ---
 
@@ -11,7 +11,7 @@ tags: [index, wiki]
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
 Page count: 39
-Updated: 2026-07-13
+Updated: 2026-07-28
 
 ## Core Architecture
 
@@ -32,7 +32,7 @@ Updated: 2026-07-13
 - [[controllers/api-controllers]] — REST and signed-upload API controllers.
 - [[controllers/oauth-controllers]] — Doorkeeper, DCR, and OAuth metadata controllers.
 - [[services/annotation-crop-service]] — Cropped annotation image generation.
-- [[frontend-review-ui]] — Project-card navigation, sticky annotation workflow, viewport centering, and pin geometry.
+- [[frontend-review-ui]] — Project-card navigation, guarded overview thumbnails, sticky annotation workflow, viewport centering, and pin geometry.
 
 ## Models
 
@@ -44,7 +44,7 @@ Updated: 2026-07-13
 - [[models/page]] — Logical pages/screens under projects.
 - [[models/snapshot]] — Capture-run records grouping screenshots by commit and timestamp.
 - [[models/screenshot]] — Logical capture/version records.
-- [[models/screenshot-image]] — Per-viewport image variants.
+- [[models/screenshot-image]] — Per-viewport image variants, overview thumbnail warming, and request-safe delivery.
 - [[models/annotation]] — Viewport-scoped visual feedback.
 - [[models/annotation-comment]] — Threaded comments and resolution audit log.
 - [[models/api-key]] — Project-scoped bearer tokens.
