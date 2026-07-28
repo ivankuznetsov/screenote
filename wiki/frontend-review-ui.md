@@ -29,6 +29,8 @@ The screenshot workspace uses the image canvas plus a sticky, independently scro
 
 Creating an Annotorious point or rectangle prepends a comment form to the sidebar, resets only the sidebar's own scroll position so the form is visible, and focuses its textarea with `preventScroll`. This preserves the user's document position. Only one unsaved drawing is retained: starting another empty draft cancels the previous annotation, while an existing draft with typed text is preserved and the new drawing is discarded.
 
+The canvas captures the active drawing pointer, so a rectangle remains responsive when the cursor crosses an image edge and can continue if the cursor returns before release. Geometry is normalized for either drag direction, clamped to the image endpoints, and converted from rounded percentage endpoints; fully out-of-bounds or otherwise zero-area transients are removed before another draw begins. Pointer capture and listeners are released on pointer completion, cancellation, Turbo replacement, and controller disconnect.
+
 ## Viewport image geometry
 
 Annotorious wraps the active image in a `position: relative; display: inline-block` element. The outer canvas centers that wrapper, which centers narrow mobile images inside a desktop browser without changing wide desktop images.
@@ -37,6 +39,6 @@ Custom annotation pins are children of the same wrapper. Their percentage positi
 
 ## Regression coverage
 
-Controller tests cover direct-link behavior for single, multiple, empty, pending, failed, attachment-missing, snapshot-selected, and multi-viewport cases. Browser tests cover a tall screenshot without scroll jumps through draft creation and save, typed-draft preservation when a second drawing is discarded, a visible sticky form, centered mobile geometry, and pin placement against the Annotorious wrapper.
+Controller tests cover direct-link behavior for single, multiple, empty, pending, failed, attachment-missing, snapshot-selected, and multi-viewport cases. Browser tests cover a tall screenshot without scroll jumps through draft creation and save, typed-draft preservation when a second drawing is discarded, a visible sticky form, centered mobile geometry, pin placement against the Annotorious wrapper, out-and-back boundary drags, clamping on all four edges, reverse drags, zero-area cleanup, and pointer lifecycle cleanup across Turbo replacement.
 
 See also: [[controllers/web-controllers]], [[models/page]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]
