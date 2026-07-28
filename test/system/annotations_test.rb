@@ -612,10 +612,6 @@ class AnnotationsTest < ApplicationSystemTestCase
     @tall_image_path = Rails.root.join("tmp", "annotation-scroll-#{SecureRandom.hex(6)}.png")
     Vips::Image.black(400, 2400).pngsave(@tall_image_path.to_s)
 
-    within find(BREADCRUMB) do
-      all("a").last.click
-    end
-    wait_for_turbo
     click_link "Upload version"
     fill_screenshot_form(title: "Tall annotation test", image_path: @tall_image_path.to_s)
     submit_screenshot_form

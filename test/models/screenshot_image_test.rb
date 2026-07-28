@@ -70,6 +70,25 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     )
   end
 
+  test "overview variants require preloaded tracked records" do
+    image = screenshot_images(:alice_screenshot_desktop)
+    image.image.attach(
+      io: StringIO.new(file_fixture("test_image.png").binread),
+      filename: "test_image.png",
+      content_type: "image/png"
+    )
+    image.thumbnail_variants.each do |variant|
+      image.image.blob.variant_records.create!(variation_digest: variant.variation.digest)
+    end
+
+    assert_not ScreenshotImage.find(image.id).overview_variants_warmed?,
+      "Overview rendering must not query an association that was not preloaded"
+
+    preloaded = ScreenshotImage.includes(ScreenshotImage::OVERVIEW_IMAGE_PRELOAD).find(image.id)
+    assert preloaded.image.blob.association(:variant_records).loaded?
+    assert preloaded.overview_variants_warmed?
+  end
+
   test "width must be positive integer when present" do
     si = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :tablet, width: -1)
     assert_not si.valid?

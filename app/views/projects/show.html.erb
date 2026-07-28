@@ -37,7 +37,7 @@
 
           <%= link_to card_path, class: "page-card", data: card_data do %>
             <div class="page-card__thumbnail">
-              <% if thumbnail&.primary_image&.image&.attached? %>
+              <% if thumbnail&.primary_image&.overview_variants_warmed? %>
                 <% primary_image = thumbnail.primary_image
                    card_1x = primary_image.image.variant(:page_card_1x)
                    card_2x = primary_image.image.variant(:page_card_2x) %>
@@ -53,7 +53,7 @@
                       loading: "lazy",
                       decoding: "async" %>
               <% else %>
-                <div class="page-card__placeholder">No screenshots yet</div>
+                <div class="page-card__placeholder"><%= thumbnail ? "Thumbnail processing" : "No screenshots yet" %></div>
               <% end %>
             </div>
             <div class="page-card__info">

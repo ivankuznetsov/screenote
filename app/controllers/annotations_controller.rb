@@ -58,7 +58,11 @@ class AnnotationsController < ApplicationController
   end
 
   def annotation_params
-    params.require(:annotation).permit(:x_percent, :y_percent, :width_percent, :height_percent, :comment, :viewport)
+    permitted_params = params.require(:annotation).permit(
+      :x_percent, :y_percent, :width_percent, :height_percent, :comment, :viewport
+    )
+    permitted_params.delete(:viewport) if permitted_params[:viewport].blank?
+    permitted_params
   end
 
   def resolving?
@@ -67,7 +71,7 @@ class AnnotationsController < ApplicationController
 
   def submitted_viewport_valid?
     viewport = params.dig(:annotation, :viewport)
-    viewport.blank? || Annotation.viewports.key?(viewport.to_s)
+    viewport.blank? || @screenshot.available_viewports.include?(viewport.to_s)
   end
 
   def redirect_invalid_viewport(viewport: nil)

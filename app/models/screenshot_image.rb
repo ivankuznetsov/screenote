@@ -234,6 +234,21 @@ class ScreenshotImage < ApplicationRecord
     image.blob.variant_records.where(variation_digest: digests).distinct.count == digests.size
   end
 
+  # Overview rendering must only use the bulk-preloaded variant records. A
+  # representation URL for an unprocessed variant causes Active Storage to
+  # process it synchronously when the browser fetches it, so a request must
+  # treat an unloaded association as not warmed rather than querying for it.
+  def overview_variants_warmed?
+    return false unless image.attached?
+
+    variant_records = image.blob.association(:variant_records)
+    return false unless variant_records.loaded?
+
+    digests = thumbnail_variants.map { |variant| variant.variation.digest }
+    digests.size == THUMBNAIL_VARIANT_NAMES.size &&
+      digests.all? { |digest| variant_records.target.any? { |record| record.variation_digest == digest } }
+  end
+
   # Re-resolves the parent and its image association on every call so queued
   # jobs cannot warm a replaced blob or a viewport that is no longer primary.
   def thumbnail_warmable?(blob_id:)

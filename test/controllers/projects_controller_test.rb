@@ -55,6 +55,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     page = project.pages.create!(name: "Overview")
     screenshot = create_ready_screenshot_with_image(page, title: "Overview strip")
     primary_image = screenshot.primary_image
+    warm_overview_variants(primary_image)
 
     get projects_path
 
@@ -167,6 +168,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     page = project.pages.create!(name: "Only screen")
     screenshot = create_ready_screenshot_with_image(page, title: "Only version")
     primary_image = screenshot.primary_image
+    warm_overview_variants(primary_image)
 
     get project_path(project)
 
@@ -280,7 +282,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     8.times do |i|
       page = project.pages.create!(name: "Page #{i}")
       screenshot = page.screenshots.create!(title: "Shot #{i}", snapshot: snapshot, status: :ready)
-      attach_test_image(screenshot.screenshot_images.create!(viewport: :desktop, status: :ready))
+      primary_image = screenshot.screenshot_images.create!(viewport: :desktop, status: :ready)
+      attach_test_image(primary_image)
+      warm_overview_variants(primary_image)
       %i[tablet mobile].each { |vp| screenshot.screenshot_images.create!(viewport: vp, status: :ready) }
     end
 
@@ -305,7 +309,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     8.times do |index|
       page = project.pages.create!(name: "Page #{index}")
       screenshot = page.screenshots.create!(title: "Shot #{index}", status: :ready)
-      attach_test_image(screenshot.screenshot_images.create!(viewport: :desktop, status: :ready))
+      primary_image = screenshot.screenshot_images.create!(viewport: :desktop, status: :ready)
+      attach_test_image(primary_image)
+      warm_overview_variants(primary_image)
       %i[tablet mobile].each { |viewport| screenshot.screenshot_images.create!(viewport: viewport, status: :ready) }
     end
 
@@ -350,6 +356,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     page = project.pages.create!(name: "Shared page")
     snapshot_screenshot = create_ready_screenshot_with_image(page, title: "Snapshot version", snapshot: snapshot)
     primary_image = snapshot_screenshot.primary_image
+    warm_overview_variants(primary_image)
     create_ready_screenshot_with_image(page, title: "Newer ad-hoc version")
 
     get project_path(project, snapshot_id: snapshot.id)
@@ -363,7 +370,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "overview requests do not process missing thumbnail variants or enqueue jobs" do
+  test "unwarmed overview cards omit representation URLs and do not process thumbnail variants" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Unwarmed overview")
     page = project.pages.create!(name: "Overview")
@@ -379,7 +386,28 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_select ".page-card__placeholder", text: "No screenshots yet", count: 1
+    assert_select ".page-card__placeholder", text: "Thumbnail processing", count: 1
+    assert_select ".page-card__thumbnail img", count: 0
+    assert_no_match(/rails\/active_storage\/representations/, response.body)
+  end
+
+  test "unwarmed project strips omit representation URLs and do not process thumbnail variants" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Unwarmed project strip")
+    page = project.pages.create!(name: "Overview")
+    screenshot = create_ready_screenshot_with_image(page, title: "Unwarmed")
+    blob = screenshot.primary_image.image.blob
+
+    assert_equal 0, blob.variant_records.count
+    assert_no_enqueued_jobs do
+      assert_no_difference -> { blob.variant_records.reload.count } do
+        get projects_path
+      end
+    end
+
+    assert_response :success
+    assert_select "a[href='#{project_path(project)}'] img.project-card__thumbnail", count: 0
+    assert_no_match(/rails\/active_storage\/representations/, response.body)
   end
 
   test "show ignores unknown snapshot filter" do
@@ -597,10 +625,17 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
+  def warm_overview_variants(screenshot_image)
+    screenshot_image.thumbnail_variants.each do |variant|
+      screenshot_image.image.blob.variant_records.create!(variation_digest: variant.variation.digest)
+    end
+  end
+
   def create_thumbnail_project(name)
     project = @user.owned_projects.create!(name: name)
     page = project.pages.create!(name: "Overview")
-    create_ready_screenshot_with_image(page, title: "#{name} screenshot")
+    screenshot = create_ready_screenshot_with_image(page, title: "#{name} screenshot")
+    warm_overview_variants(screenshot.primary_image)
     project
   end
 

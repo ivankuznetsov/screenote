@@ -67,9 +67,12 @@ The `image` attachment declares three named, tracked Active Storage variants:
 
 `ScreenshotThumbnailJob` processes these variants outside request rendering. It is concurrency-limited per ScreenshotImage/blob generation and revalidates the attached blob, child and parent readiness, and exact current primary-image identity before processing. Stale replacements, siblings that are no longer primary, pending/failed records, and unattached rows exit without changing capture state. Existing tracked variant records make repeated jobs no-ops.
 
-`bin/rails screenshots:warm_thumbnails` scans existing rows in batches and is a dry-run unless `APPLY=1` is supplied. Its summary reports `candidates`, `skipped`, `processed`, and `failed`; `BATCH_SIZE` defaults to 1000. Apply mode invokes the same job synchronously for exact accounting and remains idempotent because tracked records are reused.
+`bin/rails screenshots:warm_thumbnails` scans existing rows in batches and is a dry-run unless `APPLY=1` is supplied. Its summary reports `candidates`, `skipped`, `processed`, and `failed`; `BATCH_SIZE` defaults to 1000. Apply mode invokes the same job synchronously for exact accounting and remains idempotent because tracked records are reused. Asynchronous processing wraps only the variant-processing boundary in a three-attempt retry; a partial retry skips already tracked variant digests.
 
-Overview requests never call `processed` or enqueue thumbnail work. Project
+Overview requests never call `processed` or enqueue thumbnail work. They emit
+representation URLs only when all three named variants are found in the current
+blob's already-preloaded tracked variant records; otherwise page cards show the
+thumbnail-processing placeholder and project strips omit the thumbnail. Project
 lists render `project_strip` at 120x80 CSS/intrinsic dimensions from its 240x160
 source, while page cards emit 480w and 960w candidates with a grid-aware
 `sizes` contract and 480x270 intrinsic dimensions. Controllers and model scopes

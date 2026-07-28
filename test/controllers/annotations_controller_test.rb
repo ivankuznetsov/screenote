@@ -70,6 +70,31 @@ class AnnotationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Could not save annotation.", flash[:alert]
   end
 
+  test "create rejects an enum-valid viewport unavailable on the screenshot" do
+    sign_in(@user)
+
+    assert_no_difference "Annotation.count" do
+      post screenshot_annotations_path(@screenshot), params: {
+        annotation: { x_percent: 10, y_percent: 20, comment: "Unavailable", viewport: "mobile" }
+      }
+    end
+
+    assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id)
+    assert_equal "Could not save annotation.", flash[:alert]
+  end
+
+  test "create with a blank viewport preserves the model default" do
+    sign_in(@user)
+
+    assert_difference "Annotation.count", 1 do
+      post screenshot_annotations_path(@screenshot), params: {
+        annotation: { x_percent: 10, y_percent: 20, comment: "Default viewport", viewport: "" }
+      }
+    end
+
+    assert_equal "desktop", Annotation.last.viewport
+  end
+
   test "create region annotation" do
     sign_in(@user)
 
@@ -206,6 +231,32 @@ class AnnotationsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id, viewport: :desktop)
     assert_equal original_attributes, @annotation.reload.attributes.slice("comment", "viewport")
+  end
+
+  test "update rejects an enum-valid viewport unavailable on the screenshot" do
+    sign_in(@user)
+    original_attributes = @annotation.attributes.slice("comment", "viewport")
+
+    patch screenshot_annotation_path(@screenshot, @annotation), params: {
+      annotation: { comment: "Should not save", viewport: "mobile" }
+    }
+
+    assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id, viewport: :desktop)
+    assert_equal original_attributes, @annotation.reload.attributes.slice("comment", "viewport")
+  end
+
+  test "update with a blank viewport preserves the annotation viewport" do
+    sign_in(@user)
+    @screenshot.screenshot_images.create!(viewport: :mobile)
+    @annotation.update!(viewport: :mobile)
+
+    patch screenshot_annotation_path(@screenshot, @annotation), params: {
+      annotation: { comment: "Updated comment", viewport: "" }
+    }
+
+    assert_redirected_to page_path(@screenshot.page, version_id: @screenshot.id, viewport: :mobile)
+    assert_equal "mobile", @annotation.reload.viewport
+    assert_equal "Updated comment", @annotation.comment
   end
 
   test "destroy annotation on other users project returns not found" do

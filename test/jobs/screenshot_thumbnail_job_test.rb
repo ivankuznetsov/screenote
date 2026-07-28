@@ -3,6 +3,8 @@
 require "test_helper"
 
 class ScreenshotThumbnailJobTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   setup do
     @page = pages(:alice_page)
   end
@@ -47,8 +49,10 @@ class ScreenshotThumbnailJobTest < ActiveSupport::TestCase
     screenshot = @page.screenshots.create!(title: "Warm named variants")
     image = ready_image(screenshot, :desktop)
     processed = []
+    variation = Struct.new(:digest)
     variants = ScreenshotImage::THUMBNAIL_VARIANT_NAMES.map do |name|
       Object.new.tap do |variant|
+        variant.define_singleton_method(:variation) { variation.new(name.to_s) }
         variant.define_singleton_method(:processed) { processed << name }
       end
     end
@@ -61,6 +65,34 @@ class ScreenshotThumbnailJobTest < ActiveSupport::TestCase
     assert_equal ScreenshotImage::THUMBNAIL_VARIANT_NAMES, processed
     assert_equal :skipped, ScreenshotThumbnailJob.new.perform(image, image.image.blob.id)
     assert_equal ScreenshotImage::THUMBNAIL_VARIANT_NAMES, processed
+  end
+
+  test "retries a partial thumbnail generation without reprocessing tracked variants" do
+    screenshot = @page.screenshots.create!(title: "Retry thumbnails")
+    image = ready_image(screenshot, :desktop)
+    blob = image.image.blob
+    attempts = Hash.new(0)
+    variants = image.thumbnail_variants.each_with_index.map do |variant, index|
+      variant.define_singleton_method(:processed) do
+        attempts[index] += 1
+        raise StandardError, "temporary storage failure" if index == 1 && attempts[index] == 1
+
+        blob.variant_records.create_or_find_by!(variation_digest: variation.digest)
+        self
+      end
+      variant
+    end
+    image.define_singleton_method(:thumbnail_variants) { variants }
+
+    assert_enqueued_with(job: ScreenshotThumbnailJob, args: [ image, blob.id ]) do
+      ScreenshotThumbnailJob.perform_now(image, blob.id)
+    end
+    assert_equal 1, attempts[0]
+    assert_equal 1, attempts[1]
+
+    assert_equal :processed, ScreenshotThumbnailJob.perform_now(image, blob.id)
+    assert_equal [ 1, 2, 1 ], ScreenshotImage::THUMBNAIL_VARIANT_NAMES.each_index.map { |index| attempts[index] }
+    assert_equal 3, blob.variant_records.count
   end
 
   test "tracked records for all named digests make a repeated job a no-op" do
