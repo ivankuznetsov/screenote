@@ -14,3 +14,6 @@ already tracked variants so partial generations resume without duplicate work.
 
 Annotation writes also reject enum-valid viewports that the selected screenshot
 does not have, preventing records hidden from every reachable workspace.
+
+Playwright can now run at explicit 1x and 2x device scale factors; the page-card
+system test proves the browser selects and requests the 480w and 960w candidates.

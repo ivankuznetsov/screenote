@@ -41,6 +41,11 @@ BUNDLE_PATH=vendor/bundle CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
 Use the same environment for a focused system file. Serial execution keeps the
 shared server, jobs, and Active Storage fixtures deterministic.
 
+`DEVICE_SCALE_FACTOR` configures the Playwright context for responsive-image
+proof. Run `test/system/pages_test.rb` at both `1` and `2`; its responsive card
+test verifies `currentSrc` selects the 480w and 960w candidates respectively
+and confirms the selected representation appears in the browser resource log.
+
 ## Overview performance contracts
 
 `ProjectsControllerTest` treats SQL shape as a regression contract:
@@ -51,8 +56,8 @@ shared server, jobs, and Active Storage fixtures deterministic.
   variant records exactly once;
 - adding many projects with thumbnail pages may add only a constant number of
   project-index queries;
-- rendering an unwarmed named-variant URL must not create variant records or
-  enqueue a job.
+- unwarmed cards must emit no named-variant representation URL, create no
+  variant records, and enqueue no request-time work.
 
 These tests cover request composition. Actual thumbnail transformation,
 generation checks, and idempotency are covered by the screenshot thumbnail job,

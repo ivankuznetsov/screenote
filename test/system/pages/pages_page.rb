@@ -66,7 +66,9 @@ module Pages
     end
 
     def assert_page_card_has_thumbnail(name)
-      assert_page_card_visible(name)
+      card = find(PAGE_CARD, text: name)
+      assert card.has_css?(PAGE_CARD_THUMBNAIL_IMG, wait: 15),
+        "Page '#{name}' should display its warmed thumbnail"
     end
 
     def assert_page_card_has_placeholder(name)

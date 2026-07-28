@@ -178,11 +178,61 @@ class PagesTest < ApplicationSystemTestCase
     fill_screenshot_form(title: "Version 1", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show
+    warm_selected_screenshot_thumbnails
 
     navigate_to_demo_project
 
     assert_page_card_has_thumbnail(page_name)
     assert_page_version_count(page_name, 1)
+  end
+
+  test "page card selects the responsive candidate for the browser pixel ratio" do
+    navigate_to_demo_project
+
+    page_name = "Responsive Thumbnail #{Time.now.to_i}"
+    click_new_page
+    fill_page_form(name: page_name)
+    submit_page_form
+    assert_on_page_show(page_name)
+
+    click_link "Upload version"
+    fill_screenshot_form(title: "Responsive version", image_path: TEST_IMAGE_PATH)
+    submit_screenshot_form
+    assert_on_screenshot_show
+    warm_selected_screenshot_thumbnails
+
+    navigate_to_demo_project
+    assert_page_card_has_thumbnail(page_name)
+
+    with_playwright_page do |pw_page|
+      proof = pw_page.evaluate(<<~JS, arg: page_name)
+        name => {
+          const card = [...document.querySelectorAll("[data-testid='page-card']")]
+            .find(candidate => candidate.textContent.includes(name))
+          const image = card?.querySelector(".page-card__thumbnail img")
+          const candidates = Object.fromEntries(
+            image.srcset.split(",").map(candidate => {
+              const [url, width] = candidate.trim().split(/\s+/)
+              return [width, new URL(url, document.baseURI).href]
+            })
+          )
+          const expectedWidth = window.devicePixelRatio >= 2 ? "960w" : "480w"
+
+          return {
+            devicePixelRatio: window.devicePixelRatio,
+            expectedUrl: candidates[expectedWidth],
+            currentSrc: image.currentSrc,
+            representationRequests: performance.getEntriesByType("resource")
+              .map(entry => entry.name)
+              .filter(url => url.includes("/rails/active_storage/representations/"))
+          }
+        }
+      JS
+
+      assert_equal Float(ENV.fetch("DEVICE_SCALE_FACTOR", "1")), proof["devicePixelRatio"]
+      assert_equal proof["expectedUrl"], proof["currentSrc"]
+      assert_includes proof["representationRequests"], proof["currentSrc"]
+    end
   end
 
   test "page card thumbnail updates after uploading second screenshot" do
@@ -199,16 +249,30 @@ class PagesTest < ApplicationSystemTestCase
     fill_screenshot_form(title: "V1", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show
+    warm_selected_screenshot_thumbnails
 
     # The upload returns directly to this page's selected-version workspace.
     click_link "Upload version"
     fill_screenshot_form(title: "V2", image_path: TEST_IMAGE_PATH)
     submit_screenshot_form
     assert_on_screenshot_show
+    warm_selected_screenshot_thumbnails
 
     navigate_to_demo_project
 
     assert_page_card_has_thumbnail(page_name)
     assert_page_version_count(page_name, 2)
+  end
+
+  private
+
+  def warm_selected_screenshot_thumbnails
+    screenshot_id = Rack::Utils.parse_query(URI.parse(page.current_url).query)["version_id"]
+    screenshot = Screenshot.find(screenshot_id)
+    image = screenshot.primary_image
+    blob_id = image.image.blob.id
+
+    ScreenshotDimensionJob.perform_now(image, blob_id) unless image.status_ready?
+    ScreenshotThumbnailJob.perform_now(image.reload, blob_id)
   end
 end
