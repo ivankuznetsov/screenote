@@ -26,6 +26,77 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_annotation_count(0)
   end
 
+  test "desktop review keeps a practical canvas and caps its wide layout" do
+    with_playwright_page do |pw_page|
+      geometry = pw_page.evaluate(<<~JS)
+        (() => {
+          const canvas = document.querySelector(".screenshot-canvas")
+
+          return {
+            viewportWidth: window.innerWidth,
+            canvasWidth: canvas.getBoundingClientRect().width
+          }
+        })()
+      JS
+
+      assert_equal 1280, geometry["viewportWidth"]
+      assert_operator geometry["canvasWidth"], :>=, 600
+
+      pw_page.set_viewport_size(width: 1920, height: 720)
+      review_width = pw_page.locator("main.main--review").evaluate(
+        "element => element.getBoundingClientRect().width"
+      )
+
+      assert_in_delta 1800, review_width, 1
+    end
+  end
+
+  test "page actions share rendered dimensions" do
+    with_playwright_page do |pw_page|
+      dimensions = pw_page.locator(".page-detail__actions .btn").evaluate_all(<<~JS)
+        elements => elements.map(element => {
+          const rect = element.getBoundingClientRect()
+          return { width: rect.width, height: rect.height }
+        })
+      JS
+
+      assert_equal 5, dimensions.size
+      dimensions.drop(1).each do |dimension|
+        assert_in_delta dimensions.first["width"], dimension["width"], 1
+        assert_in_delta dimensions.first["height"], dimension["height"], 1
+      end
+    end
+  end
+
+  test "viewport switcher segments share rendered dimensions" do
+    screenshot = Screenshot.order(:created_at, :id).last
+    %i[tablet mobile].each do |viewport|
+      screenshot_image = screenshot.screenshot_images.create!(viewport: viewport, status: :ready)
+      screenshot_image.image.attach(
+        io: File.open(TEST_IMAGE_PATH),
+        filename: "#{viewport}.png",
+        content_type: "image/png"
+      )
+    end
+
+    visit page_path(screenshot.page, version_id: screenshot.id)
+    assert_selector ".viewport-switcher__btn", count: 3, wait: 10
+
+    with_playwright_page do |pw_page|
+      dimensions = pw_page.locator(".viewport-switcher__btn").evaluate_all(<<~JS)
+        elements => elements.map(element => {
+          const rect = element.getBoundingClientRect()
+          return { width: rect.width, height: rect.height }
+        })
+      JS
+
+      dimensions.drop(1).each do |dimension|
+        assert_in_delta dimensions.first["width"], dimension["width"], 1
+        assert_in_delta dimensions.first["height"], dimension["height"], 1
+      end
+    end
+  end
+
   test "create an annotation by clicking on the image" do
     click_on_image_to_annotate
 

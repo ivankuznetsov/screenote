@@ -141,6 +141,10 @@ a:hover {
   padding: 2rem 1.5rem;
 }
 
+.main--review {
+  max-width: 1800px;
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;
@@ -151,7 +155,7 @@ a:hover {
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
   text-decoration: none;
   line-height: 1.5;
 }
@@ -724,7 +728,9 @@ a:hover {
 .viewport-switcher__btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
+  width: 6.25rem;
   padding: 0.35rem 0.75rem;
   border-radius: calc(var(--radius) - 2px);
   color: var(--color-text-secondary);

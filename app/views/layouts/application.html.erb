@@ -38,7 +38,7 @@
       <div class="flash flash--alert" data-testid="flash-alert"><%= flash[:alert] %></div>
     <% end %>
 
-    <main class="main">
+    <main class="main <%= yield :main_class %>">
       <%= yield %>
     </main>
 
