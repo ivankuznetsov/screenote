@@ -3,7 +3,7 @@ title: Screenshot Review UI
 type: ui
 source: app/views/, app/javascript/controllers/annotorious_controller.js, app/assets/stylesheets/application.css
 created: 2026-07-13
-updated: 2026-07-28
+updated: 2026-08-02
 tags: [ui, screenshots, annotations, viewports]
 ---
 
@@ -11,9 +11,9 @@ tags: [ui, screenshots, annotations, viewports]
 
 TLDR: Project cards open the canonical page workspace at a selected version,
 with history in a text sidebar. The viewer keeps a sticky annotation sidebar
-beside the image, preserves scroll position when a drawing opens its comment
-form, and uses the Annotorious image wrapper as the coordinate box for
-viewport-scoped pins.
+beside a practical-width image canvas, preserves scroll position when a drawing
+opens its comment form, and uses the Annotorious image wrapper as the coordinate
+box for viewport-scoped pins.
 
 Source: `app/views/projects/show.html.erb`, `app/views/pages/show.html.erb`,
 `app/views/screenshots/_workspace.html.erb`,
@@ -32,7 +32,7 @@ A page is a logical screen and a screenshot is a captured version; see [[decisio
   review.
 - Empty, pending-only, failed-only, or attachment-missing pages retain the bare
   page route and management state.
-- Page and version actions in the workspace header use the same button height
+- Page and version actions in the workspace header use the same rendered height
   and width; color still distinguishes primary, secondary, and destructive actions.
 - Desktop, tablet, and mobile `ScreenshotImage` children count as variants of one logical screenshot, not separate versions.
 - When a project is filtered to a snapshot, the page-workspace link targets
@@ -61,6 +61,13 @@ Annotorious wraps the active image in a `position: relative; display: inline-blo
 
 Custom annotation pins are children of the same wrapper. Their percentage positions therefore resolve against the visible image dimensions rather than the wider canvas. The viewport switcher keeps annotations filtered to the layout where they were created; see [[models/screenshot-image]] and [[models/annotation]].
 
+Review pages opt into an 1800px main-content ceiling instead of the global
+960px reading width. At the standard 1280px browser-test viewport this leaves
+at least 600px for the annotation canvas after the version and annotation
+sidebars; wider displays can show desktop captures close to their natural
+size. Desktop, tablet, and mobile switcher segments use one fixed rendered
+width so changing the active viewport does not resize the control.
+
 ## Regression coverage
 
 Controller tests cover page-workspace links for single, multiple, empty,
@@ -72,5 +79,7 @@ draft preservation when a second drawing is discarded, a visible sticky form,
 centered mobile geometry, pin placement against the Annotorious wrapper,
 out-and-back boundary drags, clamping on all four edges, reverse drags,
 zero-area cleanup, and pointer lifecycle cleanup across Turbo replacement.
+They also enforce a practical desktop canvas width and equal rendered
+dimensions for the page actions and viewport-switcher segments.
 
 See also: [[controllers/web-controllers]], [[models/page]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]
