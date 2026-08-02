@@ -78,6 +78,20 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_select "form[action='#{page_path(page)}']", count: 1
   end
 
+  test "show renders page and version actions at one consistent size" do
+    sign_in(@user)
+    page = @project.pages.create!(name: "Consistent actions")
+    page.screenshots.create!(title: "Current version")
+
+    get page_path(page)
+
+    assert_response :success
+    assert_select ".page-detail__actions .btn", count: 5
+    assert_select ".page-detail__actions .btn--small", count: 0
+    assert_select ".page-detail__actions > a", count: 3
+    assert_select ".page-detail__actions > form", count: 2
+  end
+
   test "show renders only the exact page url in the breadcrumb" do
     sign_in(@user)
     page = @project.pages.create!(name: "/energy-digest/uk-energy-digest-2026-07-28/")
