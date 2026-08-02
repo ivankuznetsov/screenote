@@ -32,6 +32,8 @@ A page is a logical screen and a screenshot is a captured version; see [[decisio
   review.
 - Empty, pending-only, failed-only, or attachment-missing pages retain the bare
   page route and management state.
+- Page and version actions in the workspace header use the same button height
+  and width; color still distinguishes primary, secondary, and destructive actions.
 - Desktop, tablet, and mobile `ScreenshotImage` children count as variants of one logical screenshot, not separate versions.
 - When a project is filtered to a snapshot, the page-workspace link targets
   that snapshot's selected screenshot rather than a newer ad-hoc capture.
