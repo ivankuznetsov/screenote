@@ -834,6 +834,7 @@ turbo-frame {
 
 /* Screenshot workspace (show page layout) */
 .screenshot-workspace {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 320px;
   gap: 1.5rem;
@@ -853,6 +854,116 @@ turbo-frame {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.screenshot-fullscreen-toggle {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  height: 2.75rem;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 0.75rem;
+  top: 0.75rem;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+  width: 2.75rem;
+  z-index: 30;
+}
+
+.screenshot-fullscreen-toggle:hover {
+  background: rgba(15, 23, 42, 0.96);
+  transform: scale(1.04);
+}
+
+.screenshot-fullscreen-toggle:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.screenshot-fullscreen-toggle__icon,
+.screenshot-fullscreen-toggle__icon svg {
+  display: block;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.screenshot-fullscreen-toggle__icon--exit {
+  display: none;
+}
+
+body.review-fullscreen-open {
+  overflow: hidden;
+}
+
+.screenshot-workspace--fullscreen {
+  background: #0f172a;
+  display: block;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+  z-index: 1000;
+}
+
+.screenshot-workspace--fullscreen .screenshot-canvas {
+  align-items: center;
+  background: #0f172a;
+  border: 0;
+  border-radius: 0;
+  display: flex;
+  height: 100vh;
+  justify-content: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  width: 100vw;
+}
+
+.screenshot-workspace--fullscreen .screenshot-canvas__image-wrapper {
+  flex: 0 0 auto;
+}
+
+.screenshot-workspace--fullscreen .screenshot-canvas__image-wrapper--width-bound .screenshot-canvas__image {
+  height: auto;
+  max-height: none;
+  max-width: none;
+  width: 100vw;
+}
+
+.screenshot-workspace--fullscreen .screenshot-canvas__image-wrapper--height-bound .screenshot-canvas__image {
+  height: 100vh;
+  max-height: none;
+  max-width: none;
+  width: auto;
+}
+
+.screenshot-workspace--fullscreen .screenshot-fullscreen-toggle {
+  position: fixed;
+  right: 1rem;
+  top: 1rem;
+  z-index: 50;
+}
+
+.screenshot-workspace--fullscreen .screenshot-fullscreen-toggle__icon--enter {
+  display: none;
+}
+
+.screenshot-workspace--fullscreen .screenshot-fullscreen-toggle__icon--exit {
+  display: block;
+}
+
+.screenshot-workspace--fullscreen .annotation-sidebar {
+  box-shadow: 0 1rem 3rem rgba(15, 23, 42, 0.28);
+  max-height: calc(100vh - 5.5rem);
+  position: absolute;
+  right: 1rem;
+  top: 4.5rem;
+  width: min(22rem, calc(100vw - 2rem));
+  z-index: 40;
 }
 
 /* Annotation sidebar */

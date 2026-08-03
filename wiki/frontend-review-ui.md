@@ -12,12 +12,15 @@ tags: [ui, screenshots, annotations, viewports]
 TLDR: Project cards open the canonical page workspace at a selected version,
 with newest-first history in a compact dropdown beside the viewport switcher.
 The viewer keeps a sticky annotation sidebar beside a practical-width image
-canvas, preserves scroll position when a drawing opens its comment form, and
-uses the Annotorious image wrapper as the coordinate box for viewport-scoped pins.
+canvas, can expand the screenshot into a viewport-fitted review surface with
+floating comments, preserves scroll position when a drawing opens its comment
+form, and uses the Annotorious image wrapper as the coordinate box for
+viewport-scoped pins.
 
 Source: `app/views/projects/show.html.erb`, `app/views/pages/show.html.erb`,
 `app/views/screenshots/_workspace.html.erb`,
 `app/javascript/controllers/annotorious_controller.js`,
+`app/javascript/controllers/review_fullscreen_controller.js`,
 `app/assets/stylesheets/application.css`
 
 ## Project-to-screenshot navigation
@@ -70,6 +73,22 @@ tablet, and mobile switcher segments use one fixed rendered width so changing
 the active viewport does not resize the control. The version selector shares
 that toolbar row on laptops and wraps above the canvas on narrow screens.
 
+## Fullscreen review
+
+The screenshot canvas has an icon button in its top-right corner that expands
+the workspace over the full browser viewport. The active image is fitted to
+the viewport while preserving its natural aspect ratio, and the Annotorious
+wrapper receives the same fitted dimensions so drawings and pins keep the
+image as their coordinate boundary. The annotation sidebar floats over the
+right side of the canvas and remains independently scrollable.
+
+Fullscreen review locks document scrolling and exits through the visible X
+button or the Escape key. Turbo frame replacements preserve the body-level
+fullscreen intent, and the replacement controller restores the workspace and
+global listeners so saving or filtering annotations does not collapse the
+review surface. Explicit exit removes the body class, event listeners, and
+image-fit modifier classes.
+
 ## Regression coverage
 
 Controller tests cover page-workspace links for single, multiple, empty,
@@ -85,5 +104,9 @@ They also enforce a practical desktop canvas width and equal rendered
 dimensions for the page actions and viewport-switcher segments, plus the
 version selector's toolbar placement, newest-first link order, version
 navigation, and narrow-screen wrapping and menu bounds.
+Fullscreen browser coverage verifies viewport-sized canvas geometry,
+aspect-ratio-preserving image fit across resize, floating comment bounds,
+annotation creation across Turbo replacement, restored Escape handling,
+scroll-lock cleanup, and X-button exit.
 
 See also: [[controllers/web-controllers]], [[models/page]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]

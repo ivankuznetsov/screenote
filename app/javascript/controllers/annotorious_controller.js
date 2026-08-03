@@ -46,6 +46,7 @@ export default class extends Controller {
       drawingEnabled: true,
       drawingMode: "drag"
     })
+    this.imageTarget.parentElement?.classList.add("screenshot-canvas__image-wrapper")
     this.installBoundaryPointerTracking()
 
     this.anno.on("createAnnotation", (annotation) => {
