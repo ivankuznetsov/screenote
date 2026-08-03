@@ -13,9 +13,9 @@ TLDR: Project cards open the canonical page workspace at a selected version,
 with newest-first history in a compact dropdown beside the viewport switcher.
 The viewer keeps a sticky annotation sidebar beside a practical-width image
 canvas, can expand the screenshot into a viewport-fitted review surface with
-floating comments, preserves scroll position when a drawing opens its comment
-form, and uses the Annotorious image wrapper as the coordinate box for
-viewport-scoped pins.
+floating comments, creates point and area comments directly on the image, and
+uses the Annotorious image wrapper as the coordinate box for viewport-scoped
+author markers and in-place composers.
 
 Source: `app/views/projects/show.html.erb`, `app/views/pages/show.html.erb`,
 `app/views/screenshots/_workspace.html.erb`,
@@ -55,7 +55,19 @@ cost as their counts grow.
 
 The screenshot workspace uses the image canvas plus a sticky, independently scrollable annotation sidebar. Its top offset is relative to the viewport, so comments remain available while the document scrolls through a tall capture.
 
-Creating an Annotorious point or rectangle prepends a comment form to the sidebar, resets only the sidebar's own scroll position so the form is visible, and focuses its textarea with `preventScroll`. This preserves the user's document position. Only one unsaved drawing is retained: starting another empty draft cancels the previous annotation, while an existing draft with typed text is preserved and the new drawing is discarded.
+Clicking the image creates a point comment; dragging creates a rectangular area
+comment. Both interactions place the initial comment composer beside the
+selected geometry inside the image wrapper and focus its textarea with
+`preventScroll`. Candidate placements are clamped to the screenshot and ranked
+by overlap so the composer stays in bounds without obscuring the selected area
+when space allows. The sidebar contains saved threads and reply forms only.
+
+Only one unsaved drawing is retained: starting another empty draft cancels the
+previous annotation, while an existing draft with typed text is preserved and
+the new drawing is discarded. Saved point and area markers use deterministic
+author colors and initials. Selecting a marker selects and reveals its sidebar
+thread; selecting a sidebar thread highlights and scrolls the corresponding
+marker into view.
 
 The canvas captures the active drawing pointer, so a rectangle remains responsive when the cursor crosses an image edge and can continue if the cursor returns before release. Geometry is normalized for either drag direction, clamped to the image endpoints, and converted from rounded percentage endpoints; fully out-of-bounds or otherwise zero-area transients are removed before another draw begins. Pointer capture and listeners are released on pointer completion, cancellation, Turbo replacement, and controller disconnect.
 
@@ -63,7 +75,11 @@ The canvas captures the active drawing pointer, so a rectangle remains responsiv
 
 Annotorious wraps the active image in a `position: relative; display: inline-block` element. The outer canvas centers that wrapper, which centers narrow mobile images inside a desktop browser without changing wide desktop images.
 
-Custom annotation pins are children of the same wrapper. Their percentage positions therefore resolve against the visible image dimensions rather than the wider canvas. The viewport switcher keeps annotations filtered to the layout where they were created; see [[models/screenshot-image]] and [[models/annotation]].
+Custom annotation markers and the in-place composer are children of the same
+wrapper. Their percentage positions therefore resolve against the visible
+image dimensions rather than the wider canvas. The viewport switcher keeps
+annotations filtered to the layout where they were created; see
+[[models/screenshot-image]] and [[models/annotation]].
 
 Review pages opt into an 1800px main-content ceiling instead of the global
 960px reading width. Removing the permanent version column leaves at least
@@ -86,8 +102,8 @@ Fullscreen review locks document scrolling and returns to the normal workspace
 through a restore-size icon or the Escape key. A separate comments icon keeps
 the floating annotation sidebar open by default and lets reviewers collapse it
 when they need an unobstructed image. The icon remains available to reopen the
-sidebar without leaving fullscreen. Starting a new annotation also reopens a
-collapsed sidebar before the comment form is inserted and focused.
+sidebar without leaving fullscreen. New point and area comments remain usable
+through their in-place composer while the sidebar is collapsed.
 
 Turbo frame replacements preserve both the body-level fullscreen intent and
 the current comments-panel visibility, so saving or filtering annotations does
@@ -109,11 +125,15 @@ zero-area cleanup, and pointer lifecycle cleanup across Turbo replacement.
 They also enforce a practical desktop canvas width and equal rendered
 dimensions for the page actions and viewport-switcher segments, plus the
 version selector's toolbar placement, newest-first link order, version
-navigation, and narrow-screen wrapping and menu bounds.
+navigation, and narrow-screen wrapping and menu bounds. Annotation interaction
+coverage distinguishes clicks from drags, checks composer bounds and
+non-overlap, verifies author-colored initials and marker/thread selection in
+both directions, and exercises a two-member reply exchange across separate
+authenticated sessions.
 Fullscreen browser coverage verifies viewport-sized canvas geometry,
 aspect-ratio-preserving image fit across resize, floating comment bounds,
 annotation creation across Turbo replacement, comment collapse/expand and
-automatic reopening for annotation entry, collapsed-state restoration through
+in-place annotation entry while collapsed, collapsed-state restoration through
 a frame update, restored Escape handling, default-open comments on later entry,
 scroll-lock cleanup, and restore-button exit.
 

@@ -3,7 +3,7 @@ title: Testing and CI
 type: operations
 source: test/, bin/ci, config/ci.rb, .github/workflows/ci.yml
 created: 2026-07-28
-updated: 2026-07-28
+updated: 2026-08-03
 tags: [testing, ci, minitest, capybara, playwright]
 ---
 
@@ -40,6 +40,12 @@ BUNDLE_PATH=vendor/bundle CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
 
 Use the same environment for a focused system file. Serial execution keeps the
 shared server, jobs, and Active Storage fixtures deterministic.
+
+`test/system/annotations_test.rb` is the browser contract for the review
+workspace. It covers point clicks, area drags, in-place composer placement,
+fullscreen with comments open or collapsed, marker/thread selection, long
+captures, and a multi-user thread where one project member creates feedback and
+another replies before the first member reads the response.
 
 `DEVICE_SCALE_FACTOR` configures the Playwright context for responsive-image
 proof. Run `test/system/pages_test.rb` at both `1` and `2`; its responsive card

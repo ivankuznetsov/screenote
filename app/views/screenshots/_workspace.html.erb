@@ -15,7 +15,7 @@
 
   <div class="screenshot-workspace"
        data-controller="annotorious review-fullscreen"
-       data-action="annotorious:annotation-form-show->review-fullscreen#showComments"
+       data-action="annotorious:saved-marker-selected->review-fullscreen#showComments"
        data-testid="screenshot-workspace">
     <div class="screenshot-canvas" data-annotorious-target="canvas">
       <button type="button"
@@ -91,7 +91,7 @@
         </div>
       </div>
 
-      <div class="annotation-sidebar__list" data-annotorious-target="list">
+      <div class="annotation-sidebar__list">
         <template data-annotorious-target="formTemplate">
           <%= render "annotations/form", screenshot: @screenshot, active_viewport: @active_viewport %>
         </template>

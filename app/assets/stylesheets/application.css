@@ -856,6 +856,10 @@ turbo-frame {
   height: auto;
 }
 
+.screenshot-canvas__image-wrapper {
+  position: relative;
+}
+
 .screenshot-fullscreen-toggle,
 .screenshot-comments-toggle {
   align-items: center;
@@ -1096,6 +1100,12 @@ body.review-fullscreen-open {
   border-radius: var(--radius);
   border: 1px solid var(--color-border);
   margin-bottom: 0.5rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.annotation-item--selected {
+  border-color: var(--annotation-author-color, var(--color-primary));
+  box-shadow: 0 0 0 2px var(--annotation-author-soft, rgba(37, 99, 235, 0.18));
 }
 
 .annotation-item--resolved {
@@ -1109,22 +1119,37 @@ body.review-fullscreen-open {
   margin-bottom: 0.375rem;
 }
 
-.annotation-item__number {
-  background: var(--color-primary);
-  color: #ffffff;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  display: inline-flex;
+.annotation-author-marker,
+.annotation-thread__author-marker {
   align-items: center;
+  background: var(--annotation-author-color);
+  border: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 700;
   justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-  flex-shrink: 0;
+  letter-spacing: -0.02em;
 }
 
-.annotation-item--resolved .annotation-item__number {
-  background: var(--color-success);
+.annotation-author-marker {
+  cursor: pointer;
+  font-size: 0.6875rem;
+  height: 1.5rem;
+  padding: 0;
+  width: 1.5rem;
+}
+
+.annotation-author-marker:focus-visible {
+  outline: 2px solid var(--annotation-author-color);
+  outline-offset: 2px;
+}
+
+.annotation-thread__author-marker {
+  font-size: 0.5625rem;
+  height: 1.25rem;
+  width: 1.25rem;
 }
 
 .annotation-item__author {
@@ -1228,6 +1253,11 @@ body.review-fullscreen-open {
   margin-top: 0.5rem;
 }
 
+.annotation-thread__form-wrapper--reply {
+  display: inline-block;
+  margin-right: 0.375rem;
+}
+
 .annotation-thread__form-wrapper summary {
   list-style: none;
   cursor: pointer;
@@ -1242,6 +1272,12 @@ body.review-fullscreen-open {
   border-radius: var(--radius);
   border: 1px solid var(--color-warning);
   background: rgba(217, 119, 6, 0.05);
+}
+
+.annotation-thread__form--reply {
+  border-color: var(--color-border);
+  margin-top: 0.5rem;
+  min-width: 15rem;
 }
 
 .annotation-thread__textarea {
@@ -1279,16 +1315,24 @@ body.review-fullscreen-open {
 
 /* Annotation pins on canvas */
 .annotation-pin {
+  --annotation-author-color: var(--color-primary);
+  --annotation-author-soft: rgba(37, 99, 235, 0.16);
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  margin: 0;
+  padding: 0;
+  pointer-events: auto;
   position: absolute;
   z-index: 10;
-  pointer-events: none;
 }
 
 .annotation-pin--point {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--annotation-author-color);
   color: #ffffff;
   font-size: 0.75rem;
   font-weight: 600;
@@ -1300,8 +1344,8 @@ body.review-fullscreen-open {
 }
 
 .annotation-pin--region {
-  border: 2px solid var(--color-primary);
-  background: rgba(37, 99, 235, 0.1);
+  background: var(--annotation-author-soft);
+  border: 2px solid var(--annotation-author-color);
   border-radius: 2px;
 }
 
@@ -1309,13 +1353,25 @@ body.review-fullscreen-open {
   opacity: 0.4;
 }
 
-.annotation-pin--resolved.annotation-pin--point {
-  background: var(--color-success);
+.annotation-pin--draft {
+  cursor: default;
+  pointer-events: none;
+  z-index: 20;
 }
 
-.annotation-pin--resolved.annotation-pin--region {
-  border-color: var(--color-success);
-  background: rgba(22, 163, 74, 0.1);
+.annotation-pin--selected {
+  opacity: 1;
+  z-index: 22;
+}
+
+.annotation-pin--selected.annotation-pin--point {
+  box-shadow: 0 0 0 3px #ffffff, 0 0 0 6px var(--annotation-author-color), 0 3px 8px rgba(0, 0, 0, 0.36);
+  transform: translate(-50%, -50%) scale(1.12);
+}
+
+.annotation-pin--selected.annotation-pin--region {
+  border-width: 3px;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 5px var(--annotation-author-color);
 }
 
 .annotation-pin__label {
@@ -1325,7 +1381,7 @@ body.review-fullscreen-open {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--annotation-author-color);
   color: #ffffff;
   font-size: 0.75rem;
   font-weight: 600;
@@ -1335,13 +1391,35 @@ body.review-fullscreen-open {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-/* Annotation form (in sidebar) */
+/* Author colors are deterministic per identity and shared by canvas markers and threads. */
+.annotation-author-color--0 { --annotation-author-color: #2563eb; --annotation-author-soft: rgba(37, 99, 235, 0.16); }
+.annotation-author-color--1 { --annotation-author-color: #7c3aed; --annotation-author-soft: rgba(124, 58, 237, 0.16); }
+.annotation-author-color--2 { --annotation-author-color: #059669; --annotation-author-soft: rgba(5, 150, 105, 0.16); }
+.annotation-author-color--3 { --annotation-author-color: #d97706; --annotation-author-soft: rgba(217, 119, 6, 0.16); }
+.annotation-author-color--4 { --annotation-author-color: #db2777; --annotation-author-soft: rgba(219, 39, 119, 0.16); }
+.annotation-author-color--5 { --annotation-author-color: #0891b2; --annotation-author-soft: rgba(8, 145, 178, 0.16); }
+.annotation-author-color--6 { --annotation-author-color: #dc2626; --annotation-author-soft: rgba(220, 38, 38, 0.16); }
+.annotation-author-color--7 { --annotation-author-color: #4f46e5; --annotation-author-soft: rgba(79, 70, 229, 0.16); }
+.annotation-author-color--8 { --annotation-author-color: #65a30d; --annotation-author-soft: rgba(101, 163, 13, 0.16); }
+.annotation-author-color--9 { --annotation-author-color: #c2410c; --annotation-author-soft: rgba(194, 65, 12, 0.16); }
+.annotation-author-color--ai { --annotation-author-color: #475569; --annotation-author-soft: rgba(71, 85, 105, 0.16); }
+
+/* Annotation form (floats beside a new point or region on the screenshot) */
 .annotation-form {
+  background: var(--color-bg);
+  border: 2px solid var(--annotation-author-color, var(--color-primary));
   padding: 0.75rem;
   border-radius: var(--radius);
-  border: 2px solid var(--color-primary);
-  margin-bottom: 0.5rem;
-  background: var(--color-bg-secondary);
+}
+
+.annotation-form--in-place {
+  box-shadow: 0 1rem 2.5rem rgba(15, 23, 42, 0.3);
+  margin: 0;
+  max-width: calc(100% - 1rem);
+  position: absolute;
+  text-align: left;
+  width: 18rem;
+  z-index: 25;
 }
 
 .annotation-form__textarea {

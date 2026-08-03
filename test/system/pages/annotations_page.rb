@@ -5,6 +5,7 @@ module Pages
     # --- Selectors ---
 
     ANNOTATION_FORM = "#annotation-form"
+    IN_PLACE_ANNOTATION_FORM = "#annotation-form.annotation-form--in-place"
     COMMENT_FIELD = 'textarea[name="annotation[comment]"]'
     SAVE_BUTTON = '#annotation-form input[type="submit"]'
     CANCEL_BUTTON = '[data-testid="cancel-button"]'
@@ -13,6 +14,16 @@ module Pages
     ANNOTATION_COMMENT = '[data-testid="annotation-comment"]'
 
     ANNOTATION_PIN = ".annotation-pin"
+    POINT_ANNOTATION_PIN = ".annotation-pin--point"
+    REGION_ANNOTATION_PIN = ".annotation-pin--region"
+    DRAFT_POINT_ANNOTATION_PIN = ".annotation-pin--draft.annotation-pin--point"
+    DRAFT_REGION_ANNOTATION_PIN = ".annotation-pin--draft.annotation-pin--region"
+
+    REPLY_TOGGLE = '[data-testid="reply-toggle"]'
+    REPLY_TEXTAREA = '[data-testid="reply-textarea"]'
+    REPLY_BUTTON = '[data-testid="reply-button"]'
+    THREAD_ENTRY = '[data-testid="thread-entry"]'
+    THREAD_AUTHOR_MARKER = '[data-testid="thread-author-marker"]'
 
     UNRESOLVE_BUTTON = '[data-testid="unresolve-button"]'
     SUBMIT_UNRESOLVE_BUTTON = '[data-testid="submit-unresolve-button"]'
@@ -36,6 +47,14 @@ module Pages
       find(CANCEL_BUTTON).click
     end
 
+    def reply_to_annotation(comment_text, reply:)
+      within find(ANNOTATION_ITEM, text: comment_text) do
+        find(REPLY_TOGGLE).click
+        find(REPLY_TEXTAREA).set(reply)
+        find(REPLY_BUTTON).click
+      end
+    end
+
     def resolve_annotation(comment_text)
       within find(ANNOTATION_ITEM, text: comment_text) do
         click_button "Resolve"
@@ -54,6 +73,12 @@ module Pages
 
     def assert_annotation_form_visible
       assert_selector ANNOTATION_FORM, wait: 10
+    end
+
+    def assert_in_place_annotation_form_visible
+      assert_selector IN_PLACE_ANNOTATION_FORM, wait: 10
+      assert_selector ".screenshot-canvas__image-wrapper > #{IN_PLACE_ANNOTATION_FORM}", wait: 10
+      assert_no_selector ".annotation-sidebar #{ANNOTATION_FORM}"
     end
 
     def assert_annotation_form_hidden
@@ -99,6 +124,13 @@ module Pages
     def assert_thread_body(comment_text, thread_text)
       within find(ANNOTATION_ITEM, text: comment_text) do
         assert_selector THREAD_BODY, text: thread_text, wait: 10
+      end
+    end
+
+    def assert_thread_reply(comment_text, reply:, author:)
+      within find(ANNOTATION_ITEM, text: comment_text) do
+        assert_selector THREAD_ENTRY, text: reply, wait: 10
+        assert_selector THREAD_ENTRY, text: author, wait: 10
       end
     end
   end
