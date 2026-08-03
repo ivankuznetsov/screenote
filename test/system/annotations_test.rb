@@ -242,25 +242,28 @@ class AnnotationsTest < ApplicationSystemTestCase
 
     click_on_image_to_annotate
 
-    assert_no_selector ".screenshot-workspace--comments-collapsed"
-    assert_no_selector "body.review-fullscreen-comments-collapsed"
-    assert_selector "#{comments_toggle}[aria-label='Hide comments'][aria-expanded='true']"
-    assert_selector ".annotation-sidebar", visible: true
-    assert_annotation_form_visible
+    assert_selector ".screenshot-workspace--comments-collapsed"
+    assert_selector "body.review-fullscreen-comments-collapsed"
+    assert_selector "#{comments_toggle}[aria-label='Show comments'][aria-expanded='false']"
+    assert_no_selector ".annotation-sidebar", visible: true
+    assert_in_place_annotation_form_visible
     with_playwright_page do |pw_page|
       assert pw_page.locator(COMMENT_FIELD).evaluate("element => element === document.activeElement"),
-        "Starting an annotation should focus its comment field after reopening comments"
+        "Starting an annotation should focus its in-place comment field"
     end
     assert_selector ".screenshot-workspace--fullscreen"
     fill_annotation_comment("Fullscreen annotation")
     submit_annotation
     wait_for_turbo
 
-    assert_annotation_visible("Fullscreen annotation")
+    assert_selector ANNOTATION_ITEM, text: "Fullscreen annotation", visible: :all
     assert_selector ".screenshot-workspace--fullscreen"
     assert_selector "body.review-fullscreen-open"
+    assert_selector ".screenshot-workspace--comments-collapsed"
     assert_selector "#{toggle}[aria-label='Restore view']"
 
+    find(comments_toggle).click
+    assert_annotation_visible("Fullscreen annotation")
     click_link "Open"
     wait_for_turbo
     assert_selector ".annotation-filter--active", text: "Open"
@@ -298,24 +301,123 @@ class AnnotationsTest < ApplicationSystemTestCase
   end
 
   test "create an annotation by clicking on the image" do
-    click_on_image_to_annotate
+    click_on_image_point
 
-    assert_annotation_form_visible
+    assert_in_place_annotation_form_visible
+    assert_equal(
+      { "width" => "", "height" => "" },
+      annotation_form_raw_size
+    )
     fill_annotation_comment("First annotation from e2e test")
     submit_annotation
     wait_for_turbo
 
     assert_annotation_visible("First annotation from e2e test")
     assert_annotation_count(1)
+    assert_selector POINT_ANNOTATION_PIN, text: "TE", wait: 10
   end
 
-  test "cancel annotation form hides it" do
-    click_on_image_to_annotate
+  test "a second point replaces an empty point draft" do
+    click_on_image_point(x_ratio: 0.15, y_ratio: 0.2)
+    assert_in_place_annotation_form_visible
 
-    assert_annotation_form_visible
+    with_playwright_page do |pw_page|
+      initial_state = annotorious_state(pw_page)
+      initial_coords = annotation_form_coords(pw_page)
+      initial_form = pw_page.locator(IN_PLACE_ANNOTATION_FORM).bounding_box
+      initial_pin = pw_page.locator(DRAFT_POINT_ANNOTATION_PIN).bounding_box
+
+      click_image_point(pw_page, x_ratio: 0.85, y_ratio: 0.75)
+      pw_page.wait_for_function(<<~JS, arg: initial_state["pendingAnnotationId"], timeout: 10_000)
+        initialId => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          return controller.pendingAnnotationId && controller.pendingAnnotationId !== initialId
+        }
+      JS
+
+      final_state = annotorious_state(pw_page)
+      final_coords = annotation_form_coords(pw_page)
+      final_form = pw_page.locator(IN_PLACE_ANNOTATION_FORM).bounding_box
+      final_pin = pw_page.locator(DRAFT_POINT_ANNOTATION_PIN).bounding_box
+
+      assert_equal 1, final_state["formCount"]
+      assert_equal "", final_state["comment"]
+      assert_in_delta 15, initial_coords["x"], 0.5
+      assert_in_delta 20, initial_coords["y"], 0.5
+      assert_in_delta 85, final_coords["x"], 0.5
+      assert_in_delta 75, final_coords["y"], 0.5
+      assert_operator (final_pin["x"] - initial_pin["x"]).abs, :>, 100
+      assert_operator (final_form["x"] - initial_form["x"]).abs, :>, 50
+    end
+  end
+
+  test "point composer avoids its rendered draft marker in a narrow viewport" do
+    with_playwright_page do |pw_page|
+      pw_page.set_viewport_size(width: 520, height: 720)
+      pw_page.wait_for_function(<<~JS, timeout: 10_000)
+        () => document.querySelector("[data-testid='screenshot-image']").getBoundingClientRect().width < 500
+      JS
+
+      click_image_point(pw_page, x_ratio: 0.85, y_ratio: 0.3)
+      pw_page.locator(IN_PLACE_ANNOTATION_FORM).wait_for(state: "visible", timeout: 10_000)
+
+      assert_composer_within_image_and_clear_of(pw_page, DRAFT_POINT_ANNOTATION_PIN)
+    end
+  end
+
+  test "dragging an area keeps a visible region and opens the composer beside it" do
+    with_playwright_page do |pw_page|
+      draw_annotation(
+        pw_page,
+        x_ratio: 0.2,
+        y_ratio: 0.25,
+        width_ratio: 0.45,
+        height_ratio: 0.3
+      )
+    end
+
+    assert_in_place_annotation_form_visible
+    assert_selector ".annotation-pin--draft#{REGION_ANNOTATION_PIN}", text: "TE", wait: 10
+
+    with_playwright_page do |pw_page|
+      form = pw_page.locator(IN_PLACE_ANNOTATION_FORM).bounding_box
+      region = pw_page.locator(".annotation-pin--draft#{REGION_ANNOTATION_PIN}").bounding_box
+      image = pw_page.locator("[data-testid='screenshot-image']").bounding_box
+
+      assert_operator form["x"], :>=, image["x"]
+      assert_operator form["y"], :>=, image["y"]
+      assert_operator form["x"] + form["width"], :<=, image["x"] + image["width"] + 1
+      assert_operator form["y"] + form["height"], :<=, image["y"] + image["height"] + 1
+      assert_operator region["width"], :>, 1
+      assert_operator region["height"], :>, 1
+
+      horizontal_overlap = [ [ form["x"] + form["width"], region["x"] + region["width"] ].min -
+        [ form["x"], region["x"] ].max, 0 ].max
+      vertical_overlap = [ [ form["y"] + form["height"], region["y"] + region["height"] ].min -
+        [ form["y"], region["y"] ].max, 0 ].max
+      assert_in_delta 0, horizontal_overlap * vertical_overlap, 1,
+        "The in-place composer should not obscure its selected region"
+    end
+
+    fill_annotation_comment("Selected area")
+    submit_annotation
+    wait_for_turbo
+
+    assert_selector REGION_ANNOTATION_PIN, text: "TE", wait: 10
+  end
+
+  test "canceling a point draft removes its composer and marker without persisting" do
+    annotation_count = Annotation.count
+    click_on_image_point
+
+    assert_in_place_annotation_form_visible
+    assert_selector DRAFT_POINT_ANNOTATION_PIN, count: 1, wait: 10
     cancel_annotation
 
     assert_annotation_form_hidden
+    assert_no_selector DRAFT_POINT_ANNOTATION_PIN
+    assert_equal annotation_count, Annotation.count
   end
 
   test "create multiple annotations" do
@@ -410,6 +512,126 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_selector ANNOTATION_PIN, minimum: 1, wait: 10
   end
 
+  test "sidebar threads and canvas markers select each other" do
+    create_annotation("First linked thread")
+    first_annotation = Annotation.find_by!(comment: "First linked thread")
+
+    click_on_image_to_annotate(x_offset: 160, y_offset: 80)
+    assert_in_place_annotation_form_visible
+    fill_annotation_comment("Second linked thread")
+    submit_annotation
+    wait_for_turbo
+    assert_annotation_visible("Second linked thread")
+    second_annotation = Annotation.find_by!(comment: "Second linked thread")
+
+    first_item = find("#{ANNOTATION_ITEM}[data-annotation-id='#{first_annotation.id}']")
+    first_item.click
+
+    assert_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{first_annotation.id}'].annotation-item--selected"
+    assert_selector "#{ANNOTATION_PIN}[data-annotation-id='#{first_annotation.id}'].annotation-pin--selected[aria-pressed='true']"
+
+    find("#{ANNOTATION_PIN}[data-annotation-id='#{second_annotation.id}']").click
+
+    assert_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{second_annotation.id}'].annotation-item--selected"
+    assert_selector "#{ANNOTATION_PIN}[data-annotation-id='#{second_annotation.id}'].annotation-pin--selected[aria-pressed='true']"
+    assert_no_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{first_annotation.id}'].annotation-item--selected"
+  end
+
+  test "saved marker selection reopens collapsed fullscreen comments" do
+    create_annotation("Fullscreen saved marker")
+    annotation = Annotation.find_by!(comment: "Fullscreen saved marker")
+    fullscreen_toggle = "[data-testid='review-fullscreen-toggle']"
+    comments_toggle = "[data-testid='review-comments-toggle']"
+
+    find(fullscreen_toggle).click
+    assert_selector ".screenshot-workspace--fullscreen", wait: 10
+    find(comments_toggle).click
+    assert_selector ".screenshot-workspace--comments-collapsed"
+    assert_no_selector ".annotation-sidebar", visible: true
+
+    find("#{ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']").click
+
+    assert_no_selector ".screenshot-workspace--comments-collapsed"
+    assert_selector "#{comments_toggle}[aria-label='Hide comments'][aria-expanded='true']"
+    assert_selector ".annotation-sidebar", visible: true
+    assert_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{annotation.id}'].annotation-item--selected",
+      text: "Fullscreen saved marker"
+  end
+
+  test "open composer repositions within a resized image without covering its region" do
+    with_playwright_page do |pw_page|
+      pw_page.locator("[data-testid='review-fullscreen-toggle']").click
+      pw_page.locator(".screenshot-workspace--fullscreen").wait_for(state: "visible", timeout: 10_000)
+      draw_annotation(
+        pw_page,
+        x_ratio: 0.45,
+        y_ratio: 0.25,
+        width_ratio: 0.2,
+        height_ratio: 0.2
+      )
+      pw_page.locator(IN_PLACE_ANNOTATION_FORM).wait_for(state: "visible", timeout: 10_000)
+      initial_image_width = pw_page.locator("[data-testid='screenshot-image']").bounding_box["width"]
+
+      pw_page.set_viewport_size(width: 720, height: 720)
+      pw_page.wait_for_function(<<~JS, arg: initial_image_width, timeout: 10_000)
+        initialWidth => document.querySelector("[data-testid='screenshot-image']").getBoundingClientRect().width < initialWidth - 50
+      JS
+      pw_page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+
+      assert_composer_within_image_and_clear_of(pw_page, DRAFT_REGION_ANNOTATION_PIN)
+    end
+  end
+
+  test "project members see distinct author markers and can reply to each other" do
+    screenshot = Screenshot.order(:created_at, :id).last
+    project = screenshot.page.project
+    admin = users(:admin)
+    bob = users(:bob)
+    project.project_memberships.create!(user: admin, role: :member)
+    project.project_memberships.create!(user: bob, role: :member)
+
+    logout
+    login_as(admin.email, "password123")
+    visit page_path(screenshot.page, version_id: screenshot.id)
+    assert_screenshot_image_loaded
+
+    click_on_image_point(x_ratio: 0.42, y_ratio: 0.38)
+    assert_in_place_annotation_form_visible
+    fill_annotation_comment("Ivan's point comment")
+    submit_annotation
+    wait_for_turbo
+    annotation = Annotation.find_by!(comment: "Ivan's point comment")
+
+    assert_selector "#{POINT_ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']", text: "IK"
+    assert_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{annotation.id}'] [data-testid='annotation-author-marker']", text: "IK"
+
+    logout
+    login_as(bob.email, "password123")
+    visit page_path(screenshot.page, version_id: screenshot.id)
+    assert_screenshot_image_loaded
+
+    find("#{ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']").click
+    assert_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{annotation.id}'].annotation-item--selected"
+    reply_to_annotation("Ivan's point comment", reply: "Bob can reproduce this")
+    wait_for_turbo
+
+    assert_thread_reply("Ivan's point comment", reply: "Bob can reproduce this", author: bob.email)
+    within find(ANNOTATION_ITEM, text: "Ivan's point comment") do
+      assert_selector THREAD_AUTHOR_MARKER, text: "BO"
+    end
+
+    root_color = find("#{ANNOTATION_ITEM}[data-annotation-id='#{annotation.id}'] [data-testid='annotation-author-marker']")["data-author-color"]
+    reply_color = find("#{ANNOTATION_ITEM}[data-annotation-id='#{annotation.id}'] #{THREAD_AUTHOR_MARKER}")["data-author-color"]
+    refute_equal root_color, reply_color
+
+    logout
+    login_as(admin.email, "password123")
+    visit page_path(screenshot.page, version_id: screenshot.id)
+
+    assert_thread_reply("Ivan's point comment", reply: "Bob can reproduce this", author: bob.email)
+    assert_selector "#{POINT_ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']", text: "IK"
+  end
+
   test "a typed draft survives a second drawing without retaining the transient annotation" do
     click_on_image_to_annotate
     assert_annotation_form_visible
@@ -430,7 +652,7 @@ class AnnotationsTest < ApplicationSystemTestCase
         })()
       JS
 
-      draw_annotation(pw_page, x_ratio: 0.65, y_ratio: 0.55)
+      draw_annotation(pw_page, x_ratio: 0.82, y_ratio: 0.78)
       pw_page.wait_for_function("() => window.__createdAnnotationIds?.length > 0", timeout: 10_000)
       pw_page.wait_for_function(<<~JS, timeout: 10_000)
         () => {
@@ -789,7 +1011,10 @@ class AnnotationsTest < ApplicationSystemTestCase
 
       assert_in_delta scroll_before, scroll_after, 1
       assert form_bounds["focused"], "The new annotation textarea should retain keyboard focus"
-      assert_equal 0, pw_page.locator(".annotation-sidebar").evaluate("element => element.scrollTop")
+      assert_equal sidebar_scroll_before, pw_page.locator(".annotation-sidebar").evaluate("element => element.scrollTop")
+      assert pw_page.locator(ANNOTATION_FORM).evaluate(
+        "element => element.parentElement.classList.contains('screenshot-canvas__image-wrapper')"
+      )
       assert_operator form_bounds["top"], :>=, 0
       assert_operator form_bounds["bottom"], :<=, 720
 
@@ -878,6 +1103,25 @@ class AnnotationsTest < ApplicationSystemTestCase
     end
   end
 
+  def click_on_image_point(x_ratio: 0.3, y_ratio: 0.3)
+    assert_selector ANNOTORIOUS_OVERLAY, wait: 15
+
+    with_playwright_page do |pw_page|
+      click_image_point(pw_page, x_ratio: x_ratio, y_ratio: y_ratio)
+    end
+  end
+
+  def click_image_point(pw_page, x_ratio:, y_ratio:)
+    overlay = pw_page.locator(ANNOTORIOUS_OVERLAY).first
+    overlay.wait_for(state: "visible", timeout: 10_000)
+    box = overlay.bounding_box
+
+    pw_page.mouse.click(
+      box["x"] + (box["width"] * x_ratio),
+      box["y"] + (box["height"] * y_ratio)
+    )
+  end
+
   def upload_tall_screenshot
     require_vips!
     @tall_image_path = Rails.root.join("tmp", "annotation-scroll-#{SecureRandom.hex(6)}.png")
@@ -894,7 +1138,14 @@ class AnnotationsTest < ApplicationSystemTestCase
     draw_annotation(pw_page, x_ratio: 0.3, viewport_y: 300)
   end
 
-  def draw_annotation(pw_page, x_ratio:, y_ratio: nil, viewport_y: nil)
+  def draw_annotation(
+    pw_page,
+    x_ratio:,
+    y_ratio: nil,
+    viewport_y: nil,
+    width_ratio: nil,
+    height_ratio: nil
+  )
     overlay = pw_page.locator(ANNOTORIOUS_OVERLAY).first
     overlay.wait_for(state: "visible", timeout: 10_000)
     box = overlay.bounding_box
@@ -903,7 +1154,10 @@ class AnnotationsTest < ApplicationSystemTestCase
 
     pw_page.mouse.move(start_x, start_y)
     pw_page.mouse.down
-    pw_page.mouse.move(start_x + 80, start_y + 60)
+    pw_page.mouse.move(
+      start_x + (width_ratio ? box["width"] * width_ratio : 80),
+      start_y + (height_ratio ? box["height"] * height_ratio : 60)
+    )
     pw_page.mouse.up
   end
 
@@ -936,5 +1190,44 @@ class AnnotationsTest < ApplicationSystemTestCase
         }
       })()
     JS
+  end
+
+  def annotation_form_raw_size
+    {
+      "width" => find('[name="annotation[width_percent]"]', visible: false).value,
+      "height" => find('[name="annotation[height_percent]"]', visible: false).value
+    }
+  end
+
+
+  def assert_composer_within_image_and_clear_of(pw_page, selected_selector)
+    geometry = pw_page.evaluate(<<~JS)
+      (() => {
+        const bounds = selector => {
+          const rect = document.querySelector(selector).getBoundingClientRect()
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }
+        }
+
+        return {
+          form: bounds(#{IN_PLACE_ANNOTATION_FORM.to_json}),
+          image: bounds("[data-testid='screenshot-image']"),
+          selected: bounds(#{selected_selector.to_json})
+        }
+      })()
+    JS
+    form = geometry["form"]
+    image = geometry["image"]
+    selected = geometry["selected"]
+    horizontal_overlap = [ [ form["right"], selected["right"] ].min -
+      [ form["left"], selected["left"] ].max, 0 ].max
+    vertical_overlap = [ [ form["bottom"], selected["bottom"] ].min -
+      [ form["top"], selected["top"] ].max, 0 ].max
+
+    assert_operator form["left"], :>=, image["left"] - 1
+    assert_operator form["top"], :>=, image["top"] - 1
+    assert_operator form["right"], :<=, image["right"] + 1
+    assert_operator form["bottom"], :<=, image["bottom"] + 1
+    assert_in_delta 0, horizontal_overlap * vertical_overlap, 1,
+      "The in-place composer should not obscure its selected marker or region"
   end
 end

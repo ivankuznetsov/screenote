@@ -1,7 +1,12 @@
 <%= form_with model: [screenshot, Annotation.new],
     id: "annotation-form",
-    class: "annotation-form",
-    data: { annotorious_target: "form" } do |f| %>
+    class: "annotation-form annotation-form--in-place #{annotation_author_color(Current.user)}",
+    data: {
+      annotorious_target: "form",
+      author_initials: annotation_author_initials(Current.user),
+      author_color: annotation_author_color(Current.user),
+      testid: "annotation-form"
+    } do |f| %>
   <%= f.hidden_field :x_percent, data: { annotorious_target: "xPercent" } %>
   <%= f.hidden_field :y_percent, data: { annotorious_target: "yPercent" } %>
   <%= f.hidden_field :width_percent, data: { annotorious_target: "widthPercent" } %>

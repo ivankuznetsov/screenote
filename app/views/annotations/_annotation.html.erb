@@ -1,13 +1,23 @@
-<div class="annotation-item annotation-item--<%= annotation.status %>" id="<%= dom_id(annotation) %>"
+<% author_color = annotation_author_color(annotation.user) %>
+<% author_initials = annotation_author_initials(annotation.user) %>
+<div class="annotation-item annotation-item--<%= annotation.status %> <%= author_color %>" id="<%= dom_id(annotation) %>"
   data-testid="annotation-item"
+  data-action="click->annotorious#selectSidebarAnnotation"
+  data-annotation-id="<%= annotation.id %>"
   data-status="<%= annotation.status %>"
   data-x-percent="<%= annotation.x_percent %>"
   data-y-percent="<%= annotation.y_percent %>"
   data-width-percent="<%= annotation.width_percent %>"
   data-height-percent="<%= annotation.height_percent %>"
+  data-author-initials="<%= author_initials %>"
+  data-author-color="<%= author_color %>"
   >
   <div class="annotation-item__header">
-    <span class="annotation-item__number"><%= index %></span>
+    <button type="button"
+            class="annotation-author-marker <%= author_color %>"
+            aria-label="Show annotation by <%= annotation.user.email %>"
+            data-author-color="<%= author_color %>"
+            data-testid="annotation-author-marker"><%= author_initials %></button>
     <span class="annotation-item__author"><%= annotation.user.email %></span>
     <span class="annotation-item__time"><%= time_ago_in_words(annotation.created_at) %> ago</span>
   </div>
@@ -19,8 +29,13 @@
   <% if annotation.annotation_comments.any? %>
     <div class="annotation-thread">
       <% annotation.annotation_comments.each do |ac| %>
-        <div class="annotation-thread__entry annotation-thread__entry--<%= ac.action %>">
+        <% author = ac.user || ac.api_key %>
+        <% thread_author_color = annotation_author_color(author) %>
+        <div class="annotation-thread__entry annotation-thread__entry--<%= ac.action %>" data-testid="thread-entry">
           <div class="annotation-thread__meta">
+            <span class="annotation-thread__author-marker <%= thread_author_color %>"
+                  data-author-color="<%= thread_author_color %>"
+                  data-testid="thread-author-marker"><%= annotation_author_initials(author) %></span>
             <% if ac.resolved? %>
               <span class="annotation-thread__badge annotation-thread__badge--resolved">Resolved</span>
             <% elsif ac.reopened? %>
@@ -56,6 +71,24 @@
         class: "btn btn--small btn--danger",
         data: { turbo_confirm: "Delete this annotation?", testid: "delete-annotation-button" } %>
   </div>
+
+  <details class="annotation-thread__form-wrapper annotation-thread__form-wrapper--reply">
+    <summary class="btn btn--small btn--secondary" data-testid="reply-toggle">Reply</summary>
+    <%= form_with url: screenshot_annotation_annotation_comments_path(
+          annotation.screenshot, annotation),
+        method: :post,
+        class: "annotation-thread__form annotation-thread__form--reply" do |f| %>
+      <%= f.text_area :body, name: "annotation_comment[body]",
+          class: "annotation-thread__textarea",
+          placeholder: "Write a reply...",
+          required: true,
+          rows: 2,
+          data: { testid: "reply-textarea" } %>
+      <div class="annotation-thread__form-actions">
+        <%= f.submit "Reply", class: "btn btn--small btn--primary", data: { testid: "reply-button" } %>
+      </div>
+    <% end %>
+  </details>
 
   <% if annotation.resolved? %>
     <details class="annotation-thread__form-wrapper" data-testid="unresolve-form">
