@@ -14,7 +14,7 @@ class AnnotationsTest < ApplicationSystemTestCase
   include Pages::ScreenshotsPage
   include Pages::AnnotationsPage
 
-  ANNOTORIOUS_OVERLAY = ".screenshot-canvas svg, .a9s-annotationlayer"
+  ANNOTORIOUS_OVERLAY = ".a9s-annotationlayer"
 
   setup do
     login_as_test_user
@@ -40,7 +40,8 @@ class AnnotationsTest < ApplicationSystemTestCase
       JS
 
       assert_equal 1280, geometry["viewportWidth"]
-      assert_operator geometry["canvasWidth"], :>=, 600
+      assert_operator geometry["canvasWidth"], :>=, 800
+      assert_no_selector ".version-sidebar"
 
       pw_page.set_viewport_size(width: 1920, height: 720)
       review_width = pw_page.locator("main.main--review").evaluate(
@@ -94,7 +95,168 @@ class AnnotationsTest < ApplicationSystemTestCase
         assert_in_delta dimensions.first["width"], dimension["width"], 1
         assert_in_delta dimensions.first["height"], dimension["height"], 1
       end
+
+      toolbar = pw_page.locator(".review-toolbar").bounding_box
+      switcher = pw_page.locator(".viewport-switcher").bounding_box
+      version_selector = pw_page.locator(".version-selector").bounding_box
+
+      assert_in_delta switcher["y"], version_selector["y"], 1
+      assert_operator version_selector["x"], :>, switcher["x"] + switcher["width"]
+      assert_operator toolbar["width"], :>, 1_000
     end
+  end
+
+  test "narrow review wraps the version selector and keeps its menu in bounds" do
+    screenshot = Screenshot.order(:created_at, :id).last
+    tablet = screenshot.screenshot_images.create!(viewport: :tablet, status: :ready)
+    tablet.image.attach(
+      io: File.open(TEST_IMAGE_PATH),
+      filename: "tablet.png",
+      content_type: "image/png"
+    )
+
+    visit page_path(screenshot.page, version_id: screenshot.id)
+    assert_selector ".viewport-switcher", wait: 10
+
+    with_playwright_page do |pw_page|
+      pw_page.set_viewport_size(width: 720, height: 720)
+      pw_page.locator(".version-selector__summary").click
+      pw_page.locator(".version-selector__menu").wait_for(state: "visible", timeout: 10_000)
+
+      geometry = pw_page.evaluate(<<~JS)
+        (() => {
+          const rect = selector => document.querySelector(selector).getBoundingClientRect()
+          const toolbar = rect(".review-toolbar")
+          const switcher = rect(".viewport-switcher")
+          const selector = rect(".version-selector")
+          const menu = rect(".version-selector__menu")
+
+          return {
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            toolbar: { left: toolbar.left, right: toolbar.right },
+            switcher: { bottom: switcher.bottom },
+            selector: { left: selector.left, right: selector.right, top: selector.top },
+            menu: {
+              left: menu.left,
+              right: menu.right,
+              top: menu.top,
+              bottom: menu.bottom
+            }
+          }
+        })()
+      JS
+
+      assert_operator geometry.dig("selector", "top"), :>, geometry.dig("switcher", "bottom")
+      assert_in_delta geometry.dig("toolbar", "left"), geometry.dig("selector", "left"), 1
+      assert_in_delta geometry.dig("toolbar", "right"), geometry.dig("selector", "right"), 1
+      assert_operator geometry.dig("menu", "left"), :>=, geometry.dig("selector", "left") - 1
+      assert_operator geometry.dig("menu", "right"), :<=, geometry.dig("selector", "right") + 1
+      assert_operator geometry.dig("menu", "left"), :>=, 0
+      assert_operator geometry.dig("menu", "right"), :<=, geometry["viewportWidth"]
+      assert_operator geometry.dig("menu", "top"), :>=, 0
+      assert_operator geometry.dig("menu", "bottom"), :<=, geometry["viewportHeight"]
+    end
+  end
+
+  test "fullscreen review fills the viewport and floats the annotation sidebar" do
+    toggle = "[data-testid='review-fullscreen-toggle']"
+
+    assert_selector "#{toggle}[aria-label='Enter fullscreen']", wait: 10
+    find(toggle).click
+
+    assert_selector ".screenshot-workspace--fullscreen", wait: 10
+    assert_selector "body.review-fullscreen-open"
+    assert_selector "#{toggle}[aria-label='Exit fullscreen']"
+
+    with_playwright_page do |pw_page|
+      geometry = pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector(".screenshot-workspace").getBoundingClientRect()
+          const canvas = document.querySelector(".screenshot-canvas").getBoundingClientRect()
+          const image = document.querySelector("[data-testid='screenshot-image']").getBoundingClientRect()
+          const sidebarElement = document.querySelector(".annotation-sidebar")
+          const sidebar = sidebarElement.getBoundingClientRect()
+
+          return {
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            workspace: {
+              left: workspace.left,
+              top: workspace.top,
+              width: workspace.width,
+              height: workspace.height
+            },
+            canvas: { left: canvas.left, top: canvas.top, width: canvas.width, height: canvas.height },
+            image: { left: image.left, top: image.top, width: image.width, height: image.height },
+            sidebar: {
+              left: sidebar.left,
+              right: sidebar.right,
+              top: sidebar.top,
+              bottom: sidebar.bottom,
+              position: getComputedStyle(sidebarElement).position
+            },
+            bodyOverflow: getComputedStyle(document.body).overflow
+          }
+        })()
+      JS
+
+      assert_in_delta 0, geometry.dig("workspace", "left"), 1
+      assert_in_delta 0, geometry.dig("workspace", "top"), 1
+      assert_in_delta geometry.dig("viewport", "width"), geometry.dig("workspace", "width"), 1
+      assert_in_delta geometry.dig("viewport", "height"), geometry.dig("workspace", "height"), 1
+      assert_in_delta geometry.dig("viewport", "width"), geometry.dig("canvas", "width"), 1
+      assert_in_delta geometry.dig("viewport", "height"), geometry.dig("canvas", "height"), 1
+      assert_in_delta geometry.dig("viewport", "height"), geometry.dig("image", "height"), 1
+      assert_in_delta 0, geometry.dig("image", "top"), 1
+      assert_equal "absolute", geometry.dig("sidebar", "position")
+      assert_operator geometry.dig("sidebar", "left"), :>, geometry.dig("viewport", "width") / 2
+      assert_operator geometry.dig("sidebar", "right"), :<=, geometry.dig("viewport", "width")
+      assert_operator geometry.dig("sidebar", "top"), :>, 0
+      assert_operator geometry.dig("sidebar", "bottom"), :<=, geometry.dig("viewport", "height")
+      assert_equal "hidden", geometry["bodyOverflow"]
+
+      pw_page.set_viewport_size(width: 700, height: 720)
+      pw_page.wait_for_function(<<~JS)
+        () => Math.abs(document.querySelector("[data-testid='screenshot-image']").getBoundingClientRect().width - 700) <= 1
+      JS
+      narrow_image = pw_page.locator("[data-testid='screenshot-image']").bounding_box
+      narrow_sidebar = pw_page.locator(".annotation-sidebar").bounding_box
+
+      assert_in_delta 700, narrow_image["width"], 1
+      assert_in_delta 525, narrow_image["height"], 1
+      assert_in_delta 4.0 / 3, narrow_image["width"].to_f / narrow_image["height"], 0.01
+      assert_operator narrow_sidebar["x"], :>=, 0
+      assert_operator narrow_sidebar["x"] + narrow_sidebar["width"], :<=, 700
+    end
+
+    click_on_image_to_annotate
+    assert_annotation_form_visible
+    assert_selector ".screenshot-workspace--fullscreen"
+    fill_annotation_comment("Fullscreen annotation")
+    submit_annotation
+    wait_for_turbo
+
+    assert_annotation_visible("Fullscreen annotation")
+    assert_selector ".screenshot-workspace--fullscreen"
+    assert_selector "body.review-fullscreen-open"
+    assert_selector "#{toggle}[aria-label='Exit fullscreen']"
+
+    click_link "Open"
+    wait_for_turbo
+
+    assert_annotation_visible("Fullscreen annotation")
+    assert_selector ".screenshot-workspace--fullscreen"
+    assert_selector "body.review-fullscreen-open"
+
+    find("body").send_keys(:escape)
+
+    assert_no_selector ".screenshot-workspace--fullscreen"
+    assert_no_selector "body.review-fullscreen-open"
+    assert_selector "#{toggle}[aria-label='Enter fullscreen']"
+
+    find(toggle).click
+    find("#{toggle}[aria-label='Exit fullscreen']").click
+    assert_no_selector ".screenshot-workspace--fullscreen"
   end
 
   test "create an annotation by clicking on the image" do

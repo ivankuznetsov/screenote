@@ -16,7 +16,7 @@ class PageScreenshotsOrderTest < ApplicationSystemTestCase
     login_as_test_user
   end
 
-  test "page workspace lists newest versions first in the sidebar" do
+  test "page workspace lists newest versions first in the selector" do
     project_name = "Order Project #{SecureRandom.hex(4)}"
     page_name = "Order Page #{SecureRandom.hex(4)}"
     older_title = "Older Version #{SecureRandom.hex(4)}"
@@ -31,10 +31,23 @@ class PageScreenshotsOrderTest < ApplicationSystemTestCase
     upload_version(older_title)
     upload_version(newer_title)
 
+    find("[data-testid='version-selector'] summary").click
+
     assert_equal [ newer_title, older_title ],
-      all(VERSION_SIDEBAR_ITEM, minimum: 2).map { |item| item.find(".version-sidebar__item-title").text }.first(2)
-    assert_selector "#{VERSION_SIDEBAR_ITEM}[aria-current='page']", text: newer_title, count: 1
-    assert_no_selector "[data-testid='version-sidebar'] img"
+      all(VERSION_SELECTOR_ITEM, minimum: 2).map { |item| item.find(".version-selector__item-title").text }.first(2)
+    assert_selector "#{VERSION_SELECTOR_ITEM}[aria-current='page']", text: newer_title, count: 1
+    assert_no_selector "[data-testid='version-selector'] img"
+
+    older_link = find(VERSION_SELECTOR_ITEM, text: older_title)
+    older_path = URI.parse(older_link[:href]).request_uri
+    older_link.click
+
+    assert_current_path older_path, ignore_query: false, wait: 10
+    assert_selected_version_title older_title
+    assert_screenshot_image_loaded
+
+    find("[data-testid='version-selector'] summary").click
+    assert_selector "#{VERSION_SELECTOR_ITEM}[aria-current='page']", text: older_title, count: 1
   end
 
   private

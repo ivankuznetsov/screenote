@@ -27,9 +27,10 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "[data-testid='screenshot-workspace']", count: 1
     assert_select "[data-testid='page-detail-title']", page.name
-    assert_select "[data-testid='version-sidebar-item'][aria-current='page'][data-version-id='#{newer.id}']", count: 1
-    assert_select "[data-testid='version-sidebar-item'][data-version-id='#{older.id}']", count: 1
-    assert_select "[data-testid='version-sidebar'] img", count: 0
+    assert_select "[data-testid='version-selector']", count: 1
+    assert_select "[data-testid='version-selector-item'][aria-current='page'][data-version-id='#{newer.id}']", count: 1
+    assert_select "[data-testid='version-selector-item'][data-version-id='#{older.id}']", count: 1
+    assert_select "[data-testid='version-selector'] img", count: 0
   end
 
   test "show uses id as the newest version tie breaker" do
@@ -42,8 +43,8 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     get page_path(page)
 
     assert_response :success
-    assert_select "[data-testid='version-sidebar-item'][aria-current='page'][data-version-id='#{higher_id.id}']", count: 1
-    assert_select "[data-testid='version-sidebar-item'][data-version-id='#{lower_id.id}']", count: 1
+    assert_select "[data-testid='version-selector-item'][aria-current='page'][data-version-id='#{higher_id.id}']", count: 1
+    assert_select "[data-testid='version-selector-item'][data-version-id='#{lower_id.id}']", count: 1
   end
 
   test "show selects a page scoped version and falls back for unavailable values" do
@@ -55,12 +56,12 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
 
     get page_path(page, version_id: selected.id)
     assert_response :success
-    assert_select "[data-testid='version-sidebar-item'][aria-current='page'][data-version-id='#{selected.id}']", count: 1
+    assert_select "[data-testid='version-selector-item'][aria-current='page'][data-version-id='#{selected.id}']", count: 1
 
     [ "not-an-id", Screenshot.maximum(:id).to_i + 100, cross_page.id ].each do |version_id|
       get page_path(page, version_id: version_id)
       assert_response :success
-      assert_select "[data-testid='version-sidebar-item'][aria-current='page'][data-version-id='#{newest.id}']", count: 1
+      assert_select "[data-testid='version-selector-item'][aria-current='page'][data-version-id='#{newest.id}']", count: 1
       assert_no_match cross_page.title, response.body
     end
   end
@@ -118,11 +119,11 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select(
-      "[data-testid='version-sidebar-item'][aria-current='page'][data-version-id='#{pending.id}']",
+      "[data-testid='version-selector-item'][aria-current='page'][data-version-id='#{pending.id}']",
       text: /Pending newest.*Pending/m,
       count: 1
     )
-    assert_select "[data-testid='version-sidebar-item'][data-version-id='#{failed.id}']", text: /Failed older.*Failed/m
+    assert_select "[data-testid='version-selector-item'][data-version-id='#{failed.id}']", text: /Failed older.*Failed/m
   end
 
   test "version links preserve an available viewport and otherwise use the target default" do
@@ -141,13 +142,13 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select(
-      "a[data-testid='version-sidebar-item'][data-version-id='#{with_mobile.id}']" \
+      "a[data-testid='version-selector-item'][data-version-id='#{with_mobile.id}']" \
         "[href='#{page_path(page, version_id: with_mobile.id, viewport: :mobile)}']" \
         "[data-turbo-frame='_top']",
       count: 1
     )
     assert_select(
-      "a[data-testid='version-sidebar-item'][data-version-id='#{desktop_only.id}']" \
+      "a[data-testid='version-selector-item'][data-version-id='#{desktop_only.id}']" \
         "[href='#{page_path(page, version_id: desktop_only.id)}']" \
         "[data-turbo-frame='_top']",
       count: 1

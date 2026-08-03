@@ -1,0 +1,31 @@
+<details class="version-selector" data-testid="version-selector">
+  <summary class="version-selector__summary">
+    <span class="version-selector__label">Version</span>
+    <span class="version-selector__selected" title="<%= selected_screenshot.title %>">
+      <%= selected_screenshot.title %>
+    </span>
+  </summary>
+
+  <ol class="version-selector__menu">
+    <% screenshots.each do |screenshot| %>
+      <% selected = screenshot.id == selected_screenshot.id %>
+      <li class="version-selector__item <%= "version-selector__item--active" if selected %>">
+        <%= link_to page_workspace_path_for(screenshot, viewport: active_viewport),
+            aria: { current: ("page" if selected) },
+            data: {
+              turbo_frame: "_top",
+              testid: "version-selector-item",
+              version_id: screenshot.id
+            } do %>
+          <span class="version-selector__item-title"><%= screenshot.title %></span>
+          <span class="version-selector__item-meta">
+            <%= time_tag screenshot.created_at, screenshot.created_at.to_fs(:short) %>
+            <span class="version-selector__status version-selector__status--<%= screenshot.status %>">
+              <%= screenshot.status.humanize %>
+            </span>
+          </span>
+        <% end %>
+      </li>
+    <% end %>
+  </ol>
+</details>

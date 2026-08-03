@@ -3,21 +3,24 @@ title: Screenshot Review UI
 type: ui
 source: app/views/, app/javascript/controllers/annotorious_controller.js, app/assets/stylesheets/application.css
 created: 2026-07-13
-updated: 2026-08-02
+updated: 2026-08-03
 tags: [ui, screenshots, annotations, viewports]
 ---
 
 # Screenshot Review UI
 
 TLDR: Project cards open the canonical page workspace at a selected version,
-with history in a text sidebar. The viewer keeps a sticky annotation sidebar
-beside a practical-width image canvas, preserves scroll position when a drawing
-opens its comment form, and uses the Annotorious image wrapper as the coordinate
-box for viewport-scoped pins.
+with newest-first history in a compact dropdown beside the viewport switcher.
+The viewer keeps a sticky annotation sidebar beside a practical-width image
+canvas, can expand the screenshot into a viewport-fitted review surface with
+floating comments, preserves scroll position when a drawing opens its comment
+form, and uses the Annotorious image wrapper as the coordinate box for
+viewport-scoped pins.
 
 Source: `app/views/projects/show.html.erb`, `app/views/pages/show.html.erb`,
 `app/views/screenshots/_workspace.html.erb`,
 `app/javascript/controllers/annotorious_controller.js`,
+`app/javascript/controllers/review_fullscreen_controller.js`,
 `app/assets/stylesheets/application.css`
 
 ## Project-to-screenshot navigation
@@ -28,8 +31,9 @@ A page is a logical screen and a screenshot is a captured version; see [[decisio
   workspace. When a ready version is selected, its id is encoded as the
   page-scoped `version_id`.
 - The workspace opens that version immediately and keeps newest-first history
-  as text links in a bounded sidebar; it never renders a thumbnail grid before
-  review.
+  as real links in a dropdown aligned to the right of the viewport switcher; it
+  never renders a thumbnail grid before review. The menu overlays the workspace
+  instead of reserving a permanent column, and becomes full-width below 760px.
 - Empty, pending-only, failed-only, or attachment-missing pages retain the bare
   page route and management state.
 - Page and version actions in the workspace header use the same rendered height
@@ -62,11 +66,28 @@ Annotorious wraps the active image in a `position: relative; display: inline-blo
 Custom annotation pins are children of the same wrapper. Their percentage positions therefore resolve against the visible image dimensions rather than the wider canvas. The viewport switcher keeps annotations filtered to the layout where they were created; see [[models/screenshot-image]] and [[models/annotation]].
 
 Review pages opt into an 1800px main-content ceiling instead of the global
-960px reading width. At the standard 1280px browser-test viewport this leaves
-at least 600px for the annotation canvas after the version and annotation
-sidebars; wider displays can show desktop captures close to their natural
-size. Desktop, tablet, and mobile switcher segments use one fixed rendered
-width so changing the active viewport does not resize the control.
+960px reading width. Removing the permanent version column leaves at least
+800px for the annotation canvas at the standard 1280px browser-test viewport;
+wider displays can show desktop captures close to their natural size. Desktop,
+tablet, and mobile switcher segments use one fixed rendered width so changing
+the active viewport does not resize the control. The version selector shares
+that toolbar row on laptops and wraps above the canvas on narrow screens.
+
+## Fullscreen review
+
+The screenshot canvas has an icon button in its top-right corner that expands
+the workspace over the full browser viewport. The active image is fitted to
+the viewport while preserving its natural aspect ratio, and the Annotorious
+wrapper receives the same fitted dimensions so drawings and pins keep the
+image as their coordinate boundary. The annotation sidebar floats over the
+right side of the canvas and remains independently scrollable.
+
+Fullscreen review locks document scrolling and exits through the visible X
+button or the Escape key. Turbo frame replacements preserve the body-level
+fullscreen intent, and the replacement controller restores the workspace and
+global listeners so saving or filtering annotations does not collapse the
+review surface. Explicit exit removes the body class, event listeners, and
+image-fit modifier classes.
 
 ## Regression coverage
 
@@ -80,6 +101,12 @@ centered mobile geometry, pin placement against the Annotorious wrapper,
 out-and-back boundary drags, clamping on all four edges, reverse drags,
 zero-area cleanup, and pointer lifecycle cleanup across Turbo replacement.
 They also enforce a practical desktop canvas width and equal rendered
-dimensions for the page actions and viewport-switcher segments.
+dimensions for the page actions and viewport-switcher segments, plus the
+version selector's toolbar placement, newest-first link order, version
+navigation, and narrow-screen wrapping and menu bounds.
+Fullscreen browser coverage verifies viewport-sized canvas geometry,
+aspect-ratio-preserving image fit across resize, floating comment bounds,
+annotation creation across Turbo replacement, restored Escape handling,
+scroll-lock cleanup, and X-button exit.
 
 See also: [[controllers/web-controllers]], [[models/page]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]

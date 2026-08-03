@@ -28,7 +28,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
 
     assert_flash_notice "Screenshot uploaded."
     assert_on_screenshot_show
-    assert_screenshot_title_in_breadcrumb(screenshot_title)
+    assert_selected_version_title(screenshot_title)
   end
 
   test "screenshot show page displays image and sidebar" do
@@ -53,7 +53,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
     submit_screenshot_form
 
     assert_flash_notice "Screenshot updated."
-    assert_screenshot_title_in_breadcrumb(updated_title)
+    assert_selected_version_title(updated_title)
   end
 
   test "delete a screenshot" do
@@ -88,7 +88,7 @@ class ScreenshotsTest < ApplicationSystemTestCase
     end
     wait_for_turbo
 
-    assert_selector SCREENSHOT_CARD_TITLE, text: screenshot_title, wait: 10
+    assert_selector SELECTED_VERSION_TITLE, text: screenshot_title, wait: 10
   end
 
   test "screenshot breadcrumb shows only the page url" do
