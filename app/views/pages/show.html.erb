@@ -26,11 +26,6 @@
 
 <% if @screenshot %>
   <div class="page-workspace">
-    <%= render "screenshots/version_sidebar",
-        screenshots: @screenshots,
-        selected_screenshot: @screenshot,
-        active_viewport: @active_viewport %>
-
     <div class="page-workspace__main">
       <%= render "screenshots/workspace" %>
     </div>

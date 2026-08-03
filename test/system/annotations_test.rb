@@ -40,7 +40,8 @@ class AnnotationsTest < ApplicationSystemTestCase
       JS
 
       assert_equal 1280, geometry["viewportWidth"]
-      assert_operator geometry["canvasWidth"], :>=, 600
+      assert_operator geometry["canvasWidth"], :>=, 800
+      assert_no_selector ".version-sidebar"
 
       pw_page.set_viewport_size(width: 1920, height: 720)
       review_width = pw_page.locator("main.main--review").evaluate(
@@ -94,6 +95,67 @@ class AnnotationsTest < ApplicationSystemTestCase
         assert_in_delta dimensions.first["width"], dimension["width"], 1
         assert_in_delta dimensions.first["height"], dimension["height"], 1
       end
+
+      toolbar = pw_page.locator(".review-toolbar").bounding_box
+      switcher = pw_page.locator(".viewport-switcher").bounding_box
+      version_selector = pw_page.locator(".version-selector").bounding_box
+
+      assert_in_delta switcher["y"], version_selector["y"], 1
+      assert_operator version_selector["x"], :>, switcher["x"] + switcher["width"]
+      assert_operator toolbar["width"], :>, 1_000
+    end
+  end
+
+  test "narrow review wraps the version selector and keeps its menu in bounds" do
+    screenshot = Screenshot.order(:created_at, :id).last
+    tablet = screenshot.screenshot_images.create!(viewport: :tablet, status: :ready)
+    tablet.image.attach(
+      io: File.open(TEST_IMAGE_PATH),
+      filename: "tablet.png",
+      content_type: "image/png"
+    )
+
+    visit page_path(screenshot.page, version_id: screenshot.id)
+    assert_selector ".viewport-switcher", wait: 10
+
+    with_playwright_page do |pw_page|
+      pw_page.set_viewport_size(width: 720, height: 720)
+      pw_page.locator(".version-selector__summary").click
+      pw_page.locator(".version-selector__menu").wait_for(state: "visible", timeout: 10_000)
+
+      geometry = pw_page.evaluate(<<~JS)
+        (() => {
+          const rect = selector => document.querySelector(selector).getBoundingClientRect()
+          const toolbar = rect(".review-toolbar")
+          const switcher = rect(".viewport-switcher")
+          const selector = rect(".version-selector")
+          const menu = rect(".version-selector__menu")
+
+          return {
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            toolbar: { left: toolbar.left, right: toolbar.right },
+            switcher: { bottom: switcher.bottom },
+            selector: { left: selector.left, right: selector.right, top: selector.top },
+            menu: {
+              left: menu.left,
+              right: menu.right,
+              top: menu.top,
+              bottom: menu.bottom
+            }
+          }
+        })()
+      JS
+
+      assert_operator geometry.dig("selector", "top"), :>, geometry.dig("switcher", "bottom")
+      assert_in_delta geometry.dig("toolbar", "left"), geometry.dig("selector", "left"), 1
+      assert_in_delta geometry.dig("toolbar", "right"), geometry.dig("selector", "right"), 1
+      assert_operator geometry.dig("menu", "left"), :>=, geometry.dig("selector", "left") - 1
+      assert_operator geometry.dig("menu", "right"), :<=, geometry.dig("selector", "right") + 1
+      assert_operator geometry.dig("menu", "left"), :>=, 0
+      assert_operator geometry.dig("menu", "right"), :<=, geometry["viewportWidth"]
+      assert_operator geometry.dig("menu", "top"), :>=, 0
+      assert_operator geometry.dig("menu", "bottom"), :<=, geometry["viewportHeight"]
     end
   end
 

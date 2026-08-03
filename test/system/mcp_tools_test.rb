@@ -37,7 +37,7 @@ class McpToolsTest < ApplicationSystemTestCase
     navigate_to_demo_project
     click_page(title)
     assert_on_page_show(title)
-    assert_selector SCREENSHOT_CARD_TITLE, minimum: 1, wait: 10
+    assert_selector SELECTED_VERSION_TITLE, minimum: 1, wait: 10
   end
 
   test "list_screenshots returns project screenshots" do

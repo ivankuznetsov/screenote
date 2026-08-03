@@ -1,10 +1,17 @@
 <%# Keep the switcher, canvas, and annotations in one frame so viewport and
     filter navigation update every viewport-scoped part of the workspace. %>
 <%= turbo_frame_tag "screenshot_canvas" do %>
-  <%= render "screenshots/viewport_switcher",
-      screenshot: @screenshot,
-      active_viewport: @active_viewport,
-      status: params[:status] %>
+  <div class="review-toolbar">
+    <%= render "screenshots/viewport_switcher",
+        screenshot: @screenshot,
+        active_viewport: @active_viewport,
+        status: params[:status] %>
+
+    <%= render "screenshots/version_selector",
+        screenshots: @screenshots,
+        selected_screenshot: @screenshot,
+        active_viewport: @active_viewport %>
+  </div>
 
   <div class="screenshot-workspace" data-controller="annotorious" data-testid="screenshot-workspace">
     <div class="screenshot-canvas" data-annotorious-target="canvas">
