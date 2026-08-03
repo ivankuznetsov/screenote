@@ -204,6 +204,7 @@ export default class extends Controller {
       return
     }
 
+    this.dispatch("annotation-form-show")
     this.cancelForm()
     this.pendingAnnotationId = annotationId
 

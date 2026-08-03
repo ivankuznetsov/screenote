@@ -161,13 +161,17 @@ class AnnotationsTest < ApplicationSystemTestCase
 
   test "fullscreen review fills the viewport and floats the annotation sidebar" do
     toggle = "[data-testid='review-fullscreen-toggle']"
+    comments_toggle = "[data-testid='review-comments-toggle']"
 
     assert_selector "#{toggle}[aria-label='Enter fullscreen']", wait: 10
     find(toggle).click
 
     assert_selector ".screenshot-workspace--fullscreen", wait: 10
     assert_selector "body.review-fullscreen-open"
-    assert_selector "#{toggle}[aria-label='Exit fullscreen']"
+    assert_selector "#{toggle}[aria-label='Restore view']"
+    assert_selector "#{toggle} .screenshot-fullscreen-toggle__icon--restore", visible: true
+    assert_selector "#{comments_toggle}[aria-label='Hide comments'][aria-expanded='true']"
+    assert_selector ".annotation-sidebar", visible: true
 
     with_playwright_page do |pw_page|
       geometry = pw_page.evaluate(<<~JS)
@@ -229,8 +233,24 @@ class AnnotationsTest < ApplicationSystemTestCase
       assert_operator narrow_sidebar["x"] + narrow_sidebar["width"], :<=, 700
     end
 
+    find(comments_toggle).click
+
+    assert_selector ".screenshot-workspace--comments-collapsed"
+    assert_selector "body.review-fullscreen-comments-collapsed"
+    assert_selector "#{comments_toggle}[aria-label='Show comments'][aria-expanded='false']"
+    assert_no_selector ".annotation-sidebar", visible: true
+
     click_on_image_to_annotate
+
+    assert_no_selector ".screenshot-workspace--comments-collapsed"
+    assert_no_selector "body.review-fullscreen-comments-collapsed"
+    assert_selector "#{comments_toggle}[aria-label='Hide comments'][aria-expanded='true']"
+    assert_selector ".annotation-sidebar", visible: true
     assert_annotation_form_visible
+    with_playwright_page do |pw_page|
+      assert pw_page.locator(COMMENT_FIELD).evaluate("element => element === document.activeElement"),
+        "Starting an annotation should focus its comment field after reopening comments"
+    end
     assert_selector ".screenshot-workspace--fullscreen"
     fill_annotation_comment("Fullscreen annotation")
     submit_annotation
@@ -239,23 +259,41 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_annotation_visible("Fullscreen annotation")
     assert_selector ".screenshot-workspace--fullscreen"
     assert_selector "body.review-fullscreen-open"
-    assert_selector "#{toggle}[aria-label='Exit fullscreen']"
+    assert_selector "#{toggle}[aria-label='Restore view']"
 
     click_link "Open"
     wait_for_turbo
+    assert_selector ".annotation-filter--active", text: "Open"
 
     assert_annotation_visible("Fullscreen annotation")
     assert_selector ".screenshot-workspace--fullscreen"
     assert_selector "body.review-fullscreen-open"
 
+    find(comments_toggle).click
+    assert_selector ".screenshot-workspace--comments-collapsed"
+    page.execute_script("document.querySelector('.annotation-filter').click()")
+    wait_for_turbo
+
+    assert_selector ".screenshot-workspace--fullscreen"
+    assert_selector ".screenshot-workspace--comments-collapsed"
+    assert_selector "body.review-fullscreen-comments-collapsed"
+    assert_selector "#{comments_toggle}[aria-label='Show comments'][aria-expanded='false']"
+    assert_no_selector ".annotation-sidebar", visible: true
+
     find("body").send_keys(:escape)
 
     assert_no_selector ".screenshot-workspace--fullscreen"
+    assert_no_selector ".screenshot-workspace--comments-collapsed"
     assert_no_selector "body.review-fullscreen-open"
+    assert_no_selector "body.review-fullscreen-comments-collapsed"
     assert_selector "#{toggle}[aria-label='Enter fullscreen']"
 
     find(toggle).click
-    find("#{toggle}[aria-label='Exit fullscreen']").click
+    assert_no_selector ".screenshot-workspace--comments-collapsed"
+    assert_no_selector "body.review-fullscreen-comments-collapsed"
+    assert_selector "#{comments_toggle}[aria-label='Hide comments'][aria-expanded='true']"
+    assert_selector ".annotation-sidebar", visible: true
+    find("#{toggle}[aria-label='Restore view']").click
     assert_no_selector ".screenshot-workspace--fullscreen"
   end
 

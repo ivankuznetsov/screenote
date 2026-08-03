@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["image", "toggle"]
+  static targets = ["commentsToggle", "image", "toggle"]
 
   connect() {
     this.handleKeydown = this.handleKeydown.bind(this)
@@ -9,8 +9,20 @@ export default class extends Controller {
     this.resizeFrame = null
 
     const restoreFullscreen = this.fullscreen || document.body.classList.contains("review-fullscreen-open")
-    this.element.classList.remove("screenshot-workspace--fullscreen")
-    if (restoreFullscreen) this.enter()
+    const restoreCommentsCollapsed = restoreFullscreen &&
+      document.body.classList.contains("review-fullscreen-comments-collapsed")
+
+    this.element.classList.remove(
+      "screenshot-workspace--fullscreen",
+      "screenshot-workspace--comments-collapsed"
+    )
+
+    if (restoreFullscreen) {
+      this.enter({ commentsCollapsed: restoreCommentsCollapsed })
+    } else {
+      document.body.classList.remove("review-fullscreen-comments-collapsed")
+      this.updateCommentsToggle(false)
+    }
   }
 
   disconnect() {
@@ -25,7 +37,7 @@ export default class extends Controller {
     }
   }
 
-  enter() {
+  enter({ commentsCollapsed = false } = {}) {
     if (this.fullscreen) return
 
     this.element.classList.add("screenshot-workspace--fullscreen")
@@ -34,6 +46,7 @@ export default class extends Controller {
     window.addEventListener("resize", this.handleResize)
     this.fitImage()
     this.updateToggle(true)
+    this.setCommentsCollapsed(commentsCollapsed)
     this.toggleTarget.focus({ preventScroll: true })
   }
 
@@ -44,14 +57,42 @@ export default class extends Controller {
   }
 
   leaveFullscreen({ preserveBodyState = false, restoreFocus = true } = {}) {
-    this.element.classList.remove("screenshot-workspace--fullscreen")
-    if (!preserveBodyState) document.body.classList.remove("review-fullscreen-open")
+    this.element.classList.remove(
+      "screenshot-workspace--fullscreen",
+      "screenshot-workspace--comments-collapsed"
+    )
+    if (!preserveBodyState) {
+      document.body.classList.remove(
+        "review-fullscreen-open",
+        "review-fullscreen-comments-collapsed"
+      )
+    }
     document.removeEventListener("keydown", this.handleKeydown)
     window.removeEventListener("resize", this.handleResize)
     this.cancelPendingResize()
     this.clearImageFit()
     this.updateToggle(false)
+    this.updateCommentsToggle(false)
     if (restoreFocus) this.toggleTarget.focus({ preventScroll: true })
+  }
+
+  toggleComments() {
+    if (!this.fullscreen) return
+
+    this.setCommentsCollapsed(!this.commentsCollapsed)
+    this.commentsToggleTarget.focus({ preventScroll: true })
+  }
+
+  showComments() {
+    if (!this.fullscreen || !this.commentsCollapsed) return
+
+    this.setCommentsCollapsed(false)
+  }
+
+  setCommentsCollapsed(collapsed) {
+    this.element.classList.toggle("screenshot-workspace--comments-collapsed", collapsed)
+    document.body.classList.toggle("review-fullscreen-comments-collapsed", collapsed)
+    this.updateCommentsToggle(collapsed)
   }
 
   handleKeydown(event) {
@@ -107,14 +148,29 @@ export default class extends Controller {
   }
 
   updateToggle(fullscreen) {
-    const label = fullscreen ? "Exit fullscreen" : "Enter fullscreen"
+    const label = fullscreen ? "Restore view" : "Enter fullscreen"
 
     this.toggleTarget.setAttribute("aria-label", label)
     this.toggleTarget.setAttribute("aria-pressed", fullscreen.toString())
     this.toggleTarget.title = label
   }
 
+  updateCommentsToggle(collapsed) {
+    if (!this.hasCommentsToggleTarget) return
+
+    const expanded = !collapsed
+    const label = expanded ? "Hide comments" : "Show comments"
+
+    this.commentsToggleTarget.setAttribute("aria-label", label)
+    this.commentsToggleTarget.setAttribute("aria-expanded", expanded.toString())
+    this.commentsToggleTarget.title = label
+  }
+
   get fullscreen() {
     return this.element.classList.contains("screenshot-workspace--fullscreen")
+  }
+
+  get commentsCollapsed() {
+    return this.element.classList.contains("screenshot-workspace--comments-collapsed")
   }
 }

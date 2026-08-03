@@ -82,12 +82,18 @@ wrapper receives the same fitted dimensions so drawings and pins keep the
 image as their coordinate boundary. The annotation sidebar floats over the
 right side of the canvas and remains independently scrollable.
 
-Fullscreen review locks document scrolling and exits through the visible X
-button or the Escape key. Turbo frame replacements preserve the body-level
-fullscreen intent, and the replacement controller restores the workspace and
-global listeners so saving or filtering annotations does not collapse the
-review surface. Explicit exit removes the body class, event listeners, and
-image-fit modifier classes.
+Fullscreen review locks document scrolling and returns to the normal workspace
+through a restore-size icon or the Escape key. A separate comments icon keeps
+the floating annotation sidebar open by default and lets reviewers collapse it
+when they need an unobstructed image. The icon remains available to reopen the
+sidebar without leaving fullscreen. Starting a new annotation also reopens a
+collapsed sidebar before the comment form is inserted and focused.
+
+Turbo frame replacements preserve both the body-level fullscreen intent and
+the current comments-panel visibility, so saving or filtering annotations does
+not reset the review surface. Explicit fullscreen exit removes both intent
+classes, restores comments to their default-open state for the next entry, and
+cleans up global listeners and image-fit modifier classes.
 
 ## Regression coverage
 
@@ -106,7 +112,9 @@ version selector's toolbar placement, newest-first link order, version
 navigation, and narrow-screen wrapping and menu bounds.
 Fullscreen browser coverage verifies viewport-sized canvas geometry,
 aspect-ratio-preserving image fit across resize, floating comment bounds,
-annotation creation across Turbo replacement, restored Escape handling,
-scroll-lock cleanup, and X-button exit.
+annotation creation across Turbo replacement, comment collapse/expand and
+automatic reopening for annotation entry, collapsed-state restoration through
+a frame update, restored Escape handling, default-open comments on later entry,
+scroll-lock cleanup, and restore-button exit.
 
 See also: [[controllers/web-controllers]], [[models/page]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]
