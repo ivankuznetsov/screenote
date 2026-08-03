@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-07-28
+updated: 2026-08-03
 tags: [gaps, documentation, todo]
 ---
 
@@ -55,6 +55,13 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - Environment variable documentation for production setup.
 
 ## Incomplete Documentation
+
+### Project Route Filtering
+- Project route filters normalize and match page names in memory because stored
+  names may be slash-leading paths, absolute URLs, or human labels. Thumbnail
+  associations are preloaded only after filtering, but every page row is still
+  materialized. If projects grow large enough for this to become measurable,
+  add an indexed canonical path column and backfill it from `Page.display_path`.
 
 ### Admin Features
 - Admin dashboard only has 3 stats. If there are admin-only features beyond the dashboard, they are not documented.

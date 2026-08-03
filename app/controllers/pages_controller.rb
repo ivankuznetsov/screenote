@@ -5,6 +5,7 @@ class PagesController < ApplicationController
   before_action :set_page, only: %i[show edit update destroy]
 
   def show
+    @projects = Current.user.projects.select(:id, :name).order(:name).to_a
     @screenshots = @page.screenshots.recent_first.includes(:screenshot_images).to_a
     @screenshot = selected_screenshot
     load_workspace if @screenshot

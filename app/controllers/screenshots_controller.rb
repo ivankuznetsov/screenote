@@ -55,8 +55,20 @@ class ScreenshotsController < ApplicationController
 
   def destroy
     page = @page
-    @screenshot.destroy
-    redirect_to page_path(page), notice: "Screenshot deleted."
+    project = @project
+
+    destination, notice = page.with_lock do
+      @screenshot.destroy!
+
+      if (remaining_screenshot = page.screenshots.recent_first.first)
+        [ page_workspace_path_for(remaining_screenshot), "Screenshot deleted." ]
+      else
+        page.destroy!
+        [ project_path(project), "Last version deleted. Page removed." ]
+      end
+    end
+
+    redirect_to destination, notice: notice
   end
 
   private

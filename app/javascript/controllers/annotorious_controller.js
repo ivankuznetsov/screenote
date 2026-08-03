@@ -396,7 +396,7 @@ export default class extends Controller {
   }
 
   selectSidebarAnnotation(event) {
-    if (event.target.closest("a, form, input, textarea, summary, details")) return
+    if (event.target.closest("a, button, form, input, textarea, summary, details")) return
 
     this.selectAnnotation(event.currentTarget.dataset.annotationId, { source: "sidebar" })
   }

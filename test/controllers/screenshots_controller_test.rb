@@ -271,12 +271,45 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Destroy
-  test "destroy deletes screenshot" do
+  test "destroying the last screenshot also deletes its empty page" do
     sign_in(@user)
 
-    assert_difference "Screenshot.count", -1 do
-      delete screenshot_path(@screenshot)
+    assert_difference -> { Screenshot.count }, -1 do
+      assert_difference -> { Page.count }, -1 do
+        delete screenshot_path(@screenshot)
+      end
     end
-    assert_redirected_to page_path(@page)
+    assert_redirected_to project_path(@project)
+    assert_equal "Last version deleted. Page removed.", flash[:notice]
+  end
+
+  test "destroying one of several screenshots keeps the page and selects a remaining version" do
+    sign_in(@user)
+    remaining_screenshot = @page.screenshots.create!(title: "Remaining version", status: :ready)
+
+    assert_difference -> { Screenshot.count }, -1 do
+      assert_no_difference -> { Page.count } do
+        delete screenshot_path(@screenshot)
+      end
+    end
+
+    assert_redirected_to page_path(@page, version_id: remaining_screenshot.id)
+    assert_equal "Screenshot deleted.", flash[:notice]
+  end
+
+  test "destroy returns not found without changing another users screenshot or page" do
+    sign_in(@user)
+    screenshot = screenshots(:bob_screenshot)
+    page = screenshot.page
+
+    assert_no_difference -> { Screenshot.count } do
+      assert_no_difference -> { Page.count } do
+        delete screenshot_path(screenshot)
+      end
+    end
+
+    assert_response :not_found
+    assert Screenshot.exists?(screenshot.id)
+    assert Page.exists?(page.id)
   end
 end

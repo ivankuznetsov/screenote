@@ -61,7 +61,7 @@ class AnnotationsTest < ApplicationSystemTestCase
         })
       JS
 
-      assert_equal 5, dimensions.size
+      assert_equal 3, dimensions.size
       dimensions.drop(1).each do |dimension|
         assert_in_delta dimensions.first["width"], dimension["width"], 1
         assert_in_delta dimensions.first["height"], dimension["height"], 1
@@ -442,12 +442,71 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_annotation_resolved("Will be resolved")
   end
 
+  test "annotation actions share one row and the reply composer uses the thread width" do
+    create_annotation("Compact thread controls")
+
+    within find(ANNOTATION_ITEM, text: "Compact thread controls") do
+      within '[data-testid="annotation-actions"]' do
+        assert_button "Reply"
+        assert_button "Resolve"
+        assert_button "Delete"
+      end
+      reply_toggle = find(REPLY_TOGGLE)
+      reply_toggle.click
+      assert_selector '[data-testid="reply-composer"]', visible: true
+      reply_toggle.click
+      assert_selector '[data-testid="reply-composer"]', visible: false
+      assert_equal "false", reply_toggle["aria-expanded"]
+      reply_toggle.click
+      assert_selector '[data-testid="reply-composer"]', visible: true
+    end
+
+    with_playwright_page do |pw_page|
+      geometry = pw_page.evaluate(<<~JS)
+        (() => {
+          const item = [...document.querySelectorAll(#{ANNOTATION_ITEM.to_json})]
+            .find(candidate => candidate.textContent.includes("Compact thread controls"))
+          const actions = [...item.querySelectorAll('[data-testid="annotation-actions"] button, [data-testid="annotation-actions"] input[type="submit"]')]
+          const textarea = item.querySelector(#{REPLY_TEXTAREA.to_json})
+          const form = textarea.closest("form")
+          const itemRect = item.getBoundingClientRect()
+          const textareaRect = textarea.getBoundingClientRect()
+          const formStyle = getComputedStyle(form)
+
+          return {
+            actionTops: actions.map(action => action.getBoundingClientRect().top),
+            contentWidth: itemRect.width - 24,
+            textareaWidth: textareaRect.width,
+            textareaHeight: textareaRect.height,
+            formBorder: formStyle.borderTopWidth,
+            formPadding: formStyle.paddingTop
+          }
+        })()
+      JS
+
+      assert_operator geometry["actionTops"].max - geometry["actionTops"].min, :<=, 1
+      assert_in_delta geometry["contentWidth"], geometry["textareaWidth"], 2
+      assert_operator geometry["textareaHeight"], :>=, 80
+      assert_equal "0px", geometry["formBorder"]
+      assert_equal "0px", geometry["formPadding"]
+    end
+  end
+
   test "unresolve a resolved annotation" do
     create_annotation("Will be unresolved")
 
     resolve_annotation("Will be unresolved")
     wait_for_turbo
     assert_annotation_resolved("Will be unresolved")
+
+    within find(ANNOTATION_ITEM, text: "Will be unresolved") do
+      unresolve_toggle = find(UNRESOLVE_BUTTON)
+      unresolve_toggle.click
+      assert_selector '[data-testid="unresolve-form"]', visible: true
+      unresolve_toggle.click
+      assert_selector '[data-testid="unresolve-form"]', visible: false
+      assert_equal "false", unresolve_toggle["aria-expanded"]
+    end
 
     unresolve_annotation("Will be unresolved", reason: "Still broken on mobile")
     wait_for_turbo

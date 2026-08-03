@@ -26,7 +26,7 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "[data-testid='screenshot-workspace']", count: 1
-    assert_select "[data-testid='page-detail-title']", page.name
+    assert_select "[data-testid='breadcrumb-current']", text: page.name, count: 1
     assert_select "[data-testid='version-selector']", count: 1
     assert_select "[data-testid='version-selector-item'][aria-current='page'][data-version-id='#{newer.id}']", count: 1
     assert_select "[data-testid='version-selector-item'][data-version-id='#{older.id}']", count: 1
@@ -75,8 +75,8 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "[data-testid='empty-state']", count: 1
     assert_select "a[href='#{new_page_screenshot_path(page)}']", text: /Upload/
-    assert_select "a[href='#{edit_page_path(page)}']", count: 1
-    assert_select "form[action='#{page_path(page)}']", count: 1
+    assert_select "a[href='#{edit_page_path(page)}']", count: 0
+    assert_select "form[action='#{page_path(page)}']", count: 0
   end
 
   test "show renders page and version actions at one consistent size" do
@@ -87,26 +87,50 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     get page_path(page)
 
     assert_response :success
-    assert_select ".page-detail__actions .btn", count: 5
+    assert_select ".page-detail__actions .btn", count: 3
     assert_select ".page-detail__actions .btn--small", count: 0
-    assert_select ".page-detail__actions > a", count: 3
-    assert_select ".page-detail__actions > form", count: 2
+    assert_select ".page-detail__actions > a", count: 2
+    assert_select ".page-detail__actions > form", count: 1
   end
 
-  test "show renders only the exact page url in the breadcrumb" do
+  test "show renders project navigation and a query-free path hierarchy" do
     sign_in(@user)
-    page = @project.pages.create!(name: "/energy-digest/uk-energy-digest-2026-07-28/")
+    page = @project.pages.create!(name: "/energy-digest/uk-energy-digest-2026-07-28/?page=1#selected")
     page.screenshots.create!(title: "Production")
 
     get page_path(page)
 
     assert_response :success
-    assert_select "[data-testid='breadcrumb']", count: 1 do |nodes|
-      assert_equal page.name, nodes.first.text.strip
-      assert_select "a[href='#{page_path(page)}']", text: page.name, count: 1
+    assert_select "[data-testid='breadcrumb']", count: 1 do
+      assert_select "[data-testid='project-switcher'] option[selected]", text: @project.name, count: 1
+      assert_select "a[href='#{project_path(@project, path_prefix: "/energy-digest")}']",
+        text: "energy-digest", count: 1
+      assert_select "[data-testid='breadcrumb-current']",
+        text: "uk-energy-digest-2026-07-28", count: 1
     end
-    assert_no_match @project.name, css_select("[data-testid='breadcrumb']").first.text
+    assert_no_match "page=1", css_select("[data-testid='breadcrumb']").first.text
+    assert_no_match "selected", css_select("[data-testid='breadcrumb']").first.text
     assert_no_match "Production", css_select("[data-testid='breadcrumb']").first.text
+  end
+
+  test "show renders one root marker for a root page" do
+    sign_in(@user)
+    page = @project.pages.create!(name: "/")
+
+    get page_path(page)
+
+    assert_response :success
+    assert_select "[data-testid='breadcrumb-current']", text: "/", count: 1
+    assert_select ".route-breadcrumb__separator", count: 0
+  end
+
+  test "show project switcher omits inaccessible projects" do
+    sign_in(@user)
+
+    get page_path(@page)
+
+    assert_response :success
+    assert_select "[data-testid='project-switcher'] option[value='#{project_path(projects(:bob_project))}']", count: 0
   end
 
   test "show renders the literal newest pending or failed version" do

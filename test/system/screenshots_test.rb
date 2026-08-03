@@ -56,15 +56,16 @@ class ScreenshotsTest < ApplicationSystemTestCase
     assert_selected_version_title(updated_title)
   end
 
-  test "delete a screenshot" do
+  test "deleting the last version removes its empty page" do
     create_screenshot("Delete Me #{Time.now.to_i}")
 
     accept_confirm do
       find(DELETE_SCREENSHOT_BUTTON).click
     end
 
-    assert_flash_notice "Screenshot deleted."
-    assert_on_page_show
+    assert_flash_notice "Last version deleted. Page removed."
+    assert_on_project_show("Demo Project")
+    assert_page_card_not_visible("Home")
   end
 
   test "upload screenshot without title shows validation error" do
@@ -82,23 +83,16 @@ class ScreenshotsTest < ApplicationSystemTestCase
     screenshot_title = "Sidebar Test #{Time.now.to_i}"
     create_screenshot(screenshot_title)
 
-    # Navigate back to page via breadcrumb
-    within find(BREADCRUMB) do
-      all("a").last.click
-    end
-    wait_for_turbo
-
     assert_selector SELECTED_VERSION_TITLE, text: screenshot_title, wait: 10
   end
 
-  test "screenshot breadcrumb shows only the page url" do
+  test "screenshot breadcrumb shows project navigation and a query-free page path" do
     screenshot_title = "Breadcrumb Test #{Time.now.to_i}"
     create_screenshot(screenshot_title)
 
     breadcrumb = find(BREADCRUMB)
-    assert_equal 1, breadcrumb.all("a").size
-    assert_equal breadcrumb.find("a").text, breadcrumb.text
-    assert_no_text "Demo Project", exact: true, wait: 0
+    assert_selector '[data-testid="project-switcher"]', text: "Demo Project"
+    assert_selector '[data-testid="breadcrumb-current"]', text: "Home"
     refute_includes breadcrumb.text, screenshot_title
   end
 

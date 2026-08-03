@@ -12,7 +12,6 @@ module Pages
     PAGE_FORM = '[data-testid="page-form"]'
     PAGE_FORM_ERRORS = '[data-testid="page-form-errors"]'
     PAGE_DETAIL_TITLE = '[data-testid="page-detail-title"]'
-    DELETE_PAGE_BUTTON = '[data-testid="delete-page-button"]'
 
     # --- Actions ---
 

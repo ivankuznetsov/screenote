@@ -78,4 +78,35 @@ class PageTest < ActiveSupport::TestCase
       assert_equal project, page.project
     end
   end
+
+  test "display path removes captured query and fragment state" do
+    page = Page.new(name: "/admin/users?page=1&q=test#selected")
+
+    assert_equal "/admin/users", page.display_path
+    assert_equal [ "admin", "users" ], page.path_segments
+  end
+
+  test "display path extracts the path from an absolute captured url" do
+    page = Page.new(name: "https://rabata.io/admin/users?page=1")
+
+    assert_equal "/admin/users", page.display_path
+  end
+
+  test "display path preserves human-readable page names including URI punctuation" do
+    [ "Homepage Design", "What? now", "FAQ #2", "Design:V2" ].each do |name|
+      assert_equal name, Page.new(name: name).display_path
+    end
+  end
+
+  test "display path removes transient state from a malformed captured path" do
+    page = Page.new(name: "/admin/users bad?page=1#selected")
+
+    assert_equal "/admin/users bad", page.display_path
+  end
+
+  test "path prefix matching includes the route and its descendants" do
+    assert Page.new(name: "/admin?tab=overview").within_path_prefix?("/admin")
+    assert Page.new(name: "/admin/users?page=1").within_path_prefix?("/admin")
+    assert_not Page.new(name: "/administrator").within_path_prefix?("/admin")
+  end
 end
