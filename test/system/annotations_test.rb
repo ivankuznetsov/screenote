@@ -378,11 +378,11 @@ class AnnotationsTest < ApplicationSystemTestCase
     end
 
     assert_in_place_annotation_form_visible
-    assert_selector ".annotation-pin--draft#{REGION_ANNOTATION_PIN}", text: "TE", wait: 10
+    assert_selector UNSAVED_REGION_OUTLINE, wait: 10
 
     with_playwright_page do |pw_page|
       form = pw_page.locator(IN_PLACE_ANNOTATION_FORM).bounding_box
-      region = pw_page.locator(".annotation-pin--draft#{REGION_ANNOTATION_PIN}").bounding_box
+      region = pw_page.locator(UNSAVED_REGION_OUTLINE).bounding_box
       image = pw_page.locator("[data-testid='screenshot-image']").bounding_box
 
       assert_operator form["x"], :>=, image["x"]
@@ -405,6 +405,128 @@ class AnnotationsTest < ApplicationSystemTestCase
     wait_for_turbo
 
     assert_selector REGION_ANNOTATION_PIN, text: "TE", wait: 10
+  end
+
+  test "moving and resizing an unsaved area keeps one box and saves edited geometry" do
+    annotation_count = Annotation.count
+    edited_coords = nil
+
+    with_playwright_page do |pw_page|
+      draw_annotation(
+        pw_page,
+        x_ratio: 0.2,
+        y_ratio: 0.25,
+        width_ratio: 0.25,
+        height_ratio: 0.2
+      )
+      pw_page.locator(IN_PLACE_ANNOTATION_FORM).wait_for(state: "visible", timeout: 10_000)
+
+      initial_width = annotation_form_coords(pw_page)["width"]
+      handle = pw_page.locator(".a9s-edge-handle-right")
+      handle.wait_for(state: "visible", timeout: 10_000)
+      handle_box = handle.bounding_box
+
+      pw_page.mouse.move(handle_box["x"] + handle_box["width"] / 2, handle_box["y"] + handle_box["height"] / 2)
+      pw_page.mouse.down
+      pw_page.mouse.move(handle_box["x"] + handle_box["width"] / 2 + 80, handle_box["y"] + handle_box["height"] / 2)
+      pw_page.mouse.up
+      pw_page.wait_for_function(<<~JS, arg: initial_width, timeout: 10_000)
+        initialWidth => Number(document.querySelector('[name="annotation[width_percent]"]').value) > initialWidth
+      JS
+
+      state = pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          const annotations = controller.anno.getAnnotations()
+          const annotation = controller.anno.getAnnotationById(controller.pendingAnnotationId)
+
+          return {
+            annotationCount: annotations.length,
+            visibleOutlineCount: document.querySelectorAll(#{UNSAVED_REGION_OUTLINE.to_json}).length,
+            legacyDraftRegionCount: document.querySelectorAll(".annotation-pin--draft.annotation-pin--region").length,
+            formWidth: Number(document.querySelector('[name="annotation[width_percent]"]').value),
+            annotationWidth: controller.parseSelector(annotation.target.selector).width_percent,
+            pendingAnnotationId: controller.pendingAnnotationId
+          }
+        })()
+      JS
+
+      assert_equal 1, state["annotationCount"]
+      assert_operator state["annotationWidth"], :>, initial_width
+      assert_in_delta state["annotationWidth"], state["formWidth"], 0.01
+      assert_equal 1, state["visibleOutlineCount"]
+      assert_equal 0, state["legacyDraftRegionCount"]
+
+      before_move = annotation_form_coords(pw_page)
+      outline = pw_page.locator(UNSAVED_REGION_OUTLINE)
+      outline_box = outline.bounding_box
+      pw_page.mouse.move(
+        outline_box["x"] + outline_box["width"] / 2,
+        outline_box["y"] + outline_box["height"] / 2
+      )
+      pw_page.mouse.down
+      pw_page.mouse.move(
+        outline_box["x"] + outline_box["width"] / 2 + 40,
+        outline_box["y"] + outline_box["height"] / 2 + 30
+      )
+      pw_page.mouse.up
+      pw_page.wait_for_function(<<~JS, arg: before_move, timeout: 10_000)
+        beforeMove => {
+          const x = Number(document.querySelector('[name="annotation[x_percent]"]').value)
+          const y = Number(document.querySelector('[name="annotation[y_percent]"]').value)
+          return x > beforeMove.x && y > beforeMove.y
+        }
+      JS
+
+      moved_state = pw_page.evaluate(<<~JS)
+        (() => {
+          const workspace = document.querySelector("[data-controller~='annotorious']")
+          const controller = window.Stimulus.getControllerForElementAndIdentifier(workspace, "annotorious")
+          const annotation = controller.anno.getAnnotationById(controller.pendingAnnotationId)
+          const coords = controller.parseSelector(annotation.target.selector)
+
+          return {
+            x: coords.x_percent,
+            y: coords.y_percent,
+            formX: Number(document.querySelector('[name="annotation[x_percent]"]').value),
+            formY: Number(document.querySelector('[name="annotation[y_percent]"]').value)
+          }
+        })()
+      JS
+      assert_in_delta moved_state["x"], moved_state["formX"], 0.01
+      assert_in_delta moved_state["y"], moved_state["formY"], 0.01
+
+      resized_handle_box = handle.bounding_box
+      pending_id = state["pendingAnnotationId"]
+      pw_page.mouse.move(
+        resized_handle_box["x"] + resized_handle_box["width"] / 2,
+        resized_handle_box["y"] + resized_handle_box["height"] / 2
+      )
+      pw_page.mouse.down
+      pw_page.mouse.move(
+        resized_handle_box["x"] + resized_handle_box["width"] / 2 + 2,
+        resized_handle_box["y"] + resized_handle_box["height"] / 2
+      )
+      pw_page.mouse.up
+      pw_page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+
+      final_state = annotorious_state(pw_page)
+      assert_equal pending_id, final_state["pendingAnnotationId"]
+      assert_equal 1, final_state["annotationIds"].size
+      edited_coords = annotation_form_coords(pw_page)
+    end
+
+    fill_annotation_comment("Edited area")
+    submit_annotation
+    wait_for_turbo
+
+    assert_equal annotation_count + 1, Annotation.count
+    saved_annotation = Annotation.order(:id).last
+    assert_in_delta edited_coords["x"], saved_annotation.x_percent, 0.01
+    assert_in_delta edited_coords["y"], saved_annotation.y_percent, 0.01
+    assert_in_delta edited_coords["width"], saved_annotation.width_percent, 0.01
+    assert_in_delta edited_coords["height"], saved_annotation.height_percent, 0.01
   end
 
   test "canceling a point draft removes its composer and marker without persisting" do
@@ -637,7 +759,7 @@ class AnnotationsTest < ApplicationSystemTestCase
       JS
       pw_page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
 
-      assert_composer_within_image_and_clear_of(pw_page, DRAFT_REGION_ANNOTATION_PIN)
+      assert_composer_within_image_and_clear_of(pw_page, UNSAVED_REGION_OUTLINE)
     end
   end
 

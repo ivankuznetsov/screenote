@@ -3,7 +3,7 @@ title: Screenshot Review UI
 type: ui
 source: app/views/, app/javascript/controllers/annotorious_controller.js, app/assets/stylesheets/application.css
 created: 2026-07-13
-updated: 2026-08-03
+updated: 2026-08-04
 tags: [ui, screenshots, annotations, viewports]
 ---
 
@@ -88,6 +88,12 @@ author colors and initials. Selecting a marker selects and reveals its sidebar
 thread; selecting a sidebar thread highlights and scrolls the corresponding
 marker into view.
 
+Annotorious is the single visible outline for an unsaved area. Moving or
+resizing that outline updates the pending form coordinates when the pointer is
+released, and an edit-handle gesture is never reinterpreted as a new point
+comment. Screenote renders its custom author marker only after the area is
+saved, avoiding a stale second rectangle while the draft is edited.
+
 The canvas captures the active drawing pointer, so a rectangle remains responsive when the cursor crosses an image edge and can continue if the cursor returns before release. Geometry is normalized for either drag direction, clamped to the image endpoints, and converted from rounded percentage endpoints; fully out-of-bounds or otherwise zero-area transients are removed before another draw begins. Pointer capture and listeners are released on pointer completion, cancellation, Turbo replacement, and controller disconnect.
 
 ## Viewport image geometry
@@ -150,8 +156,9 @@ bounds. Annotation interaction
 coverage distinguishes clicks from drags, checks composer bounds and
 non-overlap, verifies author-colored initials and marker/thread selection in
 both directions, enforces one-row thread controls and full-width reply entry,
-and exercises a two-member reply exchange across separate authenticated
-sessions.
+exercises unsaved-area moving, resizing, persistence, and tiny edit-handle
+movements without duplicate regions or stale submitted coordinates, and covers
+a two-member reply exchange across separate authenticated sessions.
 Fullscreen browser coverage verifies viewport-sized canvas geometry,
 aspect-ratio-preserving image fit across resize, floating comment bounds,
 annotation creation across Turbo replacement, comment collapse/expand and
