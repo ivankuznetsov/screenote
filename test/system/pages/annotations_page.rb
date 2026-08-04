@@ -17,7 +17,7 @@ module Pages
     POINT_ANNOTATION_PIN = ".annotation-pin--point"
     REGION_ANNOTATION_PIN = ".annotation-pin--region"
     DRAFT_POINT_ANNOTATION_PIN = ".annotation-pin--draft.annotation-pin--point"
-    DRAFT_REGION_ANNOTATION_PIN = ".annotation-pin--draft.annotation-pin--region"
+    UNSAVED_REGION_OUTLINE = ".a9s-annotation.selected .a9s-inner"
 
     REPLY_TOGGLE = '[data-testid="reply-toggle"]'
     REPLY_TEXTAREA = '[data-testid="reply-textarea"]'

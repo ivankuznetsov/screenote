@@ -1,0 +1,17 @@
+<select id="project-switcher"
+        class="project-switcher"
+        aria-label="Project navigation"
+        data-controller="project-switcher"
+        data-action="change->project-switcher#navigate"
+        data-testid="project-switcher">
+  <option value="" selected disabled><%= project.name %></option>
+  <option value="<%= project_path(project) %>">All <%= project.name %> pages</option>
+  <% other_projects = projects.reject { |candidate| candidate.id == project.id } %>
+  <% if other_projects.any? %>
+    <optgroup label="Switch project">
+      <% other_projects.each do |candidate| %>
+        <option value="<%= project_path(candidate) %>"><%= candidate.name %></option>
+      <% end %>
+    </optgroup>
+  <% end %>
+</select>

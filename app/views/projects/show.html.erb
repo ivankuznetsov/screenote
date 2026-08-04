@@ -1,6 +1,12 @@
 <div class="project-detail__header">
   <div>
-    <h1 class="project-detail__title" data-testid="project-detail-title"><%= @project.name %></h1>
+    <h1 class="project-detail__title route-breadcrumb" data-testid="project-detail-title">
+      <%= render "shared/project_switcher", project: @project, projects: @projects %>
+      <% if @path_prefix %>
+        <% prefix_segments = @path_prefix.split("/").compact_blank %>
+        <%= render "shared/route_segments", project: @project, segments: prefix_segments %>
+      <% end %>
+    </h1>
     <% if @project.description.present? %>
       <p class="project-detail__description" data-testid="project-detail-description"><%= @project.description %></p>
     <% end %>
@@ -17,12 +23,14 @@
 </div>
 
 <div class="project-detail__body">
-  <%= render "snapshot_sidebar", project: @project, snapshots: @snapshots, active_snapshot: @active_snapshot %>
+  <%= render "snapshot_sidebar", project: @project, snapshots: @snapshots,
+      active_snapshot: @active_snapshot, path_prefix: @path_prefix %>
 
   <div class="project-detail__content">
     <% if @pages.any? %>
       <div class="page-grid">
         <% @pages.each do |page| %>
+          <% display_path = page.display_path %>
           <%# In filtered mode the snapshot scope is authoritative — don't fall
               back to page.latest_screenshot, which would render an ad-hoc
               capture from outside the selected snapshot. %>
@@ -49,7 +57,7 @@
                         "(max-width: 960px) calc((100vw - 19.75rem) / 2), 322px",
                       width: 480,
                       height: 270,
-                      alt: page.name,
+                      alt: display_path,
                       loading: "lazy",
                       decoding: "async" %>
               <% else %>
@@ -57,7 +65,7 @@
               <% end %>
             </div>
             <div class="page-card__info">
-              <div class="page-card__name" data-testid="page-card-name"><%= page.name %></div>
+              <div class="page-card__name" data-testid="page-card-name"><%= display_path %></div>
               <div class="page-card__meta">
                 <% count = page.screenshots_count_cache %>
                 <% version_label = @active_snapshot ? "snapshot version" : "version" %>
@@ -69,7 +77,11 @@
       </div>
     <% else %>
       <div class="empty-state" data-testid="empty-state">
-        <% if @active_snapshot %>
+        <% if @path_prefix %>
+          <div class="empty-state__title">No pages under <%= @path_prefix %></div>
+          <div class="empty-state__description">Choose another path or return to all <%= @project.name %> pages.</div>
+          <%= link_to "View all pages", project_path(@project), class: "btn btn--secondary" %>
+        <% elsif @active_snapshot %>
           <div class="empty-state__title">No pages in this snapshot</div>
           <div class="empty-state__description">This snapshot has no ready screenshots.</div>
         <% else %>

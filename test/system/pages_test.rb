@@ -44,58 +44,63 @@ class PagesTest < ApplicationSystemTestCase
     assert_page_form_error
   end
 
-  test "edit a page name" do
+  test "page workspace omits redundant page edit and delete actions" do
     navigate_to_demo_project
+    navigate_to_first_page
 
-    page_name = "Edit Page #{Time.now.to_i}"
-    click_new_page
-    fill_page_form(name: page_name)
-    submit_page_form
-    assert_on_page_show(page_name)
-
-    click_link "Edit page"
-    assert_selector PAGE_TITLE, text: "Edit page", wait: 10
-
-    updated_name = "Updated #{page_name}"
-    fill_page_form(name: updated_name)
-    submit_page_form
-
-    assert_flash_notice "Page updated."
-    assert_on_page_show(updated_name)
+    assert_no_link "Edit page"
+    assert_no_button "Delete page"
   end
 
-  test "delete a page" do
-    navigate_to_demo_project
+  test "page breadcrumb hides query state and filters the project by path" do
+    project = Project.create!(name: "rabata.io", creator: users(:test_user))
+    users_page = project.pages.create!(name: "/admin/users?page=1&q=test&selected=149617800")
+    project.pages.create!(name: "/admin/settings")
+    project.pages.create!(name: "/pricing")
 
-    page_name = "Delete Page #{Time.now.to_i}"
-    click_new_page
-    fill_page_form(name: page_name)
-    submit_page_form
-    assert_on_page_show(page_name)
+    visit page_path(users_page)
 
-    accept_confirm do
-      find(DELETE_PAGE_BUTTON).click
+    within BREADCRUMB do
+      assert_selector '[data-testid="project-switcher"]', text: "rabata.io"
+      assert_link "admin", href: project_path(project, path_prefix: "/admin")
+      assert_selector '[data-testid="breadcrumb-current"]', text: "users"
+      assert_no_text "page=1"
+      assert_no_text "selected=149617800"
     end
 
-    assert_flash_notice "Page deleted."
-    assert_on_project_show("Demo Project")
-    assert_page_card_not_visible(page_name)
+    within BREADCRUMB do
+      click_link "admin"
+    end
+
+    assert_current_path project_path(project, path_prefix: "/admin"), ignore_query: false
+    assert_page_card_visible "/admin/users"
+    assert_page_card_visible "/admin/settings"
+    assert_page_card_not_visible "/pricing"
+    assert_no_text "page=1"
   end
 
-  test "navigate from project to page and back" do
-    navigate_to_demo_project
+  test "project switcher returns to all current pages and opens another project" do
+    project = Project.create!(name: "rabata.io", creator: users(:test_user))
+    current_page = project.pages.create!(name: "/admin/users?selected=149617800")
+    project.pages.create!(name: "/pricing")
+    other_project = Project.create!(name: "docs.rabata.io", creator: users(:test_user))
 
-    # Click into first page
-    page_name = find(PAGE_CARD_NAME, match: :first).text
-    click_page(page_name)
-    assert_on_page_show(page_name)
+    visit page_path(current_page)
 
-    # The breadcrumb intentionally contains only the page URL. Browser history
-    # remains the direct way back to the project overview.
-    page.go_back
-    wait_for_turbo
+    within '[data-testid="project-switcher"]' do
+      assert_selector "option[value='#{project_path(project)}']", text: "All rabata.io pages"
+      assert_selector "option[value='#{project_path(other_project)}']", text: "docs.rabata.io"
+    end
+    select "All rabata.io pages", from: "project-switcher"
 
-    assert_on_project_show("Demo Project")
+    assert_on_project_show("rabata.io")
+    assert_page_card_visible "/admin/users"
+    assert_page_card_visible "/pricing"
+    assert_no_text "selected=149617800"
+
+    select "docs.rabata.io", from: "project-switcher"
+
+    assert_on_project_show("docs.rabata.io")
   end
 
   test "cancel new page returns to project show" do
@@ -137,8 +142,7 @@ class PagesTest < ApplicationSystemTestCase
     submit_page_form
     assert_on_page_show(page_name)
 
-    # Return through project navigation; the page breadcrumb contains only the
-    # canonical page URL.
+    # Return through project navigation.
     navigate_to_demo_project
 
     click_new_page

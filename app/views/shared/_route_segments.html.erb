@@ -1,0 +1,9 @@
+<% segments.each_with_index do |segment, index| %>
+  <span class="route-breadcrumb__separator" aria-hidden="true">/</span>
+  <% if index == segments.length - 1 %>
+    <span class="route-breadcrumb__current" data-testid="breadcrumb-current" aria-current="page"><%= segment %></span>
+  <% else %>
+    <% prefix = "/#{segments.first(index + 1).join("/")}" %>
+    <%= link_to segment, project_path(project, path_prefix: prefix), class: "route-breadcrumb__link" %>
+  <% end %>
+<% end %>

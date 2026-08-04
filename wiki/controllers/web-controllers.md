@@ -53,15 +53,17 @@ Source: `app/controllers/projects_controller.rb`
 | Action | Auth | Notes |
 |--------|------|-------|
 | index | Member | Lists user's projects ordered by updated_at with up to four prewarmed `project_strip` thumbnails |
-| show | Member | Shows pages with version counts; each card opens the canonical page workspace at its exact selected version |
+| show | Member | Shows pages with version counts; optional `path_prefix` limits cards to one route and its descendants; each card opens the canonical page workspace at its exact selected version |
 | new/create | Member + quota | Checks `can_create_project?` (Free: 1 project limit) |
 | edit/update | Owner | |
 | destroy | Owner | |
 
 Both overview actions preload `ScreenshotImage` attachments, blobs, tracked
-variant records, and their attached output blobs. Rendering a project card or
-page card therefore stays on loaded associations and only emits representation
-URLs; image processing remains in `ScreenshotThumbnailJob`.
+variant records, and their attached output blobs. Project show applies any path
+filter before preloading page-card thumbnails, so filtered-out pages do not load
+image records. Rendering a project card or page card therefore stays on loaded
+associations and only emits representation URLs; image processing remains in
+`ScreenshotThumbnailJob`.
 
 ---
 
@@ -74,8 +76,9 @@ Source: `app/controllers/pages_controller.rb`
 - `new/create` -- Scoped to project via `params[:project_id]`
 - `show` -- Canonical screenshot review workspace for a logical page. It selects
   the newest version by `created_at, id` unless a page-scoped `version_id` is
-  supplied, preserves viewport when available, and lists older versions in a
-  text-only sidebar.
+  supplied, preserves viewport when available, lists older versions in a
+  text-only sidebar, and loads the user's accessible projects for the header
+  switcher.
 - `edit/update/destroy` -- Finds page by ID, verifies project membership
 
 ---
@@ -91,6 +94,9 @@ Source: `app/controllers/screenshots_controller.rb`
   with the screenshot encoded as `version_id`.
 - `viewports/:viewport` -- Compatibility endpoint that redirects to the same
   page workspace while preserving the constrained desktop/tablet/mobile viewport.
+- `destroy` -- Deletes one version under the owning page lock. A remaining
+  version becomes the selected page workspace; deleting the final version also
+  deletes the empty page and returns to the project overview.
 - Permits: `title`, `image`
 
 The review layout and Annotorious interaction rules are documented in [[frontend-review-ui]].

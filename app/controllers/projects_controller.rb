@@ -21,10 +21,14 @@ class ProjectsController < ApplicationController
 
   def show
     @is_owner = @project.owner?(Current.user)
+    @projects = Current.user.projects.select(:id, :name).order(:name).to_a
+    @path_prefix = Page.normalize_path_prefix(params[:path_prefix])
     recent_snapshots = @project.snapshots.recent.limit(10).to_a
     @active_snapshot = active_snapshot(recent_snapshots)
     @snapshots = snapshot_sidebar_items(recent_snapshots)
     @pages = @project.pages_ordered_by_latest(snapshot: @active_snapshot).to_a
+    @pages.select! { |page| page.within_path_prefix?(@path_prefix) } if @path_prefix
+    preload_page_thumbnails unless @active_snapshot
     @page_thumbnails = @active_snapshot ? @active_snapshot.thumbnails_for(@pages) : {}
   end
 
@@ -94,5 +98,16 @@ class ProjectsController < ApplicationController
     return recent_snapshots if recent_snapshots.any? { |s| s.id == @active_snapshot.id }
 
     [ @active_snapshot, *recent_snapshots ]
+  end
+
+  def preload_page_thumbnails
+    ActiveRecord::Associations::Preloader.new(
+      records: @pages,
+      associations: {
+        latest_screenshot: {
+          screenshot_images: ScreenshotImage::OVERVIEW_IMAGE_PRELOAD
+        }
+      }
+    ).call
   end
 end

@@ -33,6 +33,7 @@ export default class extends Controller {
     this.removeBoundaryPointerTracking()
     window.removeEventListener("resize", this.handleWindowResize)
     this.cancelPointAnnotation()
+    this.cancelPendingAnnotationSync()
     this.cancelAnnotationFormPosition()
     this.imageWrapperResizeObserver?.disconnect()
     this.imageWrapperResizeObserver = null
@@ -61,6 +62,10 @@ export default class extends Controller {
       this.handleCreate(annotation)
     })
 
+    this.anno.on("updateAnnotation", (annotation) => {
+      this.handleUpdate(annotation)
+    })
+
     // Show the form immediately after drawing completes (on selection)
     // rather than waiting for the user to click away to deselect
     this.anno.on("selectionChanged", (annotations) => {
@@ -84,6 +89,17 @@ export default class extends Controller {
     }
 
     this.showAnnotationForm(coords, annotation.id)
+  }
+
+  handleUpdate(annotation) {
+    if (this.disposed || annotation.id !== this.pendingAnnotationId || !this.hasFormTarget) return
+
+    const coords = this.parseSelector(annotation.target?.selector)
+    if (!coords) return
+
+    this.pendingCoords = coords
+    this.updateAnnotationFormCoords(coords)
+    this.requestAnnotationFormPosition()
   }
 
   parseSelector(selector) {
@@ -162,7 +178,8 @@ export default class extends Controller {
     this.drawingStart = {
       pointerId: event.pointerId,
       clientX: event.clientX,
-      clientY: event.clientY
+      clientY: event.clientY,
+      editingAnnotation: Boolean(target.closest?.(".a9s-annotation.selected"))
     }
 
     this.releaseBoundaryPointerCapture()
@@ -185,8 +202,12 @@ export default class extends Controller {
     this.drawingStart = null
     this.releaseBoundaryPointerCapture()
 
-    if (event.type === "pointerup" && this.isPointGesture(drawingStart, event)) {
-      this.schedulePointAnnotation(event.clientX, event.clientY)
+    if (event.type === "pointerup") {
+      if (drawingStart?.editingAnnotation) {
+        this.schedulePendingAnnotationSync()
+      } else if (this.isPointGesture(drawingStart, event)) {
+        this.schedulePointAnnotation(event.clientX, event.clientY)
+      }
     }
   }
 
@@ -261,6 +282,26 @@ export default class extends Controller {
     this.pointAnnotationFrame = null
   }
 
+  schedulePendingAnnotationSync() {
+    if (this.pendingAnnotationSyncFrame != null || !this.pendingAnnotationId) return
+
+    const pendingAnnotationId = this.pendingAnnotationId
+    this.pendingAnnotationSyncFrame = requestAnimationFrame(() => {
+      this.pendingAnnotationSyncFrame = null
+      if (this.disposed || this.pendingAnnotationId !== pendingAnnotationId) return
+
+      const annotation = this.anno?.getAnnotationById(pendingAnnotationId)
+      if (annotation) this.handleUpdate(annotation)
+    })
+  }
+
+  cancelPendingAnnotationSync() {
+    if (this.pendingAnnotationSyncFrame == null) return
+
+    cancelAnimationFrame(this.pendingAnnotationSyncFrame)
+    this.pendingAnnotationSyncFrame = null
+  }
+
   showAnnotationForm(coords, annotationId, { local = false } = {}) {
     if (this.hasFormTarget && this.commentTarget.value.trim() !== "") {
       if (!local) this.anno?.removeAnnotation(annotationId)
@@ -278,17 +319,22 @@ export default class extends Controller {
 
     pinContainer.appendChild(clone)
 
+    this.updateAnnotationFormCoords(coords)
+    this.formTarget.style.visibility = "hidden"
+    this.formTarget.dataset.needsFocus = "true"
+    if (local) this.renderDraftPin(coords)
+    this.requestAnnotationFormPosition()
+  }
+
+  updateAnnotationFormCoords(coords) {
     this.xPercentTarget.value = coords.x_percent
     this.yPercentTarget.value = coords.y_percent
     this.widthPercentTarget.value = coords.width_percent || ""
     this.heightPercentTarget.value = coords.height_percent || ""
-    this.formTarget.style.visibility = "hidden"
-    this.formTarget.dataset.needsFocus = "true"
-    this.renderDraftPin(coords)
-    this.requestAnnotationFormPosition()
   }
 
   cancelForm() {
+    this.cancelPendingAnnotationSync()
     if (this.hasFormTarget) {
       this.formTarget.remove()
     }
@@ -396,7 +442,7 @@ export default class extends Controller {
   }
 
   selectSidebarAnnotation(event) {
-    if (event.target.closest("a, form, input, textarea, summary, details")) return
+    if (event.target.closest("a, button, form, input, textarea, summary, details")) return
 
     this.selectAnnotation(event.currentTarget.dataset.annotationId, { source: "sidebar" })
   }

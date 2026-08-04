@@ -3,7 +3,7 @@ title: Screenshot Review UI
 type: ui
 source: app/views/, app/javascript/controllers/annotorious_controller.js, app/assets/stylesheets/application.css
 created: 2026-07-13
-updated: 2026-08-03
+updated: 2026-08-04
 tags: [ui, screenshots, annotations, viewports]
 ---
 
@@ -11,15 +11,18 @@ tags: [ui, screenshots, annotations, viewports]
 
 TLDR: Project cards open the canonical page workspace at a selected version,
 with newest-first history in a compact dropdown beside the viewport switcher.
-The viewer keeps a sticky annotation sidebar beside a practical-width image
-canvas, can expand the screenshot into a viewport-fitted review surface with
-floating comments, creates point and area comments directly on the image, and
-uses the Annotorious image wrapper as the coordinate box for viewport-scoped
-author markers and in-place composers.
+The page header exposes query-free path breadcrumbs and project switching. The
+viewer keeps a sticky annotation sidebar beside a practical-width image canvas,
+can expand the screenshot into a viewport-fitted review surface with floating
+comments, creates point and area comments directly on the image, and uses the
+Annotorious image wrapper as the coordinate box for viewport-scoped author
+markers and in-place composers.
 
 Source: `app/views/projects/show.html.erb`, `app/views/pages/show.html.erb`,
 `app/views/screenshots/_workspace.html.erb`,
 `app/javascript/controllers/annotorious_controller.js`,
+`app/javascript/controllers/annotation_controls_controller.js`,
+`app/javascript/controllers/project_switcher_controller.js`,
 `app/javascript/controllers/review_fullscreen_controller.js`,
 `app/assets/stylesheets/application.css`
 
@@ -36,8 +39,18 @@ A page is a logical screen and a screenshot is a captured version; see [[decisio
   instead of reserving a permanent column, and becomes full-width below 760px.
 - Empty, pending-only, failed-only, or attachment-missing pages retain the bare
   page route and management state.
-- Page and version actions in the workspace header use the same rendered height
-  and width; color still distinguishes primary, secondary, and destructive actions.
+- The page header renders the owning project as a selector. Its current-project
+  option returns to every page in that project; other accessible projects are
+  direct switch targets.
+- Captured query strings and fragments remain part of stored page identity but
+  are omitted from navigation labels. Intermediate path segments link to the
+  project overview filtered to that route and its descendants, so
+  `rabata.io / admin / users` can return to either all `rabata.io` pages or all
+  `/admin` pages without displaying transient capture filters.
+- Version actions in the workspace header use the same rendered height and
+  width; color still distinguishes primary, secondary, and destructive actions.
+  Page edit/delete actions are intentionally absent. Deleting a last version
+  removes its now-empty page and returns to the project overview.
 - Desktop, tablet, and mobile `ScreenshotImage` children count as variants of one logical screenshot, not separate versions.
 - When a project is filtered to a snapshot, the page-workspace link targets
   that snapshot's selected screenshot rather than a newer ad-hoc capture.
@@ -62,12 +75,24 @@ selected geometry inside the image wrapper and focus its textarea with
 by overlap so the composer stays in bounds without obscuring the selected area
 when space allows. The sidebar contains saved threads and reply forms only.
 
+Saved-thread actions keep Reply, Resolve/Unresolve, and Delete in one compact
+row. Opening Reply reveals a full-width, taller composer directly under that
+row without a second bordered form container. The disclosure focuses its text
+area without moving the document, while existing reply and reopen submissions
+retain their server-rendered Turbo flow.
+
 Only one unsaved drawing is retained: starting another empty draft cancels the
 previous annotation, while an existing draft with typed text is preserved and
 the new drawing is discarded. Saved point and area markers use deterministic
 author colors and initials. Selecting a marker selects and reveals its sidebar
 thread; selecting a sidebar thread highlights and scrolls the corresponding
 marker into view.
+
+Annotorious is the single visible outline for an unsaved area. Moving or
+resizing that outline updates the pending form coordinates when the pointer is
+released, and an edit-handle gesture is never reinterpreted as a new point
+comment. Screenote renders its custom author marker only after the area is
+saved, avoiding a stale second rectangle while the draft is edited.
 
 The canvas captures the active drawing pointer, so a rectangle remains responsive when the cursor crosses an image edge and can continue if the cursor returns before release. Geometry is normalized for either drag direction, clamped to the image endpoints, and converted from rounded percentage endpoints; fully out-of-bounds or otherwise zero-area transients are removed before another draw begins. Pointer capture and listeners are released on pointer completion, cancellation, Turbo replacement, and controller disconnect.
 
@@ -123,13 +148,17 @@ centered mobile geometry, pin placement against the Annotorious wrapper,
 out-and-back boundary drags, clamping on all four edges, reverse drags,
 zero-area cleanup, and pointer lifecycle cleanup across Turbo replacement.
 They also enforce a practical desktop canvas width and equal rendered
-dimensions for the page actions and viewport-switcher segments, plus the
+dimensions for the version actions and viewport-switcher segments, plus the
 version selector's toolbar placement, newest-first link order, version
-navigation, and narrow-screen wrapping and menu bounds. Annotation interaction
+navigation, query-free project/path navigation, project switching, path-prefix
+filtering, last-version page cleanup, and narrow-screen wrapping and menu
+bounds. Annotation interaction
 coverage distinguishes clicks from drags, checks composer bounds and
 non-overlap, verifies author-colored initials and marker/thread selection in
-both directions, and exercises a two-member reply exchange across separate
-authenticated sessions.
+both directions, enforces one-row thread controls and full-width reply entry,
+exercises unsaved-area moving, resizing, persistence, and tiny edit-handle
+movements without duplicate regions or stale submitted coordinates, and covers
+a two-member reply exchange across separate authenticated sessions.
 Fullscreen browser coverage verifies viewport-sized canvas geometry,
 aspect-ratio-preserving image fit across resize, floating comment bounds,
 annotation creation across Turbo replacement, comment collapse/expand and

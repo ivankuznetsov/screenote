@@ -93,7 +93,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     sign_in(@user)
     get project_path(@project)
     assert_response :success
-    assert_select ".project-detail__title", @project.name
+    assert_select ".project-detail__title [data-testid='project-switcher'] option[selected]",
+      text: @project.name, count: 1
   end
 
   test "show returns not found for other users project" do
@@ -106,7 +107,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     sign_in(users(:bob))
     get project_path(@project)
     assert_response :success
-    assert_select ".project-detail__title", @project.name
+    assert_select ".project-detail__title [data-testid='project-switcher'] option[selected]",
+      text: @project.name, count: 1
   end
 
   test "show orders pages by newest screenshot and falls back to page created_at" do
@@ -257,6 +259,27 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       "All page cards should render their version counter; got #{page_card_version_counters.inspect}"
   end
 
+  test "show combines a snapshot with a path prefix" do
+    sign_in(@user)
+    project = @user.owned_projects.create!(name: "Snapshot path project")
+    snapshot = project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+    inside = project.pages.create!(name: "/admin/users?selected=42")
+    outside = project.pages.create!(name: "/pricing")
+    inside_snapshot = inside.screenshots.create!(title: "Admin snapshot", snapshot: snapshot, status: :ready)
+    outside.screenshots.create!(title: "Pricing snapshot", snapshot: snapshot, status: :ready)
+    inside.screenshots.create!(title: "Newer ad-hoc admin", status: :ready, created_at: 1.minute.from_now)
+
+    get project_path(project, snapshot_id: snapshot.id, path_prefix: "/admin")
+
+    assert_response :success
+    assert_equal [ inside.id ], page_card_page_ids
+    assert_equal inside_snapshot.id, page_card_screenshot_ids.fetch(inside.id)
+    assert_select "[data-testid='snapshot-sidebar-clear']" \
+      "[href='#{project_path(project, path_prefix: "/admin")}']", count: 1
+    assert_select "[data-testid='snapshot-sidebar-item']" \
+      "[href='#{project_path(project, snapshot_id: snapshot.id, path_prefix: "/admin")}']", count: 1
+  end
+
   test "show explains an empty selected snapshot without suggesting a new page" do
     sign_in(@user)
     project = @user.owned_projects.create!(name: "Empty snapshot project")
@@ -295,9 +318,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     # Tight upper bound near observed baseline. With 8 pages, a per-card
-    # query path would land at >= 16; we cap at 14 so partial N+1 regressions
-    # trip the assertion well before they double-up.
-    assert queries.size <= 14,
+    # query path would land above the constant project-switcher lookup; cap at
+    # 15 so partial N+1 regressions trip before they double-up.
+    assert queries.size <= 15,
       "Filtered show should not issue per-page thumbnail queries (saw #{queries.size}): #{queries.last(40).inspect}"
     assert_variant_records_preloaded(queries)
   end
@@ -319,7 +342,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     queries = capture_app_queries { get project_path(project) }
 
     assert_response :success
-    assert queries.size <= 14,
+    assert queries.size <= 15,
       "Unfiltered show should not issue per-page thumbnail queries (saw #{queries.size}): #{queries.last(40).inspect}"
     assert_variant_records_preloaded(queries)
   end

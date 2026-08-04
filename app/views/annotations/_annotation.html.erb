@@ -56,56 +56,78 @@
     </div>
   <% end %>
 
-  <div class="annotation-item__actions">
-    <% if annotation.open? %>
-      <%= button_to "Resolve",
+  <div class="annotation-item__controls" data-controller="annotation-controls">
+    <div class="annotation-item__actions" data-testid="annotation-actions">
+      <button type="button"
+              class="btn btn--small btn--secondary"
+              aria-controls="<%= dom_id(annotation, :reply_composer) %>"
+              aria-expanded="false"
+              data-action="annotation-controls#toggleReply"
+              data-testid="reply-toggle">Reply</button>
+      <% if annotation.open? %>
+        <%= button_to "Resolve",
+            screenshot_annotation_path(annotation.screenshot, annotation),
+            method: :patch,
+            params: { annotation: { status: :resolved } },
+            class: "btn btn--small btn--secondary",
+            data: { testid: "resolve-annotation-button" } %>
+      <% else %>
+        <button type="button"
+                class="btn btn--small btn--warning"
+                aria-controls="<%= dom_id(annotation, :reopen_composer) %>"
+                aria-expanded="false"
+                data-action="annotation-controls#toggleReopen"
+                data-testid="unresolve-button">Unresolve</button>
+      <% end %>
+      <%= button_to "Delete",
           screenshot_annotation_path(annotation.screenshot, annotation),
-          method: :patch,
-          params: { annotation: { status: :resolved } },
-          class: "btn btn--small btn--secondary",
-          data: { testid: "resolve-annotation-button" } %>
-    <% end %>
-    <%= button_to "Delete",
-        screenshot_annotation_path(annotation.screenshot, annotation),
-        method: :delete,
-        class: "btn btn--small btn--danger",
-        data: { turbo_confirm: "Delete this annotation?", testid: "delete-annotation-button" } %>
-  </div>
+          method: :delete,
+          class: "btn btn--small btn--danger",
+          data: { turbo_confirm: "Delete this annotation?", testid: "delete-annotation-button" } %>
+    </div>
 
-  <details class="annotation-thread__form-wrapper annotation-thread__form-wrapper--reply">
-    <summary class="btn btn--small btn--secondary" data-testid="reply-toggle">Reply</summary>
-    <%= form_with url: screenshot_annotation_annotation_comments_path(
-          annotation.screenshot, annotation),
-        method: :post,
-        class: "annotation-thread__form annotation-thread__form--reply" do |f| %>
-      <%= f.text_area :body, name: "annotation_comment[body]",
-          class: "annotation-thread__textarea",
-          placeholder: "Write a reply...",
-          required: true,
-          rows: 2,
-          data: { testid: "reply-textarea" } %>
-      <div class="annotation-thread__form-actions">
-        <%= f.submit "Reply", class: "btn btn--small btn--primary", data: { testid: "reply-button" } %>
-      </div>
-    <% end %>
-  </details>
-
-  <% if annotation.resolved? %>
-    <details class="annotation-thread__form-wrapper" data-testid="unresolve-form">
-      <summary class="btn btn--small btn--warning" data-testid="unresolve-button">Unresolve</summary>
+    <div id="<%= dom_id(annotation, :reply_composer) %>"
+         class="annotation-item__composer"
+         data-annotation-controls-target="reply"
+         data-testid="reply-composer"
+         hidden>
       <%= form_with url: screenshot_annotation_annotation_comments_path(
             annotation.screenshot, annotation),
           method: :post,
           class: "annotation-thread__form" do |f| %>
-        <%= f.hidden_field :reopen, name: "annotation_comment[reopen]", value: "1" %>
         <%= f.text_area :body, name: "annotation_comment[body]",
             class: "annotation-thread__textarea",
-            placeholder: "Explain why you're unresolving this...",
-            rows: 2 %>
+            placeholder: "Write a reply...",
+            required: true,
+            rows: 4,
+            data: { annotation_controls_target: "replyField", testid: "reply-textarea" } %>
         <div class="annotation-thread__form-actions">
-          <%= f.submit "Unresolve", class: "btn btn--small btn--warning", data: { testid: "submit-unresolve-button" } %>
+          <%= f.submit "Reply", class: "btn btn--small btn--primary", data: { testid: "reply-button" } %>
         </div>
       <% end %>
-    </details>
-  <% end %>
+    </div>
+
+    <% if annotation.resolved? %>
+      <div id="<%= dom_id(annotation, :reopen_composer) %>"
+           class="annotation-item__composer"
+           data-annotation-controls-target="reopen"
+           data-testid="unresolve-form"
+           hidden>
+        <%= form_with url: screenshot_annotation_annotation_comments_path(
+              annotation.screenshot, annotation),
+            method: :post,
+            class: "annotation-thread__form" do |f| %>
+          <%= f.hidden_field :reopen, name: "annotation_comment[reopen]", value: "1" %>
+          <%= f.text_area :body, name: "annotation_comment[body]",
+              class: "annotation-thread__textarea",
+              placeholder: "Explain why you're unresolving this...",
+              rows: 4,
+              data: { annotation_controls_target: "reopenField" } %>
+          <div class="annotation-thread__form-actions">
+            <%= f.submit "Unresolve", class: "btn btn--small btn--warning", data: { testid: "submit-unresolve-button" } %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
 </div>
