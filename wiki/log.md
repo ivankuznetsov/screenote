@@ -294,3 +294,9 @@ Append-only log of all wiki operations.
 **Action:** Prevented SQLite parent-table rebuilds from firing legacy `ON DELETE SET NULL` or cascade actions by detaching affected child foreign keys through the alteration window, restoring restrictive constraints afterward, and verifying row and API-key attribution counts before commit.
 **Pages updated:** wiki/schema-evolution.md, wiki/log.md
 **Source:** `db/migrate/20260805130000_add_api_key_issuers_and_annotation_actors.rb`, SQLite and PostgreSQL migration regressions for comment and resolution actors
+
+## [2026-08-05] Freeze atomic admission and authentication-link contract
+
+**Action:** Replaced the U4 project-first invitation lock order with one global installation/email/users/projects/invitations/memberships/credentials order and fixed the digest-only, key-rotatable, fragment-to-tokenless-POST link format plus service result contracts before implementation.
+**Pages updated:** `docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md`, wiki/decisions.md, wiki/log.d/20260805T225000Z-u4-admission-contract.md, wiki/log.md
+**Source:** U4 architecture and correctness review against current auth, invitation, membership, and deployment code
