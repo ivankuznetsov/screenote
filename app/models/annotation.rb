@@ -2,7 +2,8 @@
 
 class Annotation < ApplicationRecord
   belongs_to :screenshot
-  belongs_to :user
+  belongs_to :user, optional: true
+  belongs_to :api_key, optional: true
   belongs_to :resolved_by_user, class_name: "User", optional: true
   belongs_to :resolved_by_api_key, class_name: "ApiKey", optional: true
   has_many :annotation_comments, -> { order(:created_at) }, dependent: :destroy
@@ -15,6 +16,8 @@ class Annotation < ApplicationRecord
     numericality: { greater_than_or_equal_to: 0.0, less_than_or_equal_to: 100.0 }
   validates :width_percent, :height_percent,
     numericality: { greater_than: 0.0, less_than_or_equal_to: 100.0 }, allow_nil: true
+  validate :has_exactly_one_actor
+  validate :resolution_actor_matches_status
   validate :region_within_bounds
 
   def point?
@@ -45,7 +48,7 @@ class Annotation < ApplicationRecord
       },
       comment: comment,
       status: status,
-      author: user&.email,
+      author: user&.email || api_key&.name,
       comments_count: annotation_comments.size,
       created_at: created_at.iso8601
     }
@@ -87,6 +90,25 @@ class Annotation < ApplicationRecord
 
   def latest_resolution_comment
     annotation_comments.where(action: :resolved).order(:created_at, :id).last
+  end
+
+  def has_exactly_one_actor
+    if user_id.blank? && api_key_id.blank?
+      errors.add(:base, "must have a user or api_key actor")
+    elsif user_id.present? && api_key_id.present?
+      errors.add(:base, "cannot have both user and api_key actors")
+    end
+  end
+
+  def resolution_actor_matches_status
+    resolvers = [ resolved_by_user_id, resolved_by_api_key_id ].compact
+
+    if open?
+      errors.add(:base, "open annotation cannot have a resolution actor") if resolvers.any?
+      return
+    end
+
+    errors.add(:base, "resolved annotation must have exactly one resolution actor") unless resolvers.one?
   end
 
   def region_within_bounds

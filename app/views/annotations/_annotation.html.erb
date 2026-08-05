@@ -1,5 +1,7 @@
-<% author_color = annotation_author_color(annotation.user) %>
-<% author_initials = annotation_author_initials(annotation.user) %>
+<% annotation_author = annotation.user || annotation.api_key %>
+<% annotation_author_name = annotation.user&.email || annotation.api_key&.name || "AI Agent" %>
+<% author_color = annotation_author_color(annotation_author) %>
+<% author_initials = annotation_author_initials(annotation_author) %>
 <div class="annotation-item annotation-item--<%= annotation.status %> <%= author_color %>" id="<%= dom_id(annotation) %>"
   data-testid="annotation-item"
   data-action="click->annotorious#selectSidebarAnnotation"
@@ -15,10 +17,10 @@
   <div class="annotation-item__header">
     <button type="button"
             class="annotation-author-marker <%= author_color %>"
-            aria-label="Show annotation by <%= annotation.user.email %>"
+            aria-label="Show annotation by <%= annotation_author_name %>"
             data-author-color="<%= author_color %>"
             data-testid="annotation-author-marker"><%= author_initials %></button>
-    <span class="annotation-item__author"><%= annotation.user.email %></span>
+    <span class="annotation-item__author"><%= annotation_author_name %></span>
     <span class="annotation-item__time"><%= time_ago_in_words(annotation.created_at) %> ago</span>
   </div>
 

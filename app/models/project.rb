@@ -19,6 +19,11 @@ class Project < ApplicationRecord
     foreign_key: :project_id,
     inverse_of: false,
     dependent: :delete_all
+  has_many :oauth_device_grants,
+    class_name: "OauthDeviceGrant",
+    foreign_key: :project_id,
+    inverse_of: :project,
+    dependent: :delete_all
 
   validates :name, presence: true, length: { maximum: 255 }
 

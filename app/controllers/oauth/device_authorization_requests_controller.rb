@@ -28,6 +28,7 @@ module Oauth
         expires_at: OauthDeviceGrant::DEFAULT_EXPIRES_IN.seconds.from_now,
         polling_interval: OauthDeviceGrant::DEFAULT_POLLING_INTERVAL
       )
+      DynamicClientRegistration.mark_used!(application)
 
       render json: authorization_response(grant, plaintext_device_code)
     end

@@ -32,7 +32,7 @@ module Oauth
       token = mint_token(user, project)
 
       render json: {
-        access_token: token.token,
+        access_token: token.plaintext_token,
         token_type: "Bearer",
         scope: token.scopes.to_s,
         expires_in: token.expires_in_seconds,
@@ -78,6 +78,7 @@ module Oauth
       Doorkeeper::AccessToken.create!(
         application: test_application,
         resource_owner_id: user.id,
+        principal_kind: "project",
         project_id: project.id,
         scopes: TOKEN_SCOPES,
         expires_in: Doorkeeper.config.access_token_expires_in,
@@ -87,7 +88,7 @@ module Oauth
 
     def test_application
       Doorkeeper::Application.find_or_create_by!(name: TEST_APPLICATION_NAME) do |app|
-        app.redirect_uri = "http://localhost/callback"
+        app.redirect_uri = "http://127.0.0.1/callback"
         app.scopes = TOKEN_SCOPES
         app.confidential = false
       end

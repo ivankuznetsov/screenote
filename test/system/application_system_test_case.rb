@@ -28,8 +28,18 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     deviceScaleFactor: Float(ENV.fetch("DEVICE_SCALE_FACTOR", "1"))
   }
 
+  setup do
+    # The test environment's NullStore intentionally makes fail-closed rate
+    # limiters unavailable. Give each system test a functional isolated store
+    # so in-process browser/API requests exercise limits without sharing state.
+    @original_system_test_cache = Rails.cache
+    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+  end
+
   teardown do
     take_screenshot unless passed?
+  ensure
+    Rails.cache = @original_system_test_cache
   end
 
   private

@@ -3,6 +3,7 @@
 class CreateAnnotationTool < ApplicationTool
   tool_name "create_annotation"
   description "Create an annotation on a screenshot. Provide coordinates as percentages (0.0-100.0)."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -39,7 +40,7 @@ class CreateAnnotationTool < ApplicationTool
       end
 
       annotation = screenshot.annotations.create!(
-        user: current_user,
+        **current_actor_attributes,
         x_percent: x_percent,
         y_percent: y_percent,
         width_percent: width_percent,

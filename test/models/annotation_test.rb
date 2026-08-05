@@ -27,6 +27,44 @@ class AnnotationTest < ActiveSupport::TestCase
     assert annotation.valid?, "Region annotation should be valid"
   end
 
+  test "valid API key annotation remains attributable after revocation" do
+    api_key = api_keys(:alice_key)
+    annotation = Annotation.create!(
+      screenshot: screenshots(:alice_screenshot),
+      api_key: api_key,
+      x_percent: 50.0,
+      y_percent: 30.0,
+      comment: "Automated review"
+    )
+
+    api_key.revoke!
+
+    assert_nil annotation.reload.user
+    assert_equal api_key, annotation.api_key
+    assert_equal api_key.name, annotation.as_api_json.fetch(:author)
+  end
+
+  test "requires exactly one creation actor" do
+    attributes = {
+      screenshot: screenshots(:alice_screenshot),
+      x_percent: 50.0,
+      y_percent: 30.0,
+      comment: "Actor invariant"
+    }
+
+    missing_actor = Annotation.new(**attributes)
+    assert_not missing_actor.valid?
+    assert_includes missing_actor.errors[:base], "must have a user or api_key actor"
+
+    duplicate_actor = Annotation.new(
+      **attributes,
+      user: users(:alice),
+      api_key: api_keys(:alice_key)
+    )
+    assert_not duplicate_actor.valid?
+    assert_includes duplicate_actor.errors[:base], "cannot have both user and api_key actors"
+  end
+
   test "requires x_percent" do
     annotation = Annotation.new(
       screenshot: screenshots(:alice_screenshot),
@@ -225,6 +263,40 @@ class AnnotationTest < ActiveSupport::TestCase
     annotation.reload
     assert annotation.resolved?
     assert_equal api_key, annotation.resolved_by_api_key
+  end
+
+  test "resolution status requires exactly one actor and open status requires none" do
+    annotation = annotations(:point_annotation)
+    annotation.status = :resolved
+
+    assert_not annotation.valid?
+    assert_includes annotation.errors[:base], "resolved annotation must have exactly one resolution actor"
+
+    annotation.resolved_by_user = users(:alice)
+    annotation.resolved_by_api_key = api_keys(:alice_key)
+    assert_not annotation.valid?
+    assert_includes annotation.errors[:base], "resolved annotation must have exactly one resolution actor"
+
+    annotation.status = :open
+    annotation.resolved_by_api_key = nil
+    assert_not annotation.valid?
+    assert_includes annotation.errors[:base], "open annotation cannot have a resolution actor"
+  end
+
+  test "resolve! rejects a missing or ambiguous resolution actor without changing state" do
+    annotation = annotations(:point_annotation)
+
+    assert_no_difference "AnnotationComment.count" do
+      assert_raises(ActiveRecord::RecordInvalid) { annotation.resolve! }
+    end
+    assert annotation.reload.open?
+
+    assert_no_difference "AnnotationComment.count" do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        annotation.resolve!(user: users(:alice), api_key: api_keys(:alice_key))
+      end
+    end
+    assert annotation.reload.open?
   end
 
   test "reopen! sets status to open and creates comment" do

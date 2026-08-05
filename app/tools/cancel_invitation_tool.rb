@@ -3,6 +3,8 @@
 class CancelInvitationTool < ApplicationTool
   tool_name "cancel_invitation"
   description "Cancel a pending project invitation. Requires owner role."
+  mcp_action scope: :mcp_write, read_only: false, destructive: true, idempotent: false, open_world: false
+  authorize { current_user.present? }
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

@@ -13,17 +13,23 @@ class ProjectMembershipsController < ApplicationController
   end
 
   def destroy
-    membership = @project.project_memberships.find(params[:id])
+    result = ProjectMemberships::Remove.call(
+      project: @project,
+      membership_id: params[:id],
+      actor: Current.user
+    )
 
-    if membership.user == Current.user
-      redirect_to project_memberships_path(@project), alert: "You cannot remove yourself."
-      return
-    end
-
-    if membership.destroy
+    case result.status
+    when :removed
       redirect_to project_memberships_path(@project), notice: "Member removed."
-    else
-      redirect_to project_memberships_path(@project), alert: membership.errors.full_messages.to_sentence
+    when :cannot_remove_self
+      redirect_to project_memberships_path(@project), alert: "You cannot remove yourself."
+    when :forbidden
+      redirect_to projects_path, alert: "Only project owners can remove members."
+    when :not_found
+      raise ActiveRecord::RecordNotFound
+    when :invalid
+      redirect_to project_memberships_path(@project), alert: result.membership.errors.full_messages.to_sentence
     end
   end
 end

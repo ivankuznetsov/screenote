@@ -7,9 +7,9 @@ module Api
         return unless require_scope!("mcp_read")
 
         if oauth_authenticated?
-          memberships = current_user.project_memberships.includes(:project)
-          if current_oauth_token.project_id.present?
-            project = require_current_project!(current_oauth_token.project_id)
+          memberships = Api::V1::ProjectScope.memberships(current_principal)
+          if current_principal.project_principal?
+            project = require_current_project!(current_principal.project.id)
             return unless project
 
             memberships = memberships.where(project_id: project.id)
@@ -45,27 +45,24 @@ module Api
 
         return unless require_scope!("mcp_write")
 
-        if current_oauth_token.project_id.present?
+        if current_principal.project_principal?
           render_error("Project-scoped OAuth tokens cannot create projects", code: "forbidden", status: :forbidden)
           return
         end
 
-        project = current_user.with_lock do
-          unless current_user.can_create_project?
-            render_error(
-              "Project limit reached for the current plan",
-              code: "project_limit_reached",
-              status: :forbidden
-            )
-            return
-          end
-
-          current_user.owned_projects.create!(project_params)
-        end
+        project = Projects::Create.call(principal: current_principal, attributes: project_params.to_h)
 
         render json: {
           project: Api::V1::ContractSerializer.project(project, screenshot_count: 0).merge(role: "owner")
         }, status: :created
+      rescue Projects::Create::LimitReached
+        render_error(
+          "Project limit reached for the current plan",
+          code: "project_limit_reached",
+          status: :forbidden
+        )
+      rescue Projects::Create::Forbidden
+        render_error("This OAuth principal cannot create projects", code: "forbidden", status: :forbidden)
       end
 
       private

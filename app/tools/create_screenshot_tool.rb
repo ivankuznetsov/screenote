@@ -3,6 +3,7 @@
 class CreateScreenshotTool < ApplicationTool
   tool_name "create_screenshot"
   description "Upload a screenshot for human annotation. Returns a URL where the human can leave Figma-style comments."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   MAX_BASE64_SIZE = 28 * 1024 * 1024 # ~28MB base64 ≈ ~20MB decoded
 

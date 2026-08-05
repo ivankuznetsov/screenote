@@ -3,6 +3,7 @@
 class ListPagesTool < ApplicationTool
   tool_name "list_pages"
   description "List pages in a project with version counts."
+  mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

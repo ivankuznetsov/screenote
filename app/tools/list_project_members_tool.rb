@@ -3,6 +3,7 @@
 class ListProjectMembersTool < ApplicationTool
   tool_name "list_project_members"
   description "List all members and pending invitations for a project."
+  mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

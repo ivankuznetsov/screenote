@@ -240,3 +240,57 @@ Append-only log of all wiki operations.
 **Action:** Deferred production dimension jobs until the attachment's outer transaction commits, preventing replacement workers from observing and discarding stale attachment state; added explicit commit, rollback, and production-boot contracts.
 **Pages updated:** wiki/self-hosting.md, wiki/log.md
 **Source:** `app/jobs/screenshot_dimension_job.rb`, `test/jobs/screenshot_dimension_job_transaction_test.rb`, `test/integration/production_boot_test.rb`
+
+## [2026-08-05] MCP principal and registry hardening
+
+**Action:** Replaced mutable MCP identity fields with one immutable authenticated principal, enforced exact per-tool scopes and complete safety hints, registered only an explicit approved tool allowlist, and preserved API-key actor provenance without creator impersonation.
+**Pages updated:** wiki/mcp-tools.md, wiki/models/current.md, wiki/log.d/20260805T200000Z-mcp-principal-registry.md, wiki/log.md
+**Source:** `app/models/current.rb`, `config/initializers/fast_mcp.rb`, `app/tools/**/*.rb`, MCP security regression tests
+
+## [2026-08-05] Authenticated principal and OAuth cutover
+
+**Action:** Unified REST and MCP authorization around an immutable user/project principal, added server-owned OAuth project consent across authorization-code/device/refresh flows, serialized membership authority through credential creation and member removal, migrated OAuth and confidential-client secrets to digest-only storage, hardened dynamic registration, and made API-key actors durable without creator impersonation.
+**Pages updated:** wiki/controllers/oauth-controllers.md, wiki/controllers/web-controllers.md, wiki/data-model.md, wiki/schema-evolution.md, wiki/gaps.md, wiki/models/api-key.md, wiki/models/annotation.md, wiki/models/annotation-comment.md, wiki/models/current.md, wiki/models/project-membership.md, wiki/decisions.md, wiki/log.md
+**Source:** `app/services/authenticated_principal.rb`, `app/services/authority_lock.rb`, `app/services/project_memberships/remove.rb`, `app/controllers/oauth`, `app/services/oauth`, `config/initializers/doorkeeper.rb`, `config/initializers/fast_mcp.rb`, U3 migrations and security/concurrency tests
+
+## [2026-08-05] Request-bound MCP transport isolation
+
+**Action:** Retired FastMCP's globally broadcasting legacy SSE/messages endpoints in favor of request-bound POST `/mcp`, bounded invalid-bearer work with a fail-closed pre-authentication IP limiter, and made project listing recheck current OAuth membership before serialization.
+**Pages updated:** wiki/mcp-tools.md, wiki/log.md
+**Source:** `config/initializers/fast_mcp.rb`, `app/tools/list_projects_tool.rb`, MCP transport and tool regressions
+
+## [2026-08-05] Bounded dynamic-client authorization
+
+**Action:** Limited each user to 25 distinct active dynamically registered OAuth clients across authorization-code and device approval, serialized the check before credential issuance, preserved same-client reauthorization, and added deterministic global-capacity concurrency coverage.
+**Pages updated:** wiki/controllers/oauth-controllers.md, wiki/log.d/20260805T204155Z-dynamic-client-authorization-quota.md, wiki/log.md
+**Source:** `app/services/oauth/dynamic_client_authorization_quota.rb`, `app/services/oauth/dynamic_client_registration.rb`, OAuth quota and concurrency regressions
+
+## [2026-08-05] MCP validation order and dependency redaction
+
+**Action:** Moved canonical path, method, IP-policy, and origin-policy rejection ahead of the pre-authentication IP counter while keeping that counter ahead of bearer lookup; normalized FastMCP backtrace errors, suppressed dependency payload logging, and gave every system test a fresh in-memory limiter cache instead of the test environment's fail-closed NullStore.
+**Pages updated:** wiki/mcp-tools.md, wiki/testing-and-ci.md, wiki/log.md
+**Source:** `config/initializers/fast_mcp.rb`, `test/tools/mcp_auth_test.rb`, `test/system/application_system_test_case.rb`, MCP Playwright regressions
+
+## [2026-08-05] Verifiable legacy API-key issuer attribution
+
+**Action:** Restricted legacy issuer backfill to projects whose recorded creator is also the unique current owner, failing before schema mutation when project custody is missing or ambiguous, and added runtime proof that migrated OAuth token digests remain lookup- and refresh-compatible.
+**Pages updated:** wiki/schema-evolution.md, wiki/models/api-key.md, wiki/log.md
+**Source:** `db/migrate/20260805130000_add_api_key_issuers_and_annotation_actors.rb`, isolated migration tests, OAuth flow integration tests
+
+## [2026-08-05] Block unsafe rolling credential migration
+
+**Action:** Recorded the existing Kamal post-deploy migration hook as a release blocker and assigned an executable stop-the-world OAuth credential cutover, refusal guard, backup/restore boundary, and overlap smoke proof to U7/U9.
+**Pages updated:** `docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md`, wiki/gaps.md, wiki/log.md
+**Source:** `.kamal/hooks/post-deploy`, migration `20260805131000`, PostgreSQL upgrade review
+
+## [2026-08-05] Correct legacy API-key issuer handling
+
+**Action:** Superseded the earlier attribution claim after confirming that current ownership cannot prove historical key issuance. The migration now revokes every preexisting key without assigning an issuer, preserves those rows as unknown-issuer audit actors, and requires every active key to carry immutable issuer provenance.
+**Pages updated:** wiki/schema-evolution.md, wiki/models/api-key.md, wiki/data-model.md, wiki/log.md
+**Source:** `db/migrate/20260805130000_add_api_key_issuers_and_annotation_actors.rb`, `app/models/api_key.rb`, migration and authentication regressions
+
+## [2026-08-05] Preserve SQLite API-key actor links during migration
+
+**Action:** Prevented SQLite parent-table rebuilds from firing legacy `ON DELETE SET NULL` or cascade actions by detaching affected child foreign keys through the alteration window, restoring restrictive constraints afterward, and verifying row and API-key attribution counts before commit.
+**Pages updated:** wiki/schema-evolution.md, wiki/log.md
+**Source:** `db/migrate/20260805130000_add_api_key_issuers_and_annotation_actors.rb`, SQLite and PostgreSQL migration regressions for comment and resolution actors

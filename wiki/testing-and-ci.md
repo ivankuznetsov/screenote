@@ -3,7 +3,7 @@ title: Testing and CI
 type: operations
 source: test/, bin/ci, config/ci.rb, .github/workflows/ci.yml
 created: 2026-07-28
-updated: 2026-08-03
+updated: 2026-08-05
 tags: [testing, ci, minitest, capybara, playwright]
 ---
 
@@ -40,6 +40,12 @@ BUNDLE_PATH=vendor/bundle CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
 
 Use the same environment for a focused system file. Serial execution keeps the
 shared server, jobs, and Active Storage fixtures deterministic.
+
+`ApplicationSystemTestCase` replaces the test environment's `NullStore` with a
+fresh in-memory cache for each test and restores it during teardown. This keeps
+rate-limit state isolated while allowing fail-closed request paths to run
+through the in-process server; production continues to use Solid Cache and
+still returns 503 when its limiter backend is unavailable.
 
 `test/system/annotations_test.rb` is the browser contract for the review
 workspace. It covers point clicks, area drags, in-place composer placement,

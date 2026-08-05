@@ -91,7 +91,7 @@ erDiagram
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `sessions` | Database-backed user sessions | user_id, ip_address, user_agent |
-| `api_keys` | Bearer token auth for API/MCP | name, token_digest, token_prefix, project_id, revoked_at, last_used_at |
+| `api_keys` | Bearer token auth for API/MCP | name, token_digest, token_prefix, project_id, issued_by_user_id, revoked_at, last_used_at |
 | `installations` | Singleton persisted deployment and claim identity | singleton_key, deployment_mode, state, storage_service, storage_namespace_fingerprint, bootstrap_token_digest, administrator_id, claimed_at |
 
 ### Billing
@@ -105,10 +105,10 @@ erDiagram
 
 | Table | Purpose |
 |-------|---------|
-| `oauth_applications` | Registered OAuth clients (supports dynamic registration) |
-| `oauth_access_grants` | Authorization codes with PKCE |
-| `oauth_access_tokens` | Bearer tokens scoped to project |
-| `oauth_device_grants` | Short-lived RFC 8628 device requests with hashed device code, human code, polling state, and approval/denial state |
+| `oauth_applications` | Registered OAuth clients, dynamic-registration fingerprint, and last-use time |
+| `oauth_access_grants` | Digest-only authorization codes with PKCE and explicit user/project principal |
+| `oauth_access_tokens` | Digest-only access/refresh credentials with explicit user/project principal |
+| `oauth_device_grants` | Short-lived RFC 8628 requests with hashed device code, user/project consent, polling state, and approval/denial state |
 
 ### Active Storage
 
@@ -128,10 +128,12 @@ erDiagram
 - `screenshots.(snapshot_id, manifest_entry_digest)` -- partial unique identity for prepared screenshot entries.
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique
+- `api_keys.issued_by_user_id` -- immutable provenance for newly issued and active keys; null only on preserved revoked legacy actors
 - `installations.singleton_key` -- unique and constrained to `screenote`; mode, ownership state, storage service, namespace fingerprint, bootstrap digest, and administrator relationships are database-constrained
 - `oauth_device_grants.device_code` -- unique SHA-256 digest; the raw device credential is never stored
 - `oauth_device_grants.user_code` -- unique short-lived human verification code
 - `oauth_device_grants.expires_at` -- indexed absolute expiry used for request validation and scheduled bulk cleanup after a bounded terminal-error retention period
+- `oauth_applications.registration_fingerprint` -- partial unique index for retry-safe dynamic registration
 - `subscriptions.user_id` -- unique (one subscription per user)
 - `subscriptions.stripe_customer_id` -- unique
 - `stripe_webhook_events.stripe_event_id` -- unique
@@ -144,12 +146,10 @@ erDiagram
 ## Foreign Key Cascade Rules
 
 - `annotation_comments -> annotations`: ON DELETE CASCADE
-- `annotation_comments -> users/api_keys`: ON DELETE SET NULL
-- `annotations -> resolved_by_user`: ON DELETE SET NULL
-- `annotations -> resolved_by_api_key`: ON DELETE SET NULL
+- Annotation and comment actor foreign keys are restrictive because their database checks require exactly one durable user or API-key actor.
 - `oauth_access_grants/tokens -> oauth_applications`: ON DELETE CASCADE
-- `oauth_access_grants/tokens -> projects`: ON DELETE SET NULL
-- `oauth_device_grants -> oauth_applications/users`: ON DELETE CASCADE so ephemeral grants cannot block client or account deletion and approved grants cannot outlive their user
+- `oauth_access_grants/tokens/device_grants -> projects`: ON DELETE CASCADE so project credentials are revoked rather than widened to account authority
+- `oauth_device_grants -> oauth_applications/users`: ON DELETE CASCADE so ephemeral grants cannot outlive their client or resource owner
 - `screenshots -> snapshots`: ON DELETE SET NULL
 - `screenshot_images -> screenshots`: no database cascade; Rails `dependent: :destroy` preserves Active Storage purge callbacks
 - Duplicate snapshots for the same `(project_id, git_commit)` are allowed because repeated `/snapshot` captures of one commit can be useful at different times; `taken_at` distinguishes the runs.

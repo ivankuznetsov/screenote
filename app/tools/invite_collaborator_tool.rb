@@ -3,6 +3,8 @@
 class InviteCollaboratorTool < ApplicationTool
   tool_name "invite_collaborator"
   description "Invite a collaborator to a project by email. Sends an invitation email. Requires owner role."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: true
+  authorize { current_user.present? }
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -14,7 +16,7 @@ class InviteCollaboratorTool < ApplicationTool
     return error if error
 
     with_error_handling do
-      unless current_project.owner?(current_user)
+      unless current_principal.can_invite_to?(current_project)
         return { error: "forbidden", message: "Only project owners can invite collaborators" }.to_json
       end
 

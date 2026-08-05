@@ -5,7 +5,7 @@ class ProjectsController < ApplicationController
 
   before_action :set_project, only: %i[show edit update destroy]
   before_action :require_owner!, only: %i[edit update destroy]
-  before_action :require_project_quota!, only: %i[new create]
+  before_action :require_project_quota!, only: :new
 
   def index
     @memberships_by_project = Current.user.project_memberships.includes(:project).index_by(&:project_id)
@@ -37,21 +37,16 @@ class ProjectsController < ApplicationController
   end
 
   def create
-    Current.user.with_lock do
-      unless Current.user.can_create_project?
-        redirect_to subscription_path,
-          alert: "You've reached the free plan limit of 1 project. Upgrade to Pro for unlimited projects."
-        return
-      end
-
-      @project = Current.user.owned_projects.build(project_params)
-
-      if @project.save
-        redirect_to @project, notice: "Project created."
-      else
-        render :new, status: :unprocessable_entity
-      end
-    end
+    @project = Projects::Create.call(
+      principal: AuthenticatedPrincipal.for_user(Current.user),
+      attributes: project_params
+    )
+    redirect_to @project, notice: "Project created."
+  rescue Projects::Create::LimitReached
+    redirect_to_project_upgrade
+  rescue ActiveRecord::RecordInvalid => error
+    @project = error.record
+    render :new, status: :unprocessable_entity
   end
 
   def edit
@@ -73,8 +68,13 @@ class ProjectsController < ApplicationController
   private
 
   def require_project_quota!
+    return unless Screenote::Deployment.current.billing?
     return if Current.user.can_create_project?
 
+    redirect_to_project_upgrade
+  end
+
+  def redirect_to_project_upgrade
     redirect_to subscription_path,
       alert: "You've reached the free plan limit of 1 project. Upgrade to Pro for unlimited projects."
   end

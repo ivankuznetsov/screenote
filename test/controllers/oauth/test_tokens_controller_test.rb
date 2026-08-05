@@ -63,11 +63,12 @@ module Oauth
       result = transport.send(:valid_token?, raw)
 
       assert result, "ProjectAuthTransport#valid_token? should accept the minted token"
-      assert_equal TestTokensController::TEST_USER_EMAIL, Current.mcp_user.email,
-        "valid_token? should resolve mcp_user to the fixed test identity"
-      assert_equal test_project, Current.mcp_project,
-        "Project-scoped token should resolve mcp_project to the fixed test project"
-      assert_nil Current.mcp_api_key, "OAuth path must not set mcp_api_key"
+      principal = Current.authenticated_principal
+      assert_equal TestTokensController::TEST_USER_EMAIL, principal.user.email,
+        "valid_token? should resolve the fixed test identity"
+      assert_equal test_project, principal.project,
+        "Project-scoped token should resolve the fixed test project"
+      assert_nil principal.api_key, "OAuth path must not set an API key"
     end
 
     test "minted token can only resolve the fixed project through tools" do
@@ -78,10 +79,11 @@ module Oauth
       transport.send(:valid_token?, raw)
 
       project = test_project
-      other_project = Current.mcp_user.owned_projects.create!(name: "not-for-test-token")
+      current_user = Current.authenticated_principal.user
+      other_project = current_user.owned_projects.create!(name: "not-for-test-token")
 
-      assert_equal Current.mcp_user, project.creator, "Test user is the project creator"
-      assert_equal :owner, project.role_for(Current.mcp_user),
+      assert_equal current_user, project.creator, "Test user is the project creator"
+      assert_equal :owner, project.role_for(current_user),
         "Test user is an owner member (so user.projects includes it)"
 
       fixed_result = JSON.parse(ListScreenshotsTool.new.call(project_id: project.id))
@@ -97,7 +99,7 @@ module Oauth
 
       transport = ProjectAuthTransport.allocate
       transport.send(:valid_token?, raw)
-      Current.mcp_user.owned_projects.create!(name: "hidden-from-test-token")
+      Current.authenticated_principal.user.owned_projects.create!(name: "hidden-from-test-token")
 
       listed = JSON.parse(ListProjectsTool.new.call)
       assert_equal [ test_project.id ], listed["projects"].map { |project| project["id"] }

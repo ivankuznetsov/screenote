@@ -53,6 +53,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.
 - Environment variable documentation for production setup.
+- **RELEASE BLOCKER:** `.kamal/hooks/post-deploy` currently runs `db:migrate` only after the replacement application starts. Migration `20260805131000` transforms OAuth access, refresh, and confidential-client secrets into values predecessor processes cannot read, while the new runtime expects the migrated columns. Before this branch can merge or publish, U7/U9 must replace that rolling path with an executable stop-the-world cutover, make ordinary deploys refuse while this migration is pending, and prove backup, complete predecessor drain, successor-image migration, raw-token compatibility verification, and restore-before-predecessor rollback.
 
 ## Incomplete Documentation
 
@@ -68,10 +69,6 @@ Areas where documentation is missing or incomplete. Updated from current source,
 
 ### Admin Features
 - Admin dashboard only has 3 stats. If there are admin-only features beyond the dashboard, they are not documented.
-
-### OAuth Token Scoping
-- Doorkeeper tokens can be scoped to projects (`project_id` FK on oauth_access_tokens). REST project authorization and listing bind such a token to that project, and project deletion removes its scoped grants/tokens instead of widening them; the broader product decision about when to issue user-scoped versus project-scoped tokens remains open.
-- **NEW:** Todo #108 proposes fundamentally rethinking this: user-scoped vs project-scoped tokens. The current architecture may change.
 
 ### Todo / Source Status Drift
 - Several todos have frontmatter that appears stale compared with source. Examples: DCR/MCP rate limiting (#087/#088), Doorkeeper admin route skipping (#089), localhost-only DCR redirect URIs (#094), `CreateAnnotationTool` (#012), `ReopenAnnotationTool` (#132), and `AddAnnotationCommentTool` (#133). Do not rely on todo status alone; verify source before planning work.
@@ -89,10 +86,9 @@ The following gaps from the original bootstrap have been partially or fully addr
 1. What is the intended long-term removal plan for the legacy `Screenshot#image`, `width`, `height`, and `status` path after `ScreenshotImage` stabilizes?
 2. Is there a periodic job runner for `Session.cleanup_expired!`?
 3. How is the digest notification job scheduled? (Solid Queue cron? Rake task?)
-4. **NEW:** Should OAuth be user-scoped or project-scoped? (#108 -- architectural decision pending)
-5. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
-6. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was not present during the 2026-07-08 refresh; neither were the default fallback paths `~/wikis/main/wiki/`, `../wikis/master/wiki/`, or `../wikis/main/wiki/`. `qmd search` returned no matching project-wiki results for the CLI/API refresh query. Cross-project context may be incomplete until the path is restored or config is updated.
-7. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
+4. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
+5. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was not present during the 2026-07-08 refresh; neither were the default fallback paths `~/wikis/main/wiki/`, `../wikis/master/wiki/`, or `../wikis/main/wiki/`. `qmd search` returned no matching project-wiki results for the CLI/API refresh query. Cross-project context may be incomplete until the path is restored or config is updated.
+6. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
 
 See also: [[architecture]], [[active-areas]], [[plans-and-initiatives]], [[technical-debt]]
 

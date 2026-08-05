@@ -11,6 +11,17 @@ Doorkeeper::GrantFlow.register(
 Doorkeeper.configure do
   orm :active_record
 
+  # Bearer credentials and confidential-client secrets are one-way hashed at
+  # rest. The release migration performs a stopped-process conversion of every
+  # existing secret, so accepting plaintext as a fallback would reopen the
+  # exposure this boundary is intended to close.
+  hash_token_secrets
+  hash_application_secrets
+
+  # Persist server-selected authority through authorization codes, device-code
+  # exchange, and refresh rotation.
+  custom_access_token_attributes %i[principal_kind project_id]
+
   # Authenticate the resource owner (user) via rails_simple_auth.
   # If the user isn't signed in, redirect to the login page.
   resource_owner_authenticator do
@@ -32,15 +43,18 @@ Doorkeeper.configure do
   access_token_expires_in 1.year
   use_refresh_token
 
-  # Allow HTTP redirect URIs for localhost (RFC 8252 loopback redirect).
-  # Native OAuth clients like Claude Code use http://localhost callbacks.
-  force_ssl_in_redirect_uri { |uri| !uri.host.in?(%w[localhost 127.0.0.1]) }
+  # RFC 8252 native clients use exact loopback IP literals with ephemeral ports.
+  force_ssl_in_redirect_uri { |uri| !%w[127.0.0.1 ::1].include?(uri.hostname) }
 
   # Browser-based PKCE remains the default; RFC 8628 supports headless clients.
   grant_flows %w[authorization_code device_code]
 
-  # Skip consent screen for previously-authorized client+scope combinations
-  skip_authorization do |resource_owner, client|
-    Doorkeeper::AccessToken.matching_token_for(client, resource_owner, client.scopes).present?
+  # Consent is never skipped: the resource owner must be able to choose user
+  # versus project authority for every grant.
+end
+
+Rails.application.config.to_prepare do
+  [ Doorkeeper::AccessGrant, Doorkeeper::AccessToken ].each do |model|
+    model.include(OauthPrincipalRecord) unless model < OauthPrincipalRecord
   end
 end

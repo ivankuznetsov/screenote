@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_05_131000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -53,9 +53,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.index ["annotation_id"], name: "index_annotation_comments_on_annotation_id"
     t.index ["api_key_id"], name: "index_annotation_comments_on_api_key_id"
     t.index ["user_id"], name: "index_annotation_comments_on_user_id"
+    t.check_constraint "(user_id IS NOT NULL AND api_key_id IS NULL) OR (user_id IS NULL AND api_key_id IS NOT NULL)", name: "annotation_comments_exactly_one_actor"
   end
 
   create_table "annotations", force: :cascade do |t|
+    t.integer "api_key_id"
     t.text "comment"
     t.datetime "created_at", null: false
     t.float "height_percent"
@@ -64,21 +66,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.integer "screenshot_id", null: false
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
+    t.integer "user_id"
     t.integer "viewport", default: 0, null: false
     t.float "width_percent"
     t.float "x_percent", null: false
     t.float "y_percent", null: false
+    t.index ["api_key_id"], name: "index_annotations_on_api_key_id"
     t.index ["resolved_by_api_key_id"], name: "index_annotations_on_resolved_by_api_key_id"
     t.index ["resolved_by_user_id"], name: "index_annotations_on_resolved_by_user_id"
     t.index ["screenshot_id", "status"], name: "index_annotations_on_screenshot_id_and_status"
     t.index ["screenshot_id", "viewport"], name: "index_annotations_on_screenshot_id_and_viewport"
     t.index ["screenshot_id"], name: "index_annotations_on_screenshot_id"
     t.index ["user_id"], name: "index_annotations_on_user_id"
+    t.check_constraint "(status = 0 AND resolved_by_user_id IS NULL AND resolved_by_api_key_id IS NULL) OR (status = 1 AND ( (resolved_by_user_id IS NOT NULL AND resolved_by_api_key_id IS NULL) OR (resolved_by_user_id IS NULL AND resolved_by_api_key_id IS NOT NULL) ))", name: "annotations_resolution_actor_state"
+    t.check_constraint "(user_id IS NOT NULL AND api_key_id IS NULL) OR (user_id IS NULL AND api_key_id IS NOT NULL)", name: "annotations_exactly_one_actor"
   end
 
   create_table "api_keys", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.integer "issued_by_user_id"
     t.datetime "last_used_at"
     t.string "name", null: false
     t.integer "project_id", null: false
@@ -86,8 +92,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.string "token_digest", null: false
     t.string "token_prefix"
     t.datetime "updated_at", null: false
+    t.index ["issued_by_user_id"], name: "index_api_keys_on_issued_by_user_id"
     t.index ["project_id"], name: "index_api_keys_on_project_id"
     t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
+    t.check_constraint "revoked_at IS NOT NULL OR issued_by_user_id IS NOT NULL", name: "api_keys_active_requires_issuer"
   end
 
   create_table "installations", force: :cascade do |t|
@@ -117,6 +125,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.string "code_challenge_method"
     t.datetime "created_at", null: false
     t.integer "expires_in", null: false
+    t.string "principal_kind", null: false
     t.integer "project_id"
     t.text "redirect_uri", null: false
     t.integer "resource_owner_id", null: false
@@ -127,6 +136,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.index ["project_id"], name: "index_oauth_access_grants_on_project_id"
     t.index ["resource_owner_id"], name: "index_oauth_access_grants_on_resource_owner_id"
     t.index ["token"], name: "index_oauth_access_grants_on_token", unique: true
+    t.check_constraint "(principal_kind = 'user' AND project_id IS NULL) OR (principal_kind = 'project' AND project_id IS NOT NULL)", name: "oauth_access_grants_valid_principal"
+    t.check_constraint "length(token) = 64", name: "oauth_access_grants_hashed_token"
   end
 
   create_table "oauth_access_tokens", force: :cascade do |t|
@@ -134,9 +145,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.datetime "created_at", null: false
     t.integer "expires_in"
     t.string "previous_refresh_token", default: "", null: false
+    t.string "principal_kind", null: false
     t.integer "project_id"
     t.string "refresh_token"
-    t.integer "resource_owner_id"
+    t.integer "resource_owner_id", null: false
     t.datetime "revoked_at"
     t.string "scopes"
     t.string "token", null: false
@@ -145,18 +157,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.index ["refresh_token"], name: "index_oauth_access_tokens_on_refresh_token", unique: true
     t.index ["resource_owner_id"], name: "index_oauth_access_tokens_on_resource_owner_id"
     t.index ["token"], name: "index_oauth_access_tokens_on_token", unique: true
+    t.check_constraint "(principal_kind = 'user' AND project_id IS NULL) OR (principal_kind = 'project' AND project_id IS NOT NULL)", name: "oauth_access_tokens_valid_principal"
+    t.check_constraint "length(token) = 64", name: "oauth_access_tokens_hashed_token"
+    t.check_constraint "previous_refresh_token = '' OR length(previous_refresh_token) = 64", name: "oauth_access_tokens_hashed_previous_refresh_token"
+    t.check_constraint "refresh_token IS NULL OR length(refresh_token) = 64", name: "oauth_access_tokens_hashed_refresh_token"
   end
 
   create_table "oauth_applications", force: :cascade do |t|
     t.boolean "confidential", default: false, null: false
     t.datetime "created_at", null: false
     t.boolean "dynamic", default: false, null: false
+    t.datetime "last_used_at"
     t.string "name", null: false
     t.text "redirect_uri", null: false
+    t.string "registration_fingerprint", limit: 64
     t.string "scopes", default: "", null: false
     t.string "secret"
     t.string "uid", null: false
     t.datetime "updated_at", null: false
+    t.index ["registration_fingerprint"], name: "index_dynamic_oauth_apps_on_registration_fingerprint", unique: true, where: "dynamic = TRUE AND registration_fingerprint IS NOT NULL"
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
   end
 
@@ -169,6 +188,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.datetime "expires_at", null: false
     t.datetime "last_polled_at"
     t.integer "polling_interval", default: 5, null: false
+    t.string "principal_kind"
+    t.integer "project_id"
     t.integer "resource_owner_id"
     t.string "scopes", null: false
     t.datetime "updated_at", null: false
@@ -176,8 +197,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
     t.index ["application_id"], name: "index_oauth_device_grants_on_application_id"
     t.index ["device_code"], name: "index_oauth_device_grants_on_device_code", unique: true
     t.index ["expires_at"], name: "index_oauth_device_grants_on_expires_at"
+    t.index ["project_id"], name: "index_oauth_device_grants_on_project_id"
     t.index ["resource_owner_id"], name: "index_oauth_device_grants_on_resource_owner_id"
     t.index ["user_code"], name: "index_oauth_device_grants_on_user_code", unique: true
+    t.check_constraint "(approved_at IS NULL AND principal_kind IS NULL AND project_id IS NULL) OR (approved_at IS NOT NULL AND resource_owner_id IS NOT NULL AND ( (principal_kind = 'user' AND project_id IS NULL) OR (principal_kind = 'project' AND project_id IS NOT NULL) ))", name: "oauth_device_grants_valid_principal"
+    t.check_constraint "approved_at IS NULL OR denied_at IS NULL", name: "oauth_device_grants_single_terminal_decision"
   end
 
   create_table "pages", force: :cascade do |t|
@@ -309,21 +333,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "annotation_comments", "annotations", on_delete: :cascade
-  add_foreign_key "annotation_comments", "api_keys", on_delete: :nullify
-  add_foreign_key "annotation_comments", "users", on_delete: :nullify
-  add_foreign_key "annotations", "api_keys", column: "resolved_by_api_key_id", on_delete: :nullify
+  add_foreign_key "annotation_comments", "api_keys"
+  add_foreign_key "annotation_comments", "users"
+  add_foreign_key "annotations", "api_keys"
+  add_foreign_key "annotations", "api_keys", column: "resolved_by_api_key_id"
   add_foreign_key "annotations", "screenshots"
   add_foreign_key "annotations", "users"
-  add_foreign_key "annotations", "users", column: "resolved_by_user_id", on_delete: :nullify
+  add_foreign_key "annotations", "users", column: "resolved_by_user_id"
   add_foreign_key "api_keys", "projects"
+  add_foreign_key "api_keys", "users", column: "issued_by_user_id"
   add_foreign_key "installations", "users", column: "administrator_id"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id", on_delete: :cascade
-  add_foreign_key "oauth_access_grants", "projects", on_delete: :nullify
+  add_foreign_key "oauth_access_grants", "projects", on_delete: :cascade
   add_foreign_key "oauth_access_grants", "users", column: "resource_owner_id", on_delete: :cascade
   add_foreign_key "oauth_access_tokens", "oauth_applications", column: "application_id", on_delete: :cascade
-  add_foreign_key "oauth_access_tokens", "projects", on_delete: :nullify
+  add_foreign_key "oauth_access_tokens", "projects", on_delete: :cascade
   add_foreign_key "oauth_access_tokens", "users", column: "resource_owner_id", on_delete: :cascade
   add_foreign_key "oauth_device_grants", "oauth_applications", column: "application_id", on_delete: :cascade
+  add_foreign_key "oauth_device_grants", "projects", on_delete: :cascade
   add_foreign_key "oauth_device_grants", "users", column: "resource_owner_id", on_delete: :cascade
   add_foreign_key "pages", "projects"
   add_foreign_key "project_invitations", "projects"

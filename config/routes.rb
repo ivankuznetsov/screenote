@@ -17,7 +17,7 @@ Rails.application.routes.draw do
   end
 
   use_doorkeeper do
-    controllers authorizations: "oauth/authorizations"
+    controllers authorizations: "oauth/authorizations", tokens: "oauth/tokens"
     skip_controllers :applications, :authorized_applications, :token_info
   end
 

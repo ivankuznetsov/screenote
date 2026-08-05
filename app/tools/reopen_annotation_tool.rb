@@ -3,6 +3,7 @@
 class ReopenAnnotationTool < ApplicationTool
   tool_name "reopen_annotation"
   description "Reopen a previously resolved annotation with an explanation of why it needs more work"
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -16,7 +17,7 @@ class ReopenAnnotationTool < ApplicationTool
 
     with_error_handling do
       annotation = project_annotations(current_project).find(annotation_id)
-      annotation.reopen!(user: Current.mcp_user, body: reason)
+      annotation.reopen!(**current_actor_attributes, body: reason)
 
       { success: true, annotation: { id: annotation.id, status: annotation.status } }.to_json
     end

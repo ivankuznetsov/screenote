@@ -126,6 +126,20 @@ jobs:
           RAILS_ENV: test
         run: bin/rails test test/migrations/repair_legacy_api_key_token_storage_test.rb
 
+      - name: Test API key actor migration on PostgreSQL
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_migration_test
+          PARALLEL_WORKERS: "1"
+          RAILS_ENV: test
+        run: bin/rails test test/migrations/add_api_key_issuers_and_annotation_actors_test.rb
+
+      - name: Test OAuth principal migration on PostgreSQL
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_migration_test
+          PARALLEL_WORKERS: "1"
+          RAILS_ENV: test
+        run: bin/rails test test/migrations/harden_oauth_principals_and_token_secrets_test.rb
+
   cli-contract:
     name: CLI contract (${{ matrix.label }})
     runs-on: ubuntu-latest

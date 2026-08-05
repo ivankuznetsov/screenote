@@ -3,6 +3,7 @@
 class ListAnnotationsTool < ApplicationTool
   tool_name "list_annotations"
   description "List annotations, optionally filtered by screenshot or status. Supports pagination via limit/offset."
+  mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

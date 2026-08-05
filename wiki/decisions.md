@@ -3,7 +3,7 @@ title: Architectural Decisions
 type: decision
 source: git log
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-08-05
 tags: [decisions, adr, architecture, history]
 ---
 
@@ -124,5 +124,13 @@ Source: `git log --all --oneline` (112 commits total)
 **Context**: Responsive review needs desktop/tablet/mobile images under one logical capture without splitting feedback into unrelated screenshots.
 **Decision**: Add `ScreenshotImage` child rows with per-viewport blobs, dimensions, status, and upload tokens. Add `Annotation#viewport` and a viewport switcher route `/screenshots/:id/viewports/:viewport`.
 **Rationale**: Per-variant rows make upload tokens, analysis status, retry, and UI filtering explicit. Annotations remain percentage-based but are scoped to the layout they reference.
+
+## ADR-015: Explicit Authenticated Principals and Server-Owned OAuth Consent
+
+**Date**: 2026-08-05
+**Status**: Active
+**Context**: REST and MCP had separate identity fields, API keys impersonated project creators, nullable OAuth project IDs could widen authority, and read/write scope behavior drifted by transport.
+**Decision**: Use one immutable `AuthenticatedPrincipal` across REST and MCP. OAuth grants are user-scoped by default or project-scoped only after a signed-in user selects a current membership on Screenote's consent screen. Persist that binding through code/device exchange and refresh; reject membership loss and cascade project deletion. Serialize project consent, code/device exchange, refresh, and member removal in user -> project -> membership -> credential order, retaining authority locks through credential creation. API-key content records the key as actor while retaining a separate immutable issuer. Register only an explicit MCP allowlist with exact scopes and safety metadata.
+**Rationale**: Authority is server-derived, auditable, and transport-independent. Transactional serialization closes membership-loss TOCTOU windows and preserves at least one owner under concurrent removals on both PostgreSQL and SQLite. A deleted project, removed member, revoked key, or future tool subclass cannot silently widen remote access.
 
 See also: [[architecture]], [[schema-evolution]], [[active-areas]], [[models/screenshot-image]]

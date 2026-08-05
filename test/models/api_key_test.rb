@@ -5,11 +5,12 @@ require "test_helper"
 class ApiKeyTest < ActiveSupport::TestCase
   setup do
     @project = projects(:alice_project)
+    @issuer = users(:alice)
     @api_key = api_keys(:alice_key)
   end
 
   test "generates token digest on create" do
-    key = @project.api_keys.create!(name: "New Key")
+    key = @project.api_keys.create!(name: "New Key", issued_by_user: @issuer)
     assert key.token_digest.present?, "Token digest should be generated"
     assert key.token_prefix.present?, "Token prefix should be generated"
     assert key.raw_token.start_with?("sk_proj_"), "Raw token should start with sk_proj_ prefix"
@@ -17,7 +18,7 @@ class ApiKeyTest < ActiveSupport::TestCase
   end
 
   test "raw_token is only available after create" do
-    key = @project.api_keys.create!(name: "New Key")
+    key = @project.api_keys.create!(name: "New Key", issued_by_user: @issuer)
     raw = key.raw_token
     assert raw.present?, "Raw token should be available right after create"
 
@@ -41,14 +42,14 @@ class ApiKeyTest < ActiveSupport::TestCase
   end
 
   test "requires name" do
-    key = @project.api_keys.build(name: "")
+    key = @project.api_keys.build(name: "", issued_by_user: @issuer)
     assert_not key.valid?, "Key without name should be invalid"
     assert key.errors[:name].any?
   end
 
   test "token digest must be unique" do
     existing_digest = @api_key.token_digest
-    duplicate = @project.api_keys.build(name: "Dupe")
+    duplicate = @project.api_keys.build(name: "Dupe", issued_by_user: @issuer)
     duplicate.token_digest = existing_digest
     assert_not duplicate.valid?, "Duplicate token digest should be invalid"
     assert duplicate.errors[:token_digest].any?
@@ -109,13 +110,56 @@ class ApiKeyTest < ActiveSupport::TestCase
   end
 
   test "name cannot exceed 255 characters" do
-    key = @project.api_keys.build(name: "a" * 256)
+    key = @project.api_keys.build(name: "a" * 256, issued_by_user: @issuer)
     assert_not key.valid?, "Name exceeding 255 chars should be invalid"
     assert key.errors[:name].any?
   end
 
   test "belongs to project" do
     assert_equal @project, @api_key.project
+  end
+
+  test "requires immutable issuer provenance when created" do
+    key = @project.api_keys.build(name: "No issuer", revoked_at: Time.current)
+
+    assert_not key.valid?
+    assert key.errors[:issued_by_user].any?
+    assert_equal @issuer, @api_key.issued_by_user
+    assert_raises(ActiveRecord::ReadonlyAttributeError) do
+      @api_key.update!(issued_by_user: users(:bob))
+    end
+  end
+
+  test "revoked legacy key without issuer remains auditable but cannot authenticate" do
+    raw_token = "sk_proj_legacy_unknown_issuer_#{SecureRandom.hex(12)}"
+    now = Time.current
+    ApiKey.insert_all!([ {
+      project_id: @project.id,
+      issued_by_user_id: nil,
+      token_digest: Digest::SHA256.hexdigest(raw_token),
+      token_prefix: raw_token.first(12),
+      name: "Legacy unknown issuer",
+      revoked_at: now,
+      created_at: now,
+      updated_at: now
+    } ])
+
+    legacy_key = ApiKey.find_by_token(raw_token)
+    assert_predicate legacy_key, :revoked?
+    assert_nil legacy_key.issued_by_user
+    assert legacy_key.update!(name: "Preserved legacy actor")
+    assert_nil AuthenticatedPrincipal.for_api_key(legacy_key)
+    assert_nil Api::BearerAuthenticator.call(raw_token)
+  end
+
+  test "requires the issuer to own the project when the key is issued" do
+    key = @project.api_keys.build(name: "Member key", issued_by_user: users(:bob))
+
+    assert_not key.valid?
+    assert_includes key.errors[:issued_by_user], "must be an owner of the project"
+
+    @project.project_memberships.find_by!(user: users(:bob)).update!(role: :owner)
+    assert @project.api_keys.create!(name: "Second owner key", issued_by_user: users(:bob)).persisted?
   end
 
   test "destroyed with project" do

@@ -3,7 +3,7 @@ title: Annotation
 type: model
 source: app/models/annotation.rb
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-08-05
 tags: [model, annotation, feedback, core]
 ---
 
@@ -19,7 +19,8 @@ Source: `app/models/annotation.rb`
 |--------|------|-------|
 | id | integer | PK |
 | screenshot_id | integer | NOT NULL, FK to screenshots |
-| user_id | integer | NOT NULL, FK to users (creator) |
+| user_id | integer | Nullable FK to users (human creator; exactly one actor required) |
+| api_key_id | integer | Nullable FK to API keys (automation creator; exactly one actor required) |
 | comment | text | NOT NULL, max 5000 chars |
 | x_percent | float | NOT NULL, 0.0-100.0 |
 | y_percent | float | NOT NULL, 0.0-100.0 |
@@ -37,7 +38,8 @@ Source: `app/models/annotation.rb`
 | Association | Type | Target |
 |-------------|------|--------|
 | screenshot | belongs_to | [[screenshot]] |
-| user | belongs_to | [[user]] (creator) |
+| user | belongs_to | [[user]] (optional creator) |
+| api_key | belongs_to | [[api-key]] (optional automation creator) |
 | resolved_by_user | belongs_to | [[user]] (optional) |
 | resolved_by_api_key | belongs_to | [[api-key]] (optional) |
 | annotation_comments | has_many | [[annotation-comment]] (ordered by created_at, dependent: destroy) |
@@ -53,6 +55,7 @@ Source: `app/models/annotation.rb`
 - `x_percent`, `y_percent`: presence, numericality 0.0-100.0
 - `width_percent`, `height_percent`: numericality > 0.0 and <= 100.0 (allow nil)
 - Custom: `region_within_bounds` -- ensures annotation region doesn't extend past image boundary
+- Custom and database checks: exactly one of `user_id`/`api_key_id`; open rows have no resolver and resolved rows have exactly one user/API-key resolver
 
 ## Key Methods
 
@@ -65,7 +68,7 @@ Source: `app/models/annotation.rb`
 
 ## Notes
 
-- Both users (web UI) and API keys (agents) can resolve/reopen annotations. The `resolved_by_user` and `resolved_by_api_key` fields track which did it.
+- Users and API keys can create, reply to, resolve, and reopen annotations. Actor identity is durable and exactly-one throughout the thread; API keys do not impersonate their issuer.
 - The `region_within_bounds` validation ensures `x + width <= 100` and `y + height <= 100`.
 - Multi-viewport screenshots require explicit viewport selection for agent-created annotations; single-viewport screenshots can default to the only available viewport.
 

@@ -229,7 +229,7 @@ class McpToolsTest < ApplicationSystemTestCase
   end
 
   def call_mcp_tool(token:, tool_name:, arguments: {})
-    uri = URI("#{app_base_url}/mcp/messages")
+    uri = URI("#{app_base_url}/mcp")
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{token}" if token
     request["Content-Type"] = "application/json"

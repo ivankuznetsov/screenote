@@ -631,7 +631,40 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_path(Project.last)
   end
 
+  test "self-hosted browser project creation is unlimited through the shared operation" do
+    user = users(:bob)
+    assert_equal 1, user.owned_projects.count, "Precondition: Bob owns 1 project"
+    sign_in(user)
+
+    with_self_hosted_deployment do
+      get new_project_path
+      assert_response :success
+
+      assert_difference [ "Project.count", "ProjectMembership.count" ], 1 do
+        post projects_path, params: { project: { name: "Second self-hosted project" } }
+      end
+      assert_redirected_to project_path(Project.order(:id).last)
+    end
+  end
+
   private
+
+  def with_self_hosted_deployment
+    deployment = Screenote::Deployment.new(
+      {
+        "SCREENOTE_EDITION" => "self_hosted",
+        "SCREENOTE_BASE_URL" => "http://screenote.internal",
+        "SECRET_KEY_BASE" => "a" * 64,
+        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      },
+      production: true
+    )
+    previous = Screenote::Deployment.current
+    Screenote::Deployment.instance_variable_set(:@current, deployment)
+    yield
+  ensure
+    Screenote::Deployment.instance_variable_set(:@current, previous)
+  end
 
   def create_ready_screenshot_with_image(page, title:, viewport: :desktop, snapshot: nil)
     screenshot = page.screenshots.create!(title: title, status: :ready, snapshot: snapshot)

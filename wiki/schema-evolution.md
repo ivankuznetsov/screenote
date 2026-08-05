@@ -102,6 +102,13 @@ Source: `db/migrate/`
 | `20260805120000_create_installations` | Singleton edition, storage-namespace, bootstrap, and administrator ownership identity with database state checks |
 | `20260805120500_add_installation_bootstrap_digest_constraint` | Append-only constraint requiring any persisted bootstrap digest to retain SHA-256 length |
 
+### Phase 12: Authenticated Principal Provenance (2026-08-05)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260805130000_add_api_key_issuers_and_annotation_actors` | Revoke unattributable legacy API keys, require issuer provenance for active keys, and enforce exactly one user/API-key actor for annotations, replies, and resolution state |
+| `20260805131000_harden_oauth_principals_and_token_secrets` | Backfill explicit user/project OAuth authority, cascade project deletion, hash all reusable OAuth/client secrets during a stopped-process cutover, and add dynamic-registration identity |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -127,5 +134,9 @@ Source: `db/migrate/`
 11. **Device credentials are short-lived and digest-only**: RFC 8628 device codes are stored as SHA-256 digests and consumed under a row lock during final exchange. Human codes remain lookupable but use 50 bits of entropy, an indexed 10-minute absolute expiry, fail-closed throttled verification, and scheduled cleanup for abandoned grants after 15 minutes of terminal-error retention.
 
 12. **Deployment identity is persistent, not inferred from providers**: one constrained Installation row records SaaS/self-hosted mode, the credential-free storage namespace, and bootstrap/claim state. Startup may rotate credentials but refuses to reinterpret an existing primary database under a different mode or object namespace.
+
+13. **OAuth authority is explicit and secrets are non-restorable**: grants, device grants, and tokens carry a user/project discriminator instead of treating a nullable project as implicit authority. Project deletion cascades. Existing bearer and confidential-client values are converted to SHA-256 only after old processes stop; runtime has no plaintext fallback. The migration avoids rebuilding the parent `oauth_applications` table solely for SQLite CHECK constraints because that can cascade-delete child credentials during table replacement.
+
+14. **Automation authors are durable actors, not impersonated users**: newly issued and active API keys record their issuing user, while annotations and thread events enforce exactly one user or API-key actor in both Rails and the database. Historical issuer identity cannot be reconstructed from later project ownership, so every preexisting key is revoked and retains a null issuer; its row remains available as the durable actor for existing content. A database check requires every active key to have an issuer, and restrictive actor foreign keys prevent credential deletion from erasing audit provenance. On SQLite, child foreign keys are detached before parent-table rebuilds and restored afterward, with row and API-key attribution counts verified before commit so `ON DELETE` actions cannot silently erase legacy audit links.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

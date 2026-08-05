@@ -5,6 +5,7 @@
 class CreateMultiViewportScreenshotTool < ApplicationTool
   tool_name "create_multi_viewport_screenshot"
   description "Create a screenshot with one or more viewport variants (desktop, tablet, mobile). Returns signed upload URLs for each variant — PUT each binary separately."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

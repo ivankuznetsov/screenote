@@ -18,6 +18,10 @@ production:
     command: "OauthDeviceGrant.cleanup_expired!"
     schedule: every 15 minutes
 
+  clear_unused_dynamic_oauth_clients:
+    command: "Oauth::DynamicClientRegistration.cleanup_unused!"
+    schedule: every hour at minute 27
+
   reconcile_screenshot_processing:
     class: ReconcileScreenshotProcessingJob
     schedule: every 5 minutes

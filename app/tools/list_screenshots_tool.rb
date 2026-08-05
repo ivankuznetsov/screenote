@@ -3,6 +3,7 @@
 class ListScreenshotsTool < ApplicationTool
   tool_name "list_screenshots"
   description "List screenshots (versions) in a project, with annotation counts. Supports filtering by page and pagination via limit/offset."
+  mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

@@ -68,7 +68,7 @@ class PagesController < ApplicationController
     @active_viewport = page_workspace_viewport_for(@screenshot, params[:viewport])
     @screenshot_image = @screenshot.image_for(@active_viewport) if @active_viewport
     @annotations = @screenshot.annotations
-      .includes(:user, annotation_comments: [ :user, :api_key ])
+      .includes(:user, :api_key, annotation_comments: [ :user, :api_key ])
       .order(:created_at)
     @annotations = @annotations.where(status: params[:status]) if Annotation.statuses.key?(params[:status])
     @annotations = @annotations.where(viewport: @active_viewport) if @active_viewport

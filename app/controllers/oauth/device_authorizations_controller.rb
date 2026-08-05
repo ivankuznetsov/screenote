@@ -13,7 +13,12 @@ module Oauth
     rescue_from DeviceAuthorizationRateLimiter::Unavailable, with: :render_rate_limiter_unavailable
 
     def show
-      render :enter_code unless params[:user_code].present?
+      if params[:user_code].present?
+        load_principal_projects
+        @selected_principal_project_id = nil
+      else
+        render :enter_code
+      end
     end
 
     def update
@@ -21,15 +26,7 @@ module Oauth
       return unless @device_grant
 
       decision = params[:decision]
-      @device_grant.with_lock do
-        unless authorizable?(@device_grant)
-          return render_invalid_code
-        end
-
-        attributes = { resource_owner: Current.user }
-        attributes[decision == "approve" ? :approved_at : :denied_at] = Time.current
-        @device_grant.update!(attributes)
-      end
+      return unless persist_decision(decision)
 
       render decision == "approve" ? :approved : :denied
     end
@@ -44,6 +41,89 @@ module Oauth
 
     def authorizable?(grant)
       grant.present? && !grant.expired? && !grant.approved? && !grant.denied?
+    end
+
+    def persist_decision(decision)
+      return persist_unscoped_decision(decision) if decision == "deny"
+
+      DynamicClientAuthorizationQuota.authorize(user: Current.user, application: @device_grant.application) do
+        persist_approval
+      end
+    rescue DynamicClientAuthorizationQuota::Exceeded => error
+      render_dynamic_client_quota_exceeded(error)
+      false
+    end
+
+    def persist_approval
+      selected_project_id = params[:principal_project_id].presence
+      if selected_project_id
+        persist_project_approval(selected_project_id)
+      else
+        persist_unscoped_decision("approve")
+      end
+    end
+
+    def persist_project_approval(project_id)
+      PrincipalBinding.with_locked_project(user: Current.user, project_id: project_id, credential: @device_grant) do |valid|
+        unless valid
+          render_invalid_principal_selection
+          next false
+        end
+
+        unless authorizable?(@device_grant)
+          render_invalid_code
+          next false
+        end
+
+        @device_grant.update!(
+          resource_owner: Current.user,
+          principal_kind: "project",
+          project_id: project_id,
+          approved_at: Time.current
+        )
+        true
+      end
+    end
+
+    def persist_unscoped_decision(decision)
+      @device_grant.with_lock do
+        unless authorizable?(@device_grant)
+          render_invalid_code
+          next false
+        end
+
+        attributes = if decision == "deny"
+          { resource_owner: Current.user, denied_at: Time.current }
+        else
+          {
+            resource_owner: Current.user,
+            principal_kind: "user",
+            project: nil,
+            approved_at: Time.current
+          }
+        end
+
+        @device_grant.update!(attributes)
+        true
+      end
+    end
+
+    def render_invalid_principal_selection
+      load_principal_projects
+      @selected_principal_project_id = nil
+      @principal_selection_error = "Choose your account or a project you currently belong to."
+      render :show, status: :unprocessable_entity
+    end
+
+    def render_dynamic_client_quota_exceeded(error)
+      load_principal_projects
+      @selected_principal_project_id = nil
+      @principal_selection_error = error.message
+      render :show, status: :unprocessable_entity
+    end
+
+    def load_principal_projects
+      @principal_projects = Current.user.projects.order(:name, :id)
     end
 
     def enforce_verification_rate_limit

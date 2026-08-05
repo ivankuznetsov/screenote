@@ -54,7 +54,7 @@ Source: `app/controllers/projects_controller.rb`
 |--------|------|-------|
 | index | Member | Lists user's projects ordered by updated_at with up to four prewarmed `project_strip` thumbnails |
 | show | Member | Shows pages with version counts; optional `path_prefix` limits cards to one route and its descendants; each card opens the canonical page workspace at its exact selected version |
-| new/create | Member + quota | Checks `can_create_project?` (Free: 1 project limit) |
+| new/create | Member + edition policy | Uses `Projects::Create`; SaaS keeps the plan quota while self-hosted creation is unlimited |
 | edit/update | Owner | |
 | destroy | Owner | |
 
@@ -64,6 +64,10 @@ filter before preloading page-card thumbnails, so filtered-out pages do not load
 image records. Rendering a project card or page card therefore stays on loaded
 associations and only emits representation URLs; image processing remains in
 `ScreenshotThumbnailJob`.
+
+Browser creation uses the same authenticated-principal operation as REST and
+MCP. The user row lock serializes quota evaluation with insertion; only a
+billing-enabled SaaS deployment applies the free-plan limit.
 
 ---
 
@@ -138,7 +142,7 @@ Source: `app/controllers/api_keys_controller.rb`
 **Actions:** index, new, create, destroy
 
 - All actions require project **owner** role
-- `create` -- Saves API key, flashes `raw_token` for one-time display
+- `create` -- Rechecks owner authority under the shared user/project/membership locks, saves the API key before releasing those locks, and flashes `raw_token` for one-time display
 - `destroy` -- Soft-deletes by calling `revoke!`
 
 ---
@@ -162,7 +166,7 @@ Source: `app/controllers/project_memberships_controller.rb`
 **Actions:** index, destroy
 
 - `index` -- Any project member can view
-- `destroy` -- Owner only. Cannot remove self.
+- `destroy` -- Delegates to the same serialized membership-removal operation as MCP. It rechecks owner authority, cannot remove self, and revokes the removed member's project-bound credentials atomically.
 
 ---
 

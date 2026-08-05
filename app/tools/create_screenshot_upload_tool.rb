@@ -3,6 +3,7 @@
 class CreateScreenshotUploadTool < ApplicationTool
   tool_name "create_screenshot_upload"
   description "Create a screenshot record and get a signed upload URL. Upload the image file directly via curl to the returned URL — no base64 needed."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

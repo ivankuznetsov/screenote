@@ -6,13 +6,10 @@ class McpToolsTest < ActiveSupport::TestCase
   setup do
     @user = users(:alice)
     @project = projects(:alice_project)
-    @api_key = api_keys(:alice_key)
     @screenshot = screenshots(:alice_screenshot)
     @annotation = annotations(:point_annotation)
 
-    Current.mcp_user = @user
-    Current.mcp_project = @project
-    Current.mcp_api_key = @api_key
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(@user)
   end
 
   teardown do
@@ -227,8 +224,6 @@ class McpToolsTest < ActiveSupport::TestCase
   end
 
   test "create_snapshot rejects inaccessible project" do
-    Current.mcp_project = nil
-
     result = JSON.parse(CreateSnapshotTool.new.call(
       project_id: projects(:bob_project).id,
       git_commit: "abc1234"
@@ -611,8 +606,6 @@ class McpToolsTest < ActiveSupport::TestCase
 
   # Project access control
   test "tools reject unauthorized project_id" do
-    Current.mcp_project = nil # Simulate OAuth auth (no pre-set project)
-
     bob_project = projects(:bob_project)
     result = JSON.parse(ListScreenshotsTool.new.call(project_id: bob_project.id))
 
@@ -620,16 +613,12 @@ class McpToolsTest < ActiveSupport::TestCase
   end
 
   test "tools require project_id when no pre-set project" do
-    Current.mcp_project = nil
-
     result = JSON.parse(ListScreenshotsTool.new.call(project_id: nil))
     assert_equal "missing_project_id", result["error"], "Should require project_id for OAuth users"
   end
 
   # ListProjectsTool
   test "list_projects returns user's projects" do
-    Current.mcp_project = nil
-
     result = JSON.parse(ListProjectsTool.new.call)
 
     project_ids = result["projects"].map { |p| p["id"] }
@@ -642,10 +631,27 @@ class McpToolsTest < ActiveSupport::TestCase
     assert project_data["screenshot_count"].is_a?(Integer)
   end
 
+  test "list_projects rechecks a project OAuth membership before serialization" do
+    bob = users(:bob)
+    token = create_oauth_token(
+      application: create_oauth_application,
+      user: bob,
+      project: @project,
+      scopes: "mcp_read"
+    )
+    Current.authenticated_principal = AuthenticatedPrincipal.for_oauth_token(token)
+    assert_equal @project, Current.authenticated_principal.project
+
+    project_memberships(:bob_member_of_alice_project).delete
+
+    result = JSON.parse(ListProjectsTool.new.call)
+
+    assert_empty result.fetch("projects"),
+      "The project cached on an authenticated principal must not survive membership removal"
+  end
+
   # CreateProjectTool
   test "create_project creates a new project" do
-    Current.mcp_project = nil
-
     result = JSON.parse(CreateProjectTool.new.call(name: "Agent Project"))
 
     project_data = result["project"]
@@ -745,8 +751,7 @@ class McpToolsTest < ActiveSupport::TestCase
   end
 
   test "invite_collaborator requires owner role" do
-    Current.mcp_user = users(:bob)
-    Current.mcp_project = @project
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(users(:bob))
 
     result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "someone@example.com"))
 
@@ -789,8 +794,7 @@ class McpToolsTest < ActiveSupport::TestCase
   end
 
   test "cancel_invitation requires owner role" do
-    Current.mcp_user = users(:bob)
-    Current.mcp_project = @project
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(users(:bob))
     invitation = project_invitations(:pending_invitation)
 
     result = JSON.parse(CancelInvitationTool.new.call(project_id: @project.id, invitation_id: invitation.id))
@@ -817,8 +821,7 @@ class McpToolsTest < ActiveSupport::TestCase
   end
 
   test "remove_project_member requires owner role" do
-    Current.mcp_user = users(:bob)
-    Current.mcp_project = @project
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(users(:bob))
     membership = project_memberships(:alice_owns_alice_project)
 
     result = JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
