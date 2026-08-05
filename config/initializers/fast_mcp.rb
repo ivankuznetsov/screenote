@@ -8,6 +8,7 @@ require "fast_mcp"
 class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
   RATE_LIMIT = 60
   RATE_PERIOD = 1.minute
+  RATE_LIMIT_STORE = Screenote::RateLimitStore.new
 
   # NOTE: Raises RateLimitedError instead of returning false for rate-limited
   # requests, so call() can produce a proper HTTP 429 response rather than
@@ -17,6 +18,9 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
   rescue RateLimitedError
     [ 429, { "Content-Type" => "application/json", "Retry-After" => RATE_PERIOD.to_i.to_s },
       [ { error: "rate_limited", message: "Too many requests. Retry after #{RATE_PERIOD.to_i} seconds." }.to_json ] ]
+  rescue Screenote::RateLimitStore::Unavailable
+    [ 503, { "Content-Type" => "application/json", "Retry-After" => "60", "Cache-Control" => "no-store" },
+      [ { error: "temporarily_unavailable", message: "Rate limiting is temporarily unavailable." }.to_json ] ]
   end
 
   # FastMcp 1.6.0 broadcasts responses via SSE only, returning an empty HTTP
@@ -30,7 +34,7 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
 
   def handle_internal_error(error)
     logger.error("MCP internal error: #{error.message}")
-    Honeybadger.notify(error)
+    Screenote::Monitoring.notify(error)
     json_rpc_error_response(500, -32_603, "Internal error")
   end
 
@@ -46,9 +50,11 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
     end
   rescue RateLimitedError
     raise
+  rescue Screenote::RateLimitStore::Unavailable
+    raise
   rescue StandardError => e
     Rails.logger.error("Token validation error: #{e.class}: #{e.message}")
-    Honeybadger.notify(e, context: { token_prefix: token&.first(8) })
+    Screenote::Monitoring.notify(e, context: { token_prefix: token&.first(8) })
     false
   end
 
@@ -64,7 +70,7 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
     project = api_key.project
     unless project
       Rails.logger.error("MCP auth: API key #{api_key.id} references missing project")
-      Honeybadger.notify("API key references deleted project", context: { api_key_id: api_key.id })
+      Screenote::Monitoring.notify("API key references deleted project", context: { api_key_id: api_key.id })
       return false
     end
 
@@ -103,7 +109,7 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
     user = User.find_by(id: access_token.resource_owner_id)
     unless user
       Rails.logger.error("MCP auth: OAuth token #{access_token.id} references missing user (resource_owner_id=#{access_token.resource_owner_id})")
-      Honeybadger.notify("OAuth token references deleted user", context: { token_id: access_token.id, resource_owner_id: access_token.resource_owner_id })
+      Screenote::Monitoring.notify("OAuth token references deleted user", context: { token_id: access_token.id, resource_owner_id: access_token.resource_owner_id })
       return false
     end
 
@@ -114,7 +120,7 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
       project = user.projects.find_by(id: access_token.project_id)
       unless project
         Rails.logger.error("MCP auth: OAuth token #{access_token.id} references inaccessible project #{access_token.project_id}")
-        Honeybadger.notify("OAuth token references inaccessible project", context: { token_id: access_token.id, project_id: access_token.project_id })
+        Screenote::Monitoring.notify("OAuth token references inaccessible project", context: { token_id: access_token.id, project_id: access_token.project_id })
         return false
       end
 
@@ -126,29 +132,16 @@ class ProjectAuthTransport < FastMcp::Transports::AuthenticatedRackTransport
 
   def rate_limited?(api_key)
     cache_key = "mcp_rate_limit/#{api_key.id}"
-    Rails.cache.write(cache_key, 0, expires_in: RATE_PERIOD, unless_exist: true)
-    count = Rails.cache.increment(cache_key, 1)
-    count.present? && count > RATE_LIMIT
-  rescue StandardError => e
-    Rails.logger.error("Rate limiting check failed: #{e.class}: #{e.message}")
-    Honeybadger.notify(e, context: { api_key_id: api_key.id })
-    false
+    RATE_LIMIT_STORE.increment(cache_key, 1, expires_in: RATE_PERIOD) > RATE_LIMIT
   end
 
   def rate_limited_oauth?(access_token)
     cache_key = "mcp_rate_limit/oauth/#{access_token.id}"
-    Rails.cache.write(cache_key, 0, expires_in: RATE_PERIOD, unless_exist: true)
-    count = Rails.cache.increment(cache_key, 1)
-    count.present? && count > RATE_LIMIT
-  rescue StandardError => e
-    Rails.logger.error("Rate limiting check failed: #{e.class}: #{e.message}")
-    Honeybadger.notify(e, context: { token_id: access_token.id })
-    false
+    RATE_LIMIT_STORE.increment(cache_key, 1, expires_in: RATE_PERIOD) > RATE_LIMIT
   end
 
   def unauthorized_response(request)
-    rack_request = request.is_a?(Hash) ? Rack::Request.new(request) : request
-    base_url = "#{rack_request.scheme}://#{rack_request.host_with_port}"
+    base_url = Screenote::Deployment.current.base_url
 
     body = JSON.generate(
       jsonrpc: "2.0",
@@ -208,7 +201,7 @@ begin
 rescue RuntimeError => e
   if e.message.include?("No such middleware")
     Rails.logger.error("CRITICAL: FastMcp ProjectAuthTransport middleware swap failed — MCP auth is broken")
-    Honeybadger.notify("FastMcp middleware swap failed - MCP auth broken", context: { error: e.message })
+    Screenote::Monitoring.notify("FastMcp middleware swap failed - MCP auth broken", context: { error: e.message })
   else
     raise
   end

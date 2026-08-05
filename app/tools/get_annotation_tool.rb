@@ -20,7 +20,7 @@ class GetAnnotationTool < ApplicationTool
       cropped_base64 = begin
         annotation.crop
       rescue => e
-        Honeybadger.notify(e, context: {
+        Screenote::Monitoring.notify(e, context: {
           annotation_id: annotation.id,
           screenshot_id: screenshot.id,
           viewport: annotation.viewport

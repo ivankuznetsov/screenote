@@ -1,0 +1,15 @@
+services:
+  screenote:
+    environment:
+      SCREENOTE_HONEYBADGER_ENABLED: "true"
+      HONEYBADGER_API_KEY_FILE: /run/secrets/screenote_honeybadger_api_key
+    secrets:
+      - source: screenote_honeybadger_api_key
+        target: screenote_honeybadger_api_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+
+secrets:
+  screenote_honeybadger_api_key:
+    file: ${SCREENOTE_HONEYBADGER_API_KEY_PATH:?Set SCREENOTE_HONEYBADGER_API_KEY_PATH to the restricted Honeybadger API-key file}

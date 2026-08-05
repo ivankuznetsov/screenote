@@ -1,5 +1,20 @@
 Rails.application.routes.draw do
-  rails_simple_auth_routes(omniauth_controller: "omniauth_callbacks")
+  get "media/screenshot_images/:id/:variant", to: "media#show",
+    as: :screenshot_image_media,
+    constraints: { variant: /original|page_card_1x|page_card_2x|project_strip/ }
+
+  if Screenote::Deployment.current.mail?
+    rails_simple_auth_routes(omniauth_controller: "omniauth_callbacks")
+  else
+    resource :session, only: %i[new create destroy], controller: "rails_simple_auth/sessions"
+    get "sign_up", to: "rails_simple_auth/registrations#new", as: :sign_up
+    post "sign_up", to: "rails_simple_auth/registrations#create"
+
+    if RailsSimpleAuth.configuration.oauth_enabled
+      get "/auth/:provider/callback", to: "omniauth_callbacks#create", as: :omniauth_callback
+      get "/auth/failure", to: "omniauth_callbacks#failure", as: :omniauth_failure
+    end
+  end
 
   use_doorkeeper do
     controllers authorizations: "oauth/authorizations"
@@ -82,6 +97,7 @@ Rails.application.routes.draw do
 
   # Health check for load balancers
   get "up" => "rails/health#show", as: :rails_health_check
+  get "ready" => "health#readiness", as: :readiness_check
 
   # Landing page for unauthenticated users, dashboard for authenticated
   root "static_pages#landing"

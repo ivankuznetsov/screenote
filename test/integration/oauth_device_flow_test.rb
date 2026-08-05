@@ -26,7 +26,7 @@ class OauthDeviceFlowTest < ActionDispatch::IntegrationTest
     assert_equal 5, response_body["interval"]
     assert_match(/\A[A-Z\d]{5}-[A-Z\d]{5}\z/, response_body["user_code"])
     assert response_body["device_code"].present?
-    assert_equal "http://www.example.com/oauth/device", response_body["verification_uri"]
+    assert_equal "#{Screenote::Deployment.current.base_url}/oauth/device", response_body["verification_uri"]
     assert_includes response_body["verification_uri_complete"], "user_code="
     assert_includes response.headers["Cache-Control"], "no-store"
     assert_equal "no-cache", response.headers["Pragma"]

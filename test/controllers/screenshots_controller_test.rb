@@ -178,6 +178,18 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert screenshot.primary_image.image.attached?, "Image should be attached to the desktop ScreenshotImage"
   end
 
+  test "create with an image schedules dimension processing immediately" do
+    sign_in(@user)
+    image = fixture_file_upload("test_image.png", "image/png")
+
+    assert_enqueued_jobs 1, only: ScreenshotDimensionJob do
+      post page_screenshots_path(@page), params: { screenshot: { title: "Process me", image: image } }
+    end
+
+    screenshot_image = Screenshot.last.primary_image
+    assert_enqueued_with(job: ScreenshotDimensionJob, args: [ screenshot_image, screenshot_image.image.blob.id ])
+  end
+
   test "create without image still creates screenshot" do
     sign_in(@user)
 
@@ -241,6 +253,23 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/PNG or JPEG/, response.body)
   end
 
+  test "create rejects an image whose dimensions exceed the decoder boundary" do
+    sign_in(@user)
+    upload, tempfile = uploaded_image(
+      Vips::Image.black(ScreenshotImage::MAX_DIMENSION + 1, 1).pngsave_buffer,
+      filename: "extreme.png"
+    )
+
+    assert_no_difference "Screenshot.count" do
+      post page_screenshots_path(@page), params: { screenshot: { title: "Extreme", image: upload } }
+    end
+
+    assert_response :unprocessable_entity
+    assert_match(/dimensions/, response.body)
+  ensure
+    tempfile&.close!
+  end
+
   test "update with a replacement image routes the new blob onto primary_image" do
     sign_in(@user)
     new_image = fixture_file_upload("test_image.png", "image/png")
@@ -268,6 +297,33 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
 
     si = @screenshot.reload.primary_image
     assert_enqueued_with(job: ScreenshotDimensionJob, args: [ si, si.image.blob.id ])
+  end
+
+  test "update rejects an extreme replacement without changing the title or current blob" do
+    sign_in(@user)
+    screenshot_image = @screenshot.primary_image
+    screenshot_image.image.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "current.png",
+      content_type: "image/png"
+    ) unless screenshot_image.image.attached?
+    original_title = @screenshot.title
+    original_blob_id = screenshot_image.image.blob.id
+    upload, tempfile = uploaded_image(
+      Vips::Image.black(ScreenshotImage::MAX_DIMENSION + 1, 1).pngsave_buffer,
+      filename: "extreme.png"
+    )
+
+    patch screenshot_path(@screenshot), params: {
+      screenshot: { title: "Must roll back", image: upload }
+    }
+
+    assert_response :unprocessable_entity
+    assert_equal original_title, @screenshot.reload.title
+    assert_equal original_blob_id, screenshot_image.reload.image.blob.id
+    assert_match(/dimensions/, response.body)
+  ensure
+    tempfile&.close!
   end
 
   # Destroy
@@ -311,5 +367,16 @@ class ScreenshotsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     assert Screenshot.exists?(screenshot.id)
     assert Page.exists?(page.id)
+  end
+
+  private
+
+  def uploaded_image(bytes, filename:, content_type: "image/png")
+    tempfile = Tempfile.new([ "screenote-controller-test", File.extname(filename) ])
+    tempfile.binmode
+    tempfile.write(bytes)
+    tempfile.rewind
+    upload = Rack::Test::UploadedFile.new(tempfile.path, content_type, true, original_filename: filename)
+    [ upload, tempfile ]
   end
 end

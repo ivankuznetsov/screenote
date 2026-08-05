@@ -66,7 +66,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       assert_equal "80", image["height"]
       assert_equal "lazy", image["loading"]
       assert_equal "async", image["decoding"]
-      assert_includes image["src"], primary_image.image.variant(:project_strip).variation.key
+      assert_equal screenshot_image_media_path(primary_image, :project_strip), image["src"]
     end
   end
 
@@ -683,9 +683,6 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   def assert_responsive_page_card_image(primary_image)
     assert_select ".page-card__thumbnail img", count: 1 do |images|
       image = images.first
-      one_x = primary_image.image.variant(:page_card_1x)
-      two_x = primary_image.image.variant(:page_card_2x)
-
       assert_equal "480", image["width"]
       assert_equal "270", image["height"]
       assert_equal "lazy", image["loading"]
@@ -697,10 +694,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
           "(max-width: 960px) calc((100vw - 19.75rem) / 2), 322px",
         image["sizes"]
       )
-      assert_includes image["src"], one_x.variation.key
-      assert_includes image["srcset"], "#{one_x.variation.key}"
+      assert_equal screenshot_image_media_path(primary_image, :page_card_1x), image["src"]
+      assert_includes image["srcset"], screenshot_image_media_path(primary_image, :page_card_1x)
       assert_includes image["srcset"], "480w"
-      assert_includes image["srcset"], "#{two_x.variation.key}"
+      assert_includes image["srcset"], screenshot_image_media_path(primary_image, :page_card_2x)
       assert_includes image["srcset"], "960w"
     end
   end

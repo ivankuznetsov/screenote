@@ -3,13 +3,13 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-08-05
 tags: [database, migrations, schema, history]
 ---
 
 # Schema Evolution
 
-TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, and headless device authorization.
+TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, headless device authorization, and persisted deployment identity.
 
 Source: `db/migrate/`
 
@@ -95,6 +95,13 @@ Source: `db/migrate/`
 |-----------|---------|
 | `20260713160000_create_oauth_device_grants` | Short-lived RFC 8628 grants with digest-only device credentials, indexed absolute expiry, polling cadence, explicit approval/denial state, and scheduled cleanup support |
 
+### Phase 11: Deployment Identity (2026-08-05)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260805120000_create_installations` | Singleton edition, storage-namespace, bootstrap, and administrator ownership identity with database state checks |
+| `20260805120500_add_installation_bootstrap_digest_constraint` | Append-only constraint requiring any persisted bootstrap digest to retain SHA-256 length |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -118,5 +125,7 @@ Source: `db/migrate/`
 10. **Applied migrations are append-only**: `20260212071431_create_api_keys` was rewritten after one production database had already run its plaintext-token form, while its forward digest migration was deleted. Fresh SQLite databases looked correct, but production PostgreSQL retained the old columns. Repairs must use a new timestamp and an upgrade-path test; never rewrite an applied migration based only on fresh-schema checks. The API-key repair test runs in both SQLite and a dedicated PostgreSQL 16 CI job so adapter-specific production behavior stays covered.
 
 11. **Device credentials are short-lived and digest-only**: RFC 8628 device codes are stored as SHA-256 digests and consumed under a row lock during final exchange. Human codes remain lookupable but use 50 bits of entropy, an indexed 10-minute absolute expiry, fail-closed throttled verification, and scheduled cleanup for abandoned grants after 15 minutes of terminal-error retention.
+
+12. **Deployment identity is persistent, not inferred from providers**: one constrained Installation row records SaaS/self-hosted mode, the credential-free storage namespace, and bootstrap/claim state. Startup may rotate credentials but refuses to reinterpret an existing primary database under a different mode or object namespace.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

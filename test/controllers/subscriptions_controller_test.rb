@@ -97,7 +97,9 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     sign_in(users(:bob))
 
     original_create = Stripe::Checkout::Session.method(:create)
-    Stripe::Checkout::Session.define_singleton_method(:create) do |**_args|
+    captured_arguments = nil
+    Stripe::Checkout::Session.define_singleton_method(:create) do |**arguments|
+      captured_arguments = arguments
       OpenStruct.new(url: "https://checkout.stripe.com/test")
     end
 
@@ -105,6 +107,8 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
       ENV["STRIPE_PRO_PRICE_ID"] = "price_test_123"
       post checkout_subscription_path
       assert_redirected_to "https://checkout.stripe.com/test"
+      assert_equal "http://localhost:3000/subscription?status=success", captured_arguments.fetch(:success_url)
+      assert_equal "http://localhost:3000/subscription?status=canceled", captured_arguments.fetch(:cancel_url)
     ensure
       ENV.delete("STRIPE_PRO_PRICE_ID")
       Stripe::Checkout::Session.define_singleton_method(:create, original_create)
@@ -144,13 +148,16 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     sign_in(users(:alice))
 
     original_create = Stripe::BillingPortal::Session.method(:create)
-    Stripe::BillingPortal::Session.define_singleton_method(:create) do |**_args|
+    captured_arguments = nil
+    Stripe::BillingPortal::Session.define_singleton_method(:create) do |**arguments|
+      captured_arguments = arguments
       OpenStruct.new(url: "https://billing.stripe.com/test")
     end
 
     begin
       post portal_subscription_path
       assert_redirected_to "https://billing.stripe.com/test"
+      assert_equal "http://localhost:3000/subscription", captured_arguments.fetch(:return_url)
     ensure
       Stripe::BillingPortal::Session.define_singleton_method(:create, original_create)
     end

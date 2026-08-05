@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_13_160000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_05_120500) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -88,6 +88,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_160000) do
     t.datetime "updated_at", null: false
     t.index ["project_id"], name: "index_api_keys_on_project_id"
     t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
+  end
+
+  create_table "installations", force: :cascade do |t|
+    t.integer "administrator_id"
+    t.string "bootstrap_token_digest", limit: 64
+    t.datetime "claimed_at"
+    t.datetime "created_at", null: false
+    t.string "deployment_mode", null: false
+    t.string "singleton_key", default: "screenote", null: false
+    t.string "state", null: false
+    t.string "storage_namespace_fingerprint", limit: 64, null: false
+    t.string "storage_service", null: false
+    t.datetime "updated_at", null: false
+    t.index ["administrator_id"], name: "index_installations_on_administrator_id", unique: true
+    t.index ["singleton_key"], name: "index_installations_on_singleton_key", unique: true
+    t.check_constraint "(deployment_mode = 'saas' AND state = 'saas' AND administrator_id IS NULL AND bootstrap_token_digest IS NULL AND claimed_at IS NULL) OR (deployment_mode = 'self_hosted' AND state = 'unclaimed' AND administrator_id IS NULL AND bootstrap_token_digest IS NOT NULL AND claimed_at IS NULL) OR (deployment_mode = 'self_hosted' AND state = 'claimed' AND administrator_id IS NOT NULL AND bootstrap_token_digest IS NULL AND claimed_at IS NOT NULL)", name: "installations_valid_state"
+    t.check_constraint "(deployment_mode = 'saas' AND storage_service = 'rabata') OR (deployment_mode = 'self_hosted' AND storage_service IN ('self_hosted_local', 'self_hosted_s3'))", name: "installations_storage_service"
+    t.check_constraint "bootstrap_token_digest IS NULL OR length(bootstrap_token_digest) = 64", name: "installations_bootstrap_digest"
+    t.check_constraint "deployment_mode IN ('saas', 'self_hosted')", name: "installations_deployment_mode"
+    t.check_constraint "length(storage_namespace_fingerprint) = 64", name: "installations_storage_fingerprint"
+    t.check_constraint "singleton_key = 'screenote'", name: "installations_singleton_key"
   end
 
   create_table "oauth_access_grants", force: :cascade do |t|
@@ -295,6 +316,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_160000) do
   add_foreign_key "annotations", "users"
   add_foreign_key "annotations", "users", column: "resolved_by_user_id", on_delete: :nullify
   add_foreign_key "api_keys", "projects"
+  add_foreign_key "installations", "users", column: "administrator_id"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id", on_delete: :cascade
   add_foreign_key "oauth_access_grants", "projects", on_delete: :nullify
   add_foreign_key "oauth_access_grants", "users", column: "resource_owner_id", on_delete: :cascade

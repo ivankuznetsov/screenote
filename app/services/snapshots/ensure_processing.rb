@@ -14,10 +14,9 @@ module Snapshots
 
     def call
       snapshot.screenshot_images
-        .status_pending
         .joins(:image_attachment)
         .preload(:image_attachment)
-        .find_each(&:ensure_dimension_processing)
+        .find_each { |image| ScreenshotImages::EnsureProcessing.call(image:) }
     end
 
     private

@@ -97,7 +97,7 @@ module Api
     end
 
     def serializer_url_options
-      { host: request.host, port: request.optional_port, protocol: request.protocol }
+      Screenote::Deployment.current.url_options
     end
 
     # Coerce only scalar pagination values; structured params such as

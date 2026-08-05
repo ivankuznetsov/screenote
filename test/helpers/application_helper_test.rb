@@ -4,7 +4,7 @@ require "test_helper"
 
 class ApplicationHelperTest < ActionView::TestCase
   test "author initials use an email identity and support Ivan Kuznetsov" do
-    assert_equal "IK", annotation_author_initials(users(:admin))
+    assert_equal "IK", annotation_author_initials(Data.define(:email).new("ivan@ikuznetsov.com"))
     assert_equal "AL", annotation_author_initials(users(:alice))
     assert_equal "BO", annotation_author_initials(users(:bob))
   end

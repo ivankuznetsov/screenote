@@ -26,7 +26,10 @@ class ListPagesTool < ApplicationTool
             id: page.id,
             name: page.name,
             version_count: page.version_count,
-            url: Rails.application.routes.url_helpers.page_url(page),
+            url: Rails.application.routes.url_helpers.page_url(
+              page,
+              Screenote::Deployment.current.url_options
+            ),
             created_at: page.created_at.iso8601
           }
         end

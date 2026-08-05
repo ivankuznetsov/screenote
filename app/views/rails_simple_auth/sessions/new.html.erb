@@ -39,8 +39,13 @@
   <% end %>
 
   <div class="auth-card__footer">
-    <%= link_to "Forgot password?", main_app.new_password_path, class: "auth-card__link" %>
-    <span class="auth-card__footer-sep">&middot;</span>
+    <% if Screenote::Deployment.current.mail? %>
+      <%= link_to "Forgot password?", main_app.new_password_path, class: "auth-card__link" %>
+      <span class="auth-card__footer-sep">&middot;</span>
+    <% else %>
+      <span>For password recovery, contact your instance administrator.</span>
+      <span class="auth-card__footer-sep">&middot;</span>
+    <% end %>
     <%= link_to "Create an account", main_app.sign_up_path, class: "auth-card__link" %>
   </div>
 </div>

@@ -16,8 +16,13 @@ class ProjectInvitationsController < ApplicationController
     @invitation.inviter = Current.user
 
     if @invitation.save
-      ProjectInvitationMailer.invite(@invitation).deliver_later
-      redirect_to project_memberships_path(@project), notice: "Invitation sent to #{@invitation.email}."
+      if Screenote::Deployment.current.mail?
+        ProjectInvitationMailer.invite(@invitation).deliver_later
+        notice = "Invitation sent to #{@invitation.email}."
+      else
+        notice = "Invitation created for #{@invitation.email}. Copy its private link to share it."
+      end
+      redirect_to project_memberships_path(@project), notice: notice
     else
       redirect_to project_memberships_path(@project), alert: @invitation.errors.full_messages.to_sentence
     end

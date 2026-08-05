@@ -3,7 +3,7 @@ title: User
 type: model
 source: app/models/user.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-08-05
 tags: [model, auth, user, subscription]
 ---
 
@@ -49,16 +49,12 @@ Source: `app/models/user.rb`
 - `pro?` -- Returns true if user has an active Pro subscription (delegates to `subscription.active_pro?`)
 - `can_create_project?` -- Pro users: unlimited. Free users: limited to `Subscription::FREE_PROJECT_LIMIT` (1) owned projects
 - `can_invite_member?(project)` -- Pro users: unlimited. Free users: limited to `Subscription::FREE_MEMBER_LIMIT` (1) member per project
-- `admin?` -- Checks if email matches `ADMIN_EMAIL` constant (`ivan@ikuznetsov.com`)
+- `saas_operator?` / compatibility alias `admin?` -- True only in SaaS mode when the normalized email matches the boot-validated `SCREENOTE_SAAS_OPERATOR_EMAIL`
 - `assign_oauth_attributes(auth_hash)` -- Sets oauth_provider and oauth_uid from OmniAuth hash
 - `self.find_by_oauth(provider, uid)` -- Finds user by OAuth provider + UID
 
 ## Validations
 
 Inherited from rails_simple_auth concerns (email format, password presence, etc.).
-
-## Constants
-
-- `ADMIN_EMAIL = "ivan@ikuznetsov.com"`
 
 See also: [[subscription]], [[project]], [[project-membership]], [[session]]

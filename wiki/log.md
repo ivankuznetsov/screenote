@@ -222,3 +222,21 @@ Append-only log of all wiki operations.
 **Action:** Updated the public help workflow after production verification so CLI project creation, annotation crop extraction, and idempotent annotation resolution are documented instead of the superseded dashboard-only and web-only limits.
 **Pages updated:** wiki/active-areas.md, wiki/log.md
 **Source:** `app/views/static_pages/_help_quick_start.html.erb`, `app/views/static_pages/_help_cli.html.erb`, public CLI merge `c28ac8b`
+
+## [2026-08-05] Active Storage upload commit lifecycle
+
+**Action:** Staged validated screenshot bytes before attachment commit, cleaned unused and rolled-back objects, kept upload temporary files block-scoped, and added a self-hosted Playwright review test with external browser requests denied.
+**Pages updated:** wiki/self-hosting.md, wiki/testing-and-ci.md, wiki/gaps.md, wiki/log.md
+**Source:** `app/services/snapshots/attach_image.rb`, `test/system/application_system_test_case.rb`, `test/system/self_hosted_offline_review_test.rb`
+
+## [2026-08-05] Complete pre-migration installation identity gate
+
+**Action:** Extended the read-only deployment preflight to reject self-hosted storage-service, storage-namespace, and unclaimed-bootstrap drift before `db:prepare`, with database-digest and entrypoint-ordering regressions proving pending migrations cannot run on a mismatched primary.
+**Pages updated:** wiki/self-hosting.md, wiki/log.d/20260805T174138Z-deployment-topology-preflight.md, wiki/log.md
+**Source:** `lib/screenote/deployment_preflight.rb`, `test/lib/screenote/deployment_preflight_test.rb`, `test/integration/self_hosted_secret_configuration_test.rb`
+
+## [2026-08-05] Transaction-safe dimension handoff
+
+**Action:** Deferred production dimension jobs until the attachment's outer transaction commits, preventing replacement workers from observing and discarding stale attachment state; added explicit commit, rollback, and production-boot contracts.
+**Pages updated:** wiki/self-hosting.md, wiki/log.md
+**Source:** `app/jobs/screenshot_dimension_job.rb`, `test/jobs/screenshot_dimension_job_transaction_test.rb`, `test/integration/production_boot_test.rb`

@@ -6,6 +6,23 @@ local:
   service: Disk
   root: <%= Rails.root.join("storage") %>
 
+self_hosted_local:
+  service: Disk
+  root: <%= Screenote::Deployment.current.storage_configuration.fetch(:root, "/rails/storage/blobs") %>
+
+self_hosted_s3:
+  service: PrefixedS3
+  access_key_id: <%= Screenote::Deployment.current.storage_configuration[:access_key_id] %>
+  secret_access_key: <%= Screenote::Deployment.current.storage_configuration[:secret_access_key] %>
+  region: <%= Screenote::Deployment.current.storage_configuration[:region] %>
+  bucket: <%= Screenote::Deployment.current.storage_configuration[:bucket] %>
+  prefix: <%= Screenote::Deployment.current.storage_configuration[:prefix] %>
+  endpoint: <%= Screenote::Deployment.current.storage_configuration[:endpoint] %>
+  force_path_style: <%= Screenote::Deployment.current.storage_configuration.fetch(:force_path_style, true) %>
+  http_open_timeout: <%= Screenote::Deployment.current.storage_configuration.fetch(:request_timeout, 30) %>
+  http_read_timeout: <%= Screenote::Deployment.current.storage_configuration.fetch(:request_timeout, 30) %>
+  retry_limit: <%= Screenote::Deployment.current.storage_configuration.fetch(:retry_limit, 3) %>
+
 rabata:
   service: S3
   access_key_id: <%= ENV["RABATA_ACCESS_KEY_ID"] %>

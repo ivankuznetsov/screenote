@@ -37,7 +37,10 @@ class CreateScreenshotTool < ApplicationTool
         content_type: mime_type
       )
 
-      url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
+      url = Rails.application.routes.url_helpers.screenshot_url(
+        screenshot,
+        Screenote::Deployment.current.url_options
+      )
       { screenshot_id: screenshot.id, page_id: page.id, annotate_url: url }.to_json
     end
   end

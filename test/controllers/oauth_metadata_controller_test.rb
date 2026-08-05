@@ -11,7 +11,7 @@ class OauthMetadataControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     json = JSON.parse(response.body)
 
-    assert_includes json["resource"], "/mcp", "resource should include MCP path"
+    assert_equal "#{Screenote::Deployment.current.base_url}/mcp", json["resource"]
     assert_kind_of Array, json["authorization_servers"], "authorization_servers should be an array"
     assert_equal [ "header" ], json["bearer_methods_supported"]
   end
@@ -33,6 +33,19 @@ class OauthMetadataControllerTest < ActionDispatch::IntegrationTest
     assert_includes json["token_endpoint_auth_methods_supported"], "none"
     assert_includes json["scopes_supported"], "mcp_read"
     assert_includes json["scopes_supported"], "mcp_write"
+  end
+
+  test "metadata never reflects a forged request host" do
+    host! "attacker.example.test"
+
+    get "/.well-known/oauth-authorization-server",
+      headers: { "X-Forwarded-Host" => "forwarded-attacker.example.test" }
+
+    assert_response :success
+    json = response.parsed_body
+    assert_equal Screenote::Deployment.current.base_url, json.fetch("issuer")
+    assert_equal "#{Screenote::Deployment.current.base_url}/oauth/token", json.fetch("token_endpoint")
+    assert_not_includes response.body, "attacker.example.test"
   end
 
   test "metadata endpoints do not require authentication" do

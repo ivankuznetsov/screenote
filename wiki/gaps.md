@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-03
+updated: 2026-08-05
 tags: [gaps, documentation, todo]
 ---
 
@@ -55,6 +55,9 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - Environment variable documentation for production setup.
 
 ## Incomplete Documentation
+
+### Screenshot Storage Reconciliation
+- Validated screenshot bytes are synchronously staged before attachment commit, and normal upload errors or transaction rollbacks compensate by removing the object. A hard process termination between the provider write and database commit can still leave an unreferenced object because storage and the primary database do not share a transaction. U7 should add a storage-inventory reconciler or document a dedicated staging-prefix lifecycle policy before claiming orphan-free crash recovery.
 
 ### Project Route Filtering
 - Project route filters normalize and match page names in memory because stored

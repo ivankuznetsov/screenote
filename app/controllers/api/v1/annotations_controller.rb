@@ -33,7 +33,7 @@ module Api
         cropped_base64 = begin
           annotation.crop
         rescue => e
-          Honeybadger.notify(e, context: {
+          Screenote::Monitoring.notify(e, context: {
             annotation_id: annotation.id,
             screenshot_id: annotation.screenshot_id,
             viewport: annotation.viewport

@@ -157,6 +157,19 @@ class McpAuthTest < ActiveSupport::TestCase
     assert_equal "60", response[1]["Retry-After"], "Should include Retry-After header"
   end
 
+  test "unauthorized challenge uses the canonical origin rather than request host" do
+    transport = build_transport
+    response = transport.send(
+      :unauthorized_response,
+      Rack::Request.new(Rack::MockRequest.env_for("http://attacker.example.test/mcp"))
+    )
+
+    assert_equal 401, response.first
+    assert_includes response.second.fetch("WWW-Authenticate"),
+      "#{Screenote::Deployment.current.base_url}/.well-known/oauth-protected-resource"
+    assert_not_includes response.second.fetch("WWW-Authenticate"), "attacker.example.test"
+  end
+
   test "OAuth tokens are rate limited" do
     app = create_oauth_application
     access_token = create_oauth_token(application: app, user: @user, project: @project)
@@ -168,6 +181,19 @@ class McpAuthTest < ActiveSupport::TestCase
     assert_raises(ProjectAuthTransport::RateLimitedError) do
       transport.send(:valid_token?, access_token.token)
     end
+  end
+
+  test "rate limiter backend failure is unavailable rather than permissive" do
+    unavailable_store = Object.new
+    unavailable_store.define_singleton_method(:increment) { |*, **| raise "cache offline" }
+    Rails.cache = unavailable_store
+
+    transport = build_transport
+    assert_raises(Screenote::RateLimitStore::Unavailable) do
+      transport.send(:valid_token?, ALICE_TOKEN)
+    end
+
+    assert_nil Current.mcp_project
   end
 
   private

@@ -56,7 +56,7 @@
       </button>
 
       <% if @screenshot_image&.image&.attached? %>
-        <%= image_tag @screenshot_image.image,
+        <%= image_tag screenshot_image_media_path(@screenshot_image, :original),
             class: "screenshot-canvas__image",
             alt: @screenshot.title,
             data: {

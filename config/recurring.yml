@@ -18,6 +18,12 @@ production:
     command: "OauthDeviceGrant.cleanup_expired!"
     schedule: every 15 minutes
 
+  reconcile_screenshot_processing:
+    class: ReconcileScreenshotProcessingJob
+    schedule: every 5 minutes
+
+<% if Screenote::Deployment.current.mail? %>
   send_digest_notifications:
     class: SendDigestNotificationsJob
     schedule: every hour at minute 0
+<% end %>

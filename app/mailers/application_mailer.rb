@@ -1,4 +1,4 @@
 class ApplicationMailer < ActionMailer::Base
-  default from: ENV.fetch("MAILER_FROM", "noreply@screenote.ai")
+  default from: Screenote::Deployment.current.mail_configuration[:from] || "noreply@localhost"
   layout "mailer"
 end

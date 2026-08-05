@@ -39,6 +39,6 @@ class OauthMetadataController < ApplicationController
   private
 
   def base_url
-    root_url.chomp("/")
+    Screenote::Deployment.current.base_url
   end
 end

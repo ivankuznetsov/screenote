@@ -38,7 +38,7 @@
           <div class="project-card__thumbnails">
             <% thumbnails.each do |screenshot| %>
               <% if screenshot.primary_image&.overview_variants_warmed? %>
-                <%= image_tag screenshot.primary_image.image.variant(:project_strip),
+                <%= image_tag screenshot_image_media_path(screenshot.primary_image, :project_strip),
                       class: "project-card__thumbnail",
                       width: 120,
                       height: 80,

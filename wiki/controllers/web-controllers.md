@@ -3,7 +3,7 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-07-28
+updated: 2026-08-05
 tags: [controller, web, ui, auth]
 ---
 
@@ -255,7 +255,7 @@ Source: `app/controllers/admin/dashboard_controller.rb`
 
 **Actions:** show
 
-- Requires `Current.user.admin?`
+- Requires `Current.user.admin?`, which resolves the explicitly configured SaaS operator identity and is false in self-hosted mode
 - Shows: verified users count, users with projects+screenshots, active Pro users count
 
 ---

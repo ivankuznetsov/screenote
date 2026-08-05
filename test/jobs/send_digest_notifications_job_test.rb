@@ -106,6 +106,26 @@ class SendDigestNotificationsJobTest < ActiveSupport::TestCase
     end
   end
 
+  test "disabled mail neither delivers nor marks durable notification work complete" do
+    resolution = create_resolution(@annotation, resolver: @resolver)
+    deployment = Screenote::Deployment.new(
+      {
+        "SCREENOTE_EDITION" => "self_hosted",
+        "SCREENOTE_BASE_URL" => "http://screenote.internal",
+        "SECRET_KEY_BASE" => "a" * 64,
+        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      },
+      production: true
+    )
+
+    previous = Screenote::Deployment.current
+    Screenote::Deployment.instance_variable_set(:@current, deployment)
+    assert_no_emails { SendDigestNotificationsJob.perform_now }
+    assert_nil resolution.reload.notified_at
+  ensure
+    Screenote::Deployment.instance_variable_set(:@current, previous) if previous
+  end
+
   private
 
   def create_resolution(annotation, resolver:)

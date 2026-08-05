@@ -23,8 +23,9 @@ class StaticPagesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success, "Unauthenticated user should see the help page"
     assert_select "#install-cli", count: 1, message: "Help should lead with CLI installation"
     assert_select "code", text: "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest"
-    assert_select "code", text: "screenote --base-url https://screenote.ai login"
-    assert_select "code", text: "screenote --base-url https://screenote.ai login --device"
+    base_url = Screenote::Deployment.current.base_url
+    assert_select "code", text: "screenote --base-url #{base_url} login"
+    assert_select "code", text: "screenote --base-url #{base_url} login --device"
     assert_match(/SSH, tmux, or another headless session/, response.body)
     assert_match(/prints a one-time code and authorization link/, response.body)
     assert_match(/No callback port or SSH forwarding is required/, response.body)

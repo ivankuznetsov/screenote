@@ -5,6 +5,16 @@ require "test_helper"
 class SnapshotRestContractTest < ActionDispatch::IntegrationTest
   ALICE_TOKEN = "sk_proj_test_alice_key_000000000000000000000000"
 
+  setup do
+    @controller_class = Api::V1::ScreenshotImagesController
+    @original_upload_rate_limit_backend = @controller_class.cache_store
+    @controller_class.cache_store = ActiveSupport::Cache::MemoryStore.new
+  end
+
+  teardown do
+    @controller_class.cache_store = @original_upload_rate_limit_backend
+  end
+
   test "preparation response exposes the stable CLI recovery contract without local references" do
     project = projects(:alice_project)
     post api_v1_project_snapshots_path(project),

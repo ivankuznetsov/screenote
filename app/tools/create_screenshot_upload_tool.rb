@@ -31,11 +31,13 @@ class CreateScreenshotUploadTool < ApplicationTool
 
       upload_url = Rails.application.routes.url_helpers.api_screenshot_upload_url(
         screenshot,
-        token: token,
-        mime_type: mime_type
+        Screenote::Deployment.current.url_options.merge(token: token, mime_type: mime_type)
       )
 
-      annotate_url = Rails.application.routes.url_helpers.screenshot_url(screenshot)
+      annotate_url = Rails.application.routes.url_helpers.screenshot_url(
+        screenshot,
+        Screenote::Deployment.current.url_options
+      )
 
       {
         screenshot_id: screenshot.id,

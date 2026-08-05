@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class ScreenshotDimensionJob < ApplicationJob
+  self.enqueue_after_transaction_commit = !Rails.env.test?
+
+  retry_on ImageDecoding::Guard::Busy, wait: 5.seconds, attempts: 10
+
   limits_concurrency key: ->(record, blob_id = nil) {
     blob_id ? "#{record.to_global_id}/blob/#{blob_id}" : record
   }, duration: 3.minutes, on_conflict: :discard
@@ -20,7 +24,10 @@ class ScreenshotDimensionJob < ApplicationJob
       raise "ScreenshotDimensionJob: no primary_image for #{record.class}##{record.id}"
     end
 
-    return if screenshot_image.status_ready?
+    if screenshot_image.status_ready?
+      ScreenshotImages::EnsureProcessing.call(image: screenshot_image)
+      return
+    end
 
     current_blob_id = attached_blob_id(screenshot_image)
     unless current_blob_id
@@ -51,7 +58,7 @@ class ScreenshotDimensionJob < ApplicationJob
         screenshot_image.update!(width: width, height: height, status: :ready)
         dimensions_applied = true
       else
-        Honeybadger.notify("ScreenshotImage dimension extraction failed",
+        Screenote::Monitoring.notify("ScreenshotImage dimension extraction failed",
           context: { screenshot_image_id: screenshot_image.id, metadata: metadata })
         screenshot_image.update!(status: :failed)
       end
@@ -63,7 +70,7 @@ class ScreenshotDimensionJob < ApplicationJob
   private
 
   def analyze_blob(blob)
-    blob.analyze unless blob.analyzed?
+    ImageDecoding::Guard.synchronize { blob.analyze unless blob.analyzed? }
     blob.metadata
   end
 
@@ -81,7 +88,7 @@ class ScreenshotDimensionJob < ApplicationJob
     primary_image = screenshot.primary_image
     return unless primary_image&.image&.attached?
 
-    ScreenshotThumbnailJob.perform_later(primary_image, primary_image.image.blob.id)
+    ScreenshotImages::EnsureProcessing.call(image: primary_image)
   end
 
   def resolve_target(record)

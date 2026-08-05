@@ -18,15 +18,32 @@ require "rails/test_unit/railtie"
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
 
+require_relative "../lib/screenote/deployment"
+require_relative "../lib/screenote/monitoring"
+require_relative "../lib/screenote/rate_limit_store"
+require_relative "../lib/screenote/trusted_proxy_headers"
+
+Screenote::Deployment.configure!(production: Rails.env.production?)
+
 module ScreenoteTmp
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.1
 
+    # Screenshot bytes are private project data. They are delivered only by
+    # MediaController, which rechecks project membership for every request.
+    config.active_storage.draw_routes = false
+
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
     config.autoload_lib(ignore: %w[assets tasks])
+
+    config.x.screenote.deployment = Screenote::Deployment.current
+    config.middleware.insert_before 0,
+      Screenote::TrustedProxyHeaders,
+      trusted_proxies: Screenote::Deployment.current.trusted_proxies
+    config.middleware.insert_before 0, Screenote::RateLimitFailureMiddleware
 
     # Configuration for the application, engines, and railties goes here.
     #

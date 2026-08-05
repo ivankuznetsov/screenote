@@ -121,6 +121,66 @@ module Api
       assert_match(/Invalid mime type/, response.parsed_body["error"])
     end
 
+    test "rejects an unsupported JSON body before parsing request parameters" do
+      put api_screenshot_upload_path(id: 999_999, token: "missing", mime_type: "image/png"),
+        headers: { "Content-Type" => "application/json" },
+        env: { "RAW_POST_DATA" => "{" }
+
+      assert_response :unprocessable_entity
+      assert_equal "invalid_content_type", response.parsed_body["code"]
+    end
+
+    test "rejects an anonymous oversized JSON body before parsing request parameters" do
+      put api_screenshot_upload_path(id: 999_999, token: "missing", mime_type: "image/png"),
+        headers: {
+          "Content-Type" => "application/json",
+          "Content-Length" => (ScreenshotImage::MAX_FILE_SIZE + 1).to_s
+        },
+        env: { "RAW_POST_DATA" => "{" }
+
+      assert_response :unprocessable_entity
+      assert_equal "file_too_large", response.parsed_body["code"]
+    end
+
+    test "rejects bytes that do not match the declared image type" do
+      screenshot, si, token = create_screenshot_with_upload_token
+
+      put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
+        headers: { "Content-Type" => "image/png" },
+        env: { "RAW_POST_DATA" => "not an image" }
+
+      assert_response :unprocessable_entity
+      assert_match(/valid PNG or JPEG/, response.parsed_body["error"])
+      assert_not si.reload.image.attached?
+    end
+
+    test "rejects an image whose dimensions exceed the decoder boundary" do
+      require_vips!
+      screenshot, si, token = create_screenshot_with_upload_token
+      oversized_dimensions = Vips::Image.black(ScreenshotImage::MAX_DIMENSION + 1, 1).pngsave_buffer
+
+      put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
+        headers: { "Content-Type" => "image/png" },
+        env: { "RAW_POST_DATA" => oversized_dimensions }
+
+      assert_response :unprocessable_entity
+      assert_match(/dimensions/, response.parsed_body["error"])
+      assert_not si.reload.image.attached?
+    end
+
+    test "rejects an image whose decoded pixel count exceeds the boundary" do
+      screenshot, si, token = create_screenshot_with_upload_token
+      oversized_pixels = png_header(width: 10_000, height: 5_001)
+
+      put api_screenshot_upload_path(screenshot, token: token, mime_type: "image/png"),
+        headers: { "Content-Type" => "image/png" },
+        env: { "RAW_POST_DATA" => oversized_pixels }
+
+      assert_response :unprocessable_entity
+      assert_match(/pixel count/, response.parsed_body["error"])
+      assert_not si.reload.image.attached?
+    end
+
     test "enqueues dimension job targeting the ScreenshotImage after upload" do
       screenshot, si, token = create_screenshot_with_upload_token
 
@@ -141,6 +201,16 @@ module Api
       si = screenshot.screenshot_images.create!(viewport: :desktop)
       token = si.generate_token_for(:upload)
       [ screenshot, si, token ]
+    end
+
+    def png_header(width:, height:)
+      signature = "\x89PNG\r\n\x1a\n".b
+      ihdr = [ width, height, 8, 0, 0, 0, 0 ].pack("NNCCCCC")
+      signature + png_chunk("IHDR", ihdr) + png_chunk("IDAT", Zlib::Deflate.deflate("")) + png_chunk("IEND", "")
+    end
+
+    def png_chunk(type, data)
+      [ data.bytesize ].pack("N") + type + data + [ Zlib.crc32(type + data) ].pack("N")
     end
   end
 end

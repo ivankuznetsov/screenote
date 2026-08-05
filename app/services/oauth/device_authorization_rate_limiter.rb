@@ -5,11 +5,15 @@ module Oauth
     class Unavailable < StandardError; end
 
     class << self
-      def exceeded?(bucket:, identity:, limit:, within:)
-        count = store.increment(cache_key(bucket, identity), 1, expires_in: within)
+      def exceeded?(bucket:, identity:, limit:, within:, rate_store: store)
+        count = rate_store.increment(cache_key(bucket, identity), 1, expires_in: within)
         raise Unavailable, "rate-limit counter unavailable" if count.nil?
 
         count > limit
+      rescue Unavailable
+        raise
+      rescue StandardError
+        raise Unavailable, "rate-limit counter unavailable"
       end
 
       def reset!

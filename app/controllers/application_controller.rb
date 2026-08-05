@@ -2,7 +2,7 @@
 
 class ApplicationController < ActionController::Base
   include RailsSimpleAuth::Controllers::Concerns::Authentication
-  include RailsSimpleAuth::Controllers::Concerns::SessionManagement
+  include ScreenoteSessionManagement
   include PageWorkspaceNavigation
 
   allow_browser versions: :modern

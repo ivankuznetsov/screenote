@@ -32,10 +32,12 @@ class AnnotationCropService
     ].join("/")
 
     Rails.cache.fetch(cache_key, expires_in: 1.hour) do
-      @screenshot_image.image.blob.open do |tempfile|
-        image = ImageProcessing::Vips.source(tempfile)
-        result = @annotation.point? ? crop_point(image) : crop_region(image)
-        Base64.strict_encode64(File.binread(result.path))
+      ImageDecoding::Guard.synchronize do
+        @screenshot_image.image.blob.open do |tempfile|
+          image = ImageProcessing::Vips.source(tempfile)
+          result = @annotation.point? ? crop_point(image) : crop_region(image)
+          Base64.strict_encode64(File.binread(result.path))
+        end
       end
     end
   end

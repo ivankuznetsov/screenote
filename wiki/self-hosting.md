@@ -36,6 +36,35 @@ tags: [self-hosting, docker, licensing, storage, release]
 
 The same revision must continue to run `screenote.ai` with PostgreSQL, Stripe, hosted object storage, email, OAuth, and monitoring. Self-hosted defaults must not weaken those production requirements.
 
+## Deployment Configuration Boundary
+
+Production now starts from one immutable `Screenote::Deployment` configuration. `SCREENOTE_EDITION` and `SCREENOTE_BASE_URL` are explicit, `SECRET_KEY_BASE` and the initial self-hosted bootstrap token require at least 32 bytes, and malformed origins or broad proxy trust fail before service. The canonical origin controls allowed hosts, URL generation, OmniAuth callbacks, redirects, secure cookies, and HTTP/HTTPS enforcement. A pre-Rails middleware removes forwarded client and origin headers unless the immediate peer belongs to `SCREENOTE_TRUSTED_PROXIES`, so a direct caller cannot forge a rate-limit identity or TLS termination.
+
+SaaS production requires its four PostgreSQL roles plus Stripe, Resend, Google/GitHub OAuth, Honeybadger, hosted storage, and `SCREENOTE_SAAS_OPERATOR_EMAIL`. Self-hosted production defaults to local private storage and no mail, social OAuth, monitoring, or billing; each optional provider must be explicitly enabled with a complete configuration. No-mail mode does not draw password-reset routes or enqueue reset credentials. S3 storage applies `SCREENOTE_S3_PREFIX` to every object key and persists a credential-free namespace fingerprint covering service, endpoint, region, bucket, prefix, and path-style behavior.
+
+The supported Compose base is the claimed local-storage mode: one application
+service, one persistent volume, and no bootstrap declaration. A fresh instance
+adds `compose.bootstrap.yaml` only until claim, then restarts without that
+overlay or token. Generic S3, SMTP, Google OAuth, GitHub OAuth, and Honeybadger
+are independent additive overlays; every provider credential is mounted from a
+UID-1000-owned, non-group-readable file rather than stored in Compose
+environment values. `GET /up` remains process liveness, while the generic
+`GET /ready` response checks all four SQLite schemas, volume writability, and
+the selected Active Storage configuration without calling external providers
+or disclosing a failing component. The release image also bounds Thruster
+request bodies at 30 MiB, preserving the 28 MiB MCP base64 JSON contract with
+finite envelope overhead.
+
+The primary database stores exactly one constrained `Installation` identity: edition, ownership state, storage service, namespace fingerprint, and—until claim—the bootstrap digest. Before any mode-specific database preparation, the supported entrypoint runs a standalone, Bundler-backed deployment preflight that makes no provider connection. SaaS refuses a mounted self-hosted primary; self-hosted startup refuses retained SaaS database-role settings and inspects an existing local primary read-only for conflicting edition, storage service, storage namespace, or unclaimed bootstrap material. Schema preparation runs only after that complete persisted identity matches, and `Installations::Prepare` repeats the check after migrations as defense in depth. Credential rotation is allowed when the persisted namespace remains the same. See [[authentication]], [[data-model]], and [[dependencies]].
+
+## Private Media and Processing Recovery
+
+Default Active Storage blob, representation, disk, and direct-upload routes are disabled. Browser pages use `MediaController` URLs keyed by `ScreenshotImage` and an allowlisted original or named variant. Each request scopes the image through the current user's live project membership before downloading local or S3 bytes through the application, returns no provider redirect, and marks the response private and non-cacheable. Named variants must already have a tracked processed record; media GETs never invoke a decoder.
+
+Both the legacy signed upload and manifest upload pass through `Snapshots::AttachImage`. It streams into a process-owned temporary file, enforces the 20 MiB declared and observed limit, verifies PNG/JPEG magic and declared/manifest identity, limits decoder concurrency, and rejects a dimension above 32,768 pixels or more than 50 million decoded pixels before attaching. The validated bytes are staged in the selected storage service before their Blob is attached, making Active Storage's later commit callback a no-op; a concurrent loser or failed database transaction removes its staged object, and the temporary file remains block-scoped.
+
+An attached pending image is durable work intent. Dimension processing is handed to Solid Queue only after the attachment's outer database transaction commits, so a worker cannot discard a replacement job while the new blob reference is still invisible. `ScreenshotImages::EnsureProcessing` treats queue insertion failure as deferred work, and `ReconcileScreenshotProcessingJob` completes missing dimension and thumbnail work idempotently inline. The container runs reconciliation after database and installation preparation; Solid Queue repeats it every five minutes. See [[models/screenshot-image]] and [[services/annotation-crop-service]].
+
 ## Publication Safety
 
 - GitGuardian full-history scanning gates the initial public source. After publication, protected-branch checks gate every default-branch update, and the same fail-closed policy gates tags and images.

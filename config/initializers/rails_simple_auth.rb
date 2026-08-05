@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
 RailsSimpleAuth.configure do |config|
+  deployment = Screenote::Deployment.current
+
   # Features
-  config.magic_link_enabled = true
-  config.email_confirmation_enabled = true
-  config.enable_oauth(google_oauth2: "Google", github: "GitHub")
+  config.magic_link_enabled = deployment.mail?
+  config.email_confirmation_enabled = deployment.mail?
+
+  oauth_names = { google_oauth2: "Google", github: "GitHub" }
+  enabled_oauth = oauth_names.slice(*deployment.social_oauth_providers)
+  config.enable_oauth(enabled_oauth) if enabled_oauth.any?
 
   # Token Expiration
   config.magic_link_expiry = 15.minutes
@@ -31,18 +36,22 @@ RailsSimpleAuth.configure do |config|
   config.layout = "auth"
 
   # Mailer
-  config.mailer_sender = ENV.fetch("MAILER_FROM", "noreply@screenote.ai")
+  config.mailer_sender = deployment.mail_configuration[:from] || "noreply@localhost"
   config.mailer_class = "UserMailer"
 
   # Send welcome email on first-ever email confirmation.
   # Dirty tracking: confirmed_at_previously_was is nil only on first confirmation,
   # because the gem calls this callback immediately after confirm! (which calls update).
   config.after_confirmation_callback = lambda do |user, _controller|
-    if user.confirmed_at_previously_changed? && user.confirmed_at_previously_was.nil?
+    if deployment.mail? && user.confirmed_at_previously_changed? && user.confirmed_at_previously_was.nil?
       UserMailer.welcome(user).deliver_later
     end
   rescue StandardError => e
-    Honeybadger.notify(e, context: { user_id: user.id })
+    if deployment.monitoring?
+      Screenote::Monitoring.notify(e, context: { user_id: user.id })
+    else
+      Rails.logger.error("Welcome email callback failed: #{e.class}")
+    end
   end
 
   # Models

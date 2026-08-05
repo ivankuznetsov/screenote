@@ -63,8 +63,10 @@ module Oauth
       {
         device_code: plaintext_device_code,
         user_code: grant.user_code,
-        verification_uri: oauth_device_url,
-        verification_uri_complete: oauth_device_url(user_code: grant.user_code),
+        verification_uri: oauth_device_url(Screenote::Deployment.current.url_options),
+        verification_uri_complete: oauth_device_url(
+          Screenote::Deployment.current.url_options.merge(user_code: grant.user_code)
+        ),
         expires_in: OauthDeviceGrant::DEFAULT_EXPIRES_IN,
         interval: grant.polling_interval
       }

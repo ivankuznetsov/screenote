@@ -113,15 +113,14 @@ class ScreenshotsController < ApplicationController
     end
   end
 
-  # Route a form-supplied image replacement through the primary ScreenshotImage
-  # so the new blob is what readers render. Resets dimension metadata + enqueues
-  # re-analysis so Screenshot#status ends up :ready after the job finishes.
+  # Route replacements through the same bounded decoder and attachment service
+  # used by signed and manifest uploads.
   def attach_replacement_image!(image_param)
-    si = @screenshot.primary_image || @screenshot.screenshot_images.create!(viewport: :desktop)
-    si.with_lock do
-      si.image.attach(image_param)
-      si.update!(status: :pending, width: nil, height: nil)
-    end
-    si.ensure_dimension_processing
+    @screenshot.replace_primary_image!(
+      io: image_param.tempfile,
+      filename: image_param.original_filename,
+      content_type: image_param.content_type,
+      declared_length: image_param.size
+    )
   end
 end

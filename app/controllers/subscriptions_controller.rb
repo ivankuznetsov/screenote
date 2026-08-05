@@ -2,7 +2,7 @@
 
 class SubscriptionsController < ApplicationController
   rescue_from Stripe::StripeError do |e|
-    Honeybadger.notify(e)
+    Screenote::Monitoring.notify(e)
     redirect_to subscription_path, alert: "We couldn't connect to our payment provider. Please try again shortly."
   end
 
@@ -28,8 +28,8 @@ class SubscriptionsController < ApplicationController
       customer: subscription.stripe_customer_id,
       mode: "subscription",
       line_items: [ { price: ENV.fetch("STRIPE_PRO_PRICE_ID"), quantity: 1 } ],
-      success_url: subscription_url(status: "success"),
-      cancel_url: subscription_url(status: "canceled")
+      success_url: canonical_subscription_url(status: "success"),
+      cancel_url: canonical_subscription_url(status: "canceled")
     )
 
     redirect_to checkout_session.url, allow_other_host: true
@@ -44,13 +44,17 @@ class SubscriptionsController < ApplicationController
 
     portal_session = Stripe::BillingPortal::Session.create(
       customer: subscription.stripe_customer_id,
-      return_url: subscription_url
+      return_url: canonical_subscription_url
     )
 
     redirect_to portal_session.url, allow_other_host: true
   end
 
   private
+
+  def canonical_subscription_url(**options)
+    subscription_url(Screenote::Deployment.current.url_options.merge(options))
+  end
 
   def find_or_create_subscription
     Current.user.with_lock do

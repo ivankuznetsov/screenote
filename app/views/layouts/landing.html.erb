@@ -5,13 +5,15 @@
     <meta name="description" content="Install the Screenote CLI to publish screenshot captures, review them visually, and retrieve annotations from any AI agent or automation.">
     <meta property="og:title" content="Screenote CLI — Visual feedback for AI agents">
     <meta property="og:description" content="Publish screenshots from the terminal, point at what is wrong, and let your AI agent retrieve precise visual feedback.">
-    <meta property="og:url" content="https://screenote.ai">
+    <meta property="og:url" content="<%= Screenote::Deployment.current.base_url %>">
     <meta name="twitter:title" content="Screenote CLI — Visual feedback for AI agents">
     <meta name="twitter:description" content="Publish screenshots from the terminal, point at what is wrong, and let your AI agent retrieve precise visual feedback.">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <% if Screenote::Deployment.current.saas? %>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <% end %>
     <%= stylesheet_link_tag "landing", "data-turbo-track": "reload" %>
   </head>
 

@@ -46,11 +46,9 @@
           <%= link_to card_path, class: "page-card", data: card_data do %>
             <div class="page-card__thumbnail">
               <% if thumbnail&.primary_image&.overview_variants_warmed? %>
-                <% primary_image = thumbnail.primary_image
-                   card_1x = primary_image.image.variant(:page_card_1x)
-                   card_2x = primary_image.image.variant(:page_card_2x) %>
-                <%= image_tag card_1x,
-                      srcset: "#{url_for(card_1x)} 480w, #{url_for(card_2x)} 960w",
+                <% primary_image = thumbnail.primary_image %>
+                <%= image_tag screenshot_image_media_path(primary_image, :page_card_1x),
+                      srcset: "#{screenshot_image_media_path(primary_image, :page_card_1x)} 480w, #{screenshot_image_media_path(primary_image, :page_card_2x)} 960w",
                       sizes: "(max-width: 627px) calc(100vw - 3rem), " \
                         "(max-width: 760px) calc((100vw - 4.25rem) / 2), " \
                         "(max-width: 875px) calc(100vw - 18.5rem), " \

@@ -1,0 +1,16 @@
+services:
+  screenote:
+    environment:
+      SCREENOTE_GITHUB_OAUTH_ENABLED: "true"
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?Set GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET_FILE: /run/secrets/screenote_github_client_secret
+    secrets:
+      - source: screenote_github_client_secret
+        target: screenote_github_client_secret
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+
+secrets:
+  screenote_github_client_secret:
+    file: ${SCREENOTE_GITHUB_CLIENT_SECRET_PATH:?Set SCREENOTE_GITHUB_CLIENT_SECRET_PATH to the restricted GitHub client-secret file}

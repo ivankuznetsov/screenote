@@ -1,0 +1,44 @@
+name: screenote
+
+services:
+  screenote:
+    image: ${SCREENOTE_IMAGE:?Set SCREENOTE_IMAGE to a released immutable image digest}
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "${SCREENOTE_PORT:-3005}:80"
+    environment:
+      RAILS_ENV: production
+      RAILS_SERVE_STATIC_FILES: "true"
+      SCREENOTE_EDITION: self_hosted
+      SCREENOTE_BASE_URL: ${SCREENOTE_BASE_URL:?Set SCREENOTE_BASE_URL to this instance's public origin}
+      SCREENOTE_STORAGE: local
+      SCREENOTE_TRUSTED_PROXIES: ${SCREENOTE_TRUSTED_PROXIES:-}
+      RAILS_LOG_LEVEL: ${RAILS_LOG_LEVEL:-info}
+      RAILS_MAX_THREADS: ${RAILS_MAX_THREADS:-3}
+      SECRET_KEY_BASE_FILE: /run/secrets/screenote_secret_key_base
+    volumes:
+      - screenote_storage:/rails/storage
+    secrets:
+      - source: screenote_secret_key_base
+        target: screenote_secret_key_base
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl --fail --silent --show-error http://127.0.0.1:80/ready >/dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  screenote_storage:
+
+secrets:
+  screenote_secret_key_base:
+    file: ${SCREENOTE_SECRET_KEY_BASE_PATH:?Set SCREENOTE_SECRET_KEY_BASE_PATH to the restricted application-secret file}

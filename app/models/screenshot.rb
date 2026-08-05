@@ -77,13 +77,38 @@ class Screenshot < ApplicationRecord
   # Canonical factory: creates Screenshot + ScreenshotImage + attaches blob in one transaction.
   def self.create_with_image!(page:, title:, io:, filename:, content_type:, viewport: :desktop)
     screenshot = nil
+    screenshot_image = nil
     transaction do
       screenshot = page.screenshots.create!(title: title)
-      si = screenshot.screenshot_images.create!(viewport: viewport)
-      si.image.attach(io: io, filename: filename, content_type: content_type)
-      si.save!
+      screenshot_image = screenshot.screenshot_images.create!(viewport: viewport)
+      Snapshots::AttachImage.call(
+        image: screenshot_image,
+        io: io,
+        filename: filename,
+        declared_content_type: content_type,
+        declared_length: (io.size if io.respond_to?(:size)),
+        schedule_processing: false
+      )
     end
     screenshot
+  rescue Snapshots::AttachImage::Error => error
+    screenshot_image.errors.add(:image, error.message)
+    raise ActiveRecord::RecordInvalid, screenshot_image
+  end
+
+  def replace_primary_image!(io:, filename:, content_type:, declared_length: nil)
+    screenshot_image = primary_image || screenshot_images.create!(viewport: :desktop)
+    Snapshots::AttachImage.call(
+      image: screenshot_image,
+      io: io,
+      filename: filename,
+      declared_content_type: content_type,
+      declared_length: declared_length || (io.size if io.respond_to?(:size)),
+      replace_existing: true
+    )
+  rescue Snapshots::AttachImage::Error => error
+    screenshot_image.errors.add(:image, error.message)
+    raise ActiveRecord::RecordInvalid, screenshot_image
   end
 
   private

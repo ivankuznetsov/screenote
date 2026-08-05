@@ -28,7 +28,7 @@ class InviteCollaboratorTool < ApplicationTool
         return { error: "validation_failed", message: invitation.errors.full_messages.to_sentence }.to_json
       end
 
-      ProjectInvitationMailer.invite(invitation).deliver_later
+      ProjectInvitationMailer.invite(invitation).deliver_later if Screenote::Deployment.current.mail?
 
       {
         invitation: {

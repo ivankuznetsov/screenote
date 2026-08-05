@@ -11,13 +11,54 @@ module Api
       REVOKED_TOKEN = "sk_proj_test_alice_revoked_00000000000000000000"
 
       setup do
+        @controller_class = Api::V1::ScreenshotImagesController
+        @original_upload_rate_limit_backend = @controller_class.cache_store
+        @controller_class.cache_store = ActiveSupport::Cache::MemoryStore.new
         @project = projects(:alice_project)
         @image_data = File.binread(Rails.root.join("test/fixtures/files/test_image.png"))
         @snapshot, @image = prepare_image(@image_data)
       end
 
+      teardown do
+        @controller_class.cache_store = @original_upload_rate_limit_backend
+      end
+
       test "rate-limit budget permits one maximum manifest plus a full retry" do
         assert_operator Api::V1::ScreenshotImagesController::UPLOAD_RATE_LIMIT, :>=, Snapshots::PrepareUpload::MAX_ENTRIES * 2
+      end
+
+      test "rate limits use canonical credential and project identity plus an independent IP bucket" do
+        backend = RecordingRateLimitBackend.new
+
+        with_upload_rate_limit_backend(backend) do
+          upload(@image_data)
+          assert_response :ok
+
+          upload(@image_data, headers: { "Authorization" => "Bearer   #{ALICE_TOKEN}" })
+          assert_response :ok
+        end
+
+        credential_keys = backend.keys.grep(/:credential:/)
+        ip_keys = backend.keys.grep(/:ip:/)
+
+        assert_equal 2, credential_keys.length
+        assert_equal 1, credential_keys.uniq.length
+        assert_includes credential_keys.first, "api-key:#{api_keys(:alice_key).id}:project:#{@project.id}"
+        assert_equal 2, ip_keys.length
+        assert_equal 1, ip_keys.uniq.length
+      end
+
+      test "rate limiting fails closed when its backend is unavailable" do
+        backend = RecordingRateLimitBackend.new(error: IOError.new("backend unavailable"))
+
+        with_upload_rate_limit_backend(backend) do
+          upload(@image_data)
+        end
+
+        assert_response :service_unavailable
+        assert_equal "rate_limit_unavailable", response.parsed_body["code"]
+        assert_equal "60", response.headers["Retry-After"]
+        assert_not @image.reload.image.attached?
       end
 
       test "uploads valid prepared bytes and enqueues processing" do
@@ -29,6 +70,17 @@ module Api
         assert_equal "processing", response.parsed_body["state"]
         assert @image.reload.image.attached?
         assert_equal "image/png", @image.image.blob.content_type
+      end
+
+      test "uploads bytes detected as JPEG when the manifest and request agree" do
+        require_vips!
+        jpeg = Vips::Image.black(16, 16).jpegsave_buffer
+        _snapshot, @image = prepare_image(jpeg, mime_type: "image/jpeg")
+
+        upload(jpeg, content_type: "image/jpeg")
+
+        assert_response :ok
+        assert_equal "image/jpeg", @image.reload.image.blob.content_type
       end
 
       test "identical retry succeeds without another attachment blob or processing job" do
@@ -139,8 +191,38 @@ module Api
 
       private
 
-      def prepare_image(bytes)
-        entry = snapshot_entry(page: "Authenticated upload", viewport: :desktop, seed: SecureRandom.hex(4))
+      class RecordingRateLimitBackend
+        attr_reader :keys
+
+        def initialize(error: nil)
+          @error = error
+          @keys = []
+          @counts = Hash.new(0)
+        end
+
+        def increment(key, amount = 1, **)
+          raise @error if @error
+
+          keys << key
+          @counts[key] += amount
+        end
+      end
+
+      def with_upload_rate_limit_backend(backend)
+        original_backend = @controller_class.cache_store
+        @controller_class.cache_store = backend
+        yield
+      ensure
+        @controller_class.cache_store = original_backend
+      end
+
+      def prepare_image(bytes, mime_type: "image/png")
+        entry = snapshot_entry(
+          page: "Authenticated upload",
+          viewport: :desktop,
+          seed: SecureRandom.hex(4),
+          mime_type: mime_type
+        )
         entry[:content_sha256] = Digest::SHA256.hexdigest(bytes)
         snapshot = Snapshots::PrepareUpload.call(
           project: @project,

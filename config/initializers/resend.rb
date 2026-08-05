@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
-Resend.configure do |config|
-  config.api_key = ENV["RESEND_API_KEY"]
+deployment = Screenote::Deployment.current
+
+if deployment.mail_configuration.fetch(:provider) == :resend
+  Resend.configure do |config|
+    config.api_key = deployment.mail_configuration[:api_key]
+  end
 end

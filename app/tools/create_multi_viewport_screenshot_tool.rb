@@ -57,20 +57,21 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
             {
               viewport: v[:viewport],
               upload_url: Rails.application.routes.url_helpers.api_screenshot_upload_url(
-                screenshot, token: token, mime_type: v[:mime_type]
+                screenshot,
+                Screenote::Deployment.current.url_options.merge(token: token, mime_type: v[:mime_type])
               ),
               token: token
             }
           end
         end
       rescue ActiveRecord::RecordNotUnique => e
-        Honeybadger.notify(e)
+        Screenote::Monitoring.notify(e)
         next invalid("A ScreenshotImage with that viewport already exists for this Screenshot (concurrent request?)")
       rescue ActiveRecord::InvalidForeignKey => e
         # TOCTOU: snapshot existed at the pre-check but was destroyed before
         # the INSERT landed. Surface the same envelope as the pre-check so
         # agents can rely on a stable error shape.
-        Honeybadger.notify(e)
+        Screenote::Monitoring.notify(e)
         next invalid("snapshot not found in project")
       end
 
@@ -78,7 +79,10 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
         screenshot_id: screenshot.id,
         snapshot_id: screenshot.snapshot_id,
         page_id: page.id,
-        annotate_url: Rails.application.routes.url_helpers.screenshot_url(screenshot),
+        annotate_url: Rails.application.routes.url_helpers.screenshot_url(
+          screenshot,
+          Screenote::Deployment.current.url_options
+        ),
         uploads: uploads
       }.to_json
     end
