@@ -1,9 +1,9 @@
 ---
 title: Plans and Initiatives
 type: architecture
-source: plans/ directory (6 files)
+source: plans/ and docs/plans/
 created: 2026-04-11
-updated: 2026-07-13
+updated: 2026-08-05
 tags: [plans, roadmap, features, initiatives]
 ---
 
@@ -28,6 +28,14 @@ The plan covers the full technical stack (Rails 8, Annotorious v3, FastMCP, Acti
 **Key deferred items:** Server-side URL capture, screenshot versioning, pan/zoom, annotation threading, team collaboration, browser extension.
 
 ## Feature Initiatives
+
+### Self-Hosted Source Release (`docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md`)
+
+**Status:** Implementation-ready; autonomous execution is the next stage.
+
+Defines Screenote's planned O'Saasy distribution under Future Spin Ltd: one public repository, a prebuilt single-container SQLite edition with an unlimited core, optional S3-compatible storage, atomic token-secured administrator bootstrap, closed registration, and project-scoped invitations. GitGuardian gates the initial history, every protected default-branch update, and source/image releases; legal approval remains mandatory before publication.
+
+See also: [[self-hosting]], [[architecture]], [[dependencies]]
 
 ### Multi-Viewport Screenshots (plans/multi-viewport-screenshots.md)
 
@@ -102,6 +110,11 @@ Multi-Viewport Screenshots
 
 Visual Feedback (master plan)
   └── Mostly implemented; remaining items feed into other plans
+
+Self-Hosted Source Release
+  └── Product and implementation contracts reviewed; execution pending
+  └── Enables: public source and prebuilt container distribution
+  └── Shares: GitGuardian policy with a later cross-repository rollout
 ```
 
 See also: [[roadmap]], [[technical-debt]], [[active-areas]]

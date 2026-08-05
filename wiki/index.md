@@ -3,15 +3,15 @@ title: screenote Wiki
 type: index
 source: wiki/**/*.md
 created: 2026-05-14
-updated: 2026-07-13
+updated: 2026-08-05
 tags: [index, wiki]
 ---
 
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 40
-Updated: 2026-07-28
+Page count: 41
+Updated: 2026-08-05
 
 ## Core Architecture
 
@@ -61,6 +61,7 @@ Updated: 2026-07-28
 - [[technical-debt]] — Todo-derived debt, cross-checked against source drift.
 - [[gaps]] — Missing coverage and uncertainty.
 - [[testing-and-ci]] — Minitest, Playwright system tests, SQL budgets, and the full local CI gate.
+- [[self-hosting]] — Approved source-available distribution, self-hosted edition, SaaS boundary, and publication gates.
 - [[index]] — This catalog.
 - [[log]] — Append-only wiki changelog.
 
