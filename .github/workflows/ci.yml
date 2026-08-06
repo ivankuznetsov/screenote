@@ -53,7 +53,7 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       RAILS_ENV: test
       PARALLEL_WORKERS: "1"

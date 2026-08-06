@@ -1129,6 +1129,19 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes playwright.fetch("run"), "bundle exec ruby"
   end
 
+  test "coverage CI budget accommodates both complete edition suites" do
+    workflow = YAML.safe_load(
+      Rails.root.join(".github/workflows/ci.yml").read,
+      permitted_classes: [],
+      aliases: false
+    )
+    coverage = workflow.fetch("jobs").fetch("coverage")
+
+    assert_operator coverage.fetch("timeout-minutes"), :>=, 45
+    assert_equal "script/release_test_matrix coverage",
+      coverage.fetch("steps").find { |step| step["name"]&.include?("changed-security coverage") }.fetch("run")
+  end
+
   test "self-hosted coverage is an explicit positive manifest with fail-closed drift detection" do
     manifest = YAML.safe_load(
       Rails.root.join("test/manifests/self_hosted.yml").read,

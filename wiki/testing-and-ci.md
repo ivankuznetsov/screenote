@@ -122,6 +122,10 @@ the suite runs.
 The manifest includes every changed controller that delivers one of those
 flows, and `CI / coverage` runs this gate for every pull request; controller
 delivery code cannot be deferred to a release-only handoff check.
+The coverage job has a 45-minute budget because it runs the complete SaaS and
+self-hosted suites sequentially before merging their results. A 25-minute
+budget can cancel a healthy self-hosted run after the SaaS suite has already
+passed, leaving the stricter dual-edition assertion unevaluated.
 Integration and system test bases replace the test environment's `NullStore`
 with a fresh controller `MemoryStore` for each test, then restore it in teardown.
 This keeps the production fail-closed rate-limit wrappers active in tests
