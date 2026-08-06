@@ -150,19 +150,21 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "public evidence uses preauthorization and rejects the legacy authorization gate" do
+  test "public evidence contains only technical release gates" do
     example = JSON.parse(Rails.root.join("docs/releases/evidence/public-evidence.example.json").read)
     fixture = evidence
+    expected_keys = %w[
+      artifacts fixture gitguardian public_artifacts qualification release repository rulesets schema source_contracts
+      source_sha vulnerability
+    ]
 
     [ example, fixture ].each do |document|
-      assert document.key?("preauthorization")
-      assert_not document.key?("authorization")
-      assert_equal %w[approval_id approved_at approver_role environment evidence_sha256 status],
-        document.fetch("preauthorization").keys.sort
+      assert_equal "screenote-release-evidence/v2", document.fetch("schema")
+      assert_equal expected_keys.sort, document.keys.sort
     end
 
-    assert_rejected("legacy authorization gate", "preauthorization") do |document|
-      document["authorization"] = document.delete("preauthorization")
+    assert_rejected("obsolete governance field", "unknown keys: preauthorization") do |document|
+      document["preauthorization"] = { "status" => "approved" }
     end
   end
 
@@ -182,21 +184,13 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "pending security legal repository and preauthorization states fail closed" do
+  test "failed technical release gates fail closed" do
     cases = {
-      "legal approval" => [ ->(evidence) { evidence.dig("approvals", "legal")["status"] = "pending" }, "approvals.legal.status" ],
-      "credential rotation" => [ ->(evidence) { evidence.dig("credentials")["all_confirmed_revoked_or_rotated"] = false }, "all_confirmed_revoked_or_rotated" ],
       "open incident" => [ ->(evidence) { evidence.dig("gitguardian", "incidents")["open"] = 1 }, "gitguardian.incidents.open" ],
       "unfinished history" => [ ->(evidence) { evidence.dig("gitguardian", "app_check")["history_scan"] = "running" }, "history_scan" ],
       "failed source contract" => [ ->(evidence) { evidence.dig("source_contracts", "required_checks", 0)["conclusion"] = "failure" }, "must equal \"success\"" ],
       "vulnerability" => [ ->(evidence) { evidence.dig("vulnerability")["critical"] = 1 }, "vulnerability.critical" ],
       "ruleset bypass" => [ ->(evidence) { evidence.dig("rulesets")["no_broad_bypass"] = false }, "no_broad_bypass" ],
-      "pending preauthorization" => [ ->(evidence) { evidence.dig("preauthorization")["status"] = "pending" }, "preauthorization.status" ],
-      "wrong environment" => [ ->(evidence) { evidence.dig("preauthorization")["environment"] = "production" }, "source-release" ],
-      "wrong preauthorization role" => [ ->(evidence) { evidence.dig("preauthorization")["approver_role"] = "security_approver" }, "release_maintainer" ],
-      "invalid preauthorization ID" => [ ->(evidence) { evidence.dig("preauthorization")["approval_id"] = "12345" }, "opaque evidence identifier" ],
-      "stale preauthorization" => [ ->(evidence) { evidence.dig("preauthorization")["approved_at"] = "2026-08-01T00:00:00Z" }, "older than" ],
-      "invalid preauthorization evidence hash" => [ ->(evidence) { evidence.dig("preauthorization")["evidence_sha256"] = "invalid" }, "SHA-256" ],
       "stale incident check" => [ ->(evidence) { evidence.dig("gitguardian", "incidents")["checked_at"] = "2026-08-01T00:00:00Z" }, "older than" ]
     }
 
@@ -311,10 +305,13 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       promotion.fetch("permissions")
     )
     approval_step = promotion.fetch("steps").first
-    assert_equal "environment-approval", approval_step.fetch("id")
+    assert_equal "current-run-approval", approval_step.fetch("id")
     assert_equal "${{ github.token }}", approval_step.dig("env", "GH_TOKEN")
+    assert_nil approval_step.dig("env", "WORKFLOW_RUN_ID")
     assert_includes approval_step.fetch("run"),
-      '"/repos/$GITHUB_REPOSITORY/actions/runs/$WORKFLOW_RUN_ID/approvals"'
+      '"/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals"'
+    assert_not_includes release.to_yaml, "environment-approval.json"
+    assert_not_includes release.to_yaml, "historical-environment-approval"
 
     secrets = YAML.safe_load(Rails.root.join(".github/workflows/secrets.yml").read, permitted_classes: [], aliases: false)
     incident_job = secrets.fetch("jobs").fetch("repository-incidents")
@@ -605,7 +602,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       "A", "docs/releases/evidence/public-evidence.json",
       "M", "docs/releases/initial-release.md"
     ]
-    _stdout, stderr, status = run_embedded_file_classifier(classifier, "AUTHORIZATION_CHANGES", expected.join("\0") << "\0")
+    _stdout, stderr, status = run_embedded_file_script(classifier, "AUTHORIZATION_CHANGES", expected.join("\0") << "\0")
     assert status.success?, stderr
 
     {
@@ -614,7 +611,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       "added notes" => expected.dup.tap { |fields| fields[4] = "A" },
       "unexpected file" => expected + [ "A", "docs/releases/extra.md" ]
     }.each do |label, fields|
-      _stdout, stderr, status = run_embedded_file_classifier(
+      _stdout, stderr, status = run_embedded_file_script(
         classifier,
         "AUTHORIZATION_CHANGES",
         fields.join("\0") << "\0"
@@ -682,150 +679,49 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "protected-environment approval parser binds one exact review and fails closed" do
+  test "protected-environment gate requires one exact approval for the current run" do
     release = YAML.safe_load(Rails.root.join(".github/workflows/release.yml").read, permitted_classes: [], aliases: false)
     approval_step = release.fetch("jobs").fetch("promotion").fetch("steps").first
     validator_source = approval_step.fetch("run").match(
-      /cat >"\$validator" <<'APPROVAL_RUBY'\n(?<ruby>.*?)^APPROVAL_RUBY$/m
+      /APPROVALS_JSON="\$approvals_json" ruby -rjson <<'RUBY'\n(?<ruby>.*?)^RUBY$/m
     )&.named_captures&.fetch("ruby")
     assert_not_nil validator_source
     assert_nothing_raised do
-      RubyVM::InstructionSequence.compile(validator_source, "release-environment-approval-validator")
+      RubyVM::InstructionSequence.compile(validator_source, "release-current-run-approval-gate")
     end
 
-    Dir.mktmpdir("screenote-environment-approval") do |root|
-      validator = File.join(root, "validator.rb")
-      approvals_path = File.join(root, "approvals.json")
-      record_path = File.join(root, "environment-approval.json")
-      historical_run_path = File.join(root, "historical-run.json")
-      release_path = File.join(root, "release.json")
-      File.write(validator, validator_source)
+    validator = %(require "json"\n#{validator_source})
+    review = {
+      "state" => "approved",
+      "comment" => "Ship it!",
+      "environments" => [
+        { "id" => 161_088_068, "name" => "source-release", "created_at" => "2026-08-06T00:40:00Z" }
+      ],
+      "user" => { "login" => "octocat", "id" => 1 }
+    }
 
-      review = {
-        "state" => "approved",
-        "comment" => "Ship it!",
-        "environments" => [
-          { "id" => 161_088_068, "name" => "source-release", "created_at" => "2026-08-06T00:40:00Z" }
-        ],
-        "user" => { "login" => "octocat", "id" => 1 }
-      }
-      File.write(approvals_path, JSON.generate([ review ]))
-      environment = {
-        "APPROVALS_JSON" => approvals_path,
-        "APPROVAL_RECORD" => record_path,
-        "AUTHORIZING_SHA" => "2" * 40,
-        "EXPECTED_DEFAULT_BRANCH" => "main",
-        "EXPECTED_REPOSITORY" => "ivankuznetsov/screenote",
-        "SOURCE_SHA" => SOURCE_SHA,
-        "WORKFLOW_RUN_ATTEMPT" => "3",
-        "WORKFLOW_RUN_ID" => "98765"
-      }
+    _stdout, stderr, status = run_embedded_file_script(
+      validator, "APPROVALS_JSON", JSON.generate([ review ])
+    )
+    assert status.success?, stderr
 
-      _stdout, stderr, status = Open3.capture3(environment, RbConfig.ruby, validator, "create")
-      assert status.success?, stderr
-      record_bytes = File.binread(record_path)
-      record = JSON.parse(record_bytes)
-      assert_equal %w[
-        authorizing_sha environment repository review_sha256 schema source_sha state
-        workflow_run_attempt workflow_run_id
-      ], record.keys.sort
-      assert_equal "screenote-environment-approval/v1", record.fetch("schema")
-      assert_equal "ivankuznetsov/screenote", record.fetch("repository")
-      assert_equal SOURCE_SHA, record.fetch("source_sha")
-      assert_equal "2" * 40, record.fetch("authorizing_sha")
-      assert_equal "98765", record.fetch("workflow_run_id")
-      assert_equal 3, record.fetch("workflow_run_attempt")
-      assert_equal "source-release", record.fetch("environment")
-      assert_equal "approved", record.fetch("state")
-      expected_review_digest = Digest::SHA256.hexdigest(JSON.generate(deep_sort_json(review)))
-      assert_equal expected_review_digest, record.fetch("review_sha256")
-      assert_no_match(/octocat|Ship it!|"user"|"comment"/, record_bytes)
-
-      stdout, stderr, status = Open3.capture3(environment, RbConfig.ruby, validator, "identify")
-      assert status.success?, stderr
-      assert_equal "98765 3\n", stdout
-
-      historical_run = {
-        "id" => 98_765,
-        "run_attempt" => 3,
-        "event" => "workflow_dispatch",
-        "head_branch" => "main",
-        "head_sha" => "2" * 40,
-        "path" => ".github/workflows/release.yml@main",
-        "repository" => { "full_name" => "ivankuznetsov/screenote" }
-      }
-      File.write(historical_run_path, JSON.generate(historical_run))
-      history_environment = environment.merge("HISTORICAL_RUN_JSON" => historical_run_path)
-      _stdout, stderr, status = Open3.capture3(history_environment, RbConfig.ruby, validator, "verify-run")
-      assert status.success?, stderr
-      _stdout, stderr, status = Open3.capture3(environment, RbConfig.ruby, validator, "verify")
-      assert status.success?, stderr
-
-      reordered_review = {
-        "user" => { "id" => 1, "login" => "octocat" },
-        "environments" => [
-          { "created_at" => "2026-08-06T00:40:00Z", "name" => "source-release", "id" => 161_088_068 }
-        ],
-        "comment" => "Ship it!",
-        "state" => "approved"
-      }
-      File.write(approvals_path, JSON.generate([ reordered_review ]))
-      _stdout, stderr, status = Open3.capture3(environment, RbConfig.ruby, validator, "verify")
-      assert status.success?, stderr
-
-      rejected_reviews = {
-        "missing review" => [],
-        "multiple reviews" => [ review, review ],
-        "rejected review" => [ review.merge("state" => "rejected") ],
-        "wrong environment" => [ review.merge("environments" => [ { "name" => "production" } ]) ],
-        "multiple environments" => [
-          review.merge("environments" => [ { "name" => "source-release" }, { "name" => "production" } ])
-        ]
-      }
-      rejected_reviews.each do |label, reviews|
-        File.write(approvals_path, JSON.generate(reviews))
-        _stdout, _stderr, status = Open3.capture3(environment, RbConfig.ruby, validator, "create")
-        assert_not status.success?, "#{label} unexpectedly passed"
-      end
-      File.write(approvals_path, "{")
-      _stdout, _stderr, status = Open3.capture3(environment, RbConfig.ruby, validator, "create")
-      assert_not status.success?, "malformed review history unexpectedly passed"
-
-      File.write(approvals_path, JSON.generate([ review.merge("comment" => "Changed") ]))
-      _stdout, stderr, status = Open3.capture3(environment, RbConfig.ruby, validator, "verify")
-      assert_not status.success?
-      assert_includes stderr, "approval review digest does not match"
-
-      rejected_runs = {
-        "bare workflow path" => historical_run.merge("path" => ".github/workflows/release.yml"),
-        "wrong run attempt" => historical_run.merge("run_attempt" => 4),
-        "wrong default branch" => historical_run.merge("head_branch" => "release")
-      }
-      rejected_runs.each do |label, run|
-        File.write(historical_run_path, JSON.generate(run))
-        _stdout, stderr, status = Open3.capture3(history_environment, RbConfig.ruby, validator, "verify-run")
-        assert_not status.success?, "#{label} unexpectedly passed"
-        assert_includes stderr, "historical workflow run identity does not match"
-      end
-
-      mismatched_environment = environment.merge("SOURCE_SHA" => "3" * 40)
-      _stdout, stderr, status = Open3.capture3(mismatched_environment, RbConfig.ruby, validator, "identify")
-      assert_not status.success?
-      assert_includes stderr, "approval record identity does not match"
-
-      release = { "assets" => [ { "id" => 1234, "name" => "environment-approval.json" } ] }
-      File.write(release_path, JSON.generate(release))
-      asset_environment = environment.merge("RELEASE_JSON" => release_path)
-      stdout, stderr, status = Open3.capture3(asset_environment, RbConfig.ruby, validator, "asset-id")
-      assert status.success?, stderr
-      assert_equal "1234\n", stdout
-
-      release.fetch("assets") << { "id" => 5678, "name" => "environment-approval.json" }
-      File.write(release_path, JSON.generate(release))
-      _stdout, stderr, status = Open3.capture3(asset_environment, RbConfig.ruby, validator, "asset-id")
-      assert_not status.success?
-      assert_includes stderr, "exactly one environment approval asset"
+    rejected_reviews = {
+      "missing review" => [],
+      "multiple reviews" => [ review, review ],
+      "rejected review" => [ review.merge("state" => "rejected") ],
+      "wrong environment" => [ review.merge("environments" => [ { "name" => "production" } ]) ],
+      "multiple environments" => [
+        review.merge("environments" => [ { "name" => "source-release" }, { "name" => "production" } ])
+      ]
+    }
+    rejected_reviews.each do |label, reviews|
+      _stdout, _stderr, status = run_embedded_file_script(
+        validator, "APPROVALS_JSON", JSON.generate(reviews)
+      )
+      assert_not status.success?, "#{label} unexpectedly passed"
     end
+    _stdout, _stderr, status = run_embedded_file_script(validator, "APPROVALS_JSON", "{")
+    assert_not status.success?, "malformed current-run reviews unexpectedly passed"
   end
 
   test "registry image preflight accepts only exact absence responses" do
@@ -842,7 +738,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       "Error response from registry: manifest unknown: manifest unknown\n"
     ]
     accepted.each do |error|
-      _stdout, stderr, status = run_embedded_file_classifier(
+      _stdout, stderr, status = run_embedded_file_script(
         classifier,
         "REGISTRY_ERROR",
         error,
@@ -860,7 +756,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       "contradictory manifest detail" => "Error response from registry: manifest unknown: backend timeout\n"
     }
     rejected.each do |label, error|
-      _stdout, _stderr, status = run_embedded_file_classifier(
+      _stdout, _stderr, status = run_embedded_file_script(
         classifier,
         "REGISTRY_ERROR",
         error,
@@ -881,7 +777,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal 2, source.scan(/elif github_not_found "\$(?:ref|release)_error"; then/).length
     assert_no_match(/grep -Eq .*HTTP 404\|Not Found/, source)
 
-    _stdout, stderr, status = run_embedded_file_classifier(
+    _stdout, stderr, status = run_embedded_file_script(
       classifier,
       "GITHUB_ERROR",
       "gh: Not Found (HTTP 404)\n"
@@ -895,7 +791,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       "Not Found plus backend error" => "gh: Not Found (HTTP 404)\nbackend timeout\n"
     }
     rejected.each do |label, error|
-      _stdout, _stderr, status = run_embedded_file_classifier(classifier, "GITHUB_ERROR", error)
+      _stdout, _stderr, status = run_embedded_file_script(classifier, "GITHUB_ERROR", error)
       assert_not status.success?, "#{label} unexpectedly passed"
     end
   end
@@ -906,7 +802,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     promotion = parsed.fetch("jobs").fetch("promotion")
     authorize_steps = parsed.fetch("jobs").fetch("authorize").fetch("steps")
     steps = promotion.fetch("steps")
-    approval_index = steps.index { |step| step["id"] == "environment-approval" }
+    approval_index = steps.index { |step| step["id"] == "current-run-approval" }
     live_index = steps.index { |step| step["id"] == "live-incidents" }
     preflight_index = steps.index { |step| step["id"] == "preflight" }
     preflight = steps.fetch(preflight_index)
@@ -925,13 +821,14 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_operator live_index, :<, preflight_index
     approval_step = steps.fetch(approval_index)
     assert_equal "${{ github.token }}", approval_step.dig("env", "GH_TOKEN")
-    assert_equal "${{ github.run_id }}", approval_step.dig("env", "WORKFLOW_RUN_ID")
-    assert_equal "${{ github.run_attempt }}", approval_step.dig("env", "WORKFLOW_RUN_ATTEMPT")
-    assert_includes approval_step.fetch("run"), "approval history must contain exactly one review"
-    assert_includes approval_step.fetch("run"), "approval review must cover exactly source-release"
+    assert_nil approval_step.dig("env", "WORKFLOW_RUN_ID")
+    assert_nil approval_step.dig("env", "WORKFLOW_RUN_ATTEMPT")
+    assert_includes approval_step.fetch("run"), "current workflow run must have exactly one environment review"
+    assert_includes approval_step.fetch("run"), "current workflow run approval must cover exactly source-release"
     assert_includes approval_step.fetch("run"), "gh api --method GET"
-    assert_includes approval_step.fetch("run"), '"/repos/$GITHUB_REPOSITORY/actions/runs/$WORKFLOW_RUN_ID/approvals"'
-    assert_includes approval_step.fetch("run"), 'File.binwrite(required_env("APPROVAL_RECORD")'
+    assert_includes approval_step.fetch("run"), '"/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals"'
+    assert_not_includes approval_step.fetch("run"), "File.binwrite"
+    assert_not_includes approval_step.fetch("run"), "Digest"
     live_step = steps.fetch(live_index)
     assert_equal "ruby {0}", live_step.fetch("shell")
     assert_equal "${{ secrets.GITGUARDIAN_INCIDENTS_API_KEY }}", live_step.dig("env", "GITGUARDIAN_API_KEY")
@@ -947,8 +844,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     preflight_source = preflight.fetch("run")
     release_token = steps.find { |step| step["id"] == "release-token" }
     assert_equal "read", release_token.dig("with", "permission-administration")
-    assert_equal "${{ github.token }}", preflight.dig("env", "ACTIONS_TOKEN")
-    assert_equal "${{ github.event.repository.default_branch }}", preflight.dig("env", "EXPECTED_DEFAULT_BRANCH")
+    assert_nil preflight.dig("env", "ACTIONS_TOKEN")
+    assert_nil preflight.dig("env", "EXPECTED_DEFAULT_BRANCH")
     assert_includes preflight_source, '"/repos/$GITHUB_REPOSITORY/immutable-releases"'
     assert_includes preflight_source, "X-GitHub-Api-Version: 2026-03-10"
     assert_includes preflight_source, 'status["enabled"] == true'
@@ -957,12 +854,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes preflight_source, "/git/ref/tags/"
     assert_includes preflight_source, "/attestations/sha256:"
     assert_includes preflight_source, "/releases/tags/"
-    assert_includes preflight_source, '"/repos/$GITHUB_REPOSITORY/releases/assets/$approval_asset_id"'
-    assert_includes preflight_source,
-      '"/repos/$GITHUB_REPOSITORY/actions/runs/$historical_run_id/attempts/$historical_run_attempt"'
-    assert_includes preflight_source, '"/repos/$GITHUB_REPOSITORY/actions/runs/$historical_run_id/approvals"'
-    assert_includes preflight_source, 'APPROVAL_RECORD="$historical_approval" APPROVALS_JSON="$historical_approvals"'
-    assert_includes preflight_source, 'cp "$historical_approval" "$promotion/environment-approval.json"'
+    assert_not_includes preflight_source, "/actions/runs/"
+    assert_not_includes preflight_source, "/releases/assets/"
     assert_includes preflight_source, "publication_state=\"$image_state:$tag_state:$attestation_state:$release_state\""
     assert_includes preflight_source, "exact:exact:exact:exact"
     assert_not_includes preflight_source, "oras cp --from-oci-layout"
@@ -972,8 +865,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal "steps.preflight.outputs.tag_state == 'absent'", steps.fetch(tag_index).fetch("if")
     assert_equal "steps.preflight.outputs.attestation_state == 'absent'", steps.fetch(attestation_index).fetch("if")
     assert_equal "steps.preflight.outputs.release_state == 'absent'", steps.fetch(release_index).fetch("if")
-    assert_includes steps.fetch(release_index).fetch("run"), '"$promotion/environment-approval.json"'
-    assert_includes steps.fetch(final_index).fetch("run"), "environment-approval.json"
+    assert_not_includes workflow, "environment-approval.json"
+    assert_not_includes workflow, "historical-environment-approval"
 
     assert_operator verify_candidate_index, :<, final_scan_index
     assert_operator final_scan_index, :<, retain_verified_index
@@ -1247,7 +1140,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       run.scan(/ruby(?:\s+[^\n]*)?\s+<<'RUBY'\n(.*?)^RUBY$/m).flatten
     end
 
-    assert_equal 14, ruby_blocks.length
+    assert_equal 15, ruby_blocks.length
     ruby_blocks.each_with_index do |source, index|
       assert_nothing_raised { RubyVM::InstructionSequence.compile(source, "release-workflow-ruby-#{index + 1}") }
     end
@@ -1299,17 +1192,6 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     JSON.parse(EVIDENCE_FIXTURE.read)
   end
 
-  def deep_sort_json(value)
-    case value
-    when Hash
-      value.keys.sort.to_h { |key| [ key, deep_sort_json(value.fetch(key)) ] }
-    when Array
-      value.map { |entry| deep_sort_json(entry) }
-    else
-      value
-    end
-  end
-
   def assert_rejected(label, expected_error)
     mutated = evidence
     yield mutated
@@ -1338,8 +1220,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     Open3.capture3(RbConfig.ruby, VALIDATOR.to_s, *arguments, chdir: Rails.root.to_s)
   end
 
-  def run_embedded_file_classifier(source, variable, contents, environment = {})
-    Tempfile.create([ "screenote-release-classifier", ".bin" ]) do |file|
+  def run_embedded_file_script(source, variable, contents, environment = {})
+    Tempfile.create([ "screenote-release-script", ".bin" ]) do |file|
       file.binmode
       file.write(contents)
       file.flush

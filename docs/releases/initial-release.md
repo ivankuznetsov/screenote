@@ -19,7 +19,7 @@ This document is a release-note template, not a published release or an authoriz
 ## SaaS operators
 
 - This revision retains the explicit SaaS edition with PostgreSQL, Stripe, hosted storage, email, OAuth, and monitoring requirements.
-- The bearer-secret hardening migration is a stopped-process cutover. A rolling deploy is prohibited: stop and prove every predecessor web/worker process is quiesced, execute the pre-reviewed digest-pinned backup hook in that exact stopped window, verify its new private evidence against the command-generated timestamp and challenge plus the database restore point, migrate once with the successor image, and start only the successor revision.
+- The bearer-secret hardening migration is a stopped-process cutover. A rolling deploy is prohibited: stop and prove every predecessor web/worker process is quiesced, execute the digest-pinned backup hook in that exact stopped window, verify its backup receipt against the command-generated timestamp and challenge plus the database restore point, migrate once with the successor image, and start only the successor revision.
 
 ## Stored data and migrations
 
@@ -31,6 +31,6 @@ The final release notes must name every migration after the final schema is froz
 
 The final release notes must include only non-secret configuration names and defaults. They must identify newly required settings, removed settings, optional providers, and the exact CLI tag. Runtime secret values and private paths never belong here.
 
-## Publication evidence still required
+## Technical release gates still required
 
 See [`PUBLICATION_BLOCKED.md`](PUBLICATION_BLOCKED.md) and the [publication checklist](publication-checklist.md). Until those gates are complete, there is no supported source archive or container image.

@@ -1,23 +1,14 @@
 {
-  "schema": "screenote-release-evidence/v1",
+  "schema": "screenote-release-evidence/v2",
   "fixture": true,
   "repository": "ivankuznetsov/screenote",
   "source_sha": "1111111111111111111111111111111111111111",
-  "license": {
-    "source_url": "https://www.fizzy.do/license",
-    "source_snapshot_sha256": "2a430f872f3203a6ae699fa00eb2d889bb2d06062f8cbe1add79ad6eb2bebe34",
-    "upstream_repository_url": "https://github.com/basecamp/fizzy/blob/main/LICENSE.md",
-    "upstream_commit": "fa1fe476ff3844e4cfc5bb88c1b1947be29abc08",
-    "upstream_license_sha256": "ba80f19e780db9c25f48af4175c6d7b94f984b614d0062007dbf9357c41cab56",
-    "screenote_license_sha256": "270fc922f0483dc3cc6757c18e2e2c83093b5eeaf1adcf6bd5ff70df3e8790dc",
-    "copyright": "Copyright © 2026, Future Spin Ltd."
-  },
   "release": {
     "tag": "v1.0.0",
     "predecessor_tag": "none",
     "predecessor_image_digest": "none",
     "cli_tag": "v1.0.0",
-    "notes_sha256": "a2b36c9dbc858bf90b5e64326fd425613f073bf6fd46d86478c20e7eb9e20b2b"
+    "notes_sha256": "e5ec730f05e8ed4ce76ad74311cd7e589f429f6bc4d6d2ad467db62ebd00dd08"
   },
   "artifacts": {
     "source_sha": "1111111111111111111111111111111111111111",
@@ -34,36 +25,6 @@
       "licenses": "LicenseRef-OSaasy"
     },
     "evidence_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-  },
-  "approvals": {
-    "legal": {
-      "status": "approved",
-      "evidence_id": "legal-approval-1",
-      "evidence_sha256": "1212121212121212121212121212121212121212121212121212121212121212"
-    },
-    "security_history": {
-      "status": "approved",
-      "evidence_id": "security-history-1",
-      "evidence_sha256": "1313131313131313131313131313131313131313131313131313131313131313"
-    },
-    "repository_surface": {
-      "status": "approved",
-      "evidence_id": "repository-surface-1",
-      "evidence_sha256": "1414141414141414141414141414141414141414141414141414141414141414"
-    },
-    "rulesets": {
-      "status": "approved",
-      "evidence_id": "rulesets-review-1",
-      "evidence_sha256": "1515151515151515151515151515151515151515151515151515151515151515"
-    }
-  },
-  "credentials": {
-    "status": "approved",
-    "current_tree_clear": true,
-    "all_confirmed_revoked_or_rotated": true,
-    "history_disposition": "retained_approved",
-    "inventory_id": "credential-inventory-1",
-    "evidence_sha256": "1616161616161616161616161616161616161616161616161616161616161616"
   },
   "gitguardian": {
     "app_check": {
@@ -186,15 +147,7 @@
     "status": "passed",
     "sentinel_matches": 0,
     "logs_sha256": "4343434343434343434343434343434343434343434343434343434343434343",
-    "release_notes_sha256": "a2b36c9dbc858bf90b5e64326fd425613f073bf6fd46d86478c20e7eb9e20b2b",
+    "release_notes_sha256": "e5ec730f05e8ed4ce76ad74311cd7e589f429f6bc4d6d2ad467db62ebd00dd08",
     "evidence_sha256": "4545454545454545454545454545454545454545454545454545454545454545"
-  },
-  "preauthorization": {
-    "status": "approved",
-    "environment": "source-release",
-    "approver_role": "release_maintainer",
-    "approval_id": "environment-approval-1",
-    "approved_at": "2026-08-06T00:45:00Z",
-    "evidence_sha256": "4646464646464646464646464646464646464646464646464646464646464646"
   }
 }

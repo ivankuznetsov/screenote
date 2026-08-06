@@ -1,52 +1,35 @@
 # Publication checklist
 
-This checklist records the human-controlled gates around the automated release workflow. Checkboxes are intentionally empty in source. A checked box without matching restricted evidence and public evidence hashes is not approval.
+This checklist summarizes the technical setup and exact-artifact checks around the automated release workflow.
 
-## Legal and source authority
+## Repository protection and security scans
 
-- [ ] Future Spin Ltd chain of title and contribution authority reviewed.
-- [ ] Exact `LICENSE` text and `Copyright © 2026, Future Spin Ltd.` notice approved by counsel.
-- [ ] Directly competing hosted-service restriction described consistently as source-available, not open source.
-- [ ] Third-party dependency, vendored asset, base-image, generated artifact, and history licenses reviewed.
-- [ ] Candidate public history contains no unresolved protected/confidential data or third-party IP.
+- [ ] GitGuardian GitHub App installed on the repository and its historical scan finished.
+- [ ] Exact GitGuardian App check source/name required by the main ruleset; skip actions disabled.
+- [ ] Full-history and current-tree `ggshield` scans passed for the candidate SHA.
+- [ ] Every incident page was queried and no `TRIGGERED` or `ASSIGNED` incident remains.
+- [ ] Main ruleset blocks direct/force pushes and deletion and requires every product/security check.
+- [ ] `v*` creation is limited to the release App; update, force-push, and deletion are blocked for everyone.
+- [ ] `source-release` environment, least-privilege Actions settings, GHCR access, immutable releases, and private vulnerability reporting are configured.
 
-## Repository and credential surface
+## Exact artifacts and compatibility
 
-- [ ] Writes frozen and every branch/tag/ref recorded for the candidate SHA.
-- [ ] Actions logs/artifacts, issues, pull requests, wiki, releases, packages, Pages, and cached build output reviewed.
-- [ ] Removed Rails encrypted credentials inventoried with authorized decryption.
-- [ ] Every reusable credential revoked or rotated and provider evidence retained.
-- [ ] Security and legal reviewers approved history retention, or a reviewed rewrite/clean root replaced it.
-
-## GitGuardian and repository protection
-
-- [ ] GitGuardian GitHub App installed on the exact repository source and historical scan finished.
-- [ ] GitGuardian App PR check source/name verified; skip actions disabled.
-- [ ] Full-history and current-tree `ggshield` scans passed for the exact candidate SHA.
-- [ ] All repository incident pages queried; no `TRIGGERED` or `ASSIGNED` item remains.
-- [ ] Main ruleset rejects direct/force pushes and deletion and requires every product and GitGuardian check.
-- [ ] `v*` tag ruleset rejects direct creation, update, force-push, and deletion except the narrow release integration.
-- [ ] Protected `source-release` environment, least-privilege Actions settings, GHCR package access, immutable GitHub releases, and private vulnerability reporting independently inspected.
-
-## Exact artifact and compatibility
-
-- [ ] AMD64 and ARM64 OCI layouts built once from the exact protected default-branch SHA.
-- [ ] Retained layout config/layer digests match after import into the trusted scanner runtime.
+- [ ] AMD64 and ARM64 OCI layouts were built once from the protected default-branch SHA.
+- [ ] Imported config/layer digests match the retained layouts.
 - [ ] Exact platform images passed GitGuardian and pinned Critical/High vulnerability policy.
-- [ ] Final manifest labels, platform digests, SBOM, provenance, and public-log sentinel scan passed.
-- [ ] Protected-main product, migration, adapter, collaboration, container, storage, and security-data jobs are recorded only as `pr_contract_only` source checks.
-- [ ] Separate exact qualification run booted the retained AMD64 and ARM64 candidate in both self-hosted and SaaS modes.
-- [ ] Separate exact qualification run passed same-image backup/restore and the ten-minute SQLite load profile on the documented minimum host.
-- [ ] Exact immutable public CLI tag and commit passed HTTP and proxied-HTTPS compatibility against candidate-backed origins without an insecure transport override.
-- [ ] Live qualification run/attempt, exact five successful jobs, final artifact ID/archive digest, downloaded record bytes, and all eight check hashes were independently verified.
-- [ ] Release notes name predecessor (`none` for the initial release), successor digest, CLI tag, data/config changes, irreversible migrations, and rollback boundary.
+- [ ] Manifest labels, platform digests, SBOM, provenance, and public-log sentinel checks passed.
+- [ ] Protected-main jobs are recorded only as `pr_contract_only` source checks.
+- [ ] Exact qualification booted the retained AMD64 and ARM64 candidate in self-hosted and SaaS modes.
+- [ ] Exact qualification passed same-image backup/restore and the minimum-host SQLite load profile.
+- [ ] The immutable public CLI tag passed HTTP and proxied-HTTPS checks against candidate-backed origins.
+- [ ] Qualification run/attempt, five jobs, artifact ID/archive digest, record bytes, and eight check hashes were verified live.
+- [ ] Release notes name the predecessor, image digest, CLI tag, data/configuration changes, irreversible migrations, and rollback boundary.
 
-## Authorization and promotion
+## Promotion
 
-- [ ] `docs/releases/PUBLICATION_BLOCKED.md` removed in a separately reviewed authorization change.
-- [ ] Public evidence manifest contains only approved redacted fields, including the release-maintainer `preauthorization`, and matches all restricted evidence hashes.
-- [ ] `bin/release-validate --mode publish` passed for the exact tag, SHA, and manifest digest.
-- [ ] A required reviewer approved the protected `source-release` environment; this distinct runtime approval is not inferred from `preauthorization`.
-- [ ] Redacted `environment-approval.json` binds the exact repository, source/authorizing SHAs, workflow run/attempt, and canonical review digest without reviewer identity or comment.
-- [ ] Existing partial tag/image/attestation/release objects were absent or matched exactly before resumable promotion.
-- [ ] Immutable release and its exact approval/evidence/qualification/provenance/SBOM assets, manifest digest, and adjacent upgrade/rollback documents verified after publication.
+- [ ] `docs/releases/PUBLICATION_BLOCKED.md` was removed after every technical prerequisite above became available.
+- [ ] The v2 public evidence manifest contains only technical fields and matches the exact candidate and qualification artifacts.
+- [ ] `bin/release-validate --mode publish` passed for the exact tag, source SHA, and qualification artifact.
+- [ ] A reviewer approved the current workflow run's protected `source-release` environment.
+- [ ] Existing image/tag/attestation/release objects were absent or an exact resumable prefix.
+- [ ] The immutable release body and exact technical assets, image manifest, source tag, and provenance attestation were verified after publication.

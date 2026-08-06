@@ -130,11 +130,11 @@ jobs:
           history_report="$RUNNER_TEMP/ggshield-history.txt"
           tree_report="$RUNNER_TEMP/ggshield-tree.txt"
           if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan repo . >"$history_report" 2>&1; then
-            echo "::error::GitGuardian full-history scan failed; inspect restricted runner evidence"
+            echo "::error::GitGuardian full-history scan failed; inspect job-local diagnostics"
             exit 1
           fi
           if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan path --recursive --yes --all-secrets . >"$tree_report" 2>&1; then
-            echo "::error::GitGuardian current-tree scan failed; inspect restricted runner evidence"
+            echo "::error::GitGuardian current-tree scan failed; inspect job-local diagnostics"
             exit 1
           fi
           echo "GitGuardian source gates passed with redacted workflow output"
@@ -337,7 +337,7 @@ jobs:
           for architecture in amd64 arm64; do
             report="$RUNNER_TEMP/ggshield-image-$architecture.txt"
             if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan docker "screenote-release-scan:$architecture" >"$report" 2>&1; then
-              echo "::error::GitGuardian image scan failed for $architecture; inspect restricted runner evidence"
+              echo "::error::GitGuardian image scan failed for $architecture; inspect job-local diagnostics"
               exit 1
             fi
           done
@@ -362,7 +362,7 @@ jobs:
               --format json \
               --output "$report" \
               "screenote-release-scan:$architecture"; then
-              echo "::error::Trivy rejected the $architecture image; inspect restricted runner evidence"
+              echo "::error::Trivy rejected the $architecture image; inspect job-local diagnostics"
               exit 1
             fi
             ruby -rjson -e '
@@ -885,7 +885,7 @@ jobs:
             "$RUNNER_TEMP/verified/release-qualification.json"; do
             report="$RUNNER_TEMP/ggshield-final-$(basename "$path").txt"
             if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan path --yes --all-secrets "$path" >"$report" 2>&1; then
-              echo "::error::GitGuardian rejected final authorizing release bytes; inspect restricted runner evidence"
+              echo "::error::GitGuardian rejected final authorizing release bytes; inspect job-local diagnostics"
               exit 1
             fi
           done
@@ -914,178 +914,31 @@ jobs:
       id-token: write
     steps:
       # promotion-does-not-checkout: this job never checks out or executes repository code.
-      - name: Bind the protected-environment approval
-        id: environment-approval
+      - name: Require this run's protected-environment approval
+        id: current-run-approval
         env:
-          APPROVALS_JSON: ${{ runner.temp }}/current-environment-approvals.json
-          APPROVAL_RECORD: ${{ runner.temp }}/environment-approval.json
-          AUTHORIZING_SHA: ${{ needs.authorize.outputs.authorizing_sha }}
-          EXPECTED_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ inputs.source_sha }}
-          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
-          WORKFLOW_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          validator="$RUNNER_TEMP/environment-approval-validator.rb"
-          cat >"$validator" <<'APPROVAL_RUBY'
-          # frozen_string_literal: true
-
-          require "digest"
-          require "json"
-
-          class ApprovalFailure < StandardError; end
-
-          RECORD_KEYS = %w[
-            schema repository source_sha authorizing_sha workflow_run_id workflow_run_attempt
-            environment state review_sha256
-          ].freeze
-          SHA256 = /\A[0-9a-f]{64}\z/
-          GIT_SHA = /\A[0-9a-f]{40}\z/
-          POSITIVE_INTEGER = /\A[1-9][0-9]*\z/
-
-          def required_env(name)
-            value = ENV[name].to_s
-            raise ApprovalFailure, "#{name} is not configured" if value.empty?
-            value
-          end
-
-          def load_json(environment_name)
-            path = required_env(environment_name)
-            size = File.size(path)
-            raise ApprovalFailure, "#{environment_name} is empty or exceeds 2 MiB" unless size.positive? && size <= 2 * 1024 * 1024
-            JSON.parse(File.binread(path))
-          rescue ApprovalFailure
-            raise
-          rescue Errno::ENOENT, Errno::EACCES, JSON::ParserError
-            raise ApprovalFailure, "#{environment_name} is unavailable or malformed"
-          end
-
-          def canonical(value)
-            case value
-            when Hash
-              value.keys.sort.to_h { |key| [key, canonical(value.fetch(key))] }
-            when Array
-              value.map { |entry| canonical(entry) }
-            else
-              value
-            end
-          end
-
-          def exact_review(approvals)
-            raise ApprovalFailure, "approval history must contain exactly one review" unless
-              approvals.is_a?(Array) && approvals.length == 1
-
-            review = approvals.first
-            raise ApprovalFailure, "approval review must be an object" unless review.is_a?(Hash)
-            raise ApprovalFailure, "approval review state must be approved" unless review["state"] == "approved"
-
-            environments = review["environments"]
-            exact_environment = environments.is_a?(Array) && environments.length == 1 &&
-              environments.first.is_a?(Hash) && environments.first["name"] == "source-release"
-            raise ApprovalFailure, "approval review must cover exactly source-release" unless exact_environment
-            review
-          end
-
-          def validate_record(record)
-            raise ApprovalFailure, "approval record must be an object" unless record.is_a?(Hash)
-            raise ApprovalFailure, "approval record shape does not match" unless record.keys.sort == RECORD_KEYS.sort
-
-            expected = {
-              "schema" => "screenote-environment-approval/v1",
-              "repository" => required_env("EXPECTED_REPOSITORY"),
-              "source_sha" => required_env("SOURCE_SHA"),
-              "authorizing_sha" => required_env("AUTHORIZING_SHA"),
-              "environment" => "source-release",
-              "state" => "approved"
-            }
-            raise ApprovalFailure, "approval record identity does not match" unless
-              expected.all? { |key, value| record[key] == value }
-            raise ApprovalFailure, "approval record source SHA is invalid" unless record["source_sha"].match?(GIT_SHA)
-            raise ApprovalFailure, "approval record authorizing SHA is invalid" unless record["authorizing_sha"].match?(GIT_SHA)
-            raise ApprovalFailure, "approval record run ID is invalid" unless
-              record["workflow_run_id"].is_a?(String) && record["workflow_run_id"].match?(POSITIVE_INTEGER)
-            raise ApprovalFailure, "approval record run attempt is invalid" unless
-              record["workflow_run_attempt"].is_a?(Integer) && record["workflow_run_attempt"].positive?
-            raise ApprovalFailure, "approval record review digest is invalid" unless
-              record["review_sha256"].is_a?(String) && record["review_sha256"].match?(SHA256)
-            record
-          end
-
-          def review_digest(review)
-            Digest::SHA256.hexdigest(JSON.generate(canonical(review)))
-          end
-
-          begin
-            case ARGV
-            when ["create"]
-              run_id = required_env("WORKFLOW_RUN_ID")
-              run_attempt = required_env("WORKFLOW_RUN_ATTEMPT")
-              raise ApprovalFailure, "workflow run ID is invalid" unless run_id.match?(POSITIVE_INTEGER)
-              raise ApprovalFailure, "workflow run attempt is invalid" unless run_attempt.match?(POSITIVE_INTEGER)
-
-              review = exact_review(load_json("APPROVALS_JSON"))
-              record = {
-                "schema" => "screenote-environment-approval/v1",
-                "repository" => required_env("EXPECTED_REPOSITORY"),
-                "source_sha" => required_env("SOURCE_SHA"),
-                "authorizing_sha" => required_env("AUTHORIZING_SHA"),
-                "workflow_run_id" => run_id,
-                "workflow_run_attempt" => Integer(run_attempt, 10),
-                "environment" => "source-release",
-                "state" => "approved",
-                "review_sha256" => review_digest(review)
-              }
-              validate_record(record)
-              File.binwrite(required_env("APPROVAL_RECORD"), JSON.generate(record) << "\n")
-            when ["identify"]
-              record = validate_record(load_json("APPROVAL_RECORD"))
-              puts "#{record.fetch('workflow_run_id')} #{record.fetch('workflow_run_attempt')}"
-            when ["verify-run"]
-              record = validate_record(load_json("APPROVAL_RECORD"))
-              run = load_json("HISTORICAL_RUN_JSON")
-              default_branch = required_env("EXPECTED_DEFAULT_BRANCH")
-              valid_run = run.is_a?(Hash) &&
-                run["id"].to_s == record["workflow_run_id"] &&
-                run["run_attempt"] == record["workflow_run_attempt"] &&
-                run["event"] == "workflow_dispatch" &&
-                run["head_branch"] == default_branch &&
-                run["head_sha"] == record["authorizing_sha"] &&
-                run["path"] == ".github/workflows/release.yml@#{default_branch}" &&
-                run.dig("repository", "full_name") == record["repository"]
-              raise ApprovalFailure, "historical workflow run identity does not match" unless valid_run
-            when ["verify"]
-              record = validate_record(load_json("APPROVAL_RECORD"))
-              review = exact_review(load_json("APPROVALS_JSON"))
-              raise ApprovalFailure, "approval review digest does not match" unless
-                record["review_sha256"] == review_digest(review)
-            when ["asset-id"]
-              release = load_json("RELEASE_JSON")
-              assets = release["assets"] if release.is_a?(Hash)
-              raise ApprovalFailure, "release assets are malformed" unless assets.is_a?(Array)
-              matches = assets.select do |asset|
-                asset.is_a?(Hash) && asset["name"] == "environment-approval.json"
-              end
-              raise ApprovalFailure, "release must contain exactly one environment approval asset" unless matches.length == 1
-              asset_id = matches.first["id"]
-              raise ApprovalFailure, "environment approval asset ID is invalid" unless asset_id.is_a?(Integer) && asset_id.positive?
-              puts asset_id
-            else
-              raise ApprovalFailure, "unknown approval validator mode"
-            end
-          rescue ApprovalFailure => error
-            warn "Protected-environment approval gate failed: #{error.message}"
-            exit 1
-          rescue StandardError => error
-            warn "Protected-environment approval gate failed closed (#{error.class})"
-            exit 1
-          end
-          APPROVAL_RUBY
+          approvals_json="$RUNNER_TEMP/current-run-environment-approvals.json"
+          trap 'rm -f "$approvals_json"' EXIT
           gh api --method GET \
             --header "X-GitHub-Api-Version: 2026-03-10" \
-            "/repos/$GITHUB_REPOSITORY/actions/runs/$WORKFLOW_RUN_ID/approvals" >"$APPROVALS_JSON"
-          ruby "$validator" create
-          rm -f "$APPROVALS_JSON"
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" >"$approvals_json"
+          APPROVALS_JSON="$approvals_json" ruby -rjson <<'RUBY'
+          approvals = JSON.parse(File.binread(ENV.fetch("APPROVALS_JSON")))
+          abort "current workflow run must have exactly one environment review" unless
+            approvals.is_a?(Array) && approvals.length == 1
+
+          review = approvals.first
+          abort "current workflow run review must be approved" unless
+            review.is_a?(Hash) && review["state"] == "approved"
+
+          environments = review["environments"]
+          exact_environment = environments.is_a?(Array) && environments.length == 1 &&
+            environments.first.is_a?(Hash) && environments.first["name"] == "source-release"
+          abort "current workflow run approval must cover exactly source-release" unless exact_environment
+          RUBY
 
       - name: Recheck live GitGuardian incidents after approval
         id: live-incidents
@@ -1250,11 +1103,6 @@ jobs:
           name: verified-promotion-${{ inputs.source_sha }}-${{ inputs.release_tag }}
           path: ${{ runner.temp }}/promotion
 
-      - name: Stage the protected-environment approval binding
-        run: |
-          set -euo pipefail
-          cp "$RUNNER_TEMP/environment-approval.json" "$RUNNER_TEMP/promotion/environment-approval.json"
-
       - name: Install checksum-pinned ORAS
         env:
           ORAS_ARCHIVE_SHA256: 9229ccc6d17bb282039ad4a69abb16dcb887a5bce567c075d731d9b3c7ad8eaf
@@ -1280,12 +1128,9 @@ jobs:
       - name: Preflight every remote publication object
         id: preflight
         env:
-          ACTIONS_TOKEN: ${{ github.token }}
           ATTESTATION_TOKEN: ${{ github.token }}
           ATTESTATION_PREDICATE_TYPE: https://screenote.ai/attestations/release-provenance/v1
           AUTHORIZING_SHA: ${{ needs.authorize.outputs.authorizing_sha }}
-          EXPECTED_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          EXPECTED_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
           IMAGE_REPOSITORY: ghcr.io/ivankuznetsov/screenote
           MANIFEST_DIGEST: ${{ needs.authorize.outputs.manifest_digest }}
@@ -1294,8 +1139,6 @@ jobs:
         run: |
           set -euo pipefail
           promotion="$RUNNER_TEMP/promotion"
-          approval_validator="$RUNNER_TEMP/environment-approval-validator.rb"
-          test -f "$approval_validator"
 
           github_not_found() {
             GITHUB_ERROR="$1" ruby <<'RUBY'
@@ -1394,39 +1237,6 @@ jobs:
           release_json="$RUNNER_TEMP/release.json"
           release_error="$RUNNER_TEMP/release.error"
           if gh api "/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json" 2>"$release_error"; then
-            approval_asset_id="$(
-              RELEASE_JSON="$release_json" ruby "$approval_validator" asset-id
-            )"
-            historical_approval="$RUNNER_TEMP/historical-environment-approval.json"
-            GH_TOKEN="$ACTIONS_TOKEN" gh api --method GET \
-              --header "Accept: application/octet-stream" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "/repos/$GITHUB_REPOSITORY/releases/assets/$approval_asset_id" >"$historical_approval"
-
-            historical_identity="$(
-              APPROVAL_RECORD="$historical_approval" ruby "$approval_validator" identify
-            )"
-            read -r historical_run_id historical_run_attempt extra_identity <<<"$historical_identity"
-            test -n "$historical_run_id"
-            test -n "$historical_run_attempt"
-            test -z "${extra_identity:-}"
-
-            historical_run="$RUNNER_TEMP/historical-approval-run.json"
-            GH_TOKEN="$ACTIONS_TOKEN" gh api --method GET \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "/repos/$GITHUB_REPOSITORY/actions/runs/$historical_run_id/attempts/$historical_run_attempt" >"$historical_run"
-            APPROVAL_RECORD="$historical_approval" HISTORICAL_RUN_JSON="$historical_run" \
-              ruby "$approval_validator" verify-run
-
-            historical_approvals="$RUNNER_TEMP/historical-environment-approvals.json"
-            GH_TOKEN="$ACTIONS_TOKEN" gh api --method GET \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "/repos/$GITHUB_REPOSITORY/actions/runs/$historical_run_id/approvals" >"$historical_approvals"
-            APPROVAL_RECORD="$historical_approval" APPROVALS_JSON="$historical_approvals" \
-              ruby "$approval_validator" verify
-            cp "$historical_approval" "$promotion/environment-approval.json"
-            rm -f "$historical_approvals" "$historical_run"
-
             PROMOTION_DIR="$promotion" RELEASE_JSON="$release_json" ruby -rjson -rdigest <<'RUBY'
             release = JSON.parse(File.binread(ENV.fetch("RELEASE_JSON")))
             promotion = ENV.fetch("PROMOTION_DIR")
@@ -1440,7 +1250,6 @@ jobs:
                 release["immutable"] == true
 
             expected_assets = %w[
-              environment-approval.json
               provenance.json
               public-evidence.json
               release-qualification.json
@@ -1538,7 +1347,6 @@ jobs:
             --target "$SOURCE_SHA" \
             --title "Screenote $RELEASE_TAG" \
             --notes-file "$promotion/release-notes.md" \
-            "$promotion/environment-approval.json" \
             "$promotion/public-evidence.json" \
             "$promotion/release-qualification.json" \
             "$promotion/sbom-amd64.spdx.json" \
@@ -1610,7 +1418,6 @@ jobs:
               release["immutable"] == true
 
           expected_assets = %w[
-            environment-approval.json
             provenance.json
             public-evidence.json
             release-qualification.json

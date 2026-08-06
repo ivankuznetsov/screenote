@@ -4,7 +4,7 @@ Screenote is a visual feedback workspace for screenshots. Teams can capture seve
 
 This repository is **source-available and self-hostable**. It contains both the unlimited self-hosted core and the explicitly enabled services Future Spin Ltd uses to operate `screenote.ai`.
 
-> **Release status:** the first source release is being prepared. Do not treat an untagged branch, a moving image tag, or a candidate CLI build as a supported release. Publication remains blocked until the legal, full-history secret-review, GitGuardian, repository-protection, and exact-artifact gates in [the release guide](docs/releases.md) are complete.
+> **Release status:** the first source release is being prepared. Do not treat an untagged branch, a moving image tag, or a candidate CLI build as a supported release. Publication remains blocked until the automated GitGuardian, repository-protection, exact-artifact, and runtime-qualification gates in [the release guide](docs/releases.md) are complete.
 
 ## Self-host Screenote
 

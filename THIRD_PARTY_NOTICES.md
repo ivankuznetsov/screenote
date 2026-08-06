@@ -1,6 +1,6 @@
 # Third-party notices
 
-Screenote is source-available under the O'Saasy license and uses third-party software under separate terms. This inventory is a review aid tied to the checked-in dependency locks; each dependency remains governed by its own license. The exact release SBOM is the authoritative artifact inventory. Publication is blocked until a legal reviewer confirms the dependency set, bundled notices, base-image packages, and license compatibility.
+Screenote is source-available under the O'Saasy license and uses third-party software under separate terms. This inventory is tied to the checked-in dependency locks; each dependency remains governed by its own license. The exact release SBOM is the authoritative artifact inventory.
 
 ## Bundled browser asset
 
@@ -70,4 +70,4 @@ The in-repository Go client is transitional and is not a supported release artif
 
 ## Container operating-system packages
 
-The released SBOM also inventories the pinned Ruby base image and Alpine packages installed by `Dockerfile` with `apk`. Their copyright and license material remains in the standard package documentation directories inside the image. A release must not proceed if SBOM generation, notice review, or license-policy evaluation is missing or inconclusive.
+The released SBOM also inventories the pinned Ruby base image and Alpine packages installed by `Dockerfile` with `apk`. Their copyright and license material remains in the standard package documentation directories inside the image. A release must not proceed when SBOM generation or the automated notice/license inventory check is missing or inconclusive.

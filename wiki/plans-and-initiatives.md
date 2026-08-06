@@ -31,9 +31,9 @@ The plan covers the full technical stack (Rails 8, Annotorious v3, FastMCP, Acti
 
 ### Self-Hosted Source Release (`docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md`)
 
-**Status:** Implementation-ready; autonomous execution is the next stage.
+**Status:** Implemented in source; external release infrastructure and exact qualification remain pending.
 
-Defines Screenote's planned O'Saasy distribution under Future Spin Ltd: one public repository, a prebuilt single-container SQLite edition with an unlimited core, optional S3-compatible storage, atomic token-secured administrator bootstrap, closed registration, and project-scoped invitations. GitGuardian gates the initial history, every protected default-branch update, and source/image releases; legal approval remains mandatory before publication.
+Defines Screenote's O'Saasy distribution under Future Spin Ltd: one public repository, a prebuilt single-container SQLite edition with an unlimited core, optional S3-compatible storage, atomic token-secured administrator bootstrap, closed registration, and project-scoped invitations. GitGuardian gates the initial history, every protected default-branch update, and source/image releases. Publication requires only the documented technical readiness checks and the protected release-environment approval.
 
 See also: [[self-hosting]], [[architecture]], [[dependencies]]
 

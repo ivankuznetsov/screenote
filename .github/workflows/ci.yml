@@ -311,4 +311,4 @@ jobs:
       - name: Run artifact positive and fail-closed negative contracts
         run: PARALLEL_WORKERS=1 bin/rails test test/integration/release_artifact_contract_test.rb
       - name: Record release applicability
-        run: echo "::notice::Exact tag, OCI digest, SBOM, provenance, approvals, and release evidence remain release-candidate inputs."
+        run: echo "::notice::Exact tag, OCI digest, SBOM, provenance, and release evidence remain release-candidate inputs."

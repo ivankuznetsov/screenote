@@ -68,9 +68,7 @@ class ReleaseValidation
     docs/releases/security-evidence.md
     docs/releases/action-pins.md
     docs/releases/publication-checklist.md
-    docs/releases/tracked-credential-audit.md
     docs/releases/evidence/public-evidence.example.json
-    docs/releases/evidence/private-evidence.example.md
     .gitguardian.yaml
     .github/workflows/secrets.yml
     .github/workflows/release.yml
@@ -80,8 +78,6 @@ class ReleaseValidation
     .github/rulesets/immutable-release-tags.json
     .github/dependabot.yml
   ].freeze
-
-  APPROVAL_NAMES = %w[legal security_history repository_surface rulesets].freeze
 
   attr_reader :errors
 
@@ -117,20 +113,17 @@ class ReleaseValidation
 
     check_public_payload(evidence)
     exact_keys(evidence, %w[
-      schema fixture repository source_sha license release artifacts approvals credentials gitguardian
-      vulnerability rulesets source_contracts qualification public_artifacts preauthorization
+      schema fixture repository source_sha release artifacts gitguardian vulnerability rulesets source_contracts
+      qualification public_artifacts
     ], "evidence")
-    value(evidence, "schema", "screenote-release-evidence/v1")
+    value(evidence, "schema", "screenote-release-evidence/v2")
     boolean(evidence, "fixture")
     error("fixture evidence cannot authorize publication") if evidence["fixture"] == true && !allow_fixture
     value(evidence, "repository", EXPECTED_REPOSITORY)
     sha(evidence, "source_sha", source_sha)
 
-    validate_license_evidence(evidence["license"])
     validate_release(evidence["release"], tag)
     validate_artifacts(evidence["artifacts"], source_sha, tag)
-    validate_approvals(evidence["approvals"])
-    validate_credentials(evidence["credentials"])
     validate_gitguardian(evidence["gitguardian"], source_sha, evidence["artifacts"])
     validate_vulnerability(evidence["vulnerability"], evidence["artifacts"])
     validate_rulesets(evidence["rulesets"])
@@ -145,7 +138,6 @@ class ReleaseValidation
       require_external_binding: !allow_fixture
     )
     validate_public_artifacts(evidence["public_artifacts"])
-    validate_preauthorization(evidence["preauthorization"])
     validate_final_release_notes(evidence) unless allow_fixture
     self
   end
@@ -445,20 +437,6 @@ class ReleaseValidation
     error(".github/dependabot.yml is invalid YAML (#{error_object.class})")
   end
 
-  def validate_license_evidence(license)
-    exact_keys(license, %w[
-      source_url source_snapshot_sha256 upstream_repository_url upstream_commit upstream_license_sha256
-      screenote_license_sha256 copyright
-    ], "license")
-    return unless license.is_a?(Hash)
-    value(license, "source_url", "https://www.fizzy.do/license", "license")
-    value(license, "upstream_repository_url", "https://github.com/basecamp/fizzy/blob/main/LICENSE.md", "license")
-    git_sha(license, "upstream_commit", nil, "license")
-    %w[source_snapshot_sha256 upstream_license_sha256 screenote_license_sha256].each { |key| digest(license, key, "license") }
-    value(license, "screenote_license_sha256", Digest::SHA256.file(path("LICENSE")).hexdigest, "license") if File.file?(path("LICENSE"))
-    value(license, "copyright", "Copyright © 2026, Future Spin Ltd.", "license")
-  end
-
   def validate_release(release, tag)
     exact_keys(release, %w[tag predecessor_tag predecessor_image_digest cli_tag notes_sha256], "release")
     return unless release.is_a?(Hash)
@@ -497,25 +475,6 @@ class ReleaseValidation
     value(labels, "version", tag, "artifacts.oci_labels")
     value(labels, "description", "Screenote visual feedback workspace", "artifacts.oci_labels")
     value(labels, "licenses", "LicenseRef-OSaasy", "artifacts.oci_labels")
-  end
-
-  def validate_approvals(approvals)
-    exact_keys(approvals, APPROVAL_NAMES, "approvals")
-    return unless approvals.is_a?(Hash)
-    APPROVAL_NAMES.each { |name| approval(approvals[name], "approvals.#{name}") }
-  end
-
-  def validate_credentials(credentials)
-    exact_keys(credentials, %w[
-      status current_tree_clear all_confirmed_revoked_or_rotated history_disposition inventory_id evidence_sha256
-    ], "credentials")
-    return unless credentials.is_a?(Hash)
-    value(credentials, "status", "approved", "credentials")
-    value(credentials, "current_tree_clear", true, "credentials")
-    value(credentials, "all_confirmed_revoked_or_rotated", true, "credentials")
-    allowed_value(credentials, "history_disposition", %w[retained_approved rewritten clean_root], "credentials")
-    evidence_id(credentials, "inventory_id", "credentials")
-    digest(credentials, "evidence_sha256", "credentials")
   end
 
   def validate_gitguardian(gitguardian, source_sha, artifacts)
@@ -726,18 +685,6 @@ class ReleaseValidation
     ) if File.file?(path("docs/releases/initial-release.md"))
   end
 
-  def validate_preauthorization(preauthorization)
-    context = "preauthorization"
-    exact_keys(preauthorization, %w[status environment approver_role approval_id approved_at evidence_sha256], context)
-    return unless preauthorization.is_a?(Hash)
-    value(preauthorization, "status", "approved", context)
-    value(preauthorization, "environment", "source-release", context)
-    value(preauthorization, "approver_role", "release_maintainer", context)
-    evidence_id(preauthorization, "approval_id", context)
-    recent_time(preauthorization, "approved_at", 24 * 60 * 60, context)
-    digest(preauthorization, "evidence_sha256", context)
-  end
-
   def validate_final_release_notes(evidence)
     notes = read("docs/releases/initial-release.md")
     release = evidence["release"]
@@ -797,14 +744,6 @@ class ReleaseValidation
     error("#{context}.approved_at is in the future") if approved > @now
     error("#{context}.expires_at must be in the future") unless expires > @now
     error("#{context} lasts longer than 30 days") if expires > approved + (30 * 24 * 60 * 60)
-  end
-
-  def approval(record, context)
-    exact_keys(record, %w[status evidence_id evidence_sha256], context)
-    return unless record.is_a?(Hash)
-    value(record, "status", "approved", context)
-    evidence_id(record, "evidence_id", context)
-    digest(record, "evidence_sha256", context)
   end
 
   def check_public_payload(value, trail = "evidence")

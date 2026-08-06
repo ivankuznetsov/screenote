@@ -35,7 +35,7 @@ A useful pull request:
 - includes tests that fail without the change;
 - calls out data, configuration, self-hosted, SaaS, API, security, and upgrade effects;
 - updates operator documentation and the project wiki when behavior or architecture changes;
-- contains no generated credentials, local environment files, production configuration, or private evidence; and
+- contains no generated credentials, local environment files, production configuration, or sensitive scanner output; and
 - passes every required status check, including GitGuardian. A pending, unavailable, skipped, or failed security check is not a pass.
 
 Maintainers may ask for a smaller change, a different implementation, or additional evidence. A contribution is not accepted until it is reviewed and merged.
@@ -46,4 +46,4 @@ Pin dependency and GitHub Action updates to immutable versions or full commit SH
 
 ## Release authority
 
-Contributing code does not authorize a release. Repository visibility, tags, images, security-incident disposition, legal approval, and release-environment approval remain maintainer-controlled operations described in [docs/releases.md](docs/releases.md).
+Contributing code does not authorize a release. Repository visibility, tags, images, security-incident response, and the protected release environment remain maintainer-controlled operations described in [docs/releases.md](docs/releases.md).

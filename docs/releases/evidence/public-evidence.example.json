@@ -1,17 +1,8 @@
 {
-  "schema": "screenote-release-evidence/v1",
+  "schema": "screenote-release-evidence/v2",
   "fixture": false,
   "repository": "ivankuznetsov/screenote",
   "source_sha": "PENDING",
-  "license": {
-    "source_url": "https://www.fizzy.do/license",
-    "source_snapshot_sha256": "PENDING",
-    "upstream_repository_url": "https://github.com/basecamp/fizzy/blob/main/LICENSE.md",
-    "upstream_commit": "PENDING",
-    "upstream_license_sha256": "PENDING",
-    "screenote_license_sha256": "PENDING",
-    "copyright": "Copyright © 2026, Future Spin Ltd."
-  },
   "release": {
     "tag": "v1.0.0",
     "predecessor_tag": "none",
@@ -33,20 +24,6 @@
       "description": "Screenote visual feedback workspace",
       "licenses": "LicenseRef-OSaasy"
     },
-    "evidence_sha256": "PENDING"
-  },
-  "approvals": {
-    "legal": { "status": "PENDING", "evidence_id": "PENDING", "evidence_sha256": "PENDING" },
-    "security_history": { "status": "PENDING", "evidence_id": "PENDING", "evidence_sha256": "PENDING" },
-    "repository_surface": { "status": "PENDING", "evidence_id": "PENDING", "evidence_sha256": "PENDING" },
-    "rulesets": { "status": "PENDING", "evidence_id": "PENDING", "evidence_sha256": "PENDING" }
-  },
-  "credentials": {
-    "status": "PENDING",
-    "current_tree_clear": false,
-    "all_confirmed_revoked_or_rotated": false,
-    "history_disposition": "PENDING",
-    "inventory_id": "PENDING",
     "evidence_sha256": "PENDING"
   },
   "gitguardian": {
@@ -140,14 +117,6 @@
     "sentinel_matches": -1,
     "logs_sha256": "PENDING",
     "release_notes_sha256": "PENDING",
-    "evidence_sha256": "PENDING"
-  },
-  "preauthorization": {
-    "status": "PENDING",
-    "environment": "source-release",
-    "approver_role": "release_maintainer",
-    "approval_id": "PENDING",
-    "approved_at": "PENDING",
     "evidence_sha256": "PENDING"
   }
 }
