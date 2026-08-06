@@ -165,7 +165,7 @@ jobs:
           bundler-cache: true
       - name: Install Playwright Chromium
         run: |
-          PLAYWRIGHT_CLI_VERSION="$(ruby -e 'require "playwright"; puts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip')"
+          PLAYWRIGHT_CLI_VERSION="$(bundle exec ruby -e 'require "playwright"; puts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip')"
           npm install --no-save "playwright@$PLAYWRIGHT_CLI_VERSION"
           npx playwright install --with-deps chromium
       - name: Run the explicit collaboration manifest with a real server
@@ -194,6 +194,8 @@ jobs:
           ref: ${{ env.SCREENOTE_CLI_REF }}
           path: tmp/screenote-cli
           persist-credentials: false
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
       - name: Set up Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
@@ -300,6 +302,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
       - name: Set up Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:

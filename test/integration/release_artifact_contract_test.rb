@@ -1102,20 +1102,25 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal "env GOFLAGS=-mod=mod go test ./...", step.fetch("run")
   end
 
-  test "backup restore CI installs the image runtime before Rails boots" do
+  test "focused Rails CI jobs install the image runtime before Rails boots" do
     workflow = YAML.safe_load(
       Rails.root.join(".github/workflows/ci.yml").read,
       permitted_classes: [],
       aliases: false
     )
-    steps = workflow.fetch("jobs").fetch("backup-restore").fetch("steps")
-    runtime = steps.find { |step| step["name"] == "Install runtime packages" }
-    setup = steps.find { |step| step["name"] == "Set up Ruby" }
+    %w[backup-restore public-cli release-artifact].each do |job|
+      steps = workflow.fetch("jobs").fetch(job).fetch("steps")
+      runtime = steps.find { |step| step.fetch("run", "").include?("libvips") }
+      setup = steps.find { |step| step["name"] == "Set up Ruby" }
 
-    assert_not_nil runtime
-    assert_not_nil setup
-    assert_includes runtime.fetch("run"), "libvips"
-    assert_operator steps.index(runtime), :<, steps.index(setup)
+      assert_not_nil runtime, job
+      assert_not_nil setup, job
+      assert_operator steps.index(runtime), :<, steps.index(setup), job
+    end
+
+    browser_steps = workflow.fetch("jobs").fetch("system-collaboration").fetch("steps")
+    playwright = browser_steps.find { |step| step["name"] == "Install Playwright Chromium" }
+    assert_includes playwright.fetch("run"), "bundle exec ruby"
   end
 
   test "self-hosted coverage is an explicit positive manifest with fail-closed drift detection" do
@@ -1177,6 +1182,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes matrix, "assert_mode_booted"
     assert_includes matrix, "SCREENOTE_DEFER_COVERAGE_GATE=1 TEST_ENV_NUMBER=1"
     assert_includes matrix, "SCREENOTE_DEFER_COVERAGE_GATE=1 TEST_ENV_NUMBER=2"
+    assert_equal 2, matrix.scan("DISABLE_BOOTSNAP_COMPILE_CACHE=1").length
     assert_includes matrix, "test/support/coverage_boot"
     assert_includes matrix, "git merge-base HEAD origin/main"
     assert_includes matrix, "--manifest test/manifests/release_security_coverage.yml"

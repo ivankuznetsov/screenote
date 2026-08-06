@@ -32,6 +32,9 @@ Every CI job that boots Rails must install libvips before `ruby/setup-ruby`
 hands control to the test command. The application loads the Vips initializer
 at boot even when a focused contract does not transform an image; a focused
 backup/restore job without the runtime library fails before its tests begin.
+The public-CLI digest and release-artifact jobs follow the same rule. Commands
+that inspect a bundled Ruby dependency, such as Playwright version discovery,
+run through `bundle exec ruby` so a cache-restored bundle is visible.
 
 ## Browser tests
 
@@ -112,6 +115,10 @@ deployment, bootstrap, invitation, principal, suspension, recovery, and
 administrator-transfer boundaries. Every executable changed line and changed
 branch arm in those files must be covered; missing instrumentation, source
 manifest drift, an invalid base, or an empty security diff fails closed.
+Coverage processes set `DISABLE_BOOTSNAP_COMPILE_CACHE=1`: Ruby cannot compile
+Bootsnap instruction-sequence cache entries after branch/line coverage has
+started, and a warm CI bundle cache must not make the coverage gate fail before
+the suite runs.
 The manifest includes every changed controller that delivers one of those
 flows, and `CI / coverage` runs this gate for every pull request; controller
 delivery code cannot be deferred to a release-only handoff check.

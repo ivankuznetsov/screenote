@@ -436,11 +436,13 @@ case "${1-}" in
     assert_mode_booted saas
     env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
       COVERAGE=true SCREENOTE_DEFER_COVERAGE_GATE=1 TEST_ENV_NUMBER=1 \
+      DISABLE_BOOTSNAP_COMPILE_CACHE=1 \
       RUBYOPT="${RUBYOPT:+${RUBYOPT} }${coverage_rubyopt}" \
       bin/rails test
     assert_mode_booted self_hosted
     env COVERAGE=true SCREENOTE_DEFER_COVERAGE_GATE=1 TEST_ENV_NUMBER=2 \
       SCREENOTE_EDITION=self_hosted SCREENOTE_REQUIRED_MODE=self_hosted \
+      DISABLE_BOOTSNAP_COMPILE_CACHE=1 \
       RUBYOPT="${RUBYOPT:+${RUBYOPT} }${coverage_rubyopt}" \
       PARALLEL_WORKERS=1 bin/rails test "${self_hosted_tests[@]}"
     coverage_base="$(git merge-base HEAD origin/main)" ||
