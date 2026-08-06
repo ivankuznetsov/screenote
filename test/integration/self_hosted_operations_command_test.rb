@@ -7,12 +7,14 @@ require "digest"
 require "fileutils"
 require "json"
 require "open3"
+require "rbconfig"
 require "tmpdir"
 
 class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
   BACKUP = Rails.root.join("bin/self-host-backup").to_s.freeze
   RESTORE = Rails.root.join("bin/self-host-restore").to_s.freeze
   DIAGNOSTICS = Rails.root.join("bin/self-host-diagnostics").to_s.freeze
+  HOST_IDENTITY_PRELOAD = Rails.root.join("test/support/self_hosted_host_identity").to_s.freeze
   IMAGE = "ghcr.io/future-spin/screenote@sha256:#{'a' * 64}".freeze
 
   test "backup validates the running immutable image, stops gracefully, archives, then restarts" do
@@ -355,7 +357,7 @@ class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
     with_fixture do |fixture|
       stdout, stderr, status = Open3.capture3(
         command_environment(fixture),
-        DIAGNOSTICS,
+        *supported_identity_command(DIAGNOSTICS),
         "--compose-file", fixture.fetch(:compose),
         "--project-name", "screenote-ops-test"
       )
@@ -369,12 +371,39 @@ class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
     end
   end
 
-  test "operations reject an unsupported host uid before invoking Docker" do
-    command = Screenote::SelfHosted::HostOperations::BackupCommand.new({}, host_uid: 0)
+  test "production host identity remains exactly uid and gid 1000" do
+    assert_equal 1000, Screenote::SelfHosted::HostOperations::SUPPORTED_UID
+    assert_equal 1000, Screenote::SelfHosted::HostOperations::SUPPORTED_GID
+  end
+
+  test "operations reject an unsupported user before invoking Docker" do
+    command = Screenote::SelfHosted::HostOperations::BackupCommand.new({}, host_uid: 1001, host_gid: 1000)
 
     _stdout, stderr = capture_io { assert_equal 78, command.call }
 
-    assert_includes stderr, "must run as host uid 1000"
+    assert_includes stderr, "must run as host uid/gid 1000"
+  end
+
+  test "operations reject a mismatched group before invoking Docker" do
+    command = Screenote::SelfHosted::HostOperations::BackupCommand.new({}, host_uid: 1000, host_gid: 1001)
+
+    _stdout, stderr = capture_io { assert_equal 78, command.call }
+
+    assert_includes stderr, "must run as host uid/gid 1000"
+  end
+
+  test "executable identity preload refuses non-test environments" do
+    _stdout, stderr, status = Open3.capture3(
+      { "RAILS_ENV" => "production" },
+      RbConfig.ruby,
+      "-rbundler/setup",
+      "-r#{HOST_IDENTITY_PRELOAD}",
+      "-e",
+      "exit 0"
+    )
+
+    assert_not status.success?
+    assert_includes stderr, "self-hosted identity preload is test-only"
   end
 
   private
@@ -443,7 +472,7 @@ class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
     compose_files: [ fixture.fetch(:compose) ], s3_snapshot_command: nil, s3_evidence: nil)
     compose_arguments = compose_files.flat_map { |file| [ "--compose-file", file ] }
     arguments = [
-      BACKUP,
+      *supported_identity_command(BACKUP),
       "--destination", fixture.fetch(:backup),
       "--recipient", "age1screenotetest",
       "--authentication-key", fixture.fetch(:authentication_key),
@@ -469,7 +498,7 @@ class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
     prepare_authenticated_backup(fixture)
     Open3.capture3(
       command_environment(fixture).merge(extra_environment),
-      RESTORE,
+      *supported_identity_command(RESTORE),
       "--source", fixture.fetch(:backup),
       "--identity", fixture.fetch(:identity),
       "--authentication-key", authentication_key,
@@ -511,6 +540,7 @@ class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
 
   def command_environment(fixture)
     {
+      "RAILS_ENV" => "test",
       "SCREENOTE_DOCKER_BIN" => fixture.fetch(:docker),
       "SCREENOTE_FAKE_TRACE" => fixture.fetch(:trace),
       "SCREENOTE_FAKE_STATE" => fixture.fetch(:state),
@@ -518,6 +548,10 @@ class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
       "SCREENOTE_FAKE_SECRET_FILE" => File.join(fixture.fetch(:secrets), "secret_key_base"),
       "SCREENOTE_FAKE_OPERATOR" => fixture.fetch(:operator)
     }
+  end
+
+  def supported_identity_command(executable)
+    [ RbConfig.ruby, "-rbundler/setup", "-r#{HOST_IDENTITY_PRELOAD}", executable ]
   end
 
   def write_fake_docker(path)

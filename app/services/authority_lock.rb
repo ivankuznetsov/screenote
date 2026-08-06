@@ -13,7 +13,7 @@ class AuthorityLock
     end
 
     def user!(user)
-      raise ActiveRecord::RecordNotFound unless user
+      raise ActiveRecord::RecordNotFound unless user&.persisted?
 
       if user.class.connection.adapter_name.casecmp?("SQLite")
         # SQLite ignores SELECT ... FOR UPDATE. A no-op write makes this the

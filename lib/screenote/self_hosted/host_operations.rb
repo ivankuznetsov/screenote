@@ -19,6 +19,7 @@ module Screenote
       DEFAULT_TIMEOUT = 120
       VOLUME_NAME_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\z/
       SUPPORTED_UID = 1000
+      SUPPORTED_GID = 1000
       DOCKER_ENVIRONMENT_KEYS = %w[
         DOCKER_CERT_PATH
         DOCKER_CONFIG
@@ -296,7 +297,7 @@ module Screenote
         def host_directory!(path, description:, restrictive: false, empty: false)
           canonical = BackupSet.canonical_existing_directory(path, description:)
           stat = File.stat(canonical)
-          unless stat.uid == SUPPORTED_UID && stat.gid == SUPPORTED_UID
+          unless stat.uid == SUPPORTED_UID && stat.gid == SUPPORTED_GID
             raise Error.new("#{description} must be owned by uid/gid 1000", exit_code: 78)
           end
           if restrictive && (stat.mode & 0o077) != 0
@@ -353,17 +354,18 @@ module Screenote
       end
 
       class BaseCommand
-        def initialize(options, environment: ENV, runner: Runner.new, host_uid: Process.uid)
+        def initialize(options, environment: ENV, runner: Runner.new, host_uid: Process.uid, host_gid: Process.gid)
           @options = options
           @environment = environment
           @runner = runner
           @host_uid = host_uid
+          @host_gid = host_gid
           @service_stopped = false
         end
 
         private
 
-        attr_reader :options, :environment, :runner, :host_uid
+        attr_reader :options, :environment, :runner, :host_uid, :host_gid
 
         def compose(files: options.fetch(:compose_files), project_directory: nil, env_file: nil, environment: {},
           clean_environment: false)
@@ -385,8 +387,8 @@ module Screenote
         end
 
         def validate_shared!
-          unless host_uid == SUPPORTED_UID
-            raise Error.new("self-host operations must run as host uid 1000", exit_code: 78)
+          unless host_uid == SUPPORTED_UID && host_gid == SUPPORTED_GID
+            raise Error.new("self-host operations must run as host uid/gid 1000", exit_code: 78)
           end
           options[:compose_files] = Validation.compose_files!(options.fetch(:compose_files, []))
           options[:project_name] = Validation.project_name!(options.fetch(:project_name, "screenote"))

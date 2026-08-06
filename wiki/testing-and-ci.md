@@ -152,6 +152,14 @@ a healthy container as a durability timeout. Source contracts cover the
 final-image processing poll, backup restore verification, and operator
 diagnostics command.
 
+Executable-level backup, restore, and diagnostics tests preserve the production
+host contract at exactly uid/gid 1000. Their isolated child Ruby process loads a
+test-only identity namespace that maps those two constants to the child's real
+identity so a hosted UID 1001 runner can own its private fixtures. The preload
+aborts outside `RAILS_ENV=test`; production binaries expose no environment
+override. A user-namespace regression runs the same contracts as UID 1001/GID
+127 to keep the harness independent of developer-machine identity.
+
 Required pull-request jobs prove source contracts and are recorded with
 `scope: pr_contract_only`; their names or success conclusions are never release
 qualification evidence. The separate manual release-qualification workflow

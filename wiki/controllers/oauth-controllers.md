@@ -3,7 +3,7 @@ title: OAuth Controllers
 type: controller
 source: app/controllers/oauth/
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-06
 tags: [controller, oauth, cli, doorkeeper]
 ---
 
@@ -34,6 +34,7 @@ Source: `app/controllers/oauth/tokens_controller.rb`
 
 - Rejects authorization-code and refresh exchanges when their project membership is no longer held.
 - Code and refresh exchange use the same user -> project -> membership -> source-credential lock order and keep those locks through replacement-token creation.
+- Authority locking rejects absent and already-destroyed Active Record objects before adapter-specific row locking; PostgreSQL cannot treat `lock!`'s non-persisted no-op as valid authority.
 - Doorkeeper propagates the server-owned principal fields from grant to token and through refresh rotation.
 - Access codes, access tokens, refresh tokens, previous refresh tokens, and confidential client secrets are SHA-256 digests at rest with no plaintext fallback.
 

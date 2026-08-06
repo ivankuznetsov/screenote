@@ -50,6 +50,10 @@ class AuthorityLockTest < ActiveSupport::TestCase
       @id = id
     end
 
+    def persisted?
+      true
+    end
+
     def reload
       self
     end
@@ -80,6 +84,14 @@ class AuthorityLockTest < ActiveSupport::TestCase
 
   test "rejects a missing user before trying to lock it" do
     assert_raises(ActiveRecord::RecordNotFound) { AuthorityLock.user!(nil) }
+  end
+
+  test "rejects a non-persisted user before trying to lock it" do
+    lock_order = []
+    user = LockableUser.new(id: 10, lock_order: lock_order, persisted: false)
+
+    assert_raises(ActiveRecord::RecordNotFound) { AuthorityLock.user!(user) }
+    assert_empty lock_order
   end
 
   test "fails closed when a SQLite authority row disappears before its no-op write" do
