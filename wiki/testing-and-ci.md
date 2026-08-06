@@ -28,6 +28,11 @@ Image-processing tests require libvips. The helper `require_vips!` skips those
 tests explicitly when the system dependency is absent instead of hiding a
 processing failure.
 
+Every CI job that boots Rails must install libvips before `ruby/setup-ruby`
+hands control to the test command. The application loads the Vips initializer
+at boot even when a focused contract does not transform an image; a focused
+backup/restore job without the runtime library fails before its tests begin.
+
 ## Browser tests
 
 System tests run the application through Capybara's in-process server and use

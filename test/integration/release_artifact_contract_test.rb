@@ -1102,6 +1102,22 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal "env GOFLAGS=-mod=mod go test ./...", step.fetch("run")
   end
 
+  test "backup restore CI installs the image runtime before Rails boots" do
+    workflow = YAML.safe_load(
+      Rails.root.join(".github/workflows/ci.yml").read,
+      permitted_classes: [],
+      aliases: false
+    )
+    steps = workflow.fetch("jobs").fetch("backup-restore").fetch("steps")
+    runtime = steps.find { |step| step["name"] == "Install runtime packages" }
+    setup = steps.find { |step| step["name"] == "Set up Ruby" }
+
+    assert_not_nil runtime
+    assert_not_nil setup
+    assert_includes runtime.fetch("run"), "libvips"
+    assert_operator steps.index(runtime), :<, steps.index(setup)
+  end
+
   test "self-hosted coverage is an explicit positive manifest with fail-closed drift detection" do
     manifest = YAML.safe_load(
       Rails.root.join("test/manifests/self_hosted.yml").read,

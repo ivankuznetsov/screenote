@@ -17,7 +17,7 @@
     "predecessor_tag": "none",
     "predecessor_image_digest": "none",
     "cli_tag": "v1.0.0",
-    "notes_sha256": "79f62b42a2205fa7a4ccf36b97cd0a8d6dfee9783c4cb68045852db179d53b21"
+    "notes_sha256": "a2b36c9dbc858bf90b5e64326fd425613f073bf6fd46d86478c20e7eb9e20b2b"
   },
   "artifacts": {
     "source_sha": "1111111111111111111111111111111111111111",
@@ -186,7 +186,7 @@
     "status": "passed",
     "sentinel_matches": 0,
     "logs_sha256": "4343434343434343434343434343434343434343434343434343434343434343",
-    "release_notes_sha256": "79f62b42a2205fa7a4ccf36b97cd0a8d6dfee9783c4cb68045852db179d53b21",
+    "release_notes_sha256": "a2b36c9dbc858bf90b5e64326fd425613f073bf6fd46d86478c20e7eb9e20b2b",
     "evidence_sha256": "4545454545454545454545454545454545454545454545454545454545454545"
   },
   "preauthorization": {
