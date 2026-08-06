@@ -82,7 +82,7 @@ cards.
 
 ## Upload Tokens
 
-`ScreenshotImage` generates 5-minute upload tokens keyed on whether its `image` is already attached. The signed upload endpoint still uses the parent screenshot URL shape, but resolves the token back to the exact `ScreenshotImage` so desktop, tablet, and mobile uploads can complete independently.
+`ScreenshotImage` generates five-minute upload tokens keyed on whether its `image` is already attached. The upload endpoint keeps the parent screenshot URL shape, but receives the token only as an `Authorization: Bearer` header and resolves it back to the exact `ScreenshotImage`, so desktop, tablet, and mobile uploads complete independently without credentials in URLs.
 
 ## Backfill Helpers
 

@@ -26,6 +26,14 @@ class AuthenticatedPrincipalTest < ActiveSupport::TestCase
     assert_raises(FrozenError) { principal.scopes << "extra" }
   end
 
+  test "api key authentication rejects absent revoked and suspended issuer credentials" do
+    assert_nil AuthenticatedPrincipal.for_api_key(nil)
+    assert_nil AuthenticatedPrincipal.for_api_key(api_keys(:alice_key_revoked))
+
+    users(:alice).update!(access_status: :suspended)
+    assert_nil AuthenticatedPrincipal.for_api_key(api_keys(:alice_key))
+  end
+
   test "user oauth preserves exact scopes and resolves only joined projects" do
     token = oauth_token_for(user: users(:alice), scopes: "mcp_read", principal_kind: "user")
 
@@ -91,6 +99,17 @@ class AuthenticatedPrincipalTest < ActiveSupport::TestCase
     assert_nil AuthenticatedPrincipal.for_oauth_token(project_without_project)
   end
 
+  test "malformed OAuth credentials fail closed" do
+    assert_nil AuthenticatedPrincipal.for_oauth_token(nil)
+
+    token = oauth_token_for(user: users(:alice), scopes: "mcp_read", principal_kind: "user")
+    token.define_singleton_method(:principal_kind) { nil }
+    assert_nil AuthenticatedPrincipal.for_oauth_token(token)
+
+    token.define_singleton_method(:principal_kind) { "workspace" }
+    assert_nil AuthenticatedPrincipal.for_oauth_token(token)
+  end
+
   test "browser users receive user authority with both core scopes" do
     principal = AuthenticatedPrincipal.for_user(users(:alice))
 
@@ -99,6 +118,20 @@ class AuthenticatedPrincipalTest < ActiveSupport::TestCase
     assert principal.read?
     assert principal.write?
     assert principal.can_create_project?
+  end
+
+  test "project access rejects missing candidates and missing bound projects" do
+    principal = AuthenticatedPrincipal.new(
+      kind: :project,
+      user: users(:alice),
+      issuer: users(:alice),
+      project: nil,
+      scopes: "mcp_read mcp_write"
+    )
+
+    assert_equal %w[mcp_read mcp_write], principal.scopes
+    assert_not principal.project_access?(nil)
+    assert_not principal.project_access?(projects(:alice_project))
   end
 
   private

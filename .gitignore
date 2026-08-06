@@ -34,8 +34,10 @@
 /coverage
 /vendor/bundle
 
-# Ignore key files for decrypting credentials and more.
+# Ignore encrypted Rails credentials and their decryption keys.
 /config/*.key
+/config/credentials*.yml.enc
+/config/credentials/**/*.yml.enc
 
 # Ignore Kamal secrets (contains real credentials).
 /.kamal/secrets

@@ -3,13 +3,13 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-06
 tags: [controller, web, ui, auth]
 ---
 
 # Web Controllers
 
-TLDR: 14 web controllers handling the browser-based UI. All inherit from ApplicationController which requires authentication, handles pending invitations, and preloads subscriptions. Project-scoped controllers use the ProjectAuthorization concern.
+TLDR: Browser controllers share app-owned authentication and project authorization. Subscription preload and hosted commercial controllers exist only behind the SaaS billing capability; self-hosted instance administration is a distinct, installation-bound authority.
 
 Source: `app/controllers/`
 
@@ -19,12 +19,29 @@ Source: `app/controllers/application_controller.rb`
 
 Base class for all web controllers. Includes:
 - `RailsSimpleAuth::Controllers::Concerns::Authentication`
-- `RailsSimpleAuth::Controllers::Concerns::SessionManagement`
+- `ScreenoteSessionManagement`
+- `PageWorkspaceNavigation`
 
 **before_actions:**
 - `require_authentication` -- Redirects to sign-in if not authenticated
-- `handle_pending_invitation` -- Checks for invitation token stored in session (from pre-auth invite link click) and auto-accepts it
-- `preload_subscription` -- Eagerly loads subscription to avoid N+1 in views
+- `preload_subscription` -- Eagerly loads subscriptions only when the deployment enables SaaS billing; self-hosted requests never make this query
+
+`ScreenoteSessionManagement` serializes every durable session insert with the
+resource-owner user lock. Successful password, OAuth, magic-link, invitation,
+registration, bootstrap, and recovery flows use one replacement primitive: a
+valid same-account session is retained, while switching identities destroys the
+previous database session before issuing the new credential.
+
+Login, registration, confirmation, magic-link, password-reset, exchanged-link,
+bootstrap, and recovery endpoints all use lazy `Screenote::RateLimitStore`
+wrappers around the configured controller cache. Backend failure returns a
+private retryable response instead of disabling throttling; tests and in-process
+browser runs install a fresh isolated controller `MemoryStore` per case.
+
+Password login delegates lookup and password work to Active Record's
+timing-safe `authenticate_by`, then applies the shared active-account predicate.
+Missing, suspended, and active identities therefore all cross a comparable
+password-digest boundary before access status can affect the response.
 
 **Rescue handlers:**
 - `ActiveRecord::RecordNotFound` -> custom 404 page
@@ -165,7 +182,7 @@ Source: `app/controllers/project_memberships_controller.rb`
 
 **Actions:** index, destroy
 
-- `index` -- Any project member can view
+- `index` -- Any project member can view. Owner-only re-presented invitation credentials are delivered under `no-store`/no-referrer headers and wrapped in `data-turbo-temporary`, so Turbo removes them before caching a page snapshot.
 - `destroy` -- Delegates to the same serialized membership-removal operation as MCP. It rechecks owner authority, cannot remove self, and revokes the removed member's project-bound credentials atomically.
 
 ---
@@ -177,9 +194,10 @@ Source: `app/controllers/invitation_acceptances_controller.rb`
 **Actions:** show, create
 
 - **Public** (skips `require_authentication`)
-- `show` -- Displays invitation acceptance page
-- `create` -- Handles 3 cases: (1) existing user already signed in, (2) existing user not signed in (stores token in session, redirects to login), (3) new user (auto-creates account with random password + confirmed)
-- Rescues `MemberLimitExceeded`, `RecordInvalid`, `RecordNotUnique`
+- `show` -- Revalidates the token-ID-only exchange context and offers proof appropriate to the invited identity
+- `create` -- Delegates locked acceptance to `ProjectInvitations::Accept`; local proof either verifies an existing password or creates explicit local credentials for a new invitee
+- Retryable local validation has a distinct `invalid_input` result that retains the tokenless invitation context, project details, and labelled password form; terminal token states still clear the context
+- A successful cross-account acceptance destroys the former permanent browser-session row before creating the invited user's session, so the old cookie cannot be replayed
 
 ---
 
@@ -202,6 +220,8 @@ Source: `app/controllers/subscriptions_controller.rb`
 
 **Actions:** show, checkout, portal
 
+- SaaS-only: its routes are not drawn without the billing capability, and the controller independently returns not-found if reached after capability drift
+
 - `show` -- Displays billing page with subscription state
 - `checkout` -- Creates Stripe customer if needed, redirects to Stripe Checkout
 - `portal` -- Redirects to Stripe Billing Portal
@@ -216,6 +236,8 @@ Source: `app/controllers/stripe_webhooks_controller.rb`
 **Inherits from:** `ActionController::Base` (not ApplicationController -- no auth)
 
 **Actions:** create
+
+- SaaS-only: the webhook route is absent without billing and the controller rejects a drifted self-hosted dispatch before reading or verifying a Stripe payload
 
 - Verifies Stripe webhook signature
 - Handles: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
@@ -234,8 +256,9 @@ Source: `app/controllers/static_pages_controller.rb`
 **Actions:** landing, help, terms, privacy
 
 - **Public** (skips `require_authentication`)
-- `landing` -- Redirects authenticated users to dashboard
+- `landing` -- SaaS root; redirects authenticated users to dashboard
 - `help` -- Renders static CLI installation, authentication, project setup, snapshot publishing, and command-reference documentation; it no longer enumerates `ApplicationTool.descendants`
+- `terms` / `privacy` -- Hosted-service legal pages; routes are absent and direct dispatch returns not-found in self-hosted mode
 
 ---
 
@@ -243,13 +266,25 @@ Source: `app/controllers/static_pages_controller.rb`
 
 Source: `app/controllers/omniauth_callbacks_controller.rb`
 
-**Inherits from:** `RailsSimpleAuth::OmniauthCallbacksController`
-
 **Actions:** create
 
-- Handles OAuth callback from Google/GitHub
-- Finds or creates user via `User.from_oauth`
-- Creates session and redirects
+- Handles only explicitly enabled Google/GitHub callbacks with verified email evidence
+- SaaS may create a collision-free account; self-hosted OAuth never bypasses bootstrap/invitation admission
+- App-owned session issuance rejects inactive accounts
+- OmniAuth request phase accepts POST only and uses Rack Protection bound explicitly to Rails' encrypted-session `:_csrf_token`; real Rails-generated form tokens reach the provider, while missing or invalid tokens fail before provider redirect. OAuth2 callback state remains a separate check.
+- Invitation acceptance requires the current OmniAuth request's exact local `origin` intent marker as well as token-ID-only invitation context. Normal sign-in and registration forms emit their own non-invitation local origin, which overwrites an abandoned request marker; ordinary OAuth clears stale invitation context instead of accepting it.
+
+---
+
+## AuthenticationLinksController
+
+Source: `app/controllers/authentication_links_controller.rb`
+
+**Actions:** show, exchange
+
+- The sterile page scrubs fragment credentials before sending them in a same-origin POST and never persists the raw value in cookies, storage, or markup.
+- Terminal invalid responses discard the in-memory credential. HTTP 429, transient database 503, and network failures expose a retry action that retains it only in the connected Stimulus controller; disconnecting clears it.
+- Exchange responses are private and non-cacheable. Resolver database failures return `503 Service Unavailable` with `Retry-After` instead of becoming a terminal-invalid message.
 
 ---
 
@@ -259,7 +294,7 @@ Source: `app/controllers/admin/dashboard_controller.rb`
 
 **Actions:** show
 
-- Requires `Current.user.admin?`, which resolves the explicitly configured SaaS operator identity and is false in self-hosted mode
+- SaaS-only route guarded by `Current.user.saas_operator?`; self-hosted instance administrators receive no hosted dashboard privilege
 - Shows: verified users count, users with projects+screenshots, active Pro users count
 
 ---

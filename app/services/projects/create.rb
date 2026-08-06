@@ -19,7 +19,7 @@ module Projects
       raise Forbidden, "This principal cannot create projects" unless principal&.can_create_project?
 
       principal.user.with_lock do
-        if deployment.billing? && !principal.user.can_create_project?
+        if deployment.billing? && !principal.user.can_create_project?(deployment: deployment)
           raise LimitReached, "Project limit reached for the current plan"
         end
 

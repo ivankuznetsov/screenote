@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 require "open3"
 
@@ -29,7 +31,9 @@ class ProductionBootTest < ActiveSupport::TestCase
       force_ssl: Rails.application.config.force_ssl,
       deliveries: Rails.application.config.action_mailer.perform_deliveries,
       oauth_providers: Screenote::Deployment.current.social_oauth_providers,
-      oauth_request_validation: OmniAuth.config.request_validation_phase == OmniAuth::AuthenticityTokenProtection,
+      oauth_request_validation:
+        OmniAuth.config.request_validation_phase.is_a?(OmniAuth::AuthenticityTokenProtection) &&
+          OmniAuth.config.request_validation_phase.options[:key] == :_csrf_token,
       omniauth_full_host: OmniAuth.config.full_host,
       dimension_job_after_commit: ScreenshotDimensionJob.enqueue_after_transaction_commit,
       password_reset_route: Rails.application.routes.named_routes.key?(:new_password),
@@ -40,7 +44,7 @@ class ProductionBootTest < ActiveSupport::TestCase
   PROXY_PROBE = <<~'RUBY'.freeze
     app = Rails.application
     direct = Rack::MockRequest.env_for(
-      "http://notes.example.test/terms",
+      "http://notes.example.test/help",
       "REMOTE_ADDR" => "203.0.113.10",
       "HTTP_HOST" => "notes.example.test",
       "HTTP_X_FORWARDED_FOR" => "198.51.100.77",
@@ -48,7 +52,7 @@ class ProductionBootTest < ActiveSupport::TestCase
       "HTTP_X_FORWARDED_HOST" => "notes.example.test"
     )
     proxied = Rack::MockRequest.env_for(
-      "http://notes.example.test/terms",
+      "http://notes.example.test/help",
       "REMOTE_ADDR" => "10.2.3.4",
       "HTTP_HOST" => "notes.example.test",
       "HTTP_X_FORWARDED_FOR" => "198.51.100.77",
@@ -108,6 +112,7 @@ class ProductionBootTest < ActiveSupport::TestCase
     assert_equal %w[google_oauth2 github], payload.fetch("oauth_providers")
     assert_equal true, payload.fetch("deliveries")
     assert_equal true, payload.fetch("force_ssl")
+    assert_equal true, payload.fetch("oauth_request_validation")
     assert_equal "https://screenote.ai", payload.fetch("omniauth_full_host")
     assert_equal true, payload.fetch("dimension_job_after_commit")
     assert_equal true, payload.fetch("password_reset_route")
@@ -152,7 +157,7 @@ class ProductionBootTest < ActiveSupport::TestCase
     assert status.success?, stderr
     payload = JSON.parse(stdout.lines.last)
     assert_equal 301, payload.fetch("direct_status"), payload.inspect
-    assert_equal "https://notes.example.test/terms", payload.fetch("direct_location")
+    assert_equal "https://notes.example.test/help", payload.fetch("direct_location")
     assert_equal 200, payload.fetch("proxied_status"), payload.inspect
   end
 

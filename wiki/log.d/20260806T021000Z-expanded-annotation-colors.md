@@ -1,0 +1,1 @@
+2026-08-06 — Expanded deterministic annotation author colors from 10 to 24 accessible palette entries after the multi-user collaboration matrix exposed a collision between two fixture collaborators. Canvas points, regions, draft markers, root comments, and replies continue to use the same identity-derived color token. See [[frontend-review-ui]].

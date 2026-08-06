@@ -5,10 +5,11 @@
 </div>
 
 <% if @is_owner %>
-  <% if Current.user.can_invite_member?(@project) %>
+  <% if !Screenote::Deployment.current.billing? || Current.user.can_invite_member?(@project) %>
     <div class="card project-members__invite">
       <h2 class="project-members__section-title">Invite a collaborator</h2>
       <%= form_with model: ProjectInvitation.new, url: project_invitations_path(@project), class: "project-members__invite-form" do |f| %>
+        <%= f.label :email, "Collaborator email", class: "form__label" %>
         <div class="project-members__invite-row"
              data-controller="email-autocomplete"
              data-email-autocomplete-url-value="<%= project_collaborator_suggestions_path(@project) %>">
@@ -25,7 +26,7 @@
         </div>
       <% end %>
     </div>
-  <% else %>
+  <% elsif Screenote::Deployment.current.billing? %>
     <div class="upgrade-banner">
       <div class="upgrade-banner__text">You've reached the free plan limit of 1 team member. Upgrade to invite more collaborators.</div>
       <%= link_to "Upgrade to Pro for $#{Subscription::PRO_PRICE_CENTS / 100}/mo", subscription_path, class: "upgrade-banner__link" %>
@@ -59,6 +60,36 @@
           <div class="project-members__info">
             <span class="project-members__email"><%= invitation.email %></span>
             <span class="project-members__pending-label">Invited <%= time_ago_in_words(invitation.created_at) %> ago</span>
+            <% if @is_owner %>
+              <% if (presentation = @pending_invitation_presentations[invitation.id]) %>
+                <div data-turbo-temporary data-testid="invitation-credential">
+                  <p class="form__hint">
+                    Private credential: share this link or manual code only with <%= invitation.email %>.
+                  </p>
+                  <label class="form__label" for="invitation-link-<%= invitation.id %>">Private invitation link</label>
+                  <input id="invitation-link-<%= invitation.id %>"
+                         class="form__input"
+                         type="text"
+                         value="<%= presentation.url %>"
+                         readonly
+                         aria-describedby="invitation-warning-<%= invitation.id %>">
+                  <span id="invitation-warning-<%= invitation.id %>" class="form__hint">Select and copy the complete value.</span>
+                  <label class="form__label" for="invitation-code-<%= invitation.id %>">Manual code</label>
+                  <input id="invitation-code-<%= invitation.id %>"
+                         class="form__input"
+                         type="text"
+                         value="<%= presentation.manual_code %>"
+                         readonly>
+                </div>
+              <% else %>
+                <p class="form__hint">This link is no longer available. Reissue the invitation to create a new one.</p>
+                <%= button_to "Reissue",
+                      project_invitations_path(@project),
+                      method: :post,
+                      params: { project_invitation: { email: invitation.email } },
+                      class: "btn btn--secondary btn--small" %>
+              <% end %>
+            <% end %>
           </div>
           <% if @is_owner %>
             <%= button_to "Cancel", project_invitation_path(@project, invitation), method: :delete, class: "btn btn--secondary btn--small", data: { turbo_confirm: "Cancel invitation to #{invitation.email}?" } %>

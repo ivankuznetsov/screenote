@@ -7,6 +7,7 @@ readonly SCREENOTE_STORAGE_ROOT="/rails/storage"
 export SCREENOTE_STORAGE_ROOT
 readonly -a SCREENOTE_FILE_BACKED_SECRETS=(
   SECRET_KEY_BASE
+  SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS
   SCREENOTE_BOOTSTRAP_TOKEN
   SCREENOTE_S3_ACCESS_KEY_ID
   SCREENOTE_S3_SECRET_ACCESS_KEY
@@ -117,10 +118,15 @@ if server_command? "$@"; then
 
   if [[ "${SCREENOTE_EDITION-}" == "self_hosted" ]]; then
     preflight_storage
+  else
+    # Server startup itself enforces the stopped-process OAuth credential
+    # cutover. This cannot be bypassed with Kamal's --skip-hooks option.
+    ./bin/rails runner script/saas_deploy_guard
   fi
 
   ./bin/rails db:prepare
   ./bin/rails runner "Installations::Prepare.call"
+  ./bin/rails runner "AuthenticationLinks::KeyringPreflight.call"
   ./bin/rails runner "ReconcileScreenshotProcessingJob.perform_now"
 
   # Bootstrap material is needed only by the preparation process. Do not pass

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 require "digest"
 require "fileutils"
@@ -22,6 +24,7 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
   }.freeze
   FILE_BACKED_SECRET_NAMES = %w[
     SECRET_KEY_BASE
+    SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS
     SCREENOTE_BOOTSTRAP_TOKEN
     SCREENOTE_S3_ACCESS_KEY_ID
     SCREENOTE_S3_SECRET_ACCESS_KEY
@@ -110,11 +113,50 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
       assert_equal(
         [
           "preflight",
+          "rails:runner script/saas_deploy_guard",
           "rails:db:prepare",
           "rails:runner Installations::Prepare.call",
+          "rails:runner AuthenticationLinks::KeyringPreflight.call",
           "rails:runner ReconcileScreenshotProcessingJob.perform_now",
           "thrust:./bin/rails server bootstrap=unset"
         ],
+        File.readlines(trace, chomp: true)
+      )
+    end
+  end
+
+  test "SaaS server startup cannot bypass a pending credential cutover" do
+    Dir.mktmpdir("screenote-entrypoint-cutover") do |directory|
+      trace = File.join(directory, "trace")
+      write_executable(
+        File.join(directory, "bin/screenote-deployment-preflight"),
+        <<~'BASH'
+          #!/usr/bin/env bash
+          printf 'preflight\n' >> "$SCREENOTE_TEST_TRACE"
+        BASH
+      )
+      write_executable(
+        File.join(directory, "bin/rails"),
+        <<~'BASH'
+          #!/usr/bin/env bash
+          printf 'rails:%s\n' "$*" >> "$SCREENOTE_TEST_TRACE"
+          [[ "$*" != "runner script/saas_deploy_guard" ]]
+        BASH
+      )
+
+      _stdout, stderr, status = run_entrypoint(
+        {
+          "SCREENOTE_EDITION" => "saas",
+          "SCREENOTE_TEST_TRACE" => trace
+        },
+        "./bin/rails", "server",
+        chdir: directory
+      )
+
+      assert_not status.success?
+      assert_empty stderr
+      assert_equal(
+        [ "preflight", "rails:runner script/saas_deploy_guard" ],
         File.readlines(trace, chomp: true)
       )
     end
@@ -266,6 +308,22 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
       assert_not status.success?
       assert_includes stderr, "requires SECRET_KEY_BASE_FILE"
       assert_not_includes stderr, "direct-secret-must-not-be-used"
+    end
+
+    with_secret_file("s" * 64, mode: 0o400) do |secret_key_path|
+      _stdout, stderr, status = run_entrypoint(
+        {
+          "SCREENOTE_EDITION" => "self_hosted",
+          "SECRET_KEY_BASE_FILE" => secret_key_path,
+          "SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS" => '{"private":"material"}'
+        },
+        "./bin/rails", "server"
+      )
+
+      assert_not status.success?
+      assert_includes stderr, "requires SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS_FILE"
+      assert_not_includes stderr, "private"
+      assert_not_includes stderr, "material"
     end
   end
 
@@ -439,6 +497,9 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     clean_environment = FILE_BACKED_SECRET_NAMES.flat_map do |name|
       [ [ name, nil ], [ "#{name}_FILE", nil ] ]
     end.to_h
+    %w[DATABASE_URL CACHE_DATABASE_URL QUEUE_DATABASE_URL CABLE_DATABASE_URL].each do |name|
+      clean_environment[name] = nil
+    end
     clean_environment.merge!(environment)
 
     Open3.capture3(clean_environment, ENTRYPOINT, *command, chdir: chdir)

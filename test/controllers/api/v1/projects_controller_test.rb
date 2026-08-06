@@ -54,6 +54,23 @@ module Api
           response.parsed_body.fetch("projects").pluck("id")
       end
 
+      test "project-scoped oauth index fails closed if authority disappears after authentication" do
+        token = oauth_token(
+          user: users(:alice),
+          project: projects(:alice_project),
+          scopes: "mcp_read"
+        )
+        original = Api::V1::ProjectScope.method(:resolve_project)
+        Api::V1::ProjectScope.define_singleton_method(:resolve_project) { |*, **| nil }
+
+        get api_v1_projects_path, headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      ensure
+        Api::V1::ProjectScope.define_singleton_method(:resolve_project, original) if original
+      end
+
       test "project-scoped oauth token is rejected after membership removal" do
         token = oauth_token(
           user: users(:bob),
@@ -190,6 +207,26 @@ module Api
 
         assert_response :forbidden
         assert_equal "forbidden", response.parsed_body["code"]
+      end
+
+      test "project creation maps a principal authorization race to forbidden" do
+        token = oauth_token(user: users(:free_user), scopes: "mcp_write")
+        original = Projects::Create.method(:call)
+        Projects::Create.define_singleton_method(:call) do |**|
+          raise Projects::Create::Forbidden
+        end
+
+        assert_no_difference "Project.count" do
+          post api_v1_projects_path,
+            params: { name: "Racing project" },
+            headers: auth_header(token.token),
+            as: :json
+        end
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      ensure
+        Projects::Create.define_singleton_method(:call, original) if original
       end
 
       test "project deletion invalidates its project-scoped oauth token" do

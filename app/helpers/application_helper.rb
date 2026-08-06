@@ -1,7 +1,7 @@
 require "digest"
 
 module ApplicationHelper
-  ANNOTATION_AUTHOR_COLOR_COUNT = 10
+  ANNOTATION_AUTHOR_COLOR_COUNT = 24
 
   def annotation_author_initials(author)
     return "AI" unless author.respond_to?(:email) && author.email.present?

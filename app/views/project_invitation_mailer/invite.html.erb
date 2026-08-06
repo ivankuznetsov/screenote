@@ -18,3 +18,10 @@
 </p>
 
 <%= render "user_mailer/email_fallback_url", url: @accept_url %>
+
+<p style="margin: 20px 0 8px 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
+  If the button does not work, enter this one-time code on the invitation link page:
+</p>
+<p style="margin: 0; font-size: 14px; color: #e8e8ed; line-height: 1.6; font-family: monospace; word-break: break-all;">
+  <%= @presentation.manual_code %>
+</p>

@@ -69,10 +69,6 @@ module Api
       current_principal.oauth?
     end
 
-    def oauth_scope?(scope)
-      current_principal.oauth? && current_principal.allows_scope?(scope)
-    end
-
     def pagination_params
       limit = integer_param(:limit, 50).clamp(1, 100)
       offset = [ integer_param(:offset, 0), 0 ].max

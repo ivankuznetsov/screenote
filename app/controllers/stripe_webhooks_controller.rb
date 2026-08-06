@@ -5,6 +5,7 @@
 # mail side-effects. State transitions live on Subscription.
 class StripeWebhooksController < ActionController::Base
   skip_forgery_protection
+  before_action :require_billing!
 
   def create
     payload = request.body.read
@@ -49,6 +50,10 @@ class StripeWebhooksController < ActionController::Base
   end
 
   private
+
+  def require_billing!
+    head :not_found unless Screenote::Deployment.current.billing?
+  end
 
   def handle_checkout_completed(session)
     subscription = find_subscription(session[:customer], "checkout.session.completed")

@@ -111,7 +111,7 @@ Write code that would make DHH proud and pass code review at 37signals. Always c
 - Simple, readable code over clever abstractions
 
 ### Stack
-- Ruby 3.4.7+
+- Ruby 3.4.10+
 - Rails 8.1.2+
 - SQLite (development/test), PostgreSQL (production)
 - Kamal for deployment

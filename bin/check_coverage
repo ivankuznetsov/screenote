@@ -2,47 +2,541 @@
 # frozen_string_literal: true
 
 require "json"
+require "open3"
+require "optparse"
+require "pathname"
+require "yaml"
 
-result_path = ARGV.fetch(0, "coverage/.resultset.json")
-minimum = Float(ENV.fetch("MIN_COVERAGE", "100"))
+module CoverageGate
+  DOMAINS = %w[deployment bootstrap invitation principal suspension recovery transfer].freeze
+  SIMPLECOV_ID = /\A\[:(?<kind>[A-Za-z_][A-Za-z0-9_!?=]*|"(?:[^"\\]|\\.)*"),\s*-?\d+,\s*(?<start_line>\d+),\s*(?<start_column>\d+),\s*(?<end_line>\d+),\s*(?<end_column>\d+)\]\z/
 
-abort "Coverage result not found: #{result_path}" unless File.exist?(result_path)
+  class Error < StandardError; end
 
-resultset = JSON.parse(File.read(result_path))
-covered_lines = {}
-covered_branches = {}
+  FileCoverage = Data.define(:lines, :branches, :branch_enabled)
+  Location = Data.define(:kind, :start_line, :start_column, :end_line, :end_column)
 
-resultset.each_value do |result|
-  result.fetch("coverage").each do |file, coverage|
-    coverage.fetch("lines", []).each_with_index do |count, index|
-      next if count.nil?
+  class Resultset
+    attr_reader :files
 
-      key = [ file, index + 1 ]
-      covered_lines[key] ||= false
-      covered_lines[key] ||= count.positive?
+    def initialize(path:, repository_root: nil)
+      @path = Pathname(path)
+      @repository_root = repository_root && Pathname(repository_root).expand_path
+      @files = load_files
     end
 
-    coverage.fetch("branches", {}).each do |branch_id, branch_counts|
-      branch_counts.each do |edge_id, count|
-        key = [ file, branch_id, edge_id ]
-        covered_branches[key] ||= false
-        covered_branches[key] ||= count.positive?
+    private
+
+    attr_reader :path, :repository_root
+
+    def load_files
+      raise Error, "Coverage result not found: #{path}" unless path.file?
+
+      resultset = JSON.parse(path.read)
+      raise Error, "Coverage result must be a non-empty mapping: #{path}" unless resultset.is_a?(Hash) && resultset.any?
+
+      resultset.each_value.each_with_object({}) do |result, merged|
+        coverage = result.is_a?(Hash) && result["coverage"]
+        raise Error, "Coverage result entry is malformed: #{path}" unless coverage.is_a?(Hash)
+
+        coverage.each do |file, raw_file_coverage|
+          normalized_file = normalize_file(file)
+          current = parse_file_coverage(raw_file_coverage)
+          merged[normalized_file] = merge_file_coverage(merged[normalized_file], current)
+        end
       end
+    rescue JSON::ParserError => e
+      raise Error, "Coverage result is not valid JSON: #{e.message}"
+    end
+
+    def normalize_file(file)
+      raise Error, "Coverage file path is malformed" unless file.is_a?(String) && !file.empty?
+
+      pathname = Pathname(file)
+      pathname = repository_root.join(pathname) if pathname.relative? && repository_root
+      pathname.expand_path.to_s
+    end
+
+    def parse_file_coverage(raw)
+      raise Error, "Coverage file entry is malformed" unless raw.is_a?(Hash)
+
+      lines = raw["lines"]
+      raise Error, "Coverage lines entry is malformed" unless lines.is_a?(Array)
+      unless lines.all? { |count| count.nil? || (count.is_a?(Integer) && count >= 0) }
+        raise Error, "Coverage line count is malformed"
+      end
+
+      raw_branches = raw.fetch("branches", {})
+      raise Error, "Coverage branches entry is malformed" unless raw_branches.is_a?(Hash)
+
+      branches = raw_branches.each_with_object({}) do |(condition, arms), parsed|
+        raise Error, "Coverage branch arms entry is malformed" unless arms.is_a?(Hash)
+
+        parsed[condition] = arms.transform_values do |count|
+          unless count.is_a?(Integer) && count >= 0
+            raise Error, "Coverage branch count is malformed"
+          end
+
+          count
+        end
+      end
+
+      FileCoverage.new(
+        lines: lines,
+        branches: branches,
+        branch_enabled: raw.key?("branches")
+      )
+    end
+
+    def merge_file_coverage(previous, current)
+      return current unless previous
+
+      FileCoverage.new(
+        lines: merge_lines(previous.lines, current.lines),
+        branches: merge_branches(previous.branches, current.branches),
+        branch_enabled: previous.branch_enabled || current.branch_enabled
+      )
+    end
+
+    # Mirrors SimpleCov::Combine::LinesCombiner. In particular, nil + 0 is
+    # still nil: a zero-only track_files map must not turn an uninstrumented
+    # line into an executable uncovered line when suites are collated.
+    def merge_lines(first, second)
+      length = [ first.length, second.length ].max
+      Array.new(length) do |index|
+        first_value = first[index]
+        second_value = second[index]
+        sum = first_value.to_i + second_value.to_i
+
+        if sum.zero? && (first_value.nil? || second_value.nil?)
+          nil
+        else
+          sum
+        end
+      end
+    end
+
+    def merge_branches(first, second)
+      (first.keys | second.keys).to_h do |condition|
+        first_arms = first.fetch(condition, {})
+        second_arms = second.fetch(condition, {})
+        arms = (first_arms.keys | second_arms.keys).to_h do |arm|
+          [ arm, first_arms.fetch(arm, 0) + second_arms.fetch(arm, 0) ]
+        end
+        [ condition, arms ]
+      end
+    end
+  end
+
+  class Repository
+    Diff = Data.define(:changed, :lines)
+
+    attr_reader :root
+
+    def initialize(cwd:)
+      output, = git_capture("rev-parse", "--show-toplevel", chdir: cwd)
+      @root = Pathname(output.strip).realpath
+    rescue Errno::ENOENT, Errno::EACCES
+      raise Error, "coverage manifest mode requires a Git repository"
+    end
+
+    def resolve_base(base)
+      unless base.is_a?(String) && base.match?(/\A(?:[0-9a-f]{40}|[0-9a-f]{64})\z/)
+        raise Error, "base must be a full lowercase commit SHA"
+      end
+
+      output, status = git_capture("rev-parse", "--verify", "#{base}^{commit}", allow_failure: true)
+      raise Error, "unknown base commit: #{base}" unless status.success?
+
+      resolved = output.strip
+      raise Error, "base did not resolve exactly: #{base}" unless resolved == base
+
+      _ancestor_output, ancestor_status = git_capture(
+        "merge-base", "--is-ancestor", resolved, "HEAD", allow_failure: true
+      )
+      case ancestor_status.exitstatus
+      when 0
+        resolved
+      when 1
+        raise Error, "base commit is not an ancestor of HEAD: #{base}"
+      else
+        raise Error, "could not verify base ancestry: #{base}"
+      end
+    end
+
+    def diff_for(path, base:)
+      unless tracked?(path)
+        line_count = root.join(path).each_line.count
+        return Diff.new(changed: true, lines: (1..line_count).to_a)
+      end
+
+      output, = git_capture(
+        "diff", "--unified=0", "--no-ext-diff", "--no-color", base, "--", path
+      )
+      return Diff.new(changed: false, lines: []) if output.empty?
+
+      changed_lines = []
+      hunk_count = 0
+      output.each_line do |line|
+        next unless line.start_with?("@@")
+
+        match = line.match(/\A@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@(?: .*)?\n?\z/)
+        raise Error, "malformed Git diff hunk for #{path}" unless match
+
+        hunk_count += 1
+        start_line = Integer(match[1], 10)
+        count = match[2] ? Integer(match[2], 10) : 1
+        count.times { |offset| changed_lines << start_line + offset }
+      end
+      raise Error, "malformed Git diff for #{path}" if hunk_count.zero?
+
+      Diff.new(changed: true, lines: changed_lines.uniq.sort)
+    end
+
+    private
+
+    def tracked?(path)
+      _output, status = git_capture("ls-files", "--error-unmatch", "--", path, allow_failure: true)
+      status.success?
+    end
+
+    def git_capture(*arguments, chdir: root, allow_failure: false)
+      stdout, stderr, status = Open3.capture3("git", *arguments, chdir: chdir.to_s)
+      if !allow_failure && !status.success?
+        detail = stderr.lines.first.to_s.strip
+        suffix = detail.empty? ? "" : ": #{detail}"
+        raise Error, "git #{arguments.first} failed#{suffix}"
+      end
+
+      [ stdout, status ]
+    rescue Errno::ENOENT
+      raise Error, "git is required for coverage manifest mode"
+    end
+  end
+
+  class Manifest
+    attr_reader :paths
+
+    def initialize(path:, repository_root:)
+      @path = Pathname(path)
+      @repository_root = Pathname(repository_root).realpath
+      @paths = load_paths
+    end
+
+    private
+
+    attr_reader :path, :repository_root
+
+    def load_paths
+      raise Error, "Coverage manifest not found: #{path}" unless path.file?
+
+      manifest = YAML.safe_load(path.read, permitted_classes: [], aliases: false)
+      raise Error, "coverage manifest must be a mapping" unless manifest.is_a?(Hash)
+
+      expected_top_level = %w[version domains discovery]
+      unless manifest.keys.all?(String) && manifest.keys.sort == expected_top_level.sort
+        raise Error, "coverage manifest keys must equal #{expected_top_level.join(', ')}"
+      end
+      raise Error, "coverage manifest version must equal 1" unless manifest.fetch("version") == 1
+
+      domains = manifest.fetch("domains")
+      raise Error, "coverage manifest domains must be a mapping" unless domains.is_a?(Hash)
+      unless domains.keys == DOMAINS
+        raise Error, "coverage manifest has unknown domain keys or missing domains"
+      end
+
+      seen = {}
+      declared_paths = domains.flat_map do |domain, domain_paths|
+        unless domain_paths.is_a?(Array) && domain_paths.any?
+          raise Error, "coverage manifest domain #{domain} must be a non-empty path list"
+        end
+        unless domain_paths.all?(String)
+          raise Error, "coverage manifest paths for #{domain} must be strings"
+        end
+        raise Error, "coverage manifest paths for #{domain} must be sorted" unless domain_paths == domain_paths.sort
+        raise Error, "coverage manifest paths for #{domain} must be unique" unless domain_paths.uniq == domain_paths
+
+        domain_paths.map do |candidate|
+          normalized = validate_path(candidate, domain: domain)
+          if seen.key?(normalized)
+            raise Error, "coverage manifest duplicate path #{normalized} in #{seen.fetch(normalized)} and #{domain}"
+          end
+
+          seen[normalized] = domain
+          normalized
+        end
+      end
+      validate_discovery(manifest.fetch("discovery"), declared_paths: declared_paths)
+      declared_paths
+    rescue Psych::Exception => e
+      raise Error, "coverage manifest is not valid YAML: #{e.message}"
+    end
+
+    def validate_discovery(patterns, declared_paths:)
+      unless patterns.is_a?(Array) && patterns.any? && patterns.all?(String)
+        raise Error, "coverage manifest discovery must be a non-empty pattern list"
+      end
+      raise Error, "coverage manifest discovery patterns must be sorted" unless patterns == patterns.sort
+      raise Error, "coverage manifest discovery patterns must be unique" unless patterns.uniq == patterns
+
+      discovered_paths = patterns.flat_map { |pattern| discover(pattern) }.uniq.sort
+      declared_paths = declared_paths.sort
+      return if discovered_paths == declared_paths
+
+      details = []
+      omitted = discovered_paths - declared_paths
+      unmatched = declared_paths - discovered_paths
+      details << "discovered but undeclared: #{omitted.join(', ')}" if omitted.any?
+      details << "declared but undiscovered: #{unmatched.join(', ')}" if unmatched.any?
+      raise Error, "coverage manifest discovery drift: #{details.join('; ')}"
+    end
+
+    def discover(pattern)
+      validate_discovery_pattern(pattern)
+      matches = Dir.glob(repository_root.join(pattern).to_s, File::FNM_EXTGLOB).filter_map do |matched|
+        absolute = Pathname(matched)
+        next unless absolute.file?
+
+        relative = absolute.relative_path_from(repository_root).to_s
+        validate_path(relative, domain: "discovery")
+      end
+      raise Error, "coverage manifest discovery pattern matched no files: #{pattern}" if matches.empty?
+
+      matches
+    end
+
+    def validate_discovery_pattern(pattern)
+      pathname = Pathname(pattern)
+      clean = pathname.cleanpath
+      invalid_component = pattern.split(File::SEPARATOR).any? { |component| component == "." || component == ".." }
+      unless pattern.end_with?(".rb") && pathname.relative? && clean.to_s == pattern &&
+          !pattern.include?("\\") && !pattern.include?("\0") && !invalid_component
+        raise Error, "coverage manifest discovery pattern must be repository-relative and normalized: #{pattern.inspect}"
+      end
+    end
+
+    def validate_path(candidate, domain:)
+      unless candidate.is_a?(String) && candidate.end_with?(".rb")
+        raise Error, "coverage manifest path in #{domain} must be a repository-relative .rb path"
+      end
+
+      pathname = Pathname(candidate)
+      clean = pathname.cleanpath
+      unless pathname.relative? && clean.to_s == candidate && candidate != "." && !candidate.include?("\\")
+        raise Error, "coverage manifest path in #{domain} must be repository-relative and normalized: #{candidate.inspect}"
+      end
+
+      absolute = repository_root.join(clean)
+      unless absolute.file?
+        raise Error, "coverage manifest file is missing: #{candidate}"
+      end
+
+      real = absolute.realpath
+      root_prefix = "#{repository_root}#{File::SEPARATOR}"
+      unless real.to_s.start_with?(root_prefix)
+        raise Error, "coverage manifest path escapes the repository: #{candidate}"
+      end
+
+      candidate
+    end
+  end
+
+  class ManifestCheck
+    def initialize(resultset_path:, manifest_path:, base:, cwd:)
+      @repository = Repository.new(cwd: cwd)
+      @base = repository.resolve_base(base)
+      @manifest = Manifest.new(path: manifest_path, repository_root: repository.root)
+      @resultset = Resultset.new(path: resultset_path, repository_root: repository.root)
+    end
+
+    def call(stdout:)
+      diffs = manifest.paths.to_h { |path| [ path, repository.diff_for(path, base: base) ] }
+      raise Error, "coverage manifest diff is empty" unless diffs.values.any?(&:changed)
+
+      changed = diffs.select { |_path, diff| diff.changed }
+      missing = changed.keys.reject { |path| branch_enabled_coverage?(path) }
+      if missing.any?
+        raise Error,
+          "changed manifest file is absent from branch-enabled coverage: #{missing.sort.join(', ')}"
+      end
+
+      line_total = 0
+      line_covered = 0
+      branch_total = 0
+      branch_covered = 0
+      uncovered_lines = []
+      uncovered_branches = []
+
+      changed.each do |path, diff|
+        coverage = coverage_for(path)
+        source_line_count = repository.root.join(path).each_line.count
+        unless coverage.lines.length == source_line_count
+          raise Error,
+            "changed manifest file has a stale coverage line map: #{path} " \
+            "(source #{source_line_count}, coverage #{coverage.lines.length})"
+        end
+        changed_lines = diff.lines.to_h { |line| [ line, true ] }
+
+        diff.lines.each do |line|
+          count = coverage.lines[line - 1]
+          next if count.nil?
+
+          line_total += 1
+          if count.positive?
+            line_covered += 1
+          else
+            uncovered_lines << "#{path}:#{line}"
+          end
+        end
+
+        coverage.branches.each do |condition_id, arms|
+          condition = parse_location(condition_id)
+          arms.each do |arm_id, count|
+            arm = parse_location(arm_id)
+            next unless location_changed?(condition, changed_lines) || location_changed?(arm, changed_lines)
+
+            branch_total += 1
+            if count.positive?
+              branch_covered += 1
+            else
+              uncovered_branches << "#{path}:#{arm.start_line} (#{arm.kind})"
+            end
+          end
+        end
+      end
+
+      stdout.puts format(
+        "Changed security line coverage: %.2f%% (%d/%d)",
+        percentage(line_covered, line_total), line_covered, line_total
+      )
+      stdout.puts format(
+        "Changed security branch coverage: %.2f%% (%d/%d)",
+        percentage(branch_covered, branch_total), branch_covered, branch_total
+      )
+
+      errors = []
+      errors << "uncovered changed lines:\n  #{uncovered_lines.uniq.sort.join("\n  ")}" if uncovered_lines.any?
+      if uncovered_branches.any?
+        errors << "uncovered changed branch arms:\n  #{uncovered_branches.uniq.sort.join("\n  ")}"
+      end
+      raise Error, errors.join("\n") if errors.any?
+
+      true
+    end
+
+    private
+
+    attr_reader :repository, :base, :manifest, :resultset
+
+    def coverage_for(path)
+      resultset.files.fetch(repository.root.join(path).expand_path.to_s)
+    end
+
+    def branch_enabled_coverage?(path)
+      coverage = resultset.files[repository.root.join(path).expand_path.to_s]
+      coverage&.branch_enabled
+    end
+
+    def parse_location(identifier)
+      match = identifier.is_a?(String) && identifier.match(SIMPLECOV_ID)
+      raise Error, "malformed SimpleCov branch identifier: #{identifier.inspect}" unless match
+
+      kind = match[:kind]
+      kind = kind[1...-1] if kind.start_with?("\"")
+      location = Location.new(
+        kind: kind,
+        start_line: Integer(match[:start_line], 10),
+        start_column: Integer(match[:start_column], 10),
+        end_line: Integer(match[:end_line], 10),
+        end_column: Integer(match[:end_column], 10)
+      )
+      start_position = [ location.start_line, location.start_column ]
+      end_position = [ location.end_line, location.end_column ]
+      if location.start_line.zero? || location.end_line.zero? || (start_position <=> end_position) == 1
+        raise Error, "malformed SimpleCov branch identifier: #{identifier.inspect}"
+      end
+
+      location
+    end
+
+    def location_changed?(location, changed_lines)
+      changed_lines.keys.any? { |line| line.between?(location.start_line, location.end_line) }
+    end
+
+    def percentage(covered, total)
+      total.zero? ? 100.0 : covered.fdiv(total) * 100
+    end
+  end
+
+  class LegacyCheck
+    def initialize(resultset_path:, minimum:)
+      @resultset_path = resultset_path
+      @resultset = Resultset.new(path: resultset_path)
+      @minimum = Float(minimum)
+    rescue ArgumentError
+      raise Error, "MIN_COVERAGE must be numeric"
+    end
+
+    def call(stdout:)
+      covered_lines = resultset.files.values.flat_map { |coverage| coverage.lines.compact }
+      covered_branches = resultset.files.values.flat_map do |coverage|
+        coverage.branches.values.flat_map(&:values)
+      end
+      raise Error, "No instrumented Ruby lines found in #{resultset_path}" if covered_lines.empty?
+
+      line_percent = percentage(covered_lines)
+      branch_percent = covered_branches.empty? ? 100.0 : percentage(covered_branches)
+      stdout.puts format("Line coverage: %.2f%%", line_percent)
+      stdout.puts format("Branch coverage: %.2f%%", branch_percent)
+
+      line_percent >= minimum && branch_percent >= minimum
+    end
+
+    private
+
+    attr_reader :resultset, :resultset_path, :minimum
+
+    def percentage(counts)
+      counts.count(&:positive?).fdiv(counts.length) * 100
     end
   end
 end
 
-abort "No instrumented Ruby lines found in #{result_path}" if covered_lines.empty?
+def run_coverage_check_cli(argv = ARGV, stdout: $stdout, stderr: $stderr, env: ENV, cwd: Dir.pwd)
+  options = {}
+  parser = OptionParser.new do |option_parser|
+    option_parser.banner = "Usage: bin/check_coverage [resultset] [--manifest PATH --base SHA]"
+    option_parser.on("--manifest PATH", "Security source coverage manifest") { |value| options[:manifest] = value }
+    option_parser.on("--base SHA", "Ancestor commit used for changed-line coverage") { |value| options[:base] = value }
+  end
+  positional = parser.parse(argv.dup)
+  raise CoverageGate::Error, parser.banner if positional.length > 1
 
-line_percent = covered_lines.values.count(true).fdiv(covered_lines.length) * 100
-branch_percent =
-  if covered_branches.empty?
-    100.0
-  else
-    covered_branches.values.count(true).fdiv(covered_branches.length) * 100
+  manifest_mode = options.key?(:manifest) || options.key?(:base)
+  if manifest_mode && !(options[:manifest] && options[:base])
+    raise CoverageGate::Error, "--manifest and --base must be provided together"
   end
 
-puts format("Line coverage: %.2f%%", line_percent)
-puts format("Branch coverage: %.2f%%", branch_percent)
+  resultset_path = Pathname(positional.fetch(0, "coverage/.resultset.json")).expand_path(cwd)
+  passed =
+    if manifest_mode
+      CoverageGate::ManifestCheck.new(
+        resultset_path: resultset_path,
+        manifest_path: Pathname(options.fetch(:manifest)).expand_path(cwd),
+        base: options.fetch(:base),
+        cwd: cwd
+      ).call(stdout: stdout)
+    else
+      CoverageGate::LegacyCheck.new(
+        resultset_path: resultset_path,
+        minimum: env.fetch("MIN_COVERAGE", "100")
+      ).call(stdout: stdout)
+    end
 
-exit 1 if line_percent < minimum || branch_percent < minimum
+  passed ? 0 : 1
+rescue CoverageGate::Error, OptionParser::ParseError => e
+  stderr.puts e.message
+  1
+end
+
+exit run_coverage_check_cli if $PROGRAM_NAME == __FILE__

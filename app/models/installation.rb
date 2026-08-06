@@ -7,6 +7,10 @@ class Installation < ApplicationRecord
   STORAGE_SERVICES = %w[rabata self_hosted_local self_hosted_s3].freeze
 
   belongs_to :administrator, class_name: "User", optional: true
+  has_many :audit_events,
+    class_name: "InstallationAuditEvent",
+    dependent: :restrict_with_exception,
+    inverse_of: :installation
 
   attr_readonly :singleton_key, :deployment_mode, :storage_service, :storage_namespace_fingerprint
 

@@ -35,8 +35,6 @@ module Oauth
     end
 
     def enforce_registration_rate_limit
-      return if performed?
-
       if DynamicClientRegistrationRateLimiter.exceeded?(identity: request.remote_ip)
         response.set_header("Retry-After", DynamicClientRegistrationRateLimiter::WINDOW.to_i.to_s)
         render_registration_error("Too many registration requests", status: :too_many_requests)

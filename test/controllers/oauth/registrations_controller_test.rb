@@ -166,47 +166,6 @@ module Oauth
       assert_equal redirect_uris.sort, response.parsed_body["redirect_uris"]
     end
 
-    test "returns not found before a self-hosted installation is claimed" do
-      with_unclaimed_self_hosted_deployment do
-        assert_no_difference "Doorkeeper::Application.count" do
-          post oauth_register_path, params: {
-            client_name: "Premature client",
-            redirect_uris: [ "http://127.0.0.1:3000/callback" ]
-          }, as: :json
-        end
-
-        assert_response :not_found
-
-        get "/.well-known/oauth-authorization-server"
-        assert_response :success
-        assert_not response.parsed_body.key?("registration_endpoint")
-      end
-    end
-
-    test "allows registration after a self-hosted installation is claimed" do
-      with_unclaimed_self_hosted_deployment do
-        Installation.current!.update!(
-          state: "claimed",
-          administrator: users(:alice),
-          bootstrap_token_digest: nil,
-          claimed_at: Time.current
-        )
-
-        post oauth_register_path, params: {
-          client_name: "Claimed instance client",
-          redirect_uris: [ "http://127.0.0.1:3000/callback" ]
-        }, as: :json
-
-        assert_response :created
-        assert response.parsed_body["client_id"].present?
-
-        get "/.well-known/oauth-authorization-server"
-        assert_response :success
-        assert_equal "http://screenote.internal/oauth/register",
-          response.parsed_body["registration_endpoint"]
-      end
-    end
-
     test "fails closed when the rate-limit backend is unavailable" do
       with_unavailable_registration_rate_limit_store do
         assert_no_difference "Doorkeeper::Application.count" do
@@ -224,25 +183,66 @@ module Oauth
       assert_equal "no-cache", response.headers["Pragma"]
     end
 
-    private
+    test "returns too many requests before attempting registration when the limit is exceeded" do
+      limiter = ->(**) { true }
+      registration = ->(**) { raise "rate-limited requests must not register a client" }
 
-    def with_unclaimed_self_hosted_deployment
-      deployment = Screenote::Deployment.new(
-        {
-          "SCREENOTE_EDITION" => "self_hosted",
-          "SCREENOTE_BASE_URL" => "http://screenote.internal",
-          "SECRET_KEY_BASE" => "a" * 64,
-          "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
-        },
-        production: true
-      )
-      previous = Screenote::Deployment.current
-      Screenote::Deployment.instance_variable_set(:@current, deployment)
-      Installations::Prepare.call(deployment: deployment)
-      yield
-    ensure
-      Screenote::Deployment.instance_variable_set(:@current, previous) if previous
+      with_singleton_method(DynamicClientRegistrationRateLimiter, :exceeded?, limiter) do
+        with_singleton_method(DynamicClientRegistration, :call, registration) do
+          assert_no_difference "Doorkeeper::Application.count" do
+            post oauth_register_path, params: {
+              client_name: "Rate-limited client",
+              redirect_uris: [ "http://127.0.0.1:3000/callback" ]
+            }, as: :json
+          end
+        end
+      end
+
+      assert_response :too_many_requests
+      assert_equal "invalid_client_metadata", response.parsed_body["error"]
+      assert_equal DynamicClientRegistrationRateLimiter::WINDOW.to_i.to_s, response.headers["Retry-After"]
     end
+
+    test "returns service unavailable when global client capacity is exhausted" do
+      capacity = lambda do |**|
+        raise DynamicClientRegistration::CapacityExceeded, "Dynamic client capacity reached"
+      end
+
+      with_singleton_method(DynamicClientRegistration, :call, capacity) do
+        assert_no_difference "Doorkeeper::Application.count" do
+          post oauth_register_path, params: {
+            client_name: "Capacity client",
+            redirect_uris: [ "http://127.0.0.1:3000/callback" ]
+          }, as: :json
+        end
+      end
+
+      assert_response :service_unavailable
+      assert_equal "invalid_client_metadata", response.parsed_body["error"]
+      assert_match(/capacity reached/i, response.parsed_body["error_description"])
+    end
+
+    test "returns not found when a self-hosted capability check has no installation" do
+      deployment = self_hosted_deployment
+      unexpected_limiter_call = ->(**) { raise "rate limiter must not run after a terminal capability check" }
+
+      with_singleton_method(Screenote::Deployment, :current, -> { deployment }) do
+        with_singleton_method(Installation, :current, -> { nil }) do
+          with_singleton_method(DynamicClientRegistrationRateLimiter, :exceeded?, unexpected_limiter_call) do
+            assert_no_difference "Doorkeeper::Application.count" do
+              post oauth_register_path, params: {
+                client_name: "Unavailable self-hosted client",
+                redirect_uris: [ "http://127.0.0.1:3000/callback" ]
+              }, as: :json
+            end
+          end
+        end
+      end
+
+      assert_response :not_found
+    end
+
+    private
 
     def with_unavailable_registration_rate_limit_store
       store = DynamicClientRegistrationRateLimiter.send(:store)
@@ -251,6 +251,25 @@ module Oauth
       yield
     ensure
       store&.define_singleton_method(:increment, original_increment) if original_increment
+    end
+
+    def with_singleton_method(object, name, implementation)
+      original = object.method(name)
+      object.define_singleton_method(name, implementation)
+      yield
+    ensure
+      object.define_singleton_method(name, original) if original
+    end
+
+    def self_hosted_deployment
+      Screenote::Deployment.new(
+        {
+          "SCREENOTE_EDITION" => "self_hosted",
+          "SCREENOTE_BASE_URL" => "http://screenote.internal",
+          "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+        },
+        production: false
+      )
     end
   end
 end

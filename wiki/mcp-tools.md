@@ -41,8 +41,8 @@ The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and 
 | `create_snapshot` | `app/tools/create_snapshot_tool.rb` | Start a project capture run for a git commit and explicit-offset timestamp |
 | `list_screenshots` | `app/tools/list_screenshots_tool.rb` | List screenshots/versions with annotation counts and pagination |
 | `create_screenshot` | `app/tools/create_screenshot_tool.rb` | Upload one base64 PNG/JPEG screenshot directly through MCP |
-| `create_screenshot_upload` | `app/tools/create_screenshot_upload_tool.rb` | Create one desktop `ScreenshotImage` and return a signed upload URL |
-| `create_multi_viewport_screenshot` | `app/tools/create_multi_viewport_screenshot_tool.rb` | Create one screenshot with 1-3 viewport variants and per-variant signed upload URLs |
+| `create_screenshot_upload` | `app/tools/create_screenshot_upload_tool.rb` | Create one desktop `ScreenshotImage` and return a credential-free URL plus one-time upload bearer |
+| `create_multi_viewport_screenshot` | `app/tools/create_multi_viewport_screenshot_tool.rb` | Create one screenshot with 1-3 viewport variants and per-variant URL/bearer pairs |
 | `list_annotations` | `app/tools/list_annotations_tool.rb` | List annotations with status, screenshot, viewport, limit, and offset filters |
 | `get_annotation` | `app/tools/get_annotation_tool.rb` | Return annotation details, comments, and cropped image data |
 | `create_annotation` | `app/tools/create_annotation_tool.rb` | Create point or region annotation; viewport is required for multi-variant screenshots |

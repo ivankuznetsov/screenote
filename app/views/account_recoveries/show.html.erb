@@ -1,0 +1,55 @@
+<section class="auth-card" aria-labelledby="account-recovery-title">
+  <h1 id="account-recovery-title" class="auth-card__title">Recover local access</h1>
+  <% if @account_email %>
+    <p class="auth-card__subtitle">
+      Set a new local password for <strong><%= @account_email %></strong>. Existing sessions and credentials will be revoked.
+    </p>
+  <% end %>
+
+  <% if @errors.present? %>
+    <div class="auth-card__error" role="alert" data-testid="recovery-errors">
+      <% @errors.each_value do |messages| %>
+        <% Array(messages).each do |message| %>
+          <p><%= message %></p>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <% if @account_email %>
+    <%= form_with url: account_recovery_path, method: :post, scope: :account_recovery, class: "auth-card__form" do |form| %>
+      <div class="auth-card__field">
+        <%= form.label :password, "New password", class: "auth-card__label" %>
+        <%= form.password_field :password,
+              required: true,
+              minlength: RailsSimpleAuth.configuration.password_minimum_length,
+              autocomplete: "new-password",
+              autofocus: true,
+              class: "auth-card__input",
+              aria: { describedby: (@errors[:password].present? ? "account_recovery_password_error" : nil), invalid: @errors[:password].present? } %>
+        <% if @errors[:password].present? %>
+          <p id="account_recovery_password_error" class="auth-card__field-error"><%= @errors[:password].join(", ") %></p>
+        <% end %>
+      </div>
+
+      <div class="auth-card__field">
+        <%= form.label :password_confirmation, "Confirm new password", class: "auth-card__label" %>
+        <%= form.password_field :password_confirmation,
+              required: true,
+              minlength: RailsSimpleAuth.configuration.password_minimum_length,
+              autocomplete: "new-password",
+              class: "auth-card__input",
+              aria: { describedby: (@errors[:password_confirmation].present? ? "account_recovery_password_confirmation_error" : nil), invalid: @errors[:password_confirmation].present? } %>
+        <% if @errors[:password_confirmation].present? %>
+          <p id="account_recovery_password_confirmation_error" class="auth-card__field-error"><%= @errors[:password_confirmation].join(", ") %></p>
+        <% end %>
+      </div>
+
+      <div class="auth-card__actions">
+        <%= form.submit "Update password", class: "auth-card__submit" %>
+      </div>
+    <% end %>
+  <% else %>
+    <p class="auth-card__subtitle"><%= link_to "Return to sign in", new_session_path, class: "auth-card__link" %></p>
+  <% end %>
+</section>

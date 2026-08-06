@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+begin
+  result = Screenote::SelfHostedRestoreVerifier.new.call
+  puts JSON.generate(schema: "screenote-self-host-restore-verification/v1", status: "ok", **result)
+  exit 0
+rescue Screenote::SelfHostedRestoreVerifier::VerificationError => error
+  warn "self-host restore verification: #{error.message}"
+  exit 65
+end

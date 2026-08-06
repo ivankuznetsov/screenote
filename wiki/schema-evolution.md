@@ -9,7 +9,7 @@ tags: [database, migrations, schema, history]
 
 # Schema Evolution
 
-TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, headless device authorization, and persisted deployment identity.
+TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, headless device authorization, persisted deployment identity, and hardened admission identities.
 
 Source: `db/migrate/`
 
@@ -109,6 +109,13 @@ Source: `db/migrate/`
 | `20260805130000_add_api_key_issuers_and_annotation_actors` | Revoke unattributable legacy API keys, require issuer provenance for active keys, and enforce exactly one user/API-key actor for annotations, replies, and resolution state |
 | `20260805131000_harden_oauth_principals_and_token_secrets` | Backfill explicit user/project OAuth authority, cascade project deletion, hash all reusable OAuth/client secrets during a stopped-process cutover, and add dynamic-registration identity |
 
+### Phase 13: Admission Identity and Authentication Links (2026-08-05)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260805132000_harden_user_and_invitation_identity` | Preflight identity conflicts before mutation; canonicalize email/provider values; add checked active/suspended users, durable cancelled invitations, normalized partial uniqueness, and the append-only installation audit foundation |
+| `20260805133000_create_authentication_tokens` | Create digest-only invitation/account link rows with exact purpose-subject binding, versioned derivation-key identity, monotonic generations, expiry/terminal checks, and separate NULL-safe partial uniqueness indexes |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -138,5 +145,9 @@ Source: `db/migrate/`
 13. **OAuth authority is explicit and secrets are non-restorable**: grants, device grants, and tokens carry a user/project discriminator instead of treating a nullable project as implicit authority. Project deletion cascades. Existing bearer and confidential-client values are converted to SHA-256 only after old processes stop; runtime has no plaintext fallback. The migration avoids rebuilding the parent `oauth_applications` table solely for SQLite CHECK constraints because that can cascade-delete child credentials during table replacement.
 
 14. **Automation authors are durable actors, not impersonated users**: newly issued and active API keys record their issuing user, while annotations and thread events enforce exactly one user or API-key actor in both Rails and the database. Historical issuer identity cannot be reconstructed from later project ownership, so every preexisting key is revoked and retains a null issuer; its row remains available as the durable actor for existing content. A database check requires every active key to have an issuer, and restrictive actor foreign keys prevent credential deletion from erasing audit provenance. On SQLite, child foreign keys are detached before parent-table rebuilds and restored afterward, with row and API-key attribution counts verified before commit so `ON DELETE` actions cannot silently erase legacy audit links.
+
+15. **Identity hardening fails before mutation**: normalized user-email collisions, half or duplicate provider identities, and duplicate normalized pending invitations report their record IDs instead of merging people or choosing a winner. SQLite disables foreign-key actions before entering one explicit immediate transaction because adding CHECK constraints rebuilds the parent `users` table; it verifies every preexisting row ID and `PRAGMA foreign_key_check` before commit and again after restoring enforcement. PostgreSQL uses one explicit transaction, bounded lock wait, and access-exclusive identity-table locks.
+
+16. **Authentication-link rows contain no bearer material**: each row binds one enumerated purpose to either a user or invitation, records a positive generation, random public derivation ID, a `v1.` Base64url derivation-key fingerprint, a lowercase SHA-256 digest, expiry, and one outstanding/terminal state. Separate partial indexes for nullable user and invitation subjects enforce both generation uniqueness and one outstanding row without relying on NULL equality.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

@@ -27,26 +27,36 @@ module Oauth
       return super unless pre_auth.authorizable?
 
       application = pre_auth.client.application
-      DynamicClientAuthorizationQuota.authorize(user: Current.user, application:) do
-        selected_project_id = params[:principal_project_id].presence
-        unless selected_project_id
-          @server_principal_attributes = { principal_kind: "user", project_id: nil }
-          @pre_auth = nil
-          next super()
-        end
+      DynamicClientRegistration.with_application_lock(application) do
+        DynamicClientAuthorizationQuota.authorize(user: Current.user, application:) do
+          selected_project_id = params[:principal_project_id].presence
+          unless selected_project_id
+            next PrincipalBinding.with_locked_user(user: Current.user) do |valid|
+              if valid
+                @server_principal_attributes = { principal_kind: "user", project_id: nil }
+                @pre_auth = nil
+                super()
+              else
+                render_invalid_principal_selection
+              end
+            end
+          end
 
-        PrincipalBinding.with_locked_project(user: Current.user, project_id: selected_project_id) do |valid|
-          if valid
-            @server_principal_attributes = { principal_kind: "project", project_id: selected_project_id }
-            @pre_auth = nil
-            super()
-          else
-            render_invalid_principal_selection
+          PrincipalBinding.with_locked_project(user: Current.user, project_id: selected_project_id) do |valid|
+            if valid
+              @server_principal_attributes = { principal_kind: "project", project_id: selected_project_id }
+              @pre_auth = nil
+              super()
+            else
+              render_invalid_principal_selection
+            end
           end
         end
       end
     rescue DynamicClientAuthorizationQuota::Exceeded => error
       render_dynamic_client_quota_exceeded(error)
+    rescue DynamicClientRegistration::ApplicationUnavailable
+      render plain: "OAuth client is no longer available.", status: :unprocessable_content
     end
 
     private

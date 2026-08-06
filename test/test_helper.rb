@@ -1,24 +1,13 @@
 ENV["RAILS_ENV"] ||= "test"
 
-if ENV["COVERAGE"] == "true"
-  require "simplecov"
-
-  SimpleCov.command_name "rails-test-#{ENV.fetch('TEST_ENV_NUMBER', '0')}"
-  SimpleCov.minimum_coverage 100
-  SimpleCov.enable_coverage :branch
-  SimpleCov.minimum_coverage line: 100, branch: 100
-  SimpleCov.start "rails" do
-    add_filter "/test/"
-    add_filter "/config/"
-    add_filter "/db/"
-    add_filter "/vendor/"
-  end
-end
+require_relative "support/coverage_boot"
 
 require_relative "../config/environment"
 require "rails/test_help"
 require_relative "support/device_authorization_test_helper"
+require_relative "support/deployment_mode_helper"
 require_relative "support/oauth_test_helper"
+require_relative "support/principal_action_contract"
 require_relative "support/snapshot_manifest_contract_helper"
 
 module ActiveSupport
@@ -35,9 +24,12 @@ module ActiveSupport
     parallelize(workers: workers)
     fixtures :all
     include DeviceAuthorizationTestHelper
+    include DeploymentModeHelper
     include SnapshotManifestContractHelper
   end
 end
+
+require_relative "support/self_hosted_system_installation"
 
 module SignInHelper
   def sign_in(user)
@@ -48,6 +40,17 @@ end
 class ActionDispatch::IntegrationTest
   include SignInHelper
   include OauthTestHelper
+
+  setup do
+    @screenote_original_controller_cache_store = ActionController::Base.cache_store
+    ActionController::Base.cache_store = ActiveSupport::Cache::MemoryStore.new
+  end
+
+  teardown do
+    if defined?(@screenote_original_controller_cache_store)
+      ActionController::Base.cache_store = @screenote_original_controller_cache_store
+    end
+  end
 end
 
 class ActiveSupport::TestCase

@@ -93,13 +93,13 @@ Source: `git log --all --oneline` (112 commits total)
 **Decision**: Separate AnnotationComment model with action enum (comment/resolved/reopened). Resolve and reopen are transactional operations that update annotation status and create a comment atomically.
 **Rationale**: Full audit trail of who resolved/reopened and when. Comments can come from users or API keys (agents).
 
-## ADR-011: Signed URL Upload for MCP
+## ADR-011: Single-use Bearer Upload for MCP
 
 **Date**: 2026-02-16 (commit `f53042b`)
 **Status**: Active
 **Context**: MCP tools need to upload screenshot binary data, but MCP transport has size limits.
-**Decision**: Two-step upload: (1) MCP creates screenshot record and gets a signed upload URL + token, (2) agent PUTs binary data directly to the upload endpoint.
-**Rationale**: Avoids base64-encoding large images through the MCP transport. Upload tokens expire in 5 minutes and are single-use.
+**Decision**: Two-step upload: (1) MCP creates a screenshot record and receives a credential-free upload URL plus a separate token, (2) the agent PUTs binary data with `Authorization: Bearer <token>` and the declared `Content-Type`.
+**Rationale**: Avoids base64-encoding large images through MCP while keeping the five-minute single-use credential out of proxy logs, browser history, request paths, and query strings.
 
 ## ADR-012: Hourly Digest Notifications
 
@@ -138,7 +138,7 @@ Source: `git log --all --oneline` (112 commits total)
 **Date**: 2026-08-05
 **Status**: Accepted for U4 implementation
 **Context**: Invitation and Rails authentication links currently place signed bearer values in URL paths and can create users through multiple controllers. The first U4 draft also ordered invitation locks project-first, opposite the user-first authority order established by OAuth and membership removal.
-**Decision**: Persist purpose/subject-bound `AuthenticationToken` rows containing only a digest plus public derivation metadata. Reproduce 32-byte credentials through a versioned domain-separated HMAC keyring, carry them in URL fragments or equivalent Base32 manual codes, and exchange them by filtered POST into a tokenless session context. Missing historical derivation keys fail closed. All account and authority transitions lock in this order: Installation when relevant, normalized-email admission lock, users by ascending ID, projects by ascending ID, invitations by ascending ID, memberships, then tokens/credentials. PostgreSQL uses a transaction advisory lock for normalized email; production SQLite uses its immediate outer write transaction. Only outermost domain services perform bounded database retries.
-**Rationale**: Database or job-queue access alone cannot reveal live link credentials; routine key rotation remains operable without silently retaining removed keys; no raw credential enters a request URL, referrer, session, or job argument; and invitation acceptance cannot deadlock against suspension, ownership loss, or membership removal by acquiring the same authority rows in reverse order.
+**Decision**: Persist purpose/subject-bound `AuthenticationToken` rows containing only a digest plus public derivation metadata. Reproduce 32-byte credentials through a versioned domain-separated HMAC keyring, carry them in URL fragments or equivalent Base32 manual codes, and exchange them by filtered POST into a tokenless session context. Missing historical derivation keys fail closed. All account and authority transitions lock in this order: Installation when relevant, normalized-email admission lock, users by ascending ID, projects by ascending ID, invitations by ascending ID, memberships, then tokens/credentials. PostgreSQL uses a transaction advisory lock for normalized email; production SQLite uses its immediate outer write transaction. Only outermost domain services perform bounded database retries. An invitation may create credentials for a new address, but an existing local account must authenticate through the ordinary rate-limited session flow before its matching signed-in identity can accept; the invitation endpoint never verifies an existing password.
+**Rationale**: Database or job-queue access alone cannot reveal live link credentials; routine key rotation remains operable without silently retaining removed keys; no raw credential enters a request URL, referrer, session, or job argument; invitation links cannot become reusable password oracles; and invitation acceptance cannot deadlock against suspension, ownership loss, or membership removal by acquiring the same authority rows in reverse order.
 
 See also: [[architecture]], [[schema-evolution]], [[active-areas]], [[models/screenshot-image]]

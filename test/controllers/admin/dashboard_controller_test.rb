@@ -20,6 +20,19 @@ class Admin::DashboardControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Not authorized.", flash[:alert]
   end
 
+  test "returns not found when the admin route is exposed without the SaaS capability" do
+    sign_in(@admin)
+    deployment = Struct.new(:saas?, :billing?).new(false, false)
+    original = Screenote::Deployment.method(:current)
+    Screenote::Deployment.define_singleton_method(:current) { deployment }
+
+    get admin_dashboard_path
+
+    assert_response :not_found
+  ensure
+    Screenote::Deployment.define_singleton_method(:current, original) if original
+  end
+
   test "shows dashboard for admin user" do
     sign_in(@admin)
     get admin_dashboard_path

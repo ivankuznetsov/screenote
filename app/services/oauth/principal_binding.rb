@@ -32,11 +32,23 @@ module Oauth
 
         case credential&.principal_kind
         when "user"
-          with_locked_user_credential(user, credential, &block)
+          with_locked_user(user: user, credential: credential) { |valid, _locked_user| block.call(valid) }
         when "project"
           with_locked_project(user: user, project_id: credential.project_id, credential: credential, &block)
         else
           lock_credential_without_authority(credential, &block)
+        end
+      end
+
+      # Serializes account-principal credential issuance with suspension and
+      # credential revocation: resource owner first, then the credential row.
+      def with_locked_user(user:, credential: nil)
+        User.transaction do
+          locked_user = lock_user(user)
+          credential_locked = credential.nil? || lock_credential(credential)
+          valid = active_user?(locked_user) && credential&.project_id.nil? && credential_locked
+
+          yield(valid, locked_user)
         end
       end
 
@@ -57,16 +69,6 @@ module Oauth
       end
 
       private
-
-      def with_locked_user_credential(user, credential)
-        User.transaction do
-          locked_user = lock_user(user)
-          credential_locked = lock_credential(credential)
-          valid = active_user?(locked_user) && credential&.project_id.nil? && credential_locked
-
-          yield(valid)
-        end
-      end
 
       def lock_credential_without_authority(credential)
         ApplicationRecord.transaction do

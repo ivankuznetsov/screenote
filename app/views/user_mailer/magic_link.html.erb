@@ -13,11 +13,15 @@
   Click the button below to sign in to your Screenote account. This magic link works instantly.
 </p>
 
-<%= render "user_mailer/email_cta_button", url: main_app.magic_link_url(token: @token), label: "Sign In" %>
+<%= render "user_mailer/email_cta_button", url: @authentication_link_url, label: "Sign In" %>
 
 <!-- Expiry note -->
 <p style="margin: 0 0 20px 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
   This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
 </p>
 
-<%= render "user_mailer/email_fallback_url", url: main_app.magic_link_url(token: @token) %>
+<%= render "user_mailer/email_fallback_url", url: @authentication_link_url %>
+
+<p style="color: #b0b0c0; font-size: 14px; line-height: 1.6;">
+  Manual code: <strong><%= @authentication_link_manual_code %></strong>
+</p>

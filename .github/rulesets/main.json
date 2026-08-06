@@ -1,0 +1,49 @@
+{
+  "name": "Protect the default branch",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "allowed_merge_methods": ["squash"],
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": true,
+        "required_approving_review_count": 1,
+        "required_review_thread_resolution": true
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "strict_required_status_checks_policy": true,
+        "required_status_checks": [
+          { "context": "CI / ruby-security", "integration_id": 15368 },
+          { "context": "CI / lint", "integration_id": 15368 },
+          { "context": "CI / coverage", "integration_id": 15368 },
+          { "context": "CI / sqlite", "integration_id": 15368 },
+          { "context": "CI / postgresql", "integration_id": 15368 },
+          { "context": "CI / system-collaboration", "integration_id": 15368 },
+          { "context": "CI / public-cli", "integration_id": 15368 },
+          { "context": "CI / container-local", "integration_id": 15368 },
+          { "context": "CI / container-s3", "integration_id": 15368 },
+          { "context": "CI / backup-restore", "integration_id": 15368 },
+          { "context": "CI / release-artifact", "integration_id": 15368 },
+          { "context": "Secrets / GitGuardian repository incidents", "integration_id": 15368 },
+          { "context": "GitGuardian Security Checks", "integration_id": 0 }
+        ]
+      }
+    }
+  ]
+}

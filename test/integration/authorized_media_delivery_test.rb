@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class AuthorizedMediaDeliveryTest < ActionDispatch::IntegrationTest
@@ -79,6 +81,47 @@ class AuthorizedMediaDeliveryTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "a media URL stops returning bytes immediately after logout" do
+    sign_in(users(:alice))
+    url = "/media/screenshot_images/#{@image.id}/original"
+
+    get url
+    assert_response :ok
+
+    delete session_path
+    get url
+
+    assert_redirected_to new_session_path
+    assert_not_equal @bytes, response.body
+  end
+
+  test "a suspended user cannot reuse a media URL from an active session" do
+    user = users(:alice)
+    sign_in(user)
+    url = "/media/screenshot_images/#{@image.id}/original"
+
+    get url
+    assert_response :ok
+    user.update!(access_status: :suspended)
+    get url
+
+    assert_redirected_to new_session_path
+    assert_not_equal @bytes, response.body
+  end
+
+  test "deleting the project invalidates a previously authorized media URL" do
+    sign_in(users(:alice))
+    url = "/media/screenshot_images/#{@image.id}/original"
+
+    get url
+    assert_response :ok
+    @image.screenshot.page.project.destroy!
+    get url
+
+    assert_response :not_found
+    assert_not_equal @bytes, response.body
+  end
+
   test "an authorized member receives a preprocessed named variant without a provider redirect" do
     require_vips!
     variant = @image.image.variant(:project_strip).processed
@@ -90,5 +133,27 @@ class AuthorizedMediaDeliveryTest < ActionDispatch::IntegrationTest
     assert_response :ok
     assert_equal expected, response.body
     assert_nil response.headers["Location"]
+  end
+
+  test "missing originals and unknown variants return not found without decoding" do
+    sign_in(users(:alice))
+
+    get "/media/screenshot_images/#{@image.id}/unknown"
+    assert_response :not_found
+
+    @image.image.purge
+    get "/media/screenshot_images/#{@image.id}/original"
+    assert_response :not_found
+
+    get "/media/screenshot_images/#{@image.id}/project_strip"
+    assert_response :not_found
+  end
+
+  test "an allowed but unprocessed variant remains unavailable" do
+    sign_in(users(:alice))
+
+    get "/media/screenshot_images/#{@image.id}/project_strip"
+
+    assert_response :not_found
   end
 end

@@ -1,0 +1,14 @@
+services:
+  screenote:
+    environment:
+      SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS_FILE: /run/secrets/screenote_authentication_link_prior_keys
+    secrets:
+      - source: screenote_authentication_link_prior_keys
+        target: screenote_authentication_link_prior_keys
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+
+secrets:
+  screenote_authentication_link_prior_keys:
+    file: ${SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS_PATH:?Set SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS_PATH to the restricted prior-keyring file}

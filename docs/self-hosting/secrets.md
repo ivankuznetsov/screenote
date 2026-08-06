@@ -169,6 +169,62 @@ credentials with the base and S3 Compose files. The application secret has
 application-level consequences; take the documented whole-instance backup
 before rotating it.
 
+### Preserve active authentication links during application-secret rotation
+
+Changing `SECRET_KEY_BASE` changes the derivation key used by invitation,
+password-reset, magic-link, confirmation, and recovery links. Take a complete
+backup first. Before replacing the old application-secret file, derive the old
+authentication-link key into a separate restricted JSON keyring. The command
+below reads the old secret from a file; it does not place the value in an
+argument or environment variable:
+
+```sh
+umask 077
+SCREENOTE_OLD_SECRET_KEY_BASE_PATH="$PWD/secrets/secret_key_base" \
+  ruby -rbase64 -rjson -ropenssl -rdigest -e '
+    secret = File.binread(ENV.fetch("SCREENOTE_OLD_SECRET_KEY_BASE_PATH")).delete_suffix("\n")
+    abort "invalid application secret" if secret.bytesize < 32 || secret.include?("\n")
+    key = OpenSSL::HMAC.digest("SHA256", secret, "screenote.authentication-links.keyring/v1")
+    id_digest = Digest::SHA256.digest("screenote.authentication-links.key-id/v1\0".b + key)
+    id = "v1.#{Base64.urlsafe_encode64(id_digest, padding: false)}"
+    puts JSON.generate(id => Base64.urlsafe_encode64(key, padding: false))
+  ' > secrets/authentication_link_prior_keys.next
+chmod 0400 secrets/authentication_link_prior_keys.next
+chown 1000:1000 secrets/authentication_link_prior_keys.next
+mv secrets/authentication_link_prior_keys.next secrets/authentication_link_prior_keys
+```
+
+Treat that JSON file as an application secret. Rotate `secret_key_base`
+atomically, set `SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS_PATH`, and recreate
+the container with the additive overlay:
+
+```sh
+docker compose \
+  -f compose.yaml \
+  -f compose.auth-link-key-rotation.yaml \
+  up -d --force-recreate
+```
+
+Startup fails closed if any active link refers to a key that is absent. Keep
+the overlay and prior-key file in every backup until all links using that key
+have expired, been consumed, or been superseded. Then verify that no active
+token uses the prior key before removing the overlay and file:
+
+```sh
+docker compose \
+  -f compose.yaml \
+  -f compose.auth-link-key-rotation.yaml \
+  exec screenote ./bin/rails runner \
+  'abort "active prior-key links remain" if AuthenticationToken.active.where.not(derivation_key_id: AuthenticationLinks::Runtime.keyring.primary_key_id).exists?'
+docker compose -f compose.yaml up -d --force-recreate
+rm secrets/authentication_link_prior_keys
+```
+
+Include every other active Compose overlay in these commands. An emergency
+rotation requires superseding and reissuing outstanding links before the
+compromised key is removed; merely omitting the prior key intentionally makes
+those links unusable.
+
 ## Health and request limits
 
 `GET /up` is process liveness only. Compose checks `GET /ready`, which returns

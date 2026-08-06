@@ -20,17 +20,20 @@ module Oauth
       return render_oauth_error(:invalid_scope) unless scopes
 
       plaintext_device_code = SecureRandom.urlsafe_base64(32)
-      grant = OauthDeviceGrant.create!(
-        application: application,
-        device_code: OauthDeviceGrant.digest_device_code(plaintext_device_code),
-        user_code: generate_user_code,
-        scopes: scopes.to_s,
-        expires_at: OauthDeviceGrant::DEFAULT_EXPIRES_IN.seconds.from_now,
-        polling_interval: OauthDeviceGrant::DEFAULT_POLLING_INTERVAL
-      )
-      DynamicClientRegistration.mark_used!(application)
+      grant = DynamicClientRegistration.with_application_lock(application) do
+        OauthDeviceGrant.create!(
+          application: application,
+          device_code: OauthDeviceGrant.digest_device_code(plaintext_device_code),
+          user_code: generate_user_code,
+          scopes: scopes.to_s,
+          expires_at: OauthDeviceGrant::DEFAULT_EXPIRES_IN.seconds.from_now,
+          polling_interval: OauthDeviceGrant::DEFAULT_POLLING_INTERVAL
+        ).tap { DynamicClientRegistration.mark_used!(application) }
+      end
 
       render json: authorization_response(grant, plaintext_device_code)
+    rescue DynamicClientRegistration::ApplicationUnavailable
+      render_oauth_error(:invalid_client, status: :unauthorized)
     end
 
     private

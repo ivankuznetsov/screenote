@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class OfflineAssetsTest < ActionDispatch::IntegrationTest
@@ -53,6 +55,9 @@ class OfflineAssetsTest < ActionDispatch::IntegrationTest
       production: true
     )
     Screenote::Deployment.instance_variable_set(:@current, deployment)
+    InstallationAuditEvent.delete_all
+    Installation.delete_all
+    Installations::Prepare.call(deployment: deployment)
     yield
   ensure
     Screenote::Deployment.instance_variable_set(:@current, previous)

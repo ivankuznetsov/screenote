@@ -23,7 +23,7 @@ module Oauth
 
     def update
       return render_invalid_decision unless params[:decision].in?(%w[approve deny])
-      return unless @device_grant
+      return render_invalid_code unless @device_grant
 
       decision = params[:decision]
       return unless persist_decision(decision)
@@ -44,7 +44,7 @@ module Oauth
     end
 
     def persist_decision(decision)
-      return persist_unscoped_decision(decision) if decision == "deny"
+      return persist_denial if decision == "deny"
 
       DynamicClientAuthorizationQuota.authorize(user: Current.user, application: @device_grant.application) do
         persist_approval
@@ -59,7 +59,24 @@ module Oauth
       if selected_project_id
         persist_project_approval(selected_project_id)
       else
-        persist_unscoped_decision("approve")
+        persist_account_approval
+      end
+    end
+
+    def persist_account_approval
+      PrincipalBinding.with_locked_user(user: Current.user, credential: @device_grant) do |valid, locked_user|
+        unless valid && authorizable?(@device_grant)
+          render_invalid_code
+          next false
+        end
+
+        @device_grant.update!(
+          resource_owner: locked_user,
+          principal_kind: "user",
+          project: nil,
+          approved_at: Time.current
+        )
+        true
       end
     end
 
@@ -85,25 +102,14 @@ module Oauth
       end
     end
 
-    def persist_unscoped_decision(decision)
+    def persist_denial
       @device_grant.with_lock do
         unless authorizable?(@device_grant)
           render_invalid_code
           next false
         end
 
-        attributes = if decision == "deny"
-          { resource_owner: Current.user, denied_at: Time.current }
-        else
-          {
-            resource_owner: Current.user,
-            principal_kind: "user",
-            project: nil,
-            approved_at: Time.current
-          }
-        end
-
-        @device_grant.update!(attributes)
+        @device_grant.update!(resource_owner: Current.user, denied_at: Time.current)
         true
       end
     end

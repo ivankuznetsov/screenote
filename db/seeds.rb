@@ -1,4 +1,4 @@
-if Rails.env.development?
+if Rails.env.development? && Screenote::Deployment.current.saas?
   user = User.find_or_create_by!(email: "test@screenote.app") do |record|
     record.password = "password"
     record.confirmed_at = Time.current
@@ -29,6 +29,8 @@ if Rails.env.development?
   puts "Seed data created."
   puts "  Pro user:  test@screenote.app / password"
   puts "  Free user: free@screenote.app / password"
+elsif Rails.env.development?
+  puts "Self-hosted development starts with zero accounts; claim the installation with its bootstrap token."
 else
   puts "Seed data is development-only; no accounts were created."
 end

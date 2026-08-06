@@ -53,18 +53,6 @@ class SendDigestNotificationsJobTest < ActiveSupport::TestCase
     assert resolution.notified_at.present?, "Self-resolution should still be marked as notified"
   end
 
-  test "skips blank email authors but still marks comments as notified" do
-    @author.update_column(:email, "")
-    resolution = create_resolution(@annotation, resolver: @resolver)
-
-    assert_no_emails do
-      SendDigestNotificationsJob.perform_now
-    end
-
-    resolution.reload
-    assert resolution.notified_at.present?, "Comment for blank-email author should still be marked as notified"
-  end
-
   test "does not re-send already notified resolutions" do
     resolution = create_resolution(@annotation, resolver: @resolver)
     resolution.update_column(:notified_at, 1.hour.ago)

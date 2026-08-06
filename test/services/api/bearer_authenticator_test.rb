@@ -38,6 +38,15 @@ module Api
       assert_nil Api::BearerAuthenticator.call(REVOKED_KEY_TOKEN)
     end
 
+    test "active api key fails closed when its issuer is suspended" do
+      key = api_keys(:alice_key)
+      previous_last_used_at = key.last_used_at
+      users(:alice).update!(access_status: :suspended)
+
+      assert_nil Api::BearerAuthenticator.call(ALICE_TOKEN)
+      assert_equal previous_last_used_at, key.reload.last_used_at
+    end
+
     test "authenticates a valid oauth access token" do
       token = create_oauth_token(application: create_oauth_application, user: users(:alice), scopes: "mcp_read")
 

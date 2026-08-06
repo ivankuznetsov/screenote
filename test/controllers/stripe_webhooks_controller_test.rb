@@ -36,6 +36,106 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
+  test "returns not found when the billing capability is unavailable" do
+    deployment = Struct.new(:billing?).new(false)
+
+    with_singleton_method(Screenote::Deployment, :current, -> { deployment }) do
+      post stripe_webhooks_path,
+        params: "{}",
+        headers: { "HTTP_STRIPE_SIGNATURE" => "valid", "CONTENT_TYPE" => "application/json" }
+    end
+
+    assert_response :not_found
+  end
+
+  test "permanent validation failures are acknowledged with redacted event context" do
+    record = Subscription.new
+    record.errors.add(:base, "invalid")
+    error = ActiveRecord::RecordInvalid.new(record)
+    notifications = []
+
+    with_singleton_method(Stripe::Webhook, :construct_event, ->(*) { raise error }) do
+      with_singleton_method(Screenote::Monitoring, :notify, ->(raised, context:) { notifications << [ raised, context ] }) do
+        post stripe_webhooks_path,
+          params: "{}",
+          headers: { "HTTP_STRIPE_SIGNATURE" => "valid", "CONTENT_TYPE" => "application/json" }
+      end
+    end
+
+    assert_response :ok
+    assert_equal error, notifications.dig(0, 0)
+    assert_nil notifications.dig(0, 1, :event_type)
+    assert_nil notifications.dig(0, 1, :event_id)
+  end
+
+  test "validation failures after parsing include the event identity" do
+    event = build_subscription_updated_event(status: "active", current_period_end: 60.days.from_now.to_i)
+    record = Subscription.new
+    record.errors.add(:base, "invalid")
+    error = ActiveRecord::RecordInvalid.new(record)
+    notifications = []
+    failing_lock = ->(*, **) { raise error }
+
+    subscription = @subscription
+    with_singleton_method(Subscription, :find_by, ->(*, **) { subscription }) do
+      with_singleton_method(@subscription, :with_lock, failing_lock) do
+        with_singleton_method(Screenote::Monitoring, :notify, ->(raised, context:) { notifications << [ raised, context ] }) do
+          post_webhook(event)
+        end
+      end
+    end
+
+    assert_response :ok
+    assert_equal event[:type], notifications.dig(0, 1, :event_type)
+    assert_equal event[:id], notifications.dig(0, 1, :event_id)
+  end
+
+  test "Stripe transport failures return retryable errors with or without a parsed event" do
+    notifications = []
+    connection_error = Stripe::APIConnectionError.new("unavailable")
+    with_singleton_method(Screenote::Monitoring, :notify, ->(raised, context:) { notifications << [ raised, context ] }) do
+      with_singleton_method(Stripe::Webhook, :construct_event, ->(*) { raise connection_error }) do
+        post stripe_webhooks_path,
+          params: "{}",
+          headers: { "HTTP_STRIPE_SIGNATURE" => "valid", "CONTENT_TYPE" => "application/json" }
+      end
+      assert_response :internal_server_error
+      assert_nil notifications.last.dig(1, :event_id)
+
+      event = build_event("checkout.session.completed", {
+        customer: @subscription.stripe_customer_id,
+        subscription: "sub-unavailable"
+      })
+      with_singleton_method(Stripe::Subscription, :retrieve, ->(*) { raise connection_error }) { post_webhook(event) }
+      assert_response :internal_server_error
+      assert_equal event[:id], notifications.last.dig(1, :event_id)
+    end
+  end
+
+  test "mail failure after activation is monitored without failing the webhook" do
+    @subscription.update_columns(
+      plan: :pro,
+      status: :incomplete,
+      stripe_subscription_id: "sub_bob_test",
+      current_period_end: 30.days.from_now
+    )
+    event = build_subscription_updated_event(status: "active", current_period_end: 60.days.from_now.to_i)
+    error = StandardError.new("mailer unavailable")
+    delivery = Object.new
+    delivery.define_singleton_method(:deliver_later) { raise error }
+    notifications = []
+
+    with_singleton_method(AdminMailer, :new_pro_subscriber, ->(*) { delivery }) do
+      with_singleton_method(Screenote::Monitoring, :notify, ->(raised, context:) { notifications << [ raised, context ] }) do
+        post_webhook(event)
+      end
+    end
+
+    assert_response :ok
+    assert_equal error, notifications.dig(0, 0)
+    assert_equal @subscription.user_id, notifications.dig(0, 1, :user_id)
+  end
+
   test "idempotency: replayed event with same id is short-circuited and does not re-trigger mail" do
     @subscription.update_columns(
       plan: :pro,
@@ -82,6 +182,30 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     })
 
     post_webhook(event)
+    assert_response :service_unavailable
+  end
+
+  test "customer.subscription.updated with missing subscription record returns service_unavailable" do
+    event = build_event("customer.subscription.updated", {
+      id: "sub_orphan",
+      customer: "cus_nonexistent",
+      status: "active",
+      items: { object: "list", data: [] }
+    })
+
+    post_webhook(event)
+
+    assert_response :service_unavailable
+  end
+
+  test "customer.subscription.deleted with missing subscription record returns service_unavailable" do
+    event = build_event("customer.subscription.deleted", {
+      id: "sub_orphan",
+      customer: "cus_nonexistent"
+    })
+
+    post_webhook(event)
+
     assert_response :service_unavailable
   end
 
@@ -391,6 +515,14 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def with_singleton_method(receiver, name, replacement)
+    original = receiver.method(name)
+    receiver.define_singleton_method(name, replacement)
+    yield
+  ensure
+    receiver.define_singleton_method(name, original) if original
+  end
 
   def upgrade_bob_to_pro!
     @subscription.update_columns(

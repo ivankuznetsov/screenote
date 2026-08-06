@@ -4,7 +4,9 @@ Confirm your Screenote account
 Thanks for signing up for Screenote. Please confirm your email address to activate your account.
 
 Confirm your email:
-<%= main_app.confirmation_url(@confirmation_token) %>
+<%= @authentication_link_url %>
+
+Manual code: <%= @authentication_link_manual_code %>
 
 This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
 

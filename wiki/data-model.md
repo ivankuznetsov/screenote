@@ -3,15 +3,15 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-06
 tags: [database, schema, models, relationships]
 ---
 
 # Data Model
 
-TLDR: Screenote has 15 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth. Installation persists the one deployment/storage/ownership identity.
+TLDR: Screenote has 17 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth. Installation persists the one deployment/storage/ownership identity, and authentication-link credentials are digest-only rows.
 
-Source: `db/schema.rb` (schema version `2026_08_05_120500`)
+Source: `db/schema.rb` (schema version `2026_08_05_134000`)
 
 ## ER Diagram
 
@@ -23,6 +23,9 @@ erDiagram
     User ||--o{ Annotation : "has many"
     User ||--o| Subscription : "has one"
     User |o--o| Installation : "may administer"
+    User ||--o{ AuthenticationToken : "receives account links"
+    User ||--o{ AuthenticationToken : "issues recovery links"
+    User ||--o{ InstallationAuditEvent : "actor or target"
 
     Project ||--o{ ProjectMembership : "has many"
     Project ||--o{ ProjectInvitation : "has many"
@@ -51,6 +54,9 @@ erDiagram
 
     ProjectInvitation }o--|| Project : "belongs to"
     ProjectInvitation }o--|| User : "invited by (inviter)"
+    ProjectInvitation ||--o{ AuthenticationToken : "receives invitation links"
+
+    Installation ||--o{ InstallationAuditEvent : "records"
 
     ApiKey }o--|| Project : "belongs to"
 
@@ -70,7 +76,7 @@ erDiagram
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| `users` | User accounts with auth | email, password_digest, confirmed_at, oauth_provider, oauth_uid |
+| `users` | User accounts with auth and checked activity state | email, password_digest, confirmed_at, oauth_provider, oauth_uid, access_status |
 | `projects` | Top-level container | name, description, user_id (creator) |
 | `pages` | Groups screenshots within a project | name, project_id |
 | `snapshots` | Capture-run records for a project | project_id, git_commit, taken_at, optional manifest_digest |
@@ -84,7 +90,7 @@ erDiagram
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `project_memberships` | User-project join table with roles | project_id, user_id, role (enum: member/owner) |
-| `project_invitations` | Email-based invites with token | email, project_id, inviter_id, status (enum: pending/accepted) |
+| `project_invitations` | Durable email-based admission intent | email, project_id, inviter_id, status (enum: pending/accepted/cancelled) |
 
 ### Auth & Access
 
@@ -93,6 +99,8 @@ erDiagram
 | `sessions` | Database-backed user sessions | user_id, ip_address, user_agent |
 | `api_keys` | Bearer token auth for API/MCP | name, token_digest, token_prefix, project_id, issued_by_user_id, revoked_at, last_used_at |
 | `installations` | Singleton persisted deployment and claim identity | singleton_key, deployment_mode, state, storage_service, storage_namespace_fingerprint, bootstrap_token_digest, administrator_id, claimed_at |
+| `installation_audit_events` | Append-only installation claim/administration audit history | installation_id, actor_user_id, target_user_id, event_type, metadata, created_at |
+| `authentication_tokens` | Digest-only, purpose/subject-bound link credentials | purpose, user_id/project_invitation_id, issued_by_user_id (recovery only), generation, derivation_id, derivation_key_id, token_digest, expires_at, state, terminal_at |
 
 ### Billing
 
@@ -120,7 +128,12 @@ erDiagram
 
 ## Key Indexes
 
-- `users.email` -- unique
+- `users.LOWER(TRIM(email))` -- unique canonical identity; a CHECK requires the stored value to already be normalized
+- `users.(oauth_provider, oauth_uid)` -- partial unique provider identity; a CHECK requires both fields or neither
+- `project_invitations.(project_id, LOWER(TRIM(email)))` -- partial unique index for pending rows only
+- `authentication_tokens.(purpose, subject, generation)` -- separate partial user/invitation indexes avoid nullable-column uniqueness gaps
+- `authentication_tokens.(purpose, subject)` -- separate partial indexes permit only one outstanding credential for each exact purpose and subject
+- `authentication_tokens.(issued_by_user_id, state)` -- partial account-recovery index preserves immutable administrator provenance and supports revocation after an administrator transfer
 - `pages.(project_id, LOWER(name))` -- unique, case-insensitive
 - `snapshots.(project_id, taken_at)` -- powers the project-page "recent snapshots" sidebar (`Snapshot.recent` within a project scope). The id-equality `find_by(id:)` path used elsewhere is served by the PK, not this composite.
 - `snapshots.(project_id, manifest_digest)` -- partial unique identity for resumable manifest-backed captures.

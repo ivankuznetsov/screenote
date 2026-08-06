@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+if [[ "${KAMAL_COMMAND-}" != "deploy" ]]; then
+  exit 0
+fi
+
+case "${KAMAL_DESTINATION-}" in
+  ""|production) ;;
+  *) exit 0 ;;
+esac
+
+exec bin/saas-deploy-guard "${KAMAL_VERSION:?KAMAL_VERSION is required}"

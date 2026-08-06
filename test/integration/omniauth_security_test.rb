@@ -4,8 +4,47 @@ require "test_helper"
 
 class OmniauthSecurityTest < ActionDispatch::IntegrationTest
   test "request phase uses POST and OmniAuth authenticity token protection" do
+    validator = OmniAuth.config.request_validation_phase
+
     assert_equal %i[post], OmniAuth.config.allowed_request_methods
-    assert_equal OmniAuth::AuthenticityTokenProtection, OmniAuth.config.request_validation_phase
+    assert_instance_of OmniAuth::AuthenticityTokenProtection, validator
+    assert_equal :_csrf_token, validator.options.fetch(:key)
+  end
+
+  test "Rails form tokens reach the provider while missing and invalid tokens are rejected" do
+    previous_forgery_protection = ActionController::Base.allow_forgery_protection
+    previous_test_mode = OmniAuth.config.test_mode
+    ActionController::Base.allow_forgery_protection = true
+    OmniAuth.config.test_mode = false
+
+    get new_session_path
+    token = css_select(
+      "form[action='/auth/google_oauth2'] input[name='authenticity_token']"
+    ).first&.[]("value")
+    origin = css_select(
+      "form[action='/auth/google_oauth2'] input[name='origin']"
+    ).first&.[]("value")
+
+    assert_predicate token, :present?
+    assert_equal new_session_path, origin
+
+    post "/auth/google_oauth2", params: { authenticity_token: token, origin: origin }
+
+    assert_response :redirect
+    assert_equal "accounts.google.com", URI.parse(response.location).host
+
+    [ nil, "invalid-token" ].each do |invalid_token|
+      params = { origin: new_session_path }
+      params[:authenticity_token] = invalid_token if invalid_token
+      post "/auth/google_oauth2", params: params
+
+      assert_response :redirect
+      assert_includes response.location, "/auth/failure"
+      assert_includes response.location, "message=authenticity_error"
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = previous_forgery_protection
+    OmniAuth.config.test_mode = previous_test_mode
   end
 
   test "configured OAuth2 strategies keep callback state verification enabled" do

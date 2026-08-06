@@ -38,7 +38,7 @@ Rails 8.1 (Puma + Thruster)
 
 | Layer | Technology |
 |-------|-----------|
-| Language | Ruby 3.4.7+ |
+| Language | Ruby 3.4.10+ |
 | Framework | Rails 8.1.2+ |
 | Database (dev/test) | SQLite |
 | Database (production) | PostgreSQL |

@@ -33,6 +33,8 @@ class RemoveProjectMemberTool < ApplicationTool
         { error: "not_found", message: "Project membership not found" }.to_json
       when :invalid
         { error: "validation_failed", message: result.membership.errors.full_messages.to_sentence }.to_json
+      when :retryable_busy
+        { error: "retryable_busy", message: "Member removal is busy; retry the request" }.to_json
       end
     end
   end

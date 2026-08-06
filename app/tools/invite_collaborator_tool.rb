@@ -2,7 +2,7 @@
 
 class InviteCollaboratorTool < ApplicationTool
   tool_name "invite_collaborator"
-  description "Invite a collaborator to a project by email. Sends an invitation email. Requires owner role."
+  description "Create a private project invitation for an email address. Requires owner role."
   mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: true
   authorize { current_user.present? }
 
@@ -16,30 +16,47 @@ class InviteCollaboratorTool < ApplicationTool
     return error if error
 
     with_error_handling do
-      unless current_principal.can_invite_to?(current_project)
-        return { error: "forbidden", message: "Only project owners can invite collaborators" }.to_json
-      end
+      result = ProjectInvitations::Issue.call(
+        principal: current_principal,
+        project: current_project,
+        email: email
+      )
 
-      unless current_user.can_invite_member?(current_project)
-        return { error: "member_limit_exceeded", message: "Project has reached its member limit. Upgrade to Pro for unlimited members." }.to_json
-      end
+      serialize_result(result)
+    end
+  end
 
-      invitation = current_project.project_invitations.build(email: email, inviter: current_user)
+  private
 
-      unless invitation.save
-        return { error: "validation_failed", message: invitation.errors.full_messages.to_sentence }.to_json
-      end
-
-      ProjectInvitationMailer.invite(invitation).deliver_later if Screenote::Deployment.current.mail?
-
-      {
+  def serialize_result(result)
+    if result.success?
+      return {
         invitation: {
-          id: invitation.id,
-          email: invitation.email,
-          status: invitation.status,
-          created_at: invitation.created_at.iso8601
-        }
+          id: result.invitation.id,
+          email: result.invitation.email,
+          status: result.invitation.status,
+          created_at: result.invitation.created_at.iso8601
+        },
+        issuance_status: result.status,
+        private_link: result.presentation.url,
+        manual_code: result.presentation.manual_code,
+        warning: "Private invitation credential. Share only with the intended recipient."
       }.to_json
+    end
+
+    case result.status
+    when :forbidden, :inactive_issuer
+      { error: "forbidden", message: "Only active project owners can invite collaborators" }.to_json
+    when :already_member
+      { error: "already_member", message: "That person is already a project member" }.to_json
+    when :limit_reached
+      { error: "member_limit_exceeded", message: "Project has reached its member limit" }.to_json
+    when :invalid
+      { error: "validation_failed", message: result.errors.presence&.to_sentence || "Enter a valid email address" }.to_json
+    when :not_found
+      { error: "not_found", message: "Project not found" }.to_json
+    when :retryable_busy
+      { error: "retryable_busy", message: "Invitation issuance is busy; retry the request" }.to_json
     end
   end
 end

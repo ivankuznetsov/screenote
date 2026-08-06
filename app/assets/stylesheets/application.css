@@ -1431,6 +1431,20 @@ body.review-fullscreen-open {
 .annotation-author-color--7 { --annotation-author-color: #4f46e5; --annotation-author-soft: rgba(79, 70, 229, 0.16); }
 .annotation-author-color--8 { --annotation-author-color: #65a30d; --annotation-author-soft: rgba(101, 163, 13, 0.16); }
 .annotation-author-color--9 { --annotation-author-color: #c2410c; --annotation-author-soft: rgba(194, 65, 12, 0.16); }
+.annotation-author-color--10 { --annotation-author-color: #9333ea; --annotation-author-soft: rgba(147, 51, 234, 0.16); }
+.annotation-author-color--11 { --annotation-author-color: #0f766e; --annotation-author-soft: rgba(15, 118, 110, 0.16); }
+.annotation-author-color--12 { --annotation-author-color: #be123c; --annotation-author-soft: rgba(190, 18, 60, 0.16); }
+.annotation-author-color--13 { --annotation-author-color: #0369a1; --annotation-author-soft: rgba(3, 105, 161, 0.16); }
+.annotation-author-color--14 { --annotation-author-color: #a21caf; --annotation-author-soft: rgba(162, 28, 175, 0.16); }
+.annotation-author-color--15 { --annotation-author-color: #15803d; --annotation-author-soft: rgba(21, 128, 61, 0.16); }
+.annotation-author-color--16 { --annotation-author-color: #b45309; --annotation-author-soft: rgba(180, 83, 9, 0.16); }
+.annotation-author-color--17 { --annotation-author-color: #4338ca; --annotation-author-soft: rgba(67, 56, 202, 0.16); }
+.annotation-author-color--18 { --annotation-author-color: #047857; --annotation-author-soft: rgba(4, 120, 87, 0.16); }
+.annotation-author-color--19 { --annotation-author-color: #b91c1c; --annotation-author-soft: rgba(185, 28, 28, 0.16); }
+.annotation-author-color--20 { --annotation-author-color: #6d28d9; --annotation-author-soft: rgba(109, 40, 217, 0.16); }
+.annotation-author-color--21 { --annotation-author-color: #0e7490; --annotation-author-soft: rgba(14, 116, 144, 0.16); }
+.annotation-author-color--22 { --annotation-author-color: #9f1239; --annotation-author-soft: rgba(159, 18, 57, 0.16); }
+.annotation-author-color--23 { --annotation-author-color: #3f6212; --annotation-author-soft: rgba(63, 98, 18, 0.16); }
 .annotation-author-color--ai { --annotation-author-color: #475569; --annotation-author-soft: rgba(71, 85, 105, 0.16); }
 
 /* Annotation form (floats beside a new point or region on the screenshot) */
@@ -2424,5 +2438,158 @@ body.review-fullscreen-open {
 
   .legal__title {
     font-size: 1.5rem;
+  }
+}
+
+/* Self-hosted instance administration */
+.instance-admin__header {
+  align-items: flex-start;
+}
+
+.instance-admin__intro {
+  color: var(--color-text-secondary);
+  margin-top: 0.35rem;
+  max-width: 42rem;
+}
+
+.instance-accounts {
+  display: grid;
+  gap: 1rem;
+}
+
+.instance-account {
+  align-items: center;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  padding: 1.25rem;
+}
+
+.instance-account__identity {
+  min-width: 0;
+}
+
+.instance-account__email {
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.instance-account__badges,
+.instance-account__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.instance-account__badges {
+  margin-top: 0.5rem;
+}
+
+.instance-account__actions {
+  justify-content: flex-end;
+}
+
+.instance-account__actions form {
+  display: inline-flex;
+}
+
+.instance-account__status {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+}
+
+.instance-account__status--active {
+  color: var(--color-success);
+}
+
+.instance-account__status--suspended {
+  color: var(--color-danger);
+}
+
+.instance-account__meta {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+}
+
+.recovery-reveal {
+  background: var(--color-info-bg);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius);
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+}
+
+.recovery-reveal__title {
+  color: var(--color-info-text);
+  font-size: 1rem;
+}
+
+.recovery-reveal__description {
+  margin: 0.35rem 0 1rem;
+}
+
+.recovery-reveal__input {
+  font-family: var(--font-mono);
+}
+
+.recovery-reveal__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.recovery-reveal__feedback {
+  color: var(--color-info-text);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 720px) {
+  .header {
+    padding-inline: 1rem;
+  }
+
+  .header__inner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .header__nav {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    width: 100%;
+  }
+
+  .header__email {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .instance-account {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .instance-account__actions {
+    justify-content: flex-start;
+  }
+
+  .instance-account__actions form,
+  .instance-account__actions .btn {
+    width: 100%;
+  }
+
+  .recovery-reveal__actions .btn {
+    width: 100%;
   }
 }

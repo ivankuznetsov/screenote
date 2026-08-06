@@ -6,26 +6,19 @@ module Api
     before_action :validate_upload_headers!
 
     def update
-      path_parameters = request.path_parameters
-      query_parameters = request.query_parameters
-      screenshot = Screenshot.find_by(id: path_parameters[:id])
-      unless screenshot
-        render json: { error: "Screenshot not found" }, status: :not_found
-        return
-      end
-
       # The signed-upload token is issued on a specific ScreenshotImage (any
       # viewport). Resolve via the token rather than hardcoding `:desktop` so
-      # multi-viewport uploads can PUT to their own viewport's upload URL.
-      # The URL still references the parent Screenshot for URL-shape stability
-      # with existing MCP clients.
-      screenshot_image = ScreenshotImage.find_by_token_for(:upload, query_parameters[:token])
-      unless screenshot_image && screenshot_image.screenshot_id == screenshot.id
+      # multi-viewport uploads can PUT to their own viewport's upload URL. The
+      # credential is accepted only in the Authorization header so proxies,
+      # browser history, and ordinary request logs never receive it in a URL.
+      screenshot_image = ScreenshotImage.find_by_token_for(:upload, upload_token)
+      unless screenshot_image && screenshot_image.screenshot_id.to_s == request.path_parameters[:id].to_s
         render json: { error: "Invalid or expired upload token" }, status: :unauthorized
         return
       end
+      screenshot = screenshot_image.screenshot
 
-      mime_type = query_parameters[:mime_type].presence || request.media_type.presence || "image/png"
+      mime_type = request.media_type.presence || "image/png"
       Snapshots::AttachImage.call(
         image: screenshot_image,
         io: request.body,
@@ -49,28 +42,35 @@ module Api
 
     private
 
+    def upload_token
+      scheme, credential = request.authorization.to_s.split(" ", 2)
+      return unless scheme&.casecmp?("Bearer")
+      return unless credential.present? && credential.ascii_only? && !credential.match?(/[[:space:][:cntrl:]]/)
+
+      credential
+    end
+
     def validate_upload_headers!
+      if request.query_parameters.key?(:token)
+        render_upload_error(
+          "Upload credentials must be sent in the Authorization header",
+          code: "credential_in_url"
+        )
+        return
+      end
+
       if request.content_length && request.content_length > ScreenshotImage::MAX_FILE_SIZE
         render_upload_error("File is too large", code: "file_too_large")
         return
       end
 
       media_type = request.media_type.to_s.downcase.presence
-      query_type = request.query_parameters[:mime_type].to_s.downcase.presence
-      unsupported_type = [ media_type, query_type ].compact.find do |content_type|
+      unsupported_type = [ media_type ].compact.find do |content_type|
         !content_type.in?(ScreenshotImage::ALLOWED_CONTENT_TYPES)
       end
       if unsupported_type
         render_upload_error("Invalid mime type. Must be a PNG or JPEG", code: "invalid_content_type")
-        return
       end
-
-      return unless media_type && query_type && media_type != query_type
-
-      render_upload_error(
-        "Request content type does not match the upload URL content type",
-        code: "content_type_mismatch"
-      )
     end
 
     def render_upload_error(message, code:)

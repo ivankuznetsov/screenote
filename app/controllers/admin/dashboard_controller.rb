@@ -2,7 +2,7 @@
 
 module Admin
   class DashboardController < ApplicationController
-    before_action :require_admin!
+    before_action :require_saas_operator!
 
     def show
       @verified_users_count = User.where.not(confirmed_at: nil).count
@@ -17,8 +17,9 @@ module Admin
 
     private
 
-    def require_admin!
-      return if Current.user&.admin?
+    def require_saas_operator!
+      return not_found unless Screenote::Deployment.current.saas?
+      return if Current.user.saas_operator?
 
       redirect_to dashboard_path, alert: "Not authorized."
     end

@@ -1,0 +1,470 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+umask 077
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly POSTGRESQL_16_IMAGE="docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
+readonly SELF_HOSTED_MANIFEST="${REPOSITORY_ROOT}/test/manifests/self_hosted.yml"
+readonly SYSTEM_TEST_BOOTSTRAP_TOKEN="screenote-system-test-bootstrap-token-0123456789abcdef0123456789abcdef"
+readonly MIGRATION_TESTS=(
+  test/migrations/repair_legacy_api_key_token_storage_test.rb
+  test/migrations/add_api_key_issuers_and_annotation_actors_test.rb
+  test/migrations/harden_oauth_principals_and_token_secrets_test.rb
+  test/migrations/identity_upgrade_test.rb
+  test/migrations/create_authentication_tokens_test.rb
+  test/migrations/add_account_recovery_provenance_test.rb
+)
+readonly CONCURRENCY_TESTS=(
+  test/integration/bootstrap_concurrency_test.rb
+  test/integration/invitation_acceptance_concurrency_test.rb
+  test/integration/instance_administration_concurrency_test.rb
+  test/integration/instance_credential_issuance_serialization_test.rb
+  test/integration/oauth_device_concurrency_test.rb
+  test/integration/oauth_dynamic_client_cleanup_concurrency_test.rb
+)
+readonly SECURITY_DATA_SELF_HOSTED_TESTS=(
+  test/integration/authorized_media_delivery_test.rb
+  test/integration/bearer_secret_upgrade_test.rb
+  test/integration/rate_limit_fail_closed_test.rb
+  test/controllers/bootstrap_controller_test.rb
+  test/controllers/account_recoveries_controller_test.rb
+  test/controllers/oauth/device_authorizations_controller_test.rb
+  test/controllers/api/v1/screenshot_images_controller_test.rb
+  test/integration/oauth_device_flow_test.rb
+  test/tools/mcp_auth_test.rb
+)
+readonly SECURITY_DATA_SAAS_TESTS=(
+  test/controllers/oauth/registrations_controller_test.rb
+)
+fail() {
+  printf 'release test matrix: %s\n' "$*" >&2
+  exit 1
+}
+
+require_file() {
+  [[ -f "${REPOSITORY_ROOT}/$1" ]] || fail "required test file is missing: $1"
+}
+
+require_executable() {
+  [[ -x "$1" ]] || fail "required executable is missing or not executable: $1"
+}
+
+require_value() {
+  local name="$1"
+  [[ -n "${!name-}" ]] || fail "${name} is required for this gate"
+}
+
+require_postgresql_test_url() {
+  local name="$1"
+  require_value "${name}"
+  ruby -ruri -e '
+    name, value = ARGV
+    uri = URI.parse(value)
+    database = uri.path.to_s.delete_prefix("/")
+    valid_scheme = %w[postgres postgresql].include?(uri.scheme)
+    valid_name = database.match?(/\A[a-zA-Z0-9_]*(?:test|ci)[a-zA-Z0-9_]*\z/)
+    abort "#{name} must be a dedicated PostgreSQL test/ci database URL" unless valid_scheme && valid_name
+  ' "${name}" "${!name}"
+}
+
+assert_distinct_urls() {
+  local first_name="$1"
+  local second_name="$2"
+  [[ "${!first_name}" != "${!second_name}" ]] ||
+    fail "${first_name} and ${second_name} must identify distinct databases"
+}
+
+prepare_database() {
+  env RAILS_ENV=test PARALLEL_WORKERS=1 "$@" bin/rails db:test:prepare
+}
+
+run_mode_suite() {
+  local mode="$1"
+  shift
+  assert_mode_booted "${mode}" "$@"
+  env -u SCREENOTE_REQUIRED_MODE RAILS_ENV=test PARALLEL_WORKERS=1 \
+    SCREENOTE_EDITION="${mode}" \
+    "$@" bin/rails test
+}
+
+assert_mode_booted() {
+  local mode="$1"
+  shift
+
+  env RAILS_ENV=test SCREENOTE_EDITION="${mode}" \
+    SCREENOTE_MATRIX_EXPECTED_MODE="${mode}" "$@" \
+    bin/rails runner '
+      expected = ENV.fetch("SCREENOTE_MATRIX_EXPECTED_MODE")
+      actual = Screenote::Deployment.current.edition.to_s
+      abort "release test matrix: expected #{expected} boot, got #{actual}" unless actual == expected
+    '
+}
+
+load_self_hosted_manifest_group() {
+  local selector="$1"
+
+  ruby -ryaml -e '
+    manifest_path, root, selector = ARGV
+    expected_capabilities = %w[
+      edition_boundary
+      boot_admission_admin
+      shared_core_http_rest
+      oauth_mcp_agent
+      security_runtime
+      operator_fast
+    ].freeze
+    expected_specialized = %w[s3 system_claimed system_unclaimed].freeze
+    required_saas_only = %w[
+      test/controllers/admin/dashboard_controller_test.rb
+      test/controllers/oauth/registrations_controller_test.rb
+      test/controllers/stripe_webhooks_controller_test.rb
+      test/controllers/subscriptions_controller_test.rb
+      test/integration/saas_credential_cutover_command_test.rb
+      test/integration/saas_postgresql_contract_test.rb
+      test/migrations/current_saas_upgrade_test.rb
+      test/models/stripe_webhook_event_test.rb
+      test/models/subscription_test.rb
+      test/services/screenote/saas_credential_cutover_test.rb
+      test/system/subscriptions_test.rb
+    ].freeze
+
+    abort "self-hosted manifest is missing: #{manifest_path}" unless File.file?(manifest_path)
+    manifest = YAML.safe_load(File.read(manifest_path), permitted_classes: [], aliases: false)
+    abort "self-hosted manifest must be a mapping" unless manifest.is_a?(Hash)
+    expected_keys = %w[version capabilities specialized saas_only]
+    abort "self-hosted manifest keys must equal #{expected_keys.join(", ")}" unless manifest.keys.sort == expected_keys.sort
+    abort "self-hosted manifest version must equal 1" unless manifest.fetch("version") == 1
+
+    capabilities = manifest.fetch("capabilities")
+    specialized = manifest.fetch("specialized")
+    saas_only = manifest.fetch("saas_only")
+    abort "self-hosted capabilities must be a mapping" unless capabilities.is_a?(Hash)
+    abort "self-hosted specialized groups must be a mapping" unless specialized.is_a?(Hash)
+    abort "self-hosted capability IDs drifted" unless capabilities.keys == expected_capabilities
+    abort "self-hosted specialized group IDs drifted" unless specialized.keys.sort == expected_specialized.sort
+
+    lists = capabilities.merge(specialized)
+    lists.each do |name, paths|
+      abort "self-hosted manifest group #{name} must be a non-empty list" unless paths.is_a?(Array) && paths.any?
+      abort "self-hosted manifest group #{name} must be sorted" unless paths == paths.sort
+      paths.each do |path|
+        abort "invalid self-hosted test path in #{name}: #{path.inspect}" unless path.is_a?(String) && path.match?(%r{\Atest/.+_test\.rb\z})
+      end
+    end
+
+    manifest_tests = lists.values.flatten
+    abort "self-hosted manifest contains duplicate tests" unless manifest_tests.uniq.length == manifest_tests.length
+    abort "saas_only must be a sorted unique list" unless saas_only.is_a?(Array) && saas_only == saas_only.sort && saas_only.uniq == saas_only
+    missing_saas_only = required_saas_only - saas_only
+    abort "self-hosted manifest lost known SaaS-only tests: #{missing_saas_only.join(", ")}" if missing_saas_only.any?
+    overlap = manifest_tests & saas_only
+    abort "tests cannot be both self-hosted and SaaS-only: #{overlap.join(", ")}" if overlap.any?
+
+    (manifest_tests + saas_only).each do |path|
+      absolute = File.expand_path(path, root)
+      abort "manifest path escapes the repository: #{path}" unless absolute.start_with?(File.expand_path(root) + File::SEPARATOR)
+      abort "manifest test is missing: #{path}" unless File.file?(absolute)
+    end
+
+    test_files = Dir.glob(File.join(root, "test/**/*_test.rb")).sort
+    marked = test_files.filter_map do |absolute|
+      contents = File.read(absolute)
+      absolute.delete_prefix("#{File.expand_path(root)}/") if contents.lines.any? { |line| line.chomp == "# screenote-edition: self_hosted" }
+    end
+    abort "self-hosted marker union does not equal the manifest" unless marked == manifest_tests.sort
+
+    convention_tests = test_files.filter_map do |absolute|
+      contents = File.read(absolute)
+      basename = File.basename(absolute)
+      if basename.start_with?("self_hosted_") || contents.match?(/require_deployment_mode!\(\s*:self_hosted\s*\)/)
+        absolute.delete_prefix("#{File.expand_path(root)}/")
+      end
+    end
+    missing_convention_tests = convention_tests - manifest_tests
+    if missing_convention_tests.any?
+      abort "self-hosted convention tests are absent from the manifest: #{missing_convention_tests.join(", ")}"
+    end
+
+    selected = selector == "self_hosted" ? capabilities.values.flatten : specialized.fetch(selector)
+    puts selected
+  ' "${SELF_HOSTED_MANIFEST}" "${REPOSITORY_ROOT}" "${selector}"
+}
+
+read_self_hosted_manifest_group() {
+  local selector="$1"
+  local destination_name="$2"
+  local output
+  local -n destination="${destination_name}"
+
+  output="$(load_self_hosted_manifest_group "${selector}")" ||
+    fail "self-hosted manifest validation failed"
+  mapfile -t destination <<<"${output}"
+  ((${#destination[@]} > 0)) || fail "self-hosted manifest group ${selector} is empty"
+}
+
+validate_manifest() {
+  local path
+  for path in "$@"; do
+    require_file "${path}"
+  done
+}
+
+clobber_precompiled_assets() {
+  # Propshaft prefers public/assets/.manifest.json over source assets. A prior
+  # image/precompile probe must not make browser tests execute stale JavaScript.
+  env RAILS_ENV=test bin/rails assets:clobber
+}
+
+run_postgresql_matrix() {
+  require_postgresql_test_url POSTGRESQL_TEST_DATABASE_URL
+  require_postgresql_test_url MIGRATION_TEST_DATABASE_URL
+  assert_distinct_urls POSTGRESQL_TEST_DATABASE_URL MIGRATION_TEST_DATABASE_URL
+  prepare_database DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" SCREENOTE_EDITION=saas
+  run_mode_suite saas DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" SCREENOTE_REQUIRE_POSTGRESQL=1
+  env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
+    MIGRATION_TEST_DATABASE_URL="${MIGRATION_TEST_DATABASE_URL}" \
+    bin/rails test "${MIGRATION_TESTS[@]}"
+}
+
+cd "${REPOSITORY_ROOT}"
+
+case "${1-}" in
+  self-hosted)
+    self_hosted_tests=()
+    read_self_hosted_manifest_group self_hosted self_hosted_tests
+    assert_mode_booted self_hosted
+    env RAILS_ENV=test PARALLEL_WORKERS=1 \
+      SCREENOTE_EDITION=self_hosted SCREENOTE_REQUIRED_MODE=self_hosted \
+      bin/rails test "${self_hosted_tests[@]}"
+    ;;
+  saas)
+    run_mode_suite saas
+    ;;
+  postgresql)
+    validate_manifest test/integration/saas_postgresql_contract_test.rb \
+      "${MIGRATION_TESTS[@]}" "${CONCURRENCY_TESTS[@]}"
+    run_postgresql_matrix
+    ;;
+  saas-upgrade)
+    require_postgresql_test_url SAAS_UPGRADE_DATABASE_URL
+    require_value SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET
+    [[ "${SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET}" == "1" ]] ||
+      fail "SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET must equal 1"
+    [[ -z "${POSTGRESQL_TEST_DATABASE_URL-}" ]] ||
+      assert_distinct_urls SAAS_UPGRADE_DATABASE_URL POSTGRESQL_TEST_DATABASE_URL
+    [[ -z "${MIGRATION_TEST_DATABASE_URL-}" ]] ||
+      assert_distinct_urls SAAS_UPGRADE_DATABASE_URL MIGRATION_TEST_DATABASE_URL
+    require_file test/migrations/current_saas_upgrade_test.rb
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
+      SCREENOTE_REQUIRE_SAAS_UPGRADE=1 \
+      SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET=1 \
+      SAAS_UPGRADE_DATABASE_URL="${SAAS_UPGRADE_DATABASE_URL}" \
+      bin/rails test test/migrations/current_saas_upgrade_test.rb
+    ;;
+  sqlite-production)
+    validate_manifest test/integration/self_hosted_database_configuration_test.rb \
+      "${MIGRATION_TESTS[@]}"
+    sqlite_root="$(mktemp -d "${TMPDIR:-/tmp}/screenote-sqlite-matrix.XXXXXX")"
+    trap 'rm -rf -- "${sqlite_root}"' EXIT
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=self_hosted \
+      MIGRATION_TEST_DATABASE_URL="sqlite3:${sqlite_root}/migration.sqlite3" \
+      bin/rails test test/integration/self_hosted_database_configuration_test.rb \
+      "${MIGRATION_TESTS[@]}"
+    ;;
+  invariants)
+    require_postgresql_test_url POSTGRESQL_TEST_DATABASE_URL
+    validate_manifest test/integration/database_constraint_contract_test.rb \
+      test/tools/mcp_security_contract_test.rb "${CONCURRENCY_TESTS[@]}"
+    sqlite_root="$(mktemp -d "${TMPDIR:-/tmp}/screenote-invariants.XXXXXX")"
+    trap 'rm -rf -- "${sqlite_root}"' EXIT
+    prepare_database DATABASE_URL="sqlite3:${sqlite_root}/primary.sqlite3" \
+      SCREENOTE_EDITION=self_hosted
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=self_hosted \
+      DATABASE_URL="sqlite3:${sqlite_root}/primary.sqlite3" \
+      bin/rails test test/integration/database_constraint_contract_test.rb \
+      test/tools/mcp_security_contract_test.rb "${CONCURRENCY_TESTS[@]}"
+    prepare_database DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" SCREENOTE_EDITION=saas
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
+      SCREENOTE_REQUIRE_POSTGRESQL=1 DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" \
+      bin/rails test test/integration/database_constraint_contract_test.rb \
+      test/tools/mcp_security_contract_test.rb "${CONCURRENCY_TESTS[@]}"
+    ;;
+  security-data)
+    validate_manifest "${SECURITY_DATA_SELF_HOSTED_TESTS[@]}" \
+      "${SECURITY_DATA_SAAS_TESTS[@]}"
+    sqlite_root="$(mktemp -d "${TMPDIR:-/tmp}/screenote-security-data.XXXXXX")"
+    trap 'rm -rf -- "${sqlite_root}"' EXIT
+    self_hosted_database="sqlite3:${sqlite_root}/self-hosted.sqlite3"
+    saas_database="sqlite3:${sqlite_root}/saas.sqlite3"
+    prepare_database DATABASE_URL="${self_hosted_database}" SCREENOTE_EDITION=self_hosted
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=self_hosted \
+      DATABASE_URL="${self_hosted_database}" \
+      bin/rails test "${SECURITY_DATA_SELF_HOSTED_TESTS[@]}"
+    prepare_database DATABASE_URL="${saas_database}" SCREENOTE_EDITION=saas
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
+      DATABASE_URL="${saas_database}" \
+      bin/rails test "${SECURITY_DATA_SAAS_TESTS[@]}"
+    ;;
+  system-collaboration)
+    system_unclaimed_tests=()
+    system_claimed_tests=()
+    read_self_hosted_manifest_group system_unclaimed system_unclaimed_tests
+    read_self_hosted_manifest_group system_claimed system_claimed_tests
+    clobber_precompiled_assets
+    env RAILS_ENV=test CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
+      SCREENOTE_EDITION=self_hosted SCREENOTE_REQUIRED_MODE=self_hosted \
+      SCREENOTE_BOOTSTRAP_TOKEN="${SYSTEM_TEST_BOOTSTRAP_TOKEN}" \
+      bin/rails test "${system_unclaimed_tests[@]}"
+    env -u SCREENOTE_BOOTSTRAP_TOKEN \
+      RAILS_ENV=test CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
+      SCREENOTE_EDITION=self_hosted SCREENOTE_REQUIRED_MODE=self_hosted \
+      SCREENOTE_PREPARE_CLAIMED_INSTALLATION=1 \
+      bin/rails test "${system_claimed_tests[@]}"
+    ;;
+  container-local)
+    require_executable "${REPOSITORY_ROOT}/script/self_hosted_container_smoke"
+    if [[ -n "${SCREENOTE_RELEASE_IMAGE-}" ]]; then
+      SCREENOTE_SMOKE_IMAGE="${SCREENOTE_RELEASE_IMAGE}" script/self_hosted_container_smoke
+    else
+      script/self_hosted_container_smoke
+    fi
+    ;;
+  s3)
+    self_hosted_s3_tests=()
+    read_self_hosted_manifest_group s3 self_hosted_s3_tests
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=self_hosted \
+      SCREENOTE_REQUIRE_S3=1 \
+      bin/rails test "${self_hosted_s3_tests[@]}"
+    ;;
+  backup-restore)
+    require_value SCREENOTE_RELEASE_IMAGE
+    [[ "${SCREENOTE_RELEASE_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]] ||
+      fail "SCREENOTE_RELEASE_IMAGE must be an immutable image digest"
+    require_executable "${REPOSITORY_ROOT}/script/self_hosted_backup_smoke"
+    script/self_hosted_backup_smoke "${SCREENOTE_RELEASE_IMAGE}"
+    ;;
+  public-cli)
+    require_value SCREENOTE_PUBLIC_CLI_TAG
+    require_value SCREENOTE_PUBLIC_CLI_SHA
+    require_value SCREENOTE_PUBLIC_CLI_CONTRACT_SCRIPT
+    require_value SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN
+    require_value SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN
+    require_value SCREENOTE_PUBLIC_CLI_EVIDENCE_DIRECTORY
+    require_value SCREENOTE_RELEASE_IMAGE
+    [[ "${SCREENOTE_PUBLIC_CLI_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+      fail "SCREENOTE_PUBLIC_CLI_TAG must be an exact semantic release tag"
+    [[ "${SCREENOTE_PUBLIC_CLI_SHA}" =~ ^[0-9a-f]{40}$ ]] ||
+      fail "SCREENOTE_PUBLIC_CLI_SHA must be an exact commit SHA"
+    [[ "${SCREENOTE_RELEASE_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]] ||
+      fail "SCREENOTE_RELEASE_IMAGE must be an immutable image digest"
+    require_executable "${SCREENOTE_PUBLIC_CLI_CONTRACT_SCRIPT}"
+    ruby -ruri -e '
+      origins = {"http" => ENV.fetch("SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN"),
+                 "https" => ENV.fetch("SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN")}
+      abort "HTTP and HTTPS CLI origins must be distinct" if origins.values.uniq.length != 2
+      origins.each do |scheme, origin|
+        uri = URI.parse(origin)
+        valid = uri.is_a?(URI::HTTP) && uri.scheme == scheme && uri.host &&
+          uri.userinfo.nil? && uri.path.to_s.empty? && uri.query.nil? && uri.fragment.nil?
+        authority = uri&.hostname.to_s
+        authority = "[#{authority}]" if authority.include?(":")
+        authority = "#{authority}:#{uri.port}" unless
+          (scheme == "http" && uri.port == 80) || (scheme == "https" && uri.port == 443)
+        abort "#{scheme.upcase} CLI origin must be one canonical #{scheme} origin" unless
+          valid && origin == "#{scheme}://#{authority}"
+      end
+    ' || fail "public CLI origins are invalid"
+
+    cli_evidence_root="$(mktemp -d "${TMPDIR:-/tmp}/screenote-public-cli.XXXXXX")"
+    trap 'rm -rf -- "${cli_evidence_root}"' EXIT
+    mkdir -p -- "${SCREENOTE_PUBLIC_CLI_EVIDENCE_DIRECTORY}"
+
+    for target in http https; do
+      if [[ "${target}" == http ]]; then
+        origin="${SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN}"
+      else
+        origin="${SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN}"
+      fi
+      raw_evidence="${cli_evidence_root}/${target}.json"
+      final_evidence="${SCREENOTE_PUBLIC_CLI_EVIDENCE_DIRECTORY}/${target}.json"
+      rm -f -- "${raw_evidence}" "${final_evidence}"
+
+      env -u SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN -u SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN \
+        SCREENOTE_PUBLIC_CLI_TARGET="${target}" \
+        SCREENOTE_PUBLIC_CLI_ORIGIN="${origin}" \
+        SCREENOTE_PUBLIC_CLI_EVIDENCE_PATH="${raw_evidence}" \
+        SCREENOTE_PUBLIC_CLI_TAG="${SCREENOTE_PUBLIC_CLI_TAG}" \
+        SCREENOTE_PUBLIC_CLI_SHA="${SCREENOTE_PUBLIC_CLI_SHA}" \
+        SCREENOTE_RELEASE_IMAGE="${SCREENOTE_RELEASE_IMAGE}" \
+        "${SCREENOTE_PUBLIC_CLI_CONTRACT_SCRIPT}"
+
+      [[ -f "${raw_evidence}" && ! -L "${raw_evidence}" ]] ||
+        fail "${target} CLI driver did not create a regular evidence file"
+      TARGET="${target}" ORIGIN="${origin}" EVIDENCE="${raw_evidence}" ruby -rjson -e '
+        evidence = JSON.parse(File.binread(ENV.fetch("EVIDENCE")))
+        expected_keys = %w[candidate_image cli_sha cli_tag origin schema status target tls]
+        abort "CLI evidence shape does not match" unless evidence.is_a?(Hash) &&
+          evidence.keys.sort == expected_keys.sort
+        abort "CLI evidence identity does not match" unless
+          evidence["schema"] == "screenote-public-cli-qualification/v1" &&
+            evidence["status"] == "passed" && evidence["target"] == ENV.fetch("TARGET") &&
+            evidence["origin"] == ENV.fetch("ORIGIN") &&
+            evidence["candidate_image"] == ENV.fetch("SCREENOTE_RELEASE_IMAGE") &&
+            evidence["cli_tag"] == ENV.fetch("SCREENOTE_PUBLIC_CLI_TAG") &&
+            evidence["cli_sha"] == ENV.fetch("SCREENOTE_PUBLIC_CLI_SHA")
+        tls = evidence["tls"]
+        abort "CLI TLS evidence shape does not match" unless tls.is_a?(Hash) &&
+          tls.keys.sort == %w[verified wrong_ca_rejected wrong_hostname_rejected]
+        expected_tls = ENV.fetch("TARGET") == "https"
+        abort "CLI TLS evidence does not match target" unless
+          tls.values.all? { |value| value == expected_tls }
+      ' || fail "${target} CLI evidence is invalid"
+
+      install -m 600 -- "${raw_evidence}" "${final_evidence}"
+    done
+    ;;
+  release-artifact)
+    require_executable "${REPOSITORY_ROOT}/bin/release-validate"
+    bin/release-validate
+    ;;
+  coverage)
+    self_hosted_tests=()
+    read_self_hosted_manifest_group self_hosted self_hosted_tests
+    rm -f -- "${REPOSITORY_ROOT}/coverage/.resultset.json"
+    coverage_rubyopt="-r${REPOSITORY_ROOT}/test/support/coverage_boot"
+    assert_mode_booted saas
+    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
+      COVERAGE=true SCREENOTE_DEFER_COVERAGE_GATE=1 TEST_ENV_NUMBER=1 \
+      RUBYOPT="${RUBYOPT:+${RUBYOPT} }${coverage_rubyopt}" \
+      bin/rails test
+    assert_mode_booted self_hosted
+    env COVERAGE=true SCREENOTE_DEFER_COVERAGE_GATE=1 TEST_ENV_NUMBER=2 \
+      SCREENOTE_EDITION=self_hosted SCREENOTE_REQUIRED_MODE=self_hosted \
+      RUBYOPT="${RUBYOPT:+${RUBYOPT} }${coverage_rubyopt}" \
+      PARALLEL_WORKERS=1 bin/rails test "${self_hosted_tests[@]}"
+    coverage_base="$(git merge-base HEAD origin/main)" ||
+      fail "coverage requires origin/main and a common ancestor"
+    bin/check_coverage \
+      --manifest test/manifests/release_security_coverage.yml \
+      --base "${coverage_base}"
+    ;;
+  image)
+    printf '%s\n' "${POSTGRESQL_16_IMAGE}"
+    ;;
+  *)
+    cat >&2 <<'USAGE'
+Usage: script/release_test_matrix GATE
+
+PR gates:
+  self-hosted saas postgresql saas-upgrade sqlite-production invariants
+  security-data system-collaboration container-local s3 coverage
+
+Release-only gates (missing evidence fails closed):
+  public-cli backup-restore release-artifact
+
+PostgreSQL is pinned to docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b.
+USAGE
+    exit 64
+    ;;
+esac

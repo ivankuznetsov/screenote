@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "optparse"
+require_relative "../lib/screenote/self_hosted/host_operations"
+
+options = { compose_files: [], project_name: "screenote", timeout: 120 }
+parser = OptionParser.new do |value|
+  value.banner = "Usage: bin/self-host-diagnostics --compose-file ABSOLUTE_FILE [--compose-file OVERLAY ...]"
+  value.on("--compose-file FILE") { |input| options[:compose_files] << input }
+  value.on("--project-name NAME") { |input| options[:project_name] = input }
+end
+
+begin
+  parser.parse!(ARGV)
+  unless ARGV.empty?
+    warn parser
+    exit 64
+  end
+  exit Screenote::SelfHosted::HostOperations::DiagnosticsCommand.new(options).call
+rescue OptionParser::ParseError => error
+  warn "self-host diagnostics: #{error.message}"
+  exit 64
+end

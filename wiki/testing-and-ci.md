@@ -41,6 +41,12 @@ BUNDLE_PATH=vendor/bundle CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
 Use the same environment for a focused system file. Serial execution keeps the
 shared server, jobs, and Active Storage fixtures deterministic.
 
+`script/release_test_matrix system-collaboration` clobbers ignored precompiled
+assets before starting the in-process server. Propshaft gives
+`public/assets/.manifest.json` precedence over source assets, so artifacts left
+by an earlier image or precompile probe could otherwise make Playwright execute
+stale JavaScript while the test reports against current source.
+
 `ApplicationSystemTestCase` replaces the test environment's `NullStore` with a
 fresh in-memory cache for each test and restores it during teardown. This keeps
 rate-limit state isolated while allowing fail-closed request paths to run
@@ -52,6 +58,13 @@ workspace. It covers point clicks, area drags, in-place composer placement,
 fullscreen with comments open or collapsed, marker/thread selection, long
 captures, and a multi-user thread where one project member creates feedback and
 another replies before the first member reads the response.
+
+The required self-hosted browser manifest repeats that cross-session outcome in
+the edition it ships: the original collaborator reloads and reads the other
+member's reply. Its instance-administration scenarios also prove that suspension
+invalidates an existing browser session, restoration requires a fresh sign-in,
+and a private recovery link resets credentials once in a separate session while
+rejecting replay and the former password.
 
 `DEVICE_SCALE_FACTOR` configures the Playwright context for responsive-image
 proof. Run `test/system/pages_test.rb` at both `1` and `2`; its responsive card
@@ -83,3 +96,47 @@ security scans, Rails tests, seed validation, and any configured Go tests. Set
 coverage mode forces one Rails worker for stable accounting. System tests are
 currently commented out as optional in `config/ci.rb`, so run the Playwright
 command above separately when browser behavior changes.
+
+The required-PR source-release coverage gate is narrower and stricter than the
+legacy whole-application option. `script/release_test_matrix coverage` starts
+SimpleCov through `RUBYOPT` before Rails can load edition-specific code, merges
+the independent SaaS and positive-manifest self-hosted runs, and compares the
+working tree with the current branch's `origin/main` merge base. The explicit
+`test/manifests/release_security_coverage.yml` source manifest must name the
+deployment, bootstrap, invitation, principal, suspension, recovery, and
+administrator-transfer boundaries. Every executable changed line and changed
+branch arm in those files must be covered; missing instrumentation, source
+manifest drift, an invalid base, or an empty security diff fails closed.
+The manifest includes every changed controller that delivers one of those
+flows, and `CI / coverage` runs this gate for every pull request; controller
+delivery code cannot be deferred to a release-only handoff check.
+Integration and system test bases replace the test environment's `NullStore`
+with a fresh controller `MemoryStore` for each test, then restore it in teardown.
+This keeps the production fail-closed rate-limit wrappers active in tests
+without sharing throttle state across cases.
+Sorted discovery patterns must expand to exactly the union of the seven domain
+lists, including ignored untracked paths, so a newly added security source
+cannot silently sit outside the positive manifest. Branch selection intersects
+changed lines with each SimpleCov condition and arm's full source range, which
+also covers continuation lines in multiline predicates.
+
+Critical admission and authority races use a deterministic one-shot barrier
+inside the first transaction after it holds the intended installation, user,
+invitation, or authentication-token lock. A second independent connection must
+remain blocked before the first is released; outcome-only simultaneous-start
+tests are not sufficient proof because they can accidentally execute serially.
+
+Final-image dependency probes must execute Ruby through Bundler. The release
+image intentionally isolates deployment gems under `BUNDLE_PATH`, so a bare
+`ruby` process is not equivalent to the Rails runtime and can report false
+missing-gem failures. The CI image probe uses `bundle exec ruby` and verifies
+both the selected S3 SDK and libvips binding from the final image.
+
+Required pull-request jobs prove source contracts and are recorded with
+`scope: pr_contract_only`; their names or success conclusions are never release
+qualification evidence. The separate manual release-qualification workflow
+downloads the exact retained candidate artifact by live ID, verifies its bytes
+and OCI identities, and emits one redacted artifact only after all eight
+architecture, edition, recovery, load, and public-CLI outcomes pass. Publish
+authorization downloads and compares those exact bytes through the Actions API
+instead of trusting a committed status claim. See [[self-hosting]].

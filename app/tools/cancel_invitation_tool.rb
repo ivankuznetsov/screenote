@@ -16,19 +16,26 @@ class CancelInvitationTool < ApplicationTool
     return error if error
 
     with_error_handling do
-      unless current_project.owner?(current_user)
-        return { error: "forbidden", message: "Only project owners can cancel invitations" }.to_json
+      result = ProjectInvitations::Cancel.call(
+        principal: current_principal,
+        project: current_project,
+        invitation_id: invitation_id
+      )
+
+      case result.status
+      when :cancelled
+        { success: true, status: "cancelled", invitation_id: result.invitation.id }.to_json
+      when :already_cancelled
+        { success: true, status: "already_cancelled", invitation_id: result.invitation.id }.to_json
+      when :already_accepted
+        { error: "already_accepted", message: "This invitation has already been accepted" }.to_json
+      when :forbidden
+        { error: "forbidden", message: "Only active project owners can cancel invitations" }.to_json
+      when :not_found
+        { error: "not_found", message: "Project invitation not found" }.to_json
+      when :retryable_busy
+        { error: "retryable_busy", message: "Invitation cancellation is busy; retry the request" }.to_json
       end
-
-      invitation = current_project.project_invitations.find(invitation_id)
-
-      unless invitation.pending?
-        return { error: "already_accepted", message: "This invitation has already been accepted" }.to_json
-      end
-
-      invitation.destroy!
-
-      { success: true, message: "Invitation to #{invitation.email} cancelled" }.to_json
     end
   end
 end

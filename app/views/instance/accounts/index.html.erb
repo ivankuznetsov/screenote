@@ -1,0 +1,67 @@
+<%= link_to "← Back to projects", dashboard_path, class: "breadcrumb-link" %>
+
+<div class="page-header instance-admin__header">
+  <div>
+    <h1 class="page-header__title">Instance administration</h1>
+    <p class="instance-admin__intro">
+      Manage account access without opening or joining anyone's projects.
+    </p>
+  </div>
+</div>
+
+<div id="recovery-reveal-container">
+  <%= render "recovery_reveal", recovery: @recovery if @recovery %>
+</div>
+
+<div class="instance-accounts" data-testid="instance-accounts">
+  <% @accounts.each do |account| %>
+    <article class="instance-account" data-testid="instance-account">
+      <div class="instance-account__identity">
+        <h2 class="instance-account__email"><%= account.email %></h2>
+        <div class="instance-account__badges">
+          <span class="instance-account__status instance-account__status--<%= account.access_status %>">
+            <%= account.access_status.capitalize %>
+          </span>
+          <% if account.administrator %>
+            <span class="role-badge role-badge--owner">Instance administrator</span>
+          <% end %>
+        </div>
+        <p class="instance-account__meta">Account created <%= time_ago_in_words(account.created_at) %> ago</p>
+      </div>
+
+      <div class="instance-account__actions" aria-label="Actions for <%= account.email %>">
+        <% if account.active? %>
+          <%= button_to "Issue recovery",
+                issue_recovery_instance_account_path(account.id),
+                method: :post,
+                class: "btn btn--secondary btn--small",
+                data: { turbo_confirm: "Create a new 15-minute recovery link and invalidate any prior link?" } %>
+          <%= button_to "Revoke credentials",
+                revoke_credentials_instance_account_path(account.id),
+                method: :post,
+                class: "btn btn--warning btn--small",
+                data: { turbo_confirm: "Sign this account out and revoke its OAuth tokens, issued API keys, and pending links?" } %>
+          <% unless account.administrator %>
+            <%= button_to "Suspend",
+                  suspend_instance_account_path(account.id),
+                  method: :post,
+                  class: "btn btn--danger btn--small",
+                  data: { turbo_confirm: "Suspend this account and revoke every credential it controls?" } %>
+            <%= button_to "Transfer administration",
+                  instance_administrator_transfer_path,
+                  method: :post,
+                  params: { administrator_id: account.id },
+                  class: "btn btn--secondary btn--small",
+                  data: { turbo_confirm: "Transfer instance administration to #{account.email}? You will immediately lose instance powers." } %>
+          <% end %>
+        <% else %>
+          <%= button_to "Restore",
+                restore_instance_account_path(account.id),
+                method: :post,
+                class: "btn btn--primary btn--small",
+                data: { turbo_confirm: "Restore sign-in for this account? Previously revoked credentials will stay revoked." } %>
+        <% end %>
+      </div>
+    </article>
+  <% end %>
+</div>

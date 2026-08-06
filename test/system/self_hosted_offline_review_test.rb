@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require_relative "application_system_test_case"
 require_relative "pages/projects_page"
 require_relative "pages/pages_page"

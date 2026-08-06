@@ -2,7 +2,7 @@
 
 class CreateScreenshotUploadTool < ApplicationTool
   tool_name "create_screenshot_upload"
-  description "Create a screenshot record and get a signed upload URL. Upload the image file directly via curl to the returned URL — no base64 needed."
+  description "Create a screenshot record and one-time upload credential. PUT the image to upload_url with Authorization: Bearer <token> and the returned content_type."
   mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
@@ -32,7 +32,7 @@ class CreateScreenshotUploadTool < ApplicationTool
 
       upload_url = Rails.application.routes.url_helpers.api_screenshot_upload_url(
         screenshot,
-        Screenote::Deployment.current.url_options.merge(token: token, mime_type: mime_type)
+        Screenote::Deployment.current.url_options
       )
 
       annotate_url = Rails.application.routes.url_helpers.screenshot_url(
@@ -44,6 +44,8 @@ class CreateScreenshotUploadTool < ApplicationTool
         screenshot_id: screenshot.id,
         page_id: page.id,
         upload_url: upload_url,
+        token: token,
+        content_type: mime_type,
         annotate_url: annotate_url
       }.to_json
     end

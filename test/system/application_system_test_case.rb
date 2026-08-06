@@ -33,12 +33,16 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     # limiters unavailable. Give each system test a functional isolated store
     # so in-process browser/API requests exercise limits without sharing state.
     @original_system_test_cache = Rails.cache
-    Rails.cache = ActiveSupport::Cache::MemoryStore.new
+    @original_system_controller_cache_store = ActionController::Base.cache_store
+    isolated_store = ActiveSupport::Cache::MemoryStore.new
+    Rails.cache = isolated_store
+    ActionController::Base.cache_store = isolated_store
   end
 
   teardown do
     take_screenshot unless passed?
   ensure
+    ActionController::Base.cache_store = @original_system_controller_cache_store
     Rails.cache = @original_system_test_cache
   end
 
@@ -92,6 +96,8 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   def visit_app_url(url)
     uri = URI.parse(url)
-    visit uri.request_uri
+    destination = uri.request_uri
+    destination = "#{destination}##{uri.fragment}" if uri.fragment
+    visit destination
   end
 end

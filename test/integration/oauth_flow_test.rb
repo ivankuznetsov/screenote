@@ -69,6 +69,57 @@ class OauthFlowTest < ActionDispatch::IntegrationTest
     assert_includes response.location, "session", "Should redirect to login"
   end
 
+  test "invalid authorization submissions are delegated to Doorkeeper without principal selection" do
+    sign_in(@user)
+
+    assert_no_difference "Doorkeeper::AccessGrant.count" do
+      post "/oauth/authorize", params: {
+        client_id: "missing-client",
+        redirect_uri: LOOPBACK_REDIRECT_URI,
+        response_type: "code",
+        scope: "mcp_read",
+        code_challenge: "invalid",
+        code_challenge_method: "S256"
+      }
+    end
+
+    assert_response :unauthorized
+  end
+
+  test "user consent fails closed if the principal becomes invalid under lock" do
+    client = create_oauth_application(name: "Racing user client", redirect_uri: LOOPBACK_REDIRECT_URI)
+    _verifier, code_challenge = generate_pkce_challenge
+    sign_in(@user)
+    oauth_params = authorization_request_params(client: client, code_challenge: code_challenge)
+    invalid_lock = ->(user:, credential: nil, &block) { block.call(false, user) }
+
+    with_singleton_method(Oauth::PrincipalBinding, :with_locked_user, invalid_lock) do
+      assert_no_difference "Doorkeeper::AccessGrant.count" do
+        post "/oauth/authorize", params: oauth_params
+      end
+    end
+
+    assert_response :unprocessable_content
+    assert_select "[data-testid='oauth-principal-error']", text: /currently belong to/i
+  end
+
+  test "authorization fails closed when a dynamic client disappears before locking" do
+    client = create_oauth_application(name: "Vanishing client", redirect_uri: LOOPBACK_REDIRECT_URI)
+    _verifier, code_challenge = generate_pkce_challenge
+    sign_in(@user)
+    oauth_params = authorization_request_params(client: client, code_challenge: code_challenge)
+    unavailable = ->(*) { raise Oauth::DynamicClientRegistration::ApplicationUnavailable }
+
+    with_singleton_method(Oauth::DynamicClientRegistration, :with_application_lock, unavailable) do
+      assert_no_difference "Doorkeeper::AccessGrant.count" do
+        post "/oauth/authorize", params: oauth_params
+      end
+    end
+
+    assert_response :unprocessable_content
+    assert_includes response.body, "OAuth client is no longer available"
+  end
+
   test "authorization consent uses application wording for the Screenote CLI" do
     client = create_oauth_application(name: "Screenote CLI", redirect_uri: LOOPBACK_REDIRECT_URI)
     _verifier, code_challenge = generate_pkce_challenge
@@ -131,6 +182,29 @@ class OauthFlowTest < ActionDispatch::IntegrationTest
     }
 
     assert_response :bad_request, "Should reject token request without PKCE verifier"
+  end
+
+  test "token exchange delegates missing clients and rejects clients lost before locking" do
+    post "/oauth/token", params: {
+      grant_type: "authorization_code",
+      code: "missing-code",
+      client_id: "missing-client"
+    }
+    assert_response :bad_request
+
+    client = create_oauth_application(name: "Unavailable token client", redirect_uri: LOOPBACK_REDIRECT_URI)
+    unavailable = ->(*) { raise Oauth::DynamicClientRegistration::ApplicationUnavailable }
+    with_singleton_method(Oauth::DynamicClientRegistration, :with_application_lock, unavailable) do
+      post "/oauth/token", params: {
+        grant_type: "authorization_code",
+        code: "missing-code",
+        client_id: client.uid
+      }
+    end
+
+    assert_response :bad_request
+    assert_equal "invalid_grant", response.parsed_body["error"]
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
   end
 
   test "refresh token flow" do
@@ -485,6 +559,14 @@ class OauthFlowTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def with_singleton_method(receiver, name, replacement)
+    original = receiver.method(name)
+    receiver.define_singleton_method(name, replacement)
+    yield
+  ensure
+    receiver.define_singleton_method(name, original) if original
+  end
 
   def authorization_request_params(client:, code_challenge:, scope: "mcp_read mcp_write")
     {

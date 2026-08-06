@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 module Oauth
@@ -28,6 +30,10 @@ module Oauth
 
     test "invalid and expired user codes are rejected without authorizing" do
       sign_in(@user)
+
+      get "/oauth/device", params: { user_code: "not-a-code" }
+      assert_response :unprocessable_entity
+      assert_select "[data-testid='device-code-error']", text: /invalid or expired/i
 
       get "/oauth/device", params: { user_code: "WRONG-CODE0" }
       assert_response :unprocessable_entity
@@ -111,6 +117,105 @@ module Oauth
       assert_nil grant.approved_at
     end
 
+    test "verification page accepts code entry before a code is supplied" do
+      sign_in(@user)
+
+      get "/oauth/device"
+
+      assert_response :success
+      assert_select "form[action='/oauth/device'][method='get']"
+      assert_select "input[name='user_code']"
+    end
+
+    test "update rejects a missing decision without mutating the grant" do
+      codes = initiate_device_authorization
+      sign_in(@user)
+
+      post "/oauth/device", params: { user_code: codes["user_code"] }
+
+      assert_response :unprocessable_entity
+      assert_equal "Choose Approve or Deny.", response.body
+      grant = grant_for(codes).reload
+      assert_nil grant.resource_owner_id
+      assert_nil grant.approved_at
+      assert_nil grant.denied_at
+    end
+
+    test "update rejects a missing user code instead of returning an empty success" do
+      sign_in(@user)
+
+      post "/oauth/device", params: { decision: "approve" }
+
+      assert_response :unprocessable_entity
+      assert_select "[data-testid='device-code-error']", text: /invalid or expired/i
+    end
+
+    test "account approval rejects authority lost after code lookup" do
+      codes = initiate_device_authorization
+      sign_in(@user)
+      expected_user = @user
+      expected_grant = grant_for(codes)
+      replacement = lambda do |user:, credential:, &block|
+        raise "unexpected user" unless user == expected_user
+        raise "unexpected grant" unless credential == expected_grant
+
+        block.call(false, nil)
+      end
+
+      with_singleton_method(PrincipalBinding, :with_locked_user, replacement) do
+        post "/oauth/device", params: { user_code: codes["user_code"], decision: "approve" }
+      end
+
+      assert_response :unprocessable_entity
+      assert_select "[data-testid='device-code-error']", text: /invalid or expired/i
+      assert_nil grant_for(codes).reload.approved_at
+    end
+
+    test "project approval rejects a grant consumed after authority locking" do
+      codes = initiate_device_authorization
+      sign_in(@user)
+      project = @user.projects.first!
+      expected_user = @user
+      expected_project_id = project.id.to_s
+      replacement = lambda do |user:, project_id:, credential:, &block|
+        raise "unexpected user" unless user == expected_user
+        raise "unexpected project" unless expected_project_id == project_id.to_s
+
+        credential.update_column(:denied_at, Time.current)
+        block.call(true)
+      end
+
+      with_singleton_method(PrincipalBinding, :with_locked_project, replacement) do
+        post "/oauth/device", params: {
+          user_code: codes["user_code"],
+          decision: "approve",
+          principal_project_id: project.id
+        }
+      end
+
+      assert_response :unprocessable_entity
+      assert_select "[data-testid='device-code-error']", text: /invalid or expired/i
+      assert_nil grant_for(codes).reload.approved_at
+    end
+
+    test "denial rejects a grant consumed between lookup and row lock" do
+      codes = initiate_device_authorization
+      sign_in(@user)
+      grant = grant_for(codes)
+      grant.define_singleton_method(:with_lock) do |&block|
+        update_column(:expires_at, 1.second.ago)
+        block.call
+      end
+
+      with_singleton_method(OauthDeviceGrant, :find_by, ->(**) { grant }) do
+        post "/oauth/device", params: { user_code: codes["user_code"], decision: "deny" }
+      end
+
+      assert_response :unprocessable_entity
+      assert_select "[data-testid='device-code-error']", text: /invalid or expired/i
+      assert_nil grant.reload.denied_at
+    end
+
     private
 
     def initiate_device_authorization
@@ -123,6 +228,14 @@ module Oauth
 
     def grant_for(codes)
       OauthDeviceGrant.find_by_plaintext_device_code(codes["device_code"])
+    end
+
+    def with_singleton_method(object, name, implementation)
+      original = object.method(name)
+      object.define_singleton_method(name, implementation)
+      yield
+    ensure
+      object.define_singleton_method(name, original) if original
     end
   end
 end

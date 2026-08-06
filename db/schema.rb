@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_05_131000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_05_134000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -96,6 +96,56 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_131000) do
     t.index ["project_id"], name: "index_api_keys_on_project_id"
     t.index ["token_digest"], name: "index_api_keys_on_token_digest", unique: true
     t.check_constraint "revoked_at IS NOT NULL OR issued_by_user_id IS NOT NULL", name: "api_keys_active_requires_issuer"
+  end
+
+  create_table "authentication_tokens", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "derivation_id", limit: 64, null: false
+    t.string "derivation_key_id", limit: 46, null: false
+    t.datetime "expires_at", null: false
+    t.bigint "generation", null: false
+    t.integer "issued_by_user_id"
+    t.integer "project_invitation_id"
+    t.integer "purpose", null: false
+    t.integer "state", default: 0, null: false
+    t.datetime "terminal_at"
+    t.string "token_digest", limit: 64, null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id"
+    t.index ["derivation_id"], name: "index_authentication_tokens_on_derivation_id", unique: true
+    t.index ["issued_by_user_id", "state"], name: "index_auth_tokens_on_recovery_issuer_state", where: "purpose = 4"
+    t.index ["project_invitation_id"], name: "index_authentication_tokens_on_project_invitation_id"
+    t.index ["purpose", "project_invitation_id", "generation"], name: "index_auth_tokens_on_invitation_generation", unique: true, where: "project_invitation_id IS NOT NULL"
+    t.index ["purpose", "project_invitation_id"], name: "index_auth_tokens_on_outstanding_invitation", unique: true, where: "state = 0 AND project_invitation_id IS NOT NULL"
+    t.index ["purpose", "user_id", "generation"], name: "index_auth_tokens_on_user_generation", unique: true, where: "user_id IS NOT NULL"
+    t.index ["purpose", "user_id"], name: "index_auth_tokens_on_outstanding_user", unique: true, where: "state = 0 AND user_id IS NOT NULL"
+    t.index ["state", "derivation_key_id"], name: "index_authentication_tokens_on_state_and_derivation_key_id"
+    t.index ["state", "expires_at"], name: "index_authentication_tokens_on_state_and_expires_at"
+    t.index ["token_digest"], name: "index_authentication_tokens_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_authentication_tokens_on_user_id"
+    t.check_constraint "(purpose = 0 AND project_invitation_id IS NOT NULL AND user_id IS NULL) OR (purpose IN (1, 2, 3, 4) AND user_id IS NOT NULL AND project_invitation_id IS NULL)", name: "authentication_tokens_exact_subject"
+    t.check_constraint "(purpose = 4 AND issued_by_user_id IS NOT NULL) OR (purpose <> 4 AND issued_by_user_id IS NULL)", name: "authentication_tokens_recovery_issuer"
+    t.check_constraint "(state = 0 AND terminal_at IS NULL) OR (state IN (1, 2, 3) AND terminal_at IS NOT NULL AND terminal_at >= created_at)", name: "authentication_tokens_terminal_state"
+    t.check_constraint "expires_at > created_at", name: "authentication_tokens_future_expiry"
+    t.check_constraint "generation > 0", name: "authentication_tokens_positive_generation"
+    t.check_constraint "length(\"derivation_id\") = 64 AND replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(\"derivation_id\", '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '') = ''", name: "authentication_tokens_derivation_id_length"
+    t.check_constraint "length(\"derivation_key_id\") = 46 AND substr(\"derivation_key_id\", 1, 3) = 'v1.' AND replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(substr(\"derivation_key_id\", 4), 'A', ''), 'B', ''), 'C', ''), 'D', ''), 'E', ''), 'F', ''), 'G', ''), 'H', ''), 'I', ''), 'J', ''), 'K', ''), 'L', ''), 'M', ''), 'N', ''), 'O', ''), 'P', ''), 'Q', ''), 'R', ''), 'S', ''), 'T', ''), 'U', ''), 'V', ''), 'W', ''), 'X', ''), 'Y', ''), 'Z', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', ''), 'g', ''), 'h', ''), 'i', ''), 'j', ''), 'k', ''), 'l', ''), 'm', ''), 'n', ''), 'o', ''), 'p', ''), 'q', ''), 'r', ''), 's', ''), 't', ''), 'u', ''), 'v', ''), 'w', ''), 'x', ''), 'y', ''), 'z', ''), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), '_', ''), '-', '') = ''", name: "authentication_tokens_key_id_format"
+    t.check_constraint "length(\"token_digest\") = 64 AND replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(\"token_digest\", '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '') = ''", name: "authentication_tokens_digest_length"
+    t.check_constraint "purpose IN (0, 1, 2, 3, 4)", name: "authentication_tokens_valid_purpose"
+    t.check_constraint "state IN (0, 1, 2, 3)", name: "authentication_tokens_valid_state"
+  end
+
+  create_table "installation_audit_events", force: :cascade do |t|
+    t.integer "actor_user_id"
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.integer "installation_id", null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "target_user_id"
+    t.index ["actor_user_id"], name: "index_installation_audit_events_on_actor_user_id"
+    t.index ["installation_id"], name: "index_installation_audit_events_on_installation_id"
+    t.index ["target_user_id"], name: "index_installation_audit_events_on_target_user_id"
+    t.check_constraint "event_type <> '' AND event_type = LOWER(TRIM(event_type))", name: "installation_audit_events_normalized_type"
   end
 
   create_table "installations", force: :cascade do |t|
@@ -220,9 +270,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_131000) do
     t.integer "project_id", null: false
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.index "project_id, LOWER(TRIM(email))", name: "index_project_invitations_on_pending_normalized_email", unique: true, where: "status = 0"
     t.index ["inviter_id"], name: "index_project_invitations_on_inviter_id"
-    t.index ["project_id", "email", "status"], name: "index_project_invitations_on_project_id_and_email_and_status"
     t.index ["project_id"], name: "index_project_invitations_on_project_id"
+    t.check_constraint "email <> '' AND email = LOWER(TRIM(email))", name: "project_invitations_normalized_email"
+    t.check_constraint "status IN (0, 1, 2)", name: "project_invitations_valid_status"
   end
 
   create_table "project_memberships", force: :cascade do |t|
@@ -319,6 +371,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_131000) do
   end
 
   create_table "users", force: :cascade do |t|
+    t.integer "access_status", default: 0, null: false
     t.datetime "confirmed_at"
     t.datetime "created_at", null: false
     t.string "email", null: false
@@ -326,8 +379,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_131000) do
     t.string "oauth_uid"
     t.string "password_digest", null: false
     t.datetime "updated_at", null: false
+    t.index "LOWER(TRIM(email))", name: "index_users_on_normalized_email", unique: true
     t.index ["confirmed_at"], name: "index_users_on_confirmed_at"
-    t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["oauth_provider", "oauth_uid"], name: "index_users_on_oauth_identity", unique: true, where: "oauth_provider IS NOT NULL AND oauth_uid IS NOT NULL"
+    t.check_constraint "(oauth_provider IS NULL AND oauth_uid IS NULL) OR (oauth_provider IS NOT NULL AND oauth_uid IS NOT NULL AND oauth_provider <> '' AND oauth_uid <> '' AND oauth_provider = LOWER(TRIM(oauth_provider)) AND oauth_uid = TRIM(oauth_uid))", name: "users_valid_oauth_identity"
+    t.check_constraint "access_status IN (0, 1)", name: "users_valid_access_status"
+    t.check_constraint "email <> '' AND email = LOWER(TRIM(email))", name: "users_normalized_email"
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
@@ -342,6 +399,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_131000) do
   add_foreign_key "annotations", "users", column: "resolved_by_user_id"
   add_foreign_key "api_keys", "projects"
   add_foreign_key "api_keys", "users", column: "issued_by_user_id"
+  add_foreign_key "authentication_tokens", "project_invitations"
+  add_foreign_key "authentication_tokens", "users"
+  add_foreign_key "authentication_tokens", "users", column: "issued_by_user_id"
+  add_foreign_key "installation_audit_events", "installations"
+  add_foreign_key "installation_audit_events", "users", column: "actor_user_id"
+  add_foreign_key "installation_audit_events", "users", column: "target_user_id"
   add_foreign_key "installations", "users", column: "administrator_id"
   add_foreign_key "oauth_access_grants", "oauth_applications", column: "application_id", on_delete: :cascade
   add_foreign_key "oauth_access_grants", "projects", on_delete: :cascade

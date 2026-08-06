@@ -1,12 +1,102 @@
 <div class="invitation-acceptance">
-  <h1>You've been invited</h1>
+  <h1>Project invitation</h1>
 
-  <p>
-    <strong><%= @invitation.inviter.email %></strong> invited you to collaborate on
-    "<strong><%= @invitation.project.name %></strong>" on Screenote.
-  </p>
+  <% if @invitation %>
+    <p>
+      <strong><%= @invitation.inviter.email %></strong> invited
+      <strong><%= @invitation.email %></strong> to collaborate on
+      "<strong><%= @invitation.project.name %></strong>".
+    </p>
+  <% end %>
 
-  <%= form_with url: accept_invitation_path(params[:token]), method: :post, class: "invitation-acceptance__form", data: { turbo_submits_with: "Accepting…" } do %>
-    <%= submit_tag "Accept Invitation", class: "invitation-acceptance__button" %>
+  <% case @acceptance_status %>
+  <% when :valid, :authentication_required, :identity_mismatch, :invalid_identity, :invalid_input, :invalid, :limit_reached, :retryable_busy %>
+    <% if @acceptance_status == :identity_mismatch %>
+      <p role="alert">This invitation belongs to a different account.</p>
+    <% elsif @acceptance_status == :invalid_identity %>
+      <p role="alert">Those credentials could not verify the invited account.</p>
+    <% elsif @acceptance_status == :invalid_input || (@acceptance_status == :invalid && @invitation) %>
+      <p role="alert"><%= @result_errors.presence&.to_sentence || "Check the form and try again." %></p>
+    <% elsif @acceptance_status == :limit_reached %>
+      <% if Screenote::Deployment.current.billing? %>
+        <p role="alert">This project has reached its member limit. Ask its owner to make space or upgrade.</p>
+      <% else %>
+        <p role="alert">This project cannot accept another member. Ask its owner to make space.</p>
+      <% end %>
+    <% elsif @acceptance_status == :retryable_busy %>
+      <p role="alert">The invitation is busy. Please try again.</p>
+    <% end %>
+
+    <% if @invitation %>
+      <% if @matching_session %>
+        <p>You are signed in as <strong><%= Current.user.email %></strong>.</p>
+        <%= form_with url: invitation_acceptance_path, method: :post, class: "invitation-acceptance__form" do |form| %>
+          <%= form.hidden_field :method, name: "acceptance[method]", value: "session" %>
+          <%= form.submit "Accept invitation", class: "invitation-acceptance__button", data: { turbo_submits_with: "Accepting…" } %>
+        <% end %>
+      <% elsif @mismatched_session %>
+        <p>
+          You are signed in as <strong><%= Current.user.email %></strong>. Sign out to continue as
+          <strong><%= @invitation.email %></strong>.
+        </p>
+        <%= button_to "Sign out and continue", session_path, method: :delete, class: "btn btn--secondary" %>
+      <% elsif @existing_user %>
+        <p>
+          Sign in as <strong><%= @invitation.email %></strong>, then return here to accept the invitation.
+        </p>
+        <%= link_to "Sign in and continue", new_session_path, class: "invitation-acceptance__button" %>
+      <% else %>
+        <%= form_with url: invitation_acceptance_path, method: :post, class: "invitation-acceptance__form" do |form| %>
+          <%= form.hidden_field :method, name: "acceptance[method]", value: "local" %>
+          <div class="form__group">
+            <%= form.label :password, "Create a password", class: "form__label" %>
+            <%= form.password_field :password,
+                  name: "acceptance[password]",
+                  class: "form__input",
+                  required: true,
+                  minlength: RailsSimpleAuth.configuration.password_minimum_length,
+                  autocomplete: "new-password" %>
+          </div>
+          <div class="form__group">
+            <%= form.label :password_confirmation, "Confirm password", class: "form__label" %>
+            <%= form.password_field :password_confirmation,
+                  name: "acceptance[password_confirmation]",
+                  class: "form__input",
+                  required: true,
+                  minlength: RailsSimpleAuth.configuration.password_minimum_length,
+                  autocomplete: "new-password" %>
+          </div>
+          <%= form.submit "Create account and accept",
+                class: "invitation-acceptance__button",
+                data: { turbo_submits_with: "Accepting…" } %>
+        <% end %>
+      <% end %>
+
+      <% if @oauth_providers.present? && !@mismatched_session %>
+        <p>Or continue with a provider that has verified <strong><%= @invitation.email %></strong>:</p>
+        <% @oauth_providers.each do |provider| %>
+          <%= button_to "Continue with #{provider.to_s.humanize}",
+                "/auth/#{provider}",
+                method: :post,
+                params: { origin: invitation_acceptance_path },
+                data: { turbo: false },
+                class: "btn btn--secondary" %>
+        <% end %>
+      <% end %>
+    <% elsif @acceptance_status == :invalid %>
+      <p role="alert">This invitation context is invalid. Ask the project owner for a new private link.</p>
+    <% elsif @acceptance_status != :retryable_busy %>
+      <p role="alert">Invitation details are temporarily unavailable. Please retry.</p>
+    <% end %>
+  <% when :expired %>
+    <p role="alert">This invitation has expired. Ask the project owner to reissue it.</p>
+  <% when :cancelled, :issuer_revoked %>
+    <p role="alert">This invitation was cancelled. Ask an active project owner for a new one.</p>
+  <% when :already_used %>
+    <p role="alert">This invitation has already been used.</p>
+  <% when :superseded %>
+    <p role="alert">A newer invitation link is available. Ask the project owner to share it.</p>
+  <% else %>
+    <p role="alert">This invitation is invalid. Ask the project owner for a new private link.</p>
   <% end %>
 </div>

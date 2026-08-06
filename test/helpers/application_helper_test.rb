@@ -12,10 +12,12 @@ class ApplicationHelperTest < ActionView::TestCase
   test "author colors are stable and distinguish fixture collaborators" do
     alice_color = annotation_author_color(users(:alice))
     bob_color = annotation_author_color(users(:bob))
+    admin_color = annotation_author_color(users(:admin))
 
     assert_match(/\Aannotation-author-color--\d+\z/, alice_color)
     assert_equal alice_color, annotation_author_color(users(:alice))
     refute_equal alice_color, bob_color
+    refute_equal admin_color, bob_color
   end
 
   test "API-authored replies receive a neutral AI identity" do

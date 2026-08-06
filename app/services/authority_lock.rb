@@ -2,6 +2,16 @@
 
 class AuthorityLock
   class << self
+    def users!(*users)
+      users = users.flatten
+      raise ActiveRecord::RecordNotFound if users.any? { |user| !user&.persisted? }
+
+      users
+        .uniq(&:id)
+        .sort_by(&:id)
+        .map { |user| user!(user) }
+    end
+
     def user!(user)
       raise ActiveRecord::RecordNotFound unless user
 

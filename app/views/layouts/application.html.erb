@@ -16,16 +16,24 @@
         <nav class="header__nav">
           <% if Current.user %>
             <%= link_to "Help", help_path, class: "header__link" %>
-            <%= link_to "Billing", subscription_path, class: "header__link", data: { testid: "billing-link" } %>
-            <% if Current.user.admin? %>
+            <% if Screenote::Deployment.current.billing? %>
+              <%= link_to "Billing", subscription_path, class: "header__link", data: { testid: "billing-link" } %>
+            <% end %>
+            <% if Current.user.saas_operator? %>
               <%= link_to "Admin", admin_dashboard_path, class: "header__link" %>
+            <% end %>
+            <% if Screenote::Deployment.current.self_hosted? &&
+                  Installation.find_by(singleton_key: Installation::SINGLETON_KEY)&.administrator_id == Current.user.id %>
+              <%= link_to "Instance administration", instance_accounts_path, class: "header__link" %>
             <% end %>
             <span class="header__email" data-testid="user-email"><%= Current.user.email %></span>
             <%= button_to "Sign out", session_path, method: :delete, class: "header__sign-out", data: { testid: "sign-out-button" } %>
           <% else %>
             <%= link_to "Help", help_path, class: "header__link" %>
             <%= link_to "Sign In", new_session_path, class: "header__link" %>
-            <%= link_to "Get Started", sign_up_path, class: "header__link header__link--cta" %>
+            <% if Screenote::Deployment.current.saas? %>
+              <%= link_to "Get Started", sign_up_path, class: "header__link header__link--cta" %>
+            <% end %>
           <% end %>
         </nav>
       </div>
@@ -44,7 +52,9 @@
 
     <footer class="app-footer">
       <span class="app-footer__copy">&copy; <%= Date.current.year %> Screenote</span>
-      <a href="mailto:support@screenote.ai" class="app-footer__link">support@screenote.ai</a>
+      <% if Screenote::Deployment.current.saas? %>
+        <a href="mailto:support@screenote.ai" class="app-footer__link">support@screenote.ai</a>
+      <% end %>
     </footer>
   </body>
 </html>

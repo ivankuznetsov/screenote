@@ -3,13 +3,13 @@ title: ProjectInvitation
 type: model
 source: app/models/project_invitation.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-08-06
 tags: [model, collaboration, invitation, email]
 ---
 
 # ProjectInvitation
 
-TLDR: Email-based invitation to join a project. Uses Rails token generation with 7-day expiry. Enforces member limits based on the project owner's subscription plan.
+TLDR: Email-based invitation to join a project. Uses a digest-only, single-use authentication link with 7-day expiry and enforces member limits only in billing-enabled SaaS.
 
 Source: `app/models/project_invitation.rb`
 
@@ -21,7 +21,7 @@ Source: `app/models/project_invitation.rb`
 | project_id | integer | NOT NULL, FK to projects |
 | inviter_id | integer | NOT NULL, FK to users |
 | email | string | NOT NULL, normalized to lowercase |
-| status | integer | Enum: pending(0), accepted(1). Default: pending |
+| status | integer | Enum: pending(0), accepted(1), cancelled(2). Default: pending |
 | created_at | datetime | |
 | updated_at | datetime | |
 
@@ -31,10 +31,11 @@ Source: `app/models/project_invitation.rb`
 |-------------|------|--------|
 | project | belongs_to | [[project]] |
 | inviter | belongs_to | [[user]] |
+| authentication_tokens | has_many | [[authentication-token]] |
 
 ## Enums
 
-- `status`: `{ pending: 0, accepted: 1 }`
+- `status`: `{ pending: 0, accepted: 1, cancelled: 2 }`
 
 ## Validations
 
@@ -45,22 +46,24 @@ Source: `app/models/project_invitation.rb`
 ## Normalizations
 
 - `email`: stripped and downcased
+- Database CHECK: stored email is canonical lowercase/trimmed
+- Database partial unique index: one pending row per project and normalized email; terminal accepted/cancelled history is retained
 
 ## Token Generation
 
-- `generates_token_for :accept, expires_in: 7.days` -- Token invalidates when status changes from pending to accepted (status is part of the fingerprint)
+- `ProjectInvitations::Issue` serializes owner authority, membership limits, invitation replacement, and `AuthenticationLinks::Issuer` generation in the locked admission transaction.
+- The raw credential is deterministically re-presentable only while its digest-only `AuthenticationToken` remains outstanding and its derivation key is retained. Acceptance exchanges it into a tokenless session context before any identity proof.
+- A successful issuance reports mail delivery separately as `queued`, `failed`, or `not_requested`. Enqueue failure keeps the committed private link and directs the owner to copy it instead of claiming that mail was sent.
 
 ## Key Methods
 
-- `accept!(user)` -- Transactional with pessimistic lock on project. Checks member limit via `project.creator.can_invite_member?`. Updates status to accepted, creates ProjectMembership with `:member` role. Raises `MemberLimitExceeded` if over limit.
-
-## Custom Exceptions
-
-- `MemberLimitExceeded` -- Raised when the project owner's plan doesn't allow more members
+- `ProjectInvitations::Accept` -- Revalidates the exact exchanged token, identity proof, locked inviter/owner authority, membership set, and optional SaaS limit before atomically creating membership and consuming the token.
+- `ProjectInvitations::Cancel` -- Cancels the pending row and its exact outstanding authentication link under the same authority order.
 
 ## Notes
 
-- The invitation flow handles both existing and new users. New users get an account created automatically with a random password and immediate email confirmation.
-- Invitations can be cancelled (destroyed) while pending, but not after acceptance.
+- Invitation acceptance requires an explicit session, local-password, or verified-provider identity proof. Provider hashes accept string or symbol keys, but an explicitly present string key is authoritative so contradictory duplicates cannot turn a false verification claim into true.
+- The flow handles both existing and new users, serializes issuance, acceptance, and cancellation, and retains accepted or cancelled terminal rows for auditability.
+- Retryable acceptance results with no embedded invitation revalidate the retained tokenless context before rendering, so a transient failure never presents a valid invitation as invalid.
 
 See also: [[project]], [[project-membership]], [[user]], [[controllers/web-controllers]]

@@ -3,15 +3,15 @@ title: screenote Wiki
 type: index
 source: wiki/**/*.md
 created: 2026-05-14
-updated: 2026-08-05
+updated: 2026-08-06
 tags: [index, wiki]
 ---
 
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 41
-Updated: 2026-08-05
+Page count: 44
+Updated: 2026-08-06
 
 ## Core Architecture
 
@@ -32,6 +32,7 @@ Updated: 2026-08-05
 - [[controllers/api-controllers]] — REST and signed-upload API controllers.
 - [[controllers/oauth-controllers]] — Doorkeeper, DCR, and OAuth metadata controllers.
 - [[services/annotation-crop-service]] — Cropped annotation image generation.
+- [[instance-administration]] — Singleton self-hosted administration, credential revocation, recovery, and operator commands.
 - [[frontend-review-ui]] — Project-card navigation, sticky annotation workflow, viewport centering, and pin geometry.
 
 ## Models
@@ -50,6 +51,8 @@ Updated: 2026-08-05
 - [[models/api-key]] — Project-scoped bearer tokens.
 - [[models/project-membership]] — Project membership roles.
 - [[models/project-invitation]] — Email invitations.
+- [[models/authentication-token]] — Digest-only, exact-purpose authentication-link lifecycle rows.
+- [[models/installation-audit-event]] — Append-only installation claim and administration audit rows.
 - [[models/subscription]] — Stripe subscription state.
 - [[models/stripe-webhook-event]] — Stripe webhook idempotency ledger.
 

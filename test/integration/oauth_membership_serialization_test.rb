@@ -333,7 +333,7 @@ class OauthMembershipSerializationTest < ActionDispatch::IntegrationTest
     raise issuance if issuance.is_a?(Exception)
     raise removal if removal.is_a?(Exception)
 
-    assert removal.success?
+    assert removal.success?, "expected membership removal to succeed, got #{removal.status.inspect}"
     assert_equal [ :credential_created, :membership_removed ], 2.times.map { pop_with_timeout(events) }
     issuance
   end
@@ -395,7 +395,7 @@ class OauthMembershipSerializationTest < ActionDispatch::IntegrationTest
     raise issuance if issuance.is_a?(Exception)
     raise removal if removal.is_a?(Exception)
 
-    assert removal.success?
+    assert removal.success?, "expected membership removal to succeed, got #{removal.status.inspect}"
     assert_equal [ :credential_created, :membership_removed ], 2.times.map { pop_with_timeout(events) }
     issuance
   end

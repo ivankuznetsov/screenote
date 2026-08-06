@@ -1,0 +1,39 @@
+<section class="auth-card"
+         data-controller="bearer-token-exchange"
+         data-bearer-token-exchange-url-value="<%= exchange_authentication_link_path(@purpose) %>">
+  <h1 class="auth-card__title">Open secure link</h1>
+  <p class="auth-card__subtitle">Screenote is verifying this link on this device.</p>
+
+  <% if local_assigns[:exchange_error] %>
+    <p class="auth-card__error" role="alert"><%= exchange_error %></p>
+  <% end %>
+
+  <p class="auth-card__error" role="alert" hidden data-bearer-token-exchange-target="error"></p>
+  <p class="auth-card__subtitle" aria-live="polite" data-bearer-token-exchange-target="status">
+    If the link does not open automatically, enter its manual code below.
+  </p>
+
+  <%= form_with url: exchange_authentication_link_path(@purpose),
+        method: :post,
+        class: "auth-card__form",
+        data: { action: "submit->bearer-token-exchange#submit" } do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :token, "Manual code", class: "auth-card__label" %>
+      <%= form.password_field :token,
+            required: true,
+            autofocus: true,
+            autocomplete: "off",
+            spellcheck: false,
+            class: "auth-card__input",
+            data: { bearer_token_exchange_target: "input" },
+            aria: { describedby: "authentication-link-help" } %>
+      <p id="authentication-link-help" class="auth-card__field-error">
+        Paste the complete grouped code from the message you received.
+      </p>
+    </div>
+    <div class="auth-card__actions">
+      <%= form.submit "Continue", class: "auth-card__submit",
+            data: { bearer_token_exchange_target: "submit" } %>
+    </div>
+  <% end %>
+</section>

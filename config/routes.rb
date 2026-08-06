@@ -1,19 +1,39 @@
 Rails.application.routes.draw do
+  authentication_link_purpose = /(?:invitation|password_reset|magic_link|email_confirmation|account_recovery)/
+
   get "media/screenshot_images/:id/:variant", to: "media#show",
     as: :screenshot_image_media,
     constraints: { variant: /original|page_card_1x|page_card_2x|project_strip/ }
 
-  if Screenote::Deployment.current.mail?
-    rails_simple_auth_routes(omniauth_controller: "omniauth_callbacks")
-  else
-    resource :session, only: %i[new create destroy], controller: "rails_simple_auth/sessions"
-    get "sign_up", to: "rails_simple_auth/registrations#new", as: :sign_up
-    post "sign_up", to: "rails_simple_auth/registrations#create"
+  if Screenote::Deployment.current.self_hosted?
+    resource :bootstrap, only: %i[show create], controller: "bootstrap"
+  end
 
-    if RailsSimpleAuth.configuration.oauth_enabled
-      get "/auth/:provider/callback", to: "omniauth_callbacks#create", as: :omniauth_callback
-      get "/auth/failure", to: "omniauth_callbacks#failure", as: :omniauth_failure
-    end
+  resource :session, only: %i[new create destroy]
+
+  if Screenote::Deployment.current.saas?
+    get "sign_up", to: "registrations#new", as: :sign_up
+    post "sign_up", to: "registrations#create"
+  end
+
+  if Screenote::Deployment.current.mail?
+    get "passwords/new", to: "passwords#new", as: :new_password
+    post "passwords", to: "passwords#create", as: :passwords
+    get "password-reset", to: "passwords#edit", as: :edit_password
+    patch "password-reset", to: "passwords#update", as: :password
+
+    get "confirmations/new", to: "confirmations#new", as: :new_confirmation
+    post "confirmations", to: "confirmations#create", as: :confirmations
+    get "confirmation", to: "confirmations#show", as: :confirmation
+
+    get "magic-link/new", to: "magic_links#new", as: :magic_link_form
+    post "magic-link", to: "magic_links#create", as: :request_magic_link
+    get "magic-link", to: "magic_links#show", as: :magic_link
+  end
+
+  if RailsSimpleAuth.configuration.oauth_enabled
+    get "/auth/:provider/callback", to: "omniauth_callbacks#create", as: :omniauth_callback
+    get "/auth/failure", to: "omniauth_callbacks#failure", as: :omniauth_failure
   end
 
   use_doorkeeper do
@@ -32,11 +52,6 @@ Rails.application.routes.draw do
   post "oauth/authorize_device", to: "oauth/device_authorization_requests#create", as: :oauth_authorize_device
   get "oauth/device", to: "oauth/device_authorizations#show", as: :oauth_device
   post "oauth/device", to: "oauth/device_authorizations#update"
-
-  # Non-interactive MCP test-token endpoint (hive OAuth/MCP integration tests).
-  # Gated entirely on ENV["SCREENOTE_MCP_TEST_TOKEN_SECRET"]; responds 404 when
-  # the secret is unset or unmatched. See Oauth::TestTokensController.
-  post "oauth/test_token", to: "oauth/test_tokens#create"
 
   resources :projects do
     resources :pages, only: %i[new create]
@@ -60,8 +75,32 @@ Rails.application.routes.draw do
     end
   end
 
-  get  "invitations/:token", to: "invitation_acceptances#show", as: :accept_invitation
-  post "invitations/:token", to: "invitation_acceptances#create"
+  get "authentication-links/:purpose", to: "authentication_links#show",
+    as: :authentication_link,
+    constraints: { purpose: authentication_link_purpose }
+  post "authentication-links/:purpose/exchange", to: "authentication_links#exchange",
+    as: :exchange_authentication_link,
+    constraints: { purpose: authentication_link_purpose }
+
+  get "invitation-acceptance", to: "invitation_acceptances#show", as: :invitation_acceptance
+  post "invitation-acceptance", to: "invitation_acceptances#create"
+
+  if Screenote::Deployment.current.self_hosted?
+    namespace :instance do
+      resources :accounts, only: :index do
+        member do
+          post :suspend
+          post :restore
+          post :revoke_credentials
+          post :issue_recovery
+        end
+      end
+      post "administrator/transfer", to: "administrators#transfer", as: :administrator_transfer
+    end
+
+    get "account-recovery", to: "account_recoveries#show", as: :account_recovery
+    post "account-recovery", to: "account_recoveries#create"
+  end
 
   namespace :api do
     put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
@@ -83,16 +122,16 @@ Rails.application.routes.draw do
     end
   end
 
-  # Billing
-  resource :subscription, only: :show do
-    post :checkout, on: :member
-    post :portal, on: :member
-  end
-  post "stripe/webhooks", to: "stripe_webhooks#create"
+  if Screenote::Deployment.current.billing?
+    resource :subscription, only: :show do
+      post :checkout, on: :member
+      post :portal, on: :member
+    end
+    post "stripe/webhooks", to: "stripe_webhooks#create"
 
-  # Admin
-  namespace :admin do
-    resource :dashboard, only: :show, controller: "dashboard"
+    namespace :admin do
+      resource :dashboard, only: :show, controller: "dashboard"
+    end
   end
 
   # Health check for load balancers
@@ -100,9 +139,15 @@ Rails.application.routes.draw do
   get "ready" => "health#readiness", as: :readiness_check
 
   # Landing page for unauthenticated users, dashboard for authenticated
-  root "static_pages#landing"
+  if Screenote::Deployment.current.self_hosted?
+    root "bootstrap#show"
+  else
+    root "static_pages#landing"
+  end
   get "dashboard", to: "projects#index", as: :dashboard
   get "help", to: "static_pages#help"
-  get "terms", to: "static_pages#terms"
-  get "privacy", to: "static_pages#privacy"
+  if Screenote::Deployment.current.saas?
+    get "terms", to: "static_pages#terms"
+    get "privacy", to: "static_pages#privacy"
+  end
 end

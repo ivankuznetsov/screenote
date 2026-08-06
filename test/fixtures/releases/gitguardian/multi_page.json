@@ -1,0 +1,24 @@
+{
+  "responses": [
+    {
+      "url": "https://api.gitguardian.com/v1/sources/42",
+      "status": 200,
+      "headers": {},
+      "body": "{\"id\":42,\"type\":\"github\",\"full_name\":\"ivankuznetsov/screenote\",\"monitoring_status\":\"active\",\"provider_metadata\":{\"archived\":false,\"deleted\":false}}"
+    },
+    {
+      "url": "https://api.gitguardian.com/v1/sources/42/incidents/secrets?per_page=100",
+      "status": 200,
+      "headers": {
+        "link": "<https://api.gitguardian.com/v1/sources/42/incidents/secrets?per_page=100&cursor=next_AA==>; rel=\"next\""
+      },
+      "body": "[{\"id\":11,\"status\":\"RESOLVED\"}]"
+    },
+    {
+      "url": "https://api.gitguardian.com/v1/sources/42/incidents/secrets?per_page=100&cursor=next_AA==",
+      "status": 200,
+      "headers": {},
+      "body": "[{\"id\":12,\"status\":\"IGNORED\"}]"
+    }
+  ]
+}

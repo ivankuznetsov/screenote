@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-06
 tags: [gaps, documentation, todo]
 ---
 
@@ -53,7 +53,11 @@ Areas where documentation is missing or incomplete. Updated from current source,
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.
 - Environment variable documentation for production setup.
-- **RELEASE BLOCKER:** `.kamal/hooks/post-deploy` currently runs `db:migrate` only after the replacement application starts. Migration `20260805131000` transforms OAuth access, refresh, and confidential-client secrets into values predecessor processes cannot read, while the new runtime expects the migrated columns. Before this branch can merge or publish, U7/U9 must replace that rolling path with an executable stop-the-world cutover, make ordinary deploys refuse while this migration is pending, and prove backup, complete predecessor drain, successor-image migration, raw-token compatibility verification, and restore-before-predecessor rollback.
+- The unsafe rolling credential migration is resolved in source: ordinary deploys refuse the pending migration and `bin/saas-credential-cutover` now locks deployment, stops and proves predecessor processes quiesced, invokes a reviewed digest-pinned backup hook for that exact window, validates challenge/restore-point-bound evidence, migrates and verifies in one PostgreSQL transaction, and starts only the successor. The remaining production boundary is operational: the private real hook and four-role restore drill must be reviewed and retained for the cutover.
+
+### Source release publication
+- **PUBLICATION BLOCKERS:** Legal review and Future Spin Ltd chain-of-title approval; authorized inventory, revocation/rotation, and history disposition for formerly tracked encrypted credentials; live GitGuardian App/incident evidence; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64 qualification runners; a versioned minimum-host profile; tracked load and public-CLI drivers; candidate-backed HTTP/HTTPS origins; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain external gates. Pull-request source-contract jobs cannot substitute for the dedicated exact qualification run. Raw candidate GitGuardian and Trivy reports currently live only in runner-temporary storage; publication also requires an approved restricted evidence store and retained report hashes/receipts rather than a claim inferred from successful jobs. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all of them are complete.
+- The initial predecessor-none release supports same-image local/S3 restore. The first successor release must add and qualify the exact adjacent local/S3 upgrade and rollback fixture and reconcile predecessor versus restore-image validation before it can publish.
 
 ## Incomplete Documentation
 

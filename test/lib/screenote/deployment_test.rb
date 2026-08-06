@@ -3,6 +3,29 @@
 require "test_helper"
 
 class Screenote::DeploymentTest < ActiveSupport::TestCase
+  test "configured deployment can be reset without retaining stale state" do
+    previous = Screenote::Deployment.current
+    configured = Screenote::Deployment.configure!(self_hosted_environment, production: true)
+
+    assert_same configured, Screenote::Deployment.current
+    Screenote::Deployment.reset!
+    assert_raises(Screenote::Deployment::ConfigurationError) { Screenote::Deployment.current }
+  ensure
+    Screenote::Deployment.instance_variable_set(:@current, previous)
+  end
+
+  test "development defaults to SaaS and parses an IPv6 origin" do
+    default = deployment({}, production: false)
+    ipv6 = deployment({ "SCREENOTE_BASE_URL" => "http://[2001:db8::1]:3000" }, production: false)
+
+    assert default.saas?
+    assert_equal "http://localhost:3000", default.base_url
+    assert_equal "http://[2001:db8::1]:3000", ipv6.base_url
+    assert_equal "[2001:db8::1]", ipv6.host
+    assert_equal "http", ipv6.protocol
+    assert_equal 3000, ipv6.port
+  end
+
   test "production requires an explicit supported edition" do
     error = assert_raises(Screenote::Deployment::ConfigurationError) do
       deployment({}, production: true)
@@ -96,6 +119,14 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     end
   end
 
+  test "malformed canonical origin is reported as configuration failure" do
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(self_hosted_environment("SCREENOTE_BASE_URL" => "https://["), production: true)
+    end
+
+    assert_equal "SCREENOTE_BASE_URL must be a valid HTTP(S) origin", error.message
+  end
+
   test "trusted proxies must be explicit valid CIDRs" do
     config = deployment(
       self_hosted_environment("SCREENOTE_TRUSTED_PROXIES" => "10.0.0.0/8, 2001:db8::/32"),
@@ -115,6 +146,30 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
       deployment(self_hosted_environment("SCREENOTE_TRUSTED_PROXIES" => "0.0.0.0/0"), production: true)
     end
     assert_match "entire internet", error.message
+  end
+
+  test "trusted proxy parsing ignores empty comma-separated entries" do
+    config = deployment(
+      self_hosted_environment("SCREENOTE_TRUSTED_PROXIES" => " , 10.0.0.0/8, "),
+      production: true
+    )
+
+    assert_equal 1, config.trusted_proxies.length
+    assert config.trusted_proxies.first.include?("10.1.2.3")
+  end
+
+  test "self hosted storage profile and bootstrap material fail closed" do
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(self_hosted_environment("SCREENOTE_STORAGE" => "shared"), production: true)
+    end
+    assert_equal "SCREENOTE_STORAGE must be local or s3", error.message
+
+    [ "short", "b" * 31 + " " ].each do |token|
+      error = assert_raises(Screenote::Deployment::ConfigurationError) do
+        deployment(self_hosted_environment("SCREENOTE_BOOTSTRAP_TOKEN" => token), production: true)
+      end
+      assert_match(/32 non-whitespace bytes/, error.message)
+    end
   end
 
   test "optional self hosted providers reject partial selection" do
@@ -192,6 +247,44 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     end
   end
 
+  test "S3 endpoint syntax and namespace components are validated" do
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(s3_environment("SCREENOTE_S3_ENDPOINT" => "https://["), production: true)
+    end
+    assert_equal "SCREENOTE_S3_ENDPOINT must be a valid HTTP(S) endpoint", error.message
+
+    [ "team//one", "team/..", "a" * 64 ].each do |prefix|
+      error = assert_raises(Screenote::Deployment::ConfigurationError) do
+        deployment(s3_environment("SCREENOTE_S3_PREFIX" => prefix), production: true)
+      end
+      assert_match(/slash-separated object namespace/, error.message)
+    end
+  end
+
+  test "boolean and numeric provider settings accept explicit false and reject malformed bounds" do
+    disabled = deployment(self_hosted_environment("SCREENOTE_SMTP_ENABLED" => "false"), production: true)
+    blank = deployment(self_hosted_environment("SCREENOTE_SMTP_ENABLED" => "   "), production: true)
+    assert_not disabled.mail?
+    assert_not blank.mail?
+
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(self_hosted_environment("SCREENOTE_SMTP_ENABLED" => "sometimes"), production: true)
+    end
+    assert_equal "SCREENOTE_SMTP_ENABLED must be true or false", error.message
+
+    [
+      [ "SCREENOTE_S3_REQUEST_TIMEOUT", "0", /positive integer/ ],
+      [ "SCREENOTE_S3_REQUEST_TIMEOUT", "many", /positive integer/ ],
+      [ "SCREENOTE_S3_RETRY_LIMIT", "-1", /non-negative integer/ ],
+      [ "SCREENOTE_S3_RETRY_LIMIT", "many", /non-negative integer/ ]
+    ].each do |key, value, message|
+      error = assert_raises(Screenote::Deployment::ConfigurationError) do
+        deployment(s3_environment(key => value), production: true)
+      end
+      assert_match message, error.message
+    end
+  end
+
   test "saas keeps every hosted provider fail fast" do
     error = assert_raises(Screenote::Deployment::ConfigurationError) do
       deployment(
@@ -261,6 +354,18 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
       "SECRET_KEY_BASE" => "a" * 64,
       "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
     }.merge(overrides)
+  end
+
+  def s3_environment(overrides = {})
+    self_hosted_environment.merge(
+      "SCREENOTE_STORAGE" => "s3",
+      "SCREENOTE_S3_ENDPOINT" => "https://objects.example.test",
+      "SCREENOTE_S3_REGION" => "local",
+      "SCREENOTE_S3_BUCKET" => "screenote-private",
+      "SCREENOTE_S3_PREFIX" => "team-one",
+      "SCREENOTE_S3_ACCESS_KEY_ID" => "access-key",
+      "SCREENOTE_S3_SECRET_ACCESS_KEY" => "secret-key"
+    ).merge(overrides)
   end
 
   def saas_environment

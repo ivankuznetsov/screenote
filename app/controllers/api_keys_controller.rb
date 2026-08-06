@@ -18,13 +18,13 @@ class ApiKeysController < ApplicationController
   def create
     @api_key = @project.api_keys.build(api_key_params.merge(issued_by_user: Current.user))
 
-    case save_api_key_with_current_authority
-    when :saved
+    status = save_api_key_with_current_authority
+    if status == :saved
       flash[:api_key_token] = @api_key.raw_token
       redirect_to project_api_keys_path(@project), notice: "API key created. Copy it now — it won't be shown again."
-    when :invalid
+    elsif status == :invalid
       render :new, status: :unprocessable_entity
-    when :forbidden
+    else
       redirect_to projects_path, alert: "You don't have permission to do that."
     end
   end

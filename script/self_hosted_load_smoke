@@ -1,0 +1,89 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "open3"
+require "pathname"
+require "timeout"
+
+ROOT = Pathname.new(__dir__).join("..").realpath
+SCHEMA = "screenote-load-smoke/v1"
+EXPECTED_PROFILE = {
+  "sessions" => 25,
+  "simultaneous_uploads" => 4,
+  "upload_bytes" => 20 * 1024 * 1024,
+  "mutation_rate_per_second" => 20,
+  "duration_seconds" => 10 * 60
+}.freeze
+
+def fail!(message)
+  warn "self-hosted load smoke: #{message}"
+  exit 1
+end
+
+def required_environment(name)
+  ENV.fetch(name) { fail!("#{name} is required") }.tap do |value|
+    fail!("#{name} cannot be blank") if value.empty?
+  end
+end
+
+begin
+  driver = Pathname.new(required_environment("SCREENOTE_LOAD_DRIVER")).realpath
+  fail!("SCREENOTE_LOAD_DRIVER must be a tracked repository executable") unless
+    driver.to_s.start_with?("#{ROOT}/") && driver.file? && driver.executable? &&
+      system("git", "ls-files", "--error-unmatch", driver.relative_path_from(ROOT).to_s,
+        chdir: ROOT.to_s, out: File::NULL, err: File::NULL)
+
+  source_sha = required_environment("SCREENOTE_SOURCE_SHA")
+  image = required_environment("SCREENOTE_RELEASE_IMAGE")
+  host_profile = required_environment("SCREENOTE_MINIMUM_HOST_PROFILE")
+  fail!("SCREENOTE_SOURCE_SHA must be an exact commit") unless source_sha.match?(/\A[0-9a-f]{40}\z/)
+  fail!("SCREENOTE_RELEASE_IMAGE must be immutable") unless image.match?(/@sha256:[0-9a-f]{64}\z/)
+
+  stdout = stderr = nil
+  status = nil
+  Timeout.timeout(EXPECTED_PROFILE.fetch("duration_seconds") + (15 * 60)) do
+    stdout, stderr, status = Open3.capture3(
+      {
+        "SCREENOTE_LOAD_EXPECTED_PROFILE" => JSON.generate(EXPECTED_PROFILE),
+        "SCREENOTE_LOAD_HOST_PROFILE" => host_profile,
+        "SCREENOTE_LOAD_IMAGE" => image,
+        "SCREENOTE_LOAD_SOURCE_SHA" => source_sha
+      },
+      driver.to_s,
+      chdir: ROOT.to_s
+    )
+  end
+  fail!("driver failed without qualifying evidence: #{stderr.lines.last(20).join}") unless status.success?
+
+  evidence = JSON.parse(stdout)
+  fail!("unexpected evidence schema") unless evidence["schema"] == SCHEMA
+  fail!("evidence source revision mismatch") unless evidence["source_sha"] == source_sha
+  fail!("evidence image digest mismatch") unless evidence["image_digest"] == image
+  fail!("evidence host profile mismatch") unless evidence["host_profile"] == host_profile
+
+  profile = evidence.fetch("profile")
+  EXPECTED_PROFILE.each do |key, expected|
+    actual = profile.fetch(key)
+    comparator = key == "mutation_rate_per_second" || key == "duration_seconds" ? :>= : :==
+    fail!("profile #{key} is #{actual.inspect}, expected #{comparator} #{expected}") unless
+      actual.public_send(comparator, expected)
+  end
+
+  metrics = evidence.fetch("metrics")
+  fail!("unhandled busy/deadlock errors were observed") unless metrics.fetch("unhandled_lock_errors").zero?
+  fail!("load test lost mutations") unless metrics.fetch("lost_mutations").zero?
+  fail!("load test duplicated mutations") unless metrics.fetch("duplicate_mutations").zero?
+  fail!("core p95 exceeded 1000ms") unless metrics.fetch("core_p95_ms") < 1_000
+  fail!("queue drain exceeded five minutes") unless metrics.fetch("queue_drain_seconds") <= 300
+  fail!("queue did not drain") unless metrics.fetch("queue_depth_after_drain").zero?
+  fail!("database integrity check failed") unless metrics.fetch("integrity_errors").zero?
+  fail!("driver reported request failures") unless metrics.fetch("request_failures").zero?
+
+  puts JSON.pretty_generate(evidence)
+  warn "self-hosted load smoke: qualification evidence validated"
+rescue JSON::ParserError, KeyError, TypeError => error
+  fail!("malformed driver evidence (#{error.class})")
+rescue Timeout::Error
+  fail!("driver exceeded the bounded qualification window")
+end

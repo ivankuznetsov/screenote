@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class OauthDeviceFlowTest < ActionDispatch::IntegrationTest
@@ -56,6 +58,23 @@ class OauthDeviceFlowTest < ActionDispatch::IntegrationTest
 
     assert_response :unauthorized
     assert_equal "invalid_client", response.parsed_body["error"]
+  end
+
+  test "device authorization rejects a client deleted while its grant is created" do
+    original = Oauth::DynamicClientRegistration.method(:with_application_lock)
+    Oauth::DynamicClientRegistration.define_singleton_method(:with_application_lock) do |*|
+      raise Oauth::DynamicClientRegistration::ApplicationUnavailable, "OAuth client is unavailable"
+    end
+
+    assert_no_difference "OauthDeviceGrant.count" do
+      initiate_device_authorization(scope: "mcp_read")
+    end
+
+    assert_response :unauthorized
+    assert_equal "invalid_client", response.parsed_body["error"]
+    assert_equal "no-store", response.headers["Cache-Control"]
+  ensure
+    Oauth::DynamicClientRegistration.define_singleton_method(:with_application_lock, original) if original
   end
 
   test "device authorization is rate limited per IP" do

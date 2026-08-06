@@ -1,0 +1,83 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Set up Screenote</h1>
+  <p class="auth-card__subtitle">Claim this private installation and create its administrator account.</p>
+
+  <% if @errors[:base].present? %>
+    <div class="flash flash--alert" role="alert" tabindex="-1">
+      <%= @errors[:base].first %>
+    </div>
+  <% end %>
+
+  <%= form_with url: bootstrap_path, scope: :bootstrap, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :token, "Bootstrap token", class: "auth-card__label" %>
+      <%= form.password_field :token,
+            value: nil,
+            class: "auth-card__input #{'auth-card__input--error' if @errors[:token].present?}",
+            required: true,
+            autofocus: true,
+            autocomplete: "off",
+            aria: {
+              invalid: @errors[:token].present?,
+              describedby: ("bootstrap_token_error" if @errors[:token].present?)
+            } %>
+      <% if @errors[:token].present? %>
+        <p id="bootstrap_token_error" class="auth-card__field-error" role="alert"><%= @errors[:token].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :email, "Email", class: "auth-card__label" %>
+      <%= form.email_field :email,
+            value: @email,
+            class: "auth-card__input #{'auth-card__input--error' if @errors[:email].present?}",
+            required: true,
+            autocomplete: "email",
+            aria: {
+              invalid: @errors[:email].present?,
+              describedby: ("bootstrap_email_error" if @errors[:email].present?)
+            } %>
+      <% if @errors[:email].present? %>
+        <p id="bootstrap_email_error" class="auth-card__field-error" role="alert"><%= @errors[:email].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password, "Password", class: "auth-card__label" %>
+      <%= form.password_field :password,
+            value: nil,
+            class: "auth-card__input #{'auth-card__input--error' if @errors[:password].present?}",
+            required: true,
+            minlength: RailsSimpleAuth.configuration.password_minimum_length,
+            autocomplete: "new-password",
+            aria: {
+              invalid: @errors[:password].present?,
+              describedby: ("bootstrap_password_error" if @errors[:password].present?)
+            } %>
+      <% if @errors[:password].present? %>
+        <p id="bootstrap_password_error" class="auth-card__field-error" role="alert"><%= @errors[:password].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password_confirmation, "Confirm password", class: "auth-card__label" %>
+      <%= form.password_field :password_confirmation,
+            value: nil,
+            class: "auth-card__input #{'auth-card__input--error' if @errors[:password_confirmation].present?}",
+            required: true,
+            minlength: RailsSimpleAuth.configuration.password_minimum_length,
+            autocomplete: "new-password",
+            aria: {
+              invalid: @errors[:password_confirmation].present?,
+              describedby: ("bootstrap_password_confirmation_error" if @errors[:password_confirmation].present?)
+            } %>
+      <% if @errors[:password_confirmation].present? %>
+        <p id="bootstrap_password_confirmation_error" class="auth-card__field-error" role="alert"><%= @errors[:password_confirmation].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__actions">
+      <%= form.submit "Create administrator", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+</div>

@@ -23,6 +23,7 @@ Source: `app/models/user.rb`
 | confirmed_at | datetime | Email confirmation timestamp |
 | oauth_provider | string | "google" or "github" |
 | oauth_uid | string | Provider-specific user ID |
+| access_status | integer | Enum: active(0), suspended(1); checked in the database |
 | created_at | datetime | |
 | updated_at | datetime | |
 
@@ -36,25 +37,29 @@ Source: `app/models/user.rb`
 | projects | has_many through | [[project]] (via project_memberships) |
 | annotations | has_many | [[annotation]] (dependent: destroy) |
 | subscription | has_one | [[subscription]] (dependent: destroy) |
+| authentication_tokens | has_many | [[authentication-token]] (dependent: destroy) |
+| installation_audit_events_as_actor | has_many | [[installation-audit-event]] (restrict deletion) |
+| installation_audit_events_as_target | has_many | [[installation-audit-event]] (restrict deletion) |
 
 ## Includes
 
 - `RailsSimpleAuth::Models::Concerns::Authenticatable`
 - `RailsSimpleAuth::Models::Concerns::Confirmable`
-- `RailsSimpleAuth::Models::Concerns::MagicLinkable`
-- `RailsSimpleAuth::Models::Concerns::OAuthConnectable`
+
+Legacy raw signed-token helpers are explicitly undefined. App-owned authentication-link services issue digest-only password-reset, magic-link, confirmation, invitation, and account-recovery credentials.
 
 ## Key Methods
 
-- `pro?` -- Returns true if user has an active Pro subscription (delegates to `subscription.active_pro?`)
-- `can_create_project?` -- Pro users: unlimited. Free users: limited to `Subscription::FREE_PROJECT_LIMIT` (1) owned projects
-- `can_invite_member?(project)` -- Pro users: unlimited. Free users: limited to `Subscription::FREE_MEMBER_LIMIT` (1) member per project
-- `saas_operator?` / compatibility alias `admin?` -- True only in SaaS mode when the normalized email matches the boot-validated `SCREENOTE_SAAS_OPERATOR_EMAIL`
+- `pro?(deployment:)` -- Returns true only when billing is enabled and the user has an active Pro subscription; it does not query subscriptions in self-hosted mode
+- `can_create_project?(deployment:)` -- Unlimited without a query in self-hosted mode; SaaS Pro users are unlimited and free users retain `Subscription::FREE_PROJECT_LIMIT`
+- `can_invite_member?(project, deployment:)` -- Unlimited without a query in self-hosted mode; SaaS Pro users are unlimited and free users retain `Subscription::FREE_MEMBER_LIMIT`
+- `saas_operator?(deployment:)` -- True only in SaaS mode when the normalized email matches the boot-validated `SCREENOTE_SAAS_OPERATOR_EMAIL`; there is no generic `admin?` compatibility alias
 - `assign_oauth_attributes(auth_hash)` -- Sets oauth_provider and oauth_uid from OmniAuth hash
 - `self.find_by_oauth(provider, uid)` -- Finds user by OAuth provider + UID
+- `access_active?` / `active_for_authentication?` -- Shared active-account predicate; false for suspended users
 
 ## Validations
 
-Inherited from rails_simple_auth concerns (email format, password presence, etc.).
+Inherited email/password rules are supplemented by canonical provider/UID pairing and scoped provider identity uniqueness. Database CHECKs and indexes enforce canonical normalized email, paired normalized OAuth identity, and active/suspended status for direct writes.
 
 See also: [[subscription]], [[project]], [[project-membership]], [[session]]

@@ -1,0 +1,200 @@
+{
+  "schema": "screenote-release-evidence/v1",
+  "fixture": true,
+  "repository": "ivankuznetsov/screenote",
+  "source_sha": "1111111111111111111111111111111111111111",
+  "license": {
+    "source_url": "https://www.fizzy.do/license",
+    "source_snapshot_sha256": "2a430f872f3203a6ae699fa00eb2d889bb2d06062f8cbe1add79ad6eb2bebe34",
+    "upstream_repository_url": "https://github.com/basecamp/fizzy/blob/main/LICENSE.md",
+    "upstream_commit": "fa1fe476ff3844e4cfc5bb88c1b1947be29abc08",
+    "upstream_license_sha256": "ba80f19e780db9c25f48af4175c6d7b94f984b614d0062007dbf9357c41cab56",
+    "screenote_license_sha256": "270fc922f0483dc3cc6757c18e2e2c83093b5eeaf1adcf6bd5ff70df3e8790dc",
+    "copyright": "Copyright © 2026, Future Spin Ltd."
+  },
+  "release": {
+    "tag": "v1.0.0",
+    "predecessor_tag": "none",
+    "predecessor_image_digest": "none",
+    "cli_tag": "v1.0.0",
+    "notes_sha256": "79f62b42a2205fa7a4ccf36b97cd0a8d6dfee9783c4cb68045852db179d53b21"
+  },
+  "artifacts": {
+    "source_sha": "1111111111111111111111111111111111111111",
+    "amd64_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "arm64_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "sbom_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "provenance_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "oci_labels": {
+      "source": "https://github.com/ivankuznetsov/screenote",
+      "revision": "1111111111111111111111111111111111111111",
+      "version": "v1.0.0",
+      "description": "Screenote visual feedback workspace",
+      "licenses": "LicenseRef-OSaasy"
+    },
+    "evidence_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "approvals": {
+    "legal": {
+      "status": "approved",
+      "evidence_id": "legal-approval-1",
+      "evidence_sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+    },
+    "security_history": {
+      "status": "approved",
+      "evidence_id": "security-history-1",
+      "evidence_sha256": "1313131313131313131313131313131313131313131313131313131313131313"
+    },
+    "repository_surface": {
+      "status": "approved",
+      "evidence_id": "repository-surface-1",
+      "evidence_sha256": "1414141414141414141414141414141414141414141414141414141414141414"
+    },
+    "rulesets": {
+      "status": "approved",
+      "evidence_id": "rulesets-review-1",
+      "evidence_sha256": "1515151515151515151515151515151515151515151515151515151515151515"
+    }
+  },
+  "credentials": {
+    "status": "approved",
+    "current_tree_clear": true,
+    "all_confirmed_revoked_or_rotated": true,
+    "history_disposition": "retained_approved",
+    "inventory_id": "credential-inventory-1",
+    "evidence_sha256": "1616161616161616161616161616161616161616161616161616161616161616"
+  },
+  "gitguardian": {
+    "app_check": {
+      "status": "passed",
+      "check_name": "GitGuardian Security Checks",
+      "app_id_sha256": "1717171717171717171717171717171717171717171717171717171717171717",
+      "skip_actions_disabled": true,
+      "history_scan": "finished",
+      "evidence_sha256": "1818181818181818181818181818181818181818181818181818181818181818"
+    },
+    "source_scan": {
+      "status": "passed",
+      "source_sha": "1111111111111111111111111111111111111111",
+      "ggshield_version": "1.52.2",
+      "history_findings": 0,
+      "tree_findings": 0,
+      "evidence_sha256": "1919191919191919191919191919191919191919191919191919191919191919"
+    },
+    "incidents": {
+      "status": "passed",
+      "source_id_sha256": "2020202020202020202020202020202020202020202020202020202020202020",
+      "pages": 2,
+      "total": 2,
+      "open": 0,
+      "checked_at": "2026-08-06T00:30:00Z",
+      "evidence_sha256": "2121212121212121212121212121212121212121212121212121212121212121"
+    },
+    "image_scan": {
+      "status": "passed",
+      "ggshield_version": "1.52.2",
+      "platforms": [
+        {
+          "architecture": "amd64",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "findings": 0,
+          "evidence_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "architecture": "arm64",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "findings": 0,
+          "evidence_sha256": "2323232323232323232323232323232323232323232323232323232323232323"
+        }
+      ],
+      "evidence_sha256": "2424242424242424242424242424242424242424242424242424242424242424"
+    }
+  },
+  "vulnerability": {
+    "status": "passed",
+    "scanner": "trivy",
+    "scanner_version": "0.70.0",
+    "database_version": "2026.08.06",
+    "policy_version": "screenote-critical-high/v1",
+    "critical": 0,
+    "high": 0,
+    "waivers": [],
+    "checked_at": "2026-08-06T00:30:00Z",
+    "evidence_sha256": "2525252525252525252525252525252525252525252525252525252525252525"
+  },
+  "rulesets": {
+    "status": "passed",
+    "main_export_sha256": "2626262626262626262626262626262626262626262626262626262626262626",
+    "tag_creation_export_sha256": "2727272727272727272727272727272727272727272727272727272727272727",
+    "tag_immutability_export_sha256": "2828282828282828282828282828282828282828282828282828282828282828",
+    "gitguardian_app_id_sha256": "2929292929292929292929292929292929292929292929292929292929292929",
+    "release_app_id_sha256": "3030303030303030303030303030303030303030303030303030303030303030",
+    "no_broad_bypass": true,
+    "evidence_sha256": "3131313131313131313131313131313131313131313131313131313131313131"
+  },
+  "source_contracts": {
+    "scope": "pr_contract_only",
+    "source_sha": "1111111111111111111111111111111111111111",
+    "workflow_run_id": "github-run-12345",
+    "required_checks": [
+      { "name": "ruby-security", "conclusion": "success", "evidence_sha256": "3232323232323232323232323232323232323232323232323232323232323232" },
+      { "name": "lint", "conclusion": "success", "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333" },
+      { "name": "coverage", "conclusion": "success", "evidence_sha256": "edededededededededededededededededededededededededededededededed" },
+      { "name": "sqlite", "conclusion": "success", "evidence_sha256": "3434343434343434343434343434343434343434343434343434343434343434" },
+      { "name": "postgresql", "conclusion": "success", "evidence_sha256": "3535353535353535353535353535353535353535353535353535353535353535" },
+      { "name": "system-collaboration", "conclusion": "success", "evidence_sha256": "3636363636363636363636363636363636363636363636363636363636363636" },
+      { "name": "public-cli", "conclusion": "success", "evidence_sha256": "3737373737373737373737373737373737373737373737373737373737373737" },
+      { "name": "container-local", "conclusion": "success", "evidence_sha256": "3838383838383838383838383838383838383838383838383838383838383838" },
+      { "name": "container-s3", "conclusion": "success", "evidence_sha256": "3939393939393939393939393939393939393939393939393939393939393939" },
+      { "name": "backup-restore", "conclusion": "success", "evidence_sha256": "4040404040404040404040404040404040404040404040404040404040404040" },
+      { "name": "release-artifact", "conclusion": "success", "evidence_sha256": "4141414141414141414141414141414141414141414141414141414141414141" }
+    ],
+    "evidence_sha256": "4242424242424242424242424242424242424242424242424242424242424242"
+  },
+  "qualification": {
+    "status": "passed",
+    "workflow_path": ".github/workflows/release-qualification.yml",
+    "workflow_run_id": "123456789",
+    "workflow_run_attempt": 1,
+    "artifact_name": "release-qualification-1111111111111111111111111111111111111111-v1.0.0",
+    "artifact_sha256": "4747474747474747474747474747474747474747474747474747474747474747",
+    "record_sha256": "4848484848484848484848484848484848484848484848484848484848484848",
+    "source_sha": "1111111111111111111111111111111111111111",
+    "release_tag": "v1.0.0",
+    "candidate_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "platforms": [
+      { "architecture": "amd64", "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      { "architecture": "arm64", "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+    ],
+    "cli_tag": "v1.0.0",
+    "cli_sha": "2222222222222222222222222222222222222222",
+    "minimum_host_profile_sha256": "4949494949494949494949494949494949494949494949494949494949494949",
+    "checks": [
+      { "name": "self-hosted-boot", "target": "linux-amd64", "status": "passed", "evidence_sha256": "5050505050505050505050505050505050505050505050505050505050505050" },
+      { "name": "self-hosted-boot", "target": "linux-arm64", "status": "passed", "evidence_sha256": "5151515151515151515151515151515151515151515151515151515151515151" },
+      { "name": "saas-boot", "target": "linux-amd64", "status": "passed", "evidence_sha256": "5252525252525252525252525252525252525252525252525252525252525252" },
+      { "name": "saas-boot", "target": "linux-arm64", "status": "passed", "evidence_sha256": "5353535353535353535353535353535353535353535353535353535353535353" },
+      { "name": "backup-restore", "target": "minimum-host", "status": "passed", "evidence_sha256": "5454545454545454545454545454545454545454545454545454545454545454" },
+      { "name": "sqlite-load", "target": "minimum-host", "status": "passed", "evidence_sha256": "5555555555555555555555555555555555555555555555555555555555555555" },
+      { "name": "public-cli", "target": "http", "status": "passed", "evidence_sha256": "5656565656565656565656565656565656565656565656565656565656565656" },
+      { "name": "public-cli", "target": "https", "status": "passed", "evidence_sha256": "5757575757575757575757575757575757575757575757575757575757575757" }
+    ]
+  },
+  "public_artifacts": {
+    "status": "passed",
+    "sentinel_matches": 0,
+    "logs_sha256": "4343434343434343434343434343434343434343434343434343434343434343",
+    "release_notes_sha256": "79f62b42a2205fa7a4ccf36b97cd0a8d6dfee9783c4cb68045852db179d53b21",
+    "evidence_sha256": "4545454545454545454545454545454545454545454545454545454545454545"
+  },
+  "preauthorization": {
+    "status": "approved",
+    "environment": "source-release",
+    "approver_role": "release_maintainer",
+    "approval_id": "environment-approval-1",
+    "approved_at": "2026-08-06T00:45:00Z",
+    "evidence_sha256": "4646464646464646464646464646464646464646464646464646464646464646"
+  }
+}

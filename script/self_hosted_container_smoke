@@ -59,8 +59,13 @@ for command in docker grep openssl sed; do
 done
 docker compose version >/dev/null
 
-printf 'Building final image %s\n' "${IMAGE_TAG}"
-docker build --tag "${IMAGE_TAG}" "${REPOSITORY_ROOT}"
+if [[ "${REMOVE_IMAGE}" == true ]]; then
+  printf 'Building final image %s\n' "${IMAGE_TAG}"
+  docker build --tag "${IMAGE_TAG}" "${REPOSITORY_ROOT}"
+else
+  printf 'Testing prebuilt final image %s\n' "${IMAGE_TAG}"
+  docker image inspect "${IMAGE_TAG}" >/dev/null
+fi
 if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}" |
   grep --fixed-strings --line-regexp --quiet 'MAX_REQUEST_BODY=31457280'; then
   printf 'self-hosted smoke: final image does not enforce the 30 MiB request limit\n' >&2

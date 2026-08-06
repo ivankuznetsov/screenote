@@ -29,6 +29,44 @@ class InstallationTest < ActiveSupport::TestCase
     assert_equal "saas", installation.state
     assert_equal "rabata", installation.storage_service
     assert_nil installation.bootstrap_token_digest
+    assert installation.saas?
+    assert_not installation.self_hosted?
+  end
+
+  test "ownership and storage validation reject every cross-edition state" do
+    valid_attributes = {
+      singleton_key: Installation::SINGLETON_KEY,
+      storage_namespace_fingerprint: "f" * 64
+    }
+
+    invalid_installations = [
+      Installation.new(valid_attributes.merge(
+        deployment_mode: "self_hosted",
+        state: "saas",
+        storage_service: "self_hosted_local"
+      )),
+      Installation.new(valid_attributes.merge(
+        deployment_mode: "retired",
+        state: "claimed",
+        storage_service: "retired"
+      )),
+      Installation.new(valid_attributes.merge(
+        deployment_mode: "saas",
+        state: "saas",
+        storage_service: "self_hosted_local"
+      )),
+      Installation.new(valid_attributes.merge(
+        deployment_mode: "self_hosted",
+        state: "unclaimed",
+        storage_service: "rabata",
+        bootstrap_token_digest: "b" * 64
+      ))
+    ]
+
+    invalid_installations.each do |installation|
+      assert_not installation.valid?
+      assert installation.errors[:state].any? || installation.errors[:storage_service].any?
+    end
   end
 
   test "restart verifies identity without replacing bootstrap digest or touching the row" do
@@ -145,20 +183,24 @@ class InstallationTest < ActiveSupport::TestCase
     installation = Installations::Prepare.call(deployment: saas_deployment)
 
     assert_raises(ActiveRecord::RecordNotUnique) do
-      Installation.insert_all!([ installation.attributes.except("id", "created_at", "updated_at") ])
+      Installation.transaction(requires_new: true) do
+        Installation.insert_all!([ installation.attributes.except("id", "created_at", "updated_at") ])
+      end
     end
 
     assert_raises(ActiveRecord::StatementInvalid) do
-      Installation.insert_all!([ {
-        singleton_key: "screenote",
-        deployment_mode: "self_hosted",
-        state: "claimed",
-        storage_service: "self_hosted_local",
-        storage_namespace_fingerprint: "a" * 64,
-        bootstrap_token_digest: "b" * 64,
-        created_at: Time.current,
-        updated_at: Time.current
-      } ])
+      Installation.transaction(requires_new: true) do
+        Installation.insert_all!([ {
+          singleton_key: "screenote",
+          deployment_mode: "self_hosted",
+          state: "claimed",
+          storage_service: "self_hosted_local",
+          storage_namespace_fingerprint: "a" * 64,
+          bootstrap_token_digest: "b" * 64,
+          created_at: Time.current,
+          updated_at: Time.current
+        } ])
+      end
     end
   end
 
@@ -167,7 +209,9 @@ class InstallationTest < ActiveSupport::TestCase
     original_digest = installation.bootstrap_token_digest
 
     assert_raises(ActiveRecord::StatementInvalid) do
-      Installation.where(id: installation.id).update_all(bootstrap_token_digest: "short")
+      Installation.transaction(requires_new: true) do
+        Installation.where(id: installation.id).update_all(bootstrap_token_digest: "short")
+      end
     end
 
     assert_equal original_digest, installation.reload.bootstrap_token_digest

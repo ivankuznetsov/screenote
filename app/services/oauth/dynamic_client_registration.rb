@@ -20,6 +20,7 @@ module Oauth
 
     class InvalidMetadata < StandardError; end
     class CapacityExceeded < StandardError; end
+    class ApplicationUnavailable < StandardError; end
 
     class << self
       def call(client_name:, redirect_uris:, token_endpoint_auth_method: nil, grant_types: nil)
@@ -34,14 +35,28 @@ module Oauth
       def cleanup_unused!(before: UNUSED_RETENTION.ago)
         deleted = 0
         cleanup_candidates(before: before).find_each do |application|
-          application.with_lock do
-            next if active_credential?(application)
+          begin
+            application.with_lock do
+              next unless cleanup_candidate?(application, before: before)
+              next if active_credential?(application)
 
-            application.destroy!
-            deleted += 1
+              application.destroy!
+              deleted += 1
+            end
+          rescue ActiveRecord::RecordNotFound
+            next
           end
         end
         deleted
+      end
+
+      def with_application_lock(application)
+        raise ApplicationUnavailable, "OAuth client is unavailable" unless application
+        return yield unless application.dynamic?
+
+        application.with_lock { yield }
+      rescue ActiveRecord::RecordNotFound
+        raise ApplicationUnavailable, "OAuth client is unavailable"
       end
 
       def mark_used!(application)
@@ -59,6 +74,11 @@ module Oauth
       def cleanup_candidates(before:)
         Doorkeeper::Application.where(dynamic: true, created_at: ...before)
           .where("last_used_at IS NULL OR last_used_at < ?", before)
+      end
+
+      def cleanup_candidate?(application, before:)
+        application.created_at < before &&
+          (application.last_used_at.nil? || application.last_used_at < before)
       end
 
       def active_credential?(application)

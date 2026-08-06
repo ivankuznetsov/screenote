@@ -18,9 +18,10 @@ if deployment.social_oauth?
 end
 
 # rails_simple_auth 1.1 disables OmniAuth's request-phase CSRF validation in a
-# later engine initializer. Restore OmniAuth's default protection after every
-# initializer has run. OAuth2 strategies separately verify callback state.
+# later engine initializer. Restore it after every initializer has run and bind
+# Rack Protection to Rails' actual encrypted-session CSRF key. OAuth2 strategies
+# separately verify callback state.
 Rails.application.config.after_initialize do
   OmniAuth.config.allowed_request_methods = %i[post]
-  OmniAuth.config.request_validation_phase = OmniAuth::AuthenticityTokenProtection
+  OmniAuth.config.request_validation_phase = OmniAuth::AuthenticityTokenProtection.new(key: :_csrf_token)
 end

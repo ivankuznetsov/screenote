@@ -10,33 +10,60 @@ module ProjectMemberships
 
     class << self
       def call(project:, membership_id:, actor:)
-        User.transaction do
-          locked_actor = AuthorityLock.user!(actor)
-          locked_project = Project.lock.find_by(id: project&.id)
+        DatabaseRetry.call do
+          target_user = target_user_for(project: project, membership_id: membership_id)
 
-          remove_locked(
-            project: locked_project,
-            membership_id: membership_id,
-            actor: locked_actor
-          )
+          User.transaction do
+            locked_users = AuthorityLock.users!(actor, *Array(target_user)).index_by(&:id)
+            locked_actor = locked_users.fetch(actor.id)
+            locked_target = target_user && locked_users.fetch(target_user.id)
+            locked_project = Project.lock.find_by(id: project&.id)
+            cancellation_scope = cancellation_scope_for(locked_target, locked_project)
+            memberships = locked_project ?
+              ProjectMembership.where(project_id: locked_project.id).order(:id).lock.to_a : []
+
+            remove_locked(
+              project: locked_project,
+              membership_id: membership_id,
+              actor: locked_actor,
+              target_user: locked_target,
+              memberships: memberships,
+              cancellation_scope: cancellation_scope
+            )
+          end
         end
+      rescue DatabaseRetry::Exhausted
+        Result.new(status: :retryable_busy, membership: nil)
       rescue ActiveRecord::RecordNotFound
         Result.new(status: :forbidden, membership: nil)
       end
 
       private
 
-      def remove_locked(project:, membership_id:, actor:)
-        return Result.new(status: :forbidden, membership: nil) unless project && actor
+      def target_user_for(project:, membership_id:)
+        user_id = ProjectMembership.where(project_id: project&.id, id: membership_id).pick(:user_id)
+        User.find_by(id: user_id) if user_id
+      end
 
-        actor_membership = ProjectMembership.lock.find_by(project_id: project.id, user_id: actor.id)
+      def cancellation_scope_for(target_user, project)
+        return unless target_user && project
+
+        ProjectInvitations::CancelForIssuer.lock_scope!(issuer: target_user, projects: [ project ])
+      end
+
+      def remove_locked(project:, membership_id:, actor:, target_user:, memberships:, cancellation_scope:)
+        return Result.new(status: :forbidden, membership: nil) unless project && actor.active?
+
+        actor_membership = memberships.find { |candidate| candidate.user_id == actor.id }
         return Result.new(status: :forbidden, membership: nil) unless actor_membership&.owner?
 
-        membership = ProjectMembership.lock.find_by(project_id: project.id, id: membership_id)
-        return Result.new(status: :not_found, membership: nil) unless membership
+        membership = memberships.find { |candidate| candidate.id.to_s == membership_id.to_s }
+        return Result.new(status: :not_found, membership: nil) unless membership && target_user
+        return Result.new(status: :not_found, membership: nil) unless membership.user_id == target_user.id
         return Result.new(status: :cannot_remove_self, membership: membership) if membership.user_id == actor.id
 
         if membership.destroy
+          ProjectInvitations::CancelForIssuer.call(issuer: target_user, scope: cancellation_scope)
           revoke_credentials!(project: project, user_id: membership.user_id)
           Result.new(status: :removed, membership: membership)
         else

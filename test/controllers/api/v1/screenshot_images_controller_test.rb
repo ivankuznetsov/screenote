@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 module Api
@@ -59,6 +61,29 @@ module Api
         assert_equal "rate_limit_unavailable", response.parsed_body["code"]
         assert_equal "60", response.headers["Retry-After"]
         assert_not @image.reload.image.attached?
+      end
+
+      test "rate limiting returns a retryable response when the credential budget is exhausted" do
+        with_upload_rate_limit_backend(SaturatedRateLimitBackend.new) do
+          upload(@image_data)
+        end
+
+        assert_response :too_many_requests
+        assert_equal "rate_limited", response.parsed_body["code"]
+        assert_equal 1.hour.to_i.to_s, response.headers["Retry-After"]
+        assert_not @image.reload.image.attached?
+      end
+
+      test "anonymous rate-limit identities fail closed for invalid and numeric project parameters" do
+        controller = @controller_class.new
+        request = ActionController::TestRequest.create(controller)
+        controller.set_request!(request)
+
+        request.path_parameters = { project_id: "not-an-id" }
+        assert_equal "unauthenticated:project:invalid", controller.send(:upload_credential_rate_limit_identity)
+
+        request.path_parameters = { project_id: "42" }
+        assert_equal "unauthenticated:project:42", controller.send(:upload_credential_rate_limit_identity)
       end
 
       test "uploads valid prepared bytes and enqueues processing" do
@@ -205,6 +230,12 @@ module Api
 
           keys << key
           @counts[key] += amount
+        end
+      end
+
+      class SaturatedRateLimitBackend
+        def increment(*)
+          Api::V1::ScreenshotImagesController::UPLOAD_RATE_LIMIT + 1
         end
       end
 

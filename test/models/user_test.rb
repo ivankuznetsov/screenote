@@ -25,6 +25,44 @@ class UserTest < ActiveSupport::TestCase
     assert_equal "test@example.com", user.email
   end
 
+  test "new users are active and suspension changes the shared activity predicate" do
+    user = User.create!(email: "activity@example.com", password: "password123")
+    assert user.active?
+    assert user.access_active?
+    assert user.active_for_authentication?
+
+    user.update!(access_status: :suspended)
+    assert user.suspended?
+    assert_not user.access_active?
+    assert_not user.active_for_authentication?
+  end
+
+  test "OAuth provider identity is normalized paired and unique" do
+    user = User.create!(
+      email: "oauth-normalized@example.com",
+      password: "password123",
+      oauth_provider: " GitHub ",
+      oauth_uid: " provider-id "
+    )
+    assert_equal "github", user.oauth_provider
+    assert_equal "provider-id", user.oauth_uid
+
+    half_identity = User.new(
+      email: "oauth-half@example.com",
+      password: "password123",
+      oauth_provider: "github"
+    )
+    assert_not half_identity.valid?
+
+    duplicate = User.new(
+      email: "oauth-duplicate@example.com",
+      password: "password123",
+      oauth_provider: "github",
+      oauth_uid: "provider-id"
+    )
+    assert_not duplicate.valid?
+  end
+
   test "has many sessions" do
     user = users(:alice)
     assert_respond_to user, :sessions

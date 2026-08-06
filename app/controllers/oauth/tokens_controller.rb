@@ -4,11 +4,20 @@ module Oauth
   class TokensController < Doorkeeper::TokensController
     def create
       credential = credential_for_exchange
-      return super unless credential
+      application = credential&.application || Doorkeeper::Application.by_uid(params[:client_id])
+      return super unless application
 
-      PrincipalBinding.with_locked_credential(credential) do |valid|
-        valid ? super() : render_invalid_principal_binding
+      DynamicClientRegistration.with_application_lock(application) do
+        if credential
+          PrincipalBinding.with_locked_credential(credential) do |valid|
+            valid ? super() : render_invalid_principal_binding
+          end
+        else
+          super()
+        end
       end
+    rescue DynamicClientRegistration::ApplicationUnavailable
+      render_invalid_principal_binding
     end
 
     private
@@ -30,8 +39,7 @@ module Oauth
 
     def after_successful_authorization(context)
       super
-      application = context.auth.respond_to?(:token) ? context.auth.token&.application : nil
-      DynamicClientRegistration.mark_used!(application)
+      DynamicClientRegistration.mark_used!(context.auth.token.application)
     end
   end
 end

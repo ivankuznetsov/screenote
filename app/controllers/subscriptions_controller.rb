@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SubscriptionsController < ApplicationController
+  before_action :require_billing!
+
   rescue_from Stripe::StripeError do |e|
     Screenote::Monitoring.notify(e)
     redirect_to subscription_path, alert: "We couldn't connect to our payment provider. Please try again shortly."
@@ -51,6 +53,10 @@ class SubscriptionsController < ApplicationController
   end
 
   private
+
+  def require_billing!
+    not_found unless Screenote::Deployment.current.billing?
+  end
 
   def canonical_subscription_url(**options)
     subscription_url(Screenote::Deployment.current.url_options.merge(options))

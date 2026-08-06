@@ -32,7 +32,6 @@ module Screenote
       GITHUB_CLIENT_SECRET
       HONEYBADGER_API_KEY
       HONEYBADGER_JS_API_KEY
-      SCREENOTE_SAAS_OPERATOR_EMAIL
       RABATA_ENDPOINT
       RABATA_REGION
       RABATA_BUCKET
@@ -184,8 +183,6 @@ module Screenote
     end
 
     def parse_origin(raw)
-      raise ConfigurationError, "SCREENOTE_BASE_URL is required" if blank?(raw)
-
       uri = URI.parse(raw)
       valid_path = uri.path.nil? || uri.path.empty? || uri.path == "/"
       valid = uri.is_a?(URI::HTTP) && %w[http https].include?(uri.scheme) &&
@@ -200,16 +197,14 @@ module Screenote
     end
 
     def origin_for(uri)
-      authority = uri.host
+      authority = uri.hostname
       authority = "[#{authority}]" if authority.include?(":")
       authority = "#{authority}:#{uri.port}" unless default_port_for?(uri)
       "#{uri.scheme}://#{authority}"
     end
 
     def default_base_url
-      return "http://localhost:3000" unless production?
-
-      DEFAULT_BASE_URLS.fetch(edition)
+      "http://localhost:3000"
     end
 
     def configured_base_url

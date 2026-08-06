@@ -1,0 +1,16 @@
+<% if RailsSimpleAuth.configuration.oauth_enabled %>
+  <div class="auth-card__oauth" aria-label="Social sign in">
+    <% RailsSimpleAuth.configuration.oauth_providers.each do |provider| %>
+      <%= button_to "/auth/#{provider}",
+            method: :post,
+            params: { origin: request.path },
+            class: "auth-card__oauth-btn",
+            form: { data: { turbo: false } } do %>
+        <span class="auth-card__oauth-icon auth-card__oauth-icon--<%= provider %>" aria-hidden="true"></span>
+        Continue with <%= RailsSimpleAuth.configuration.oauth_provider_display_name(provider) %>
+      <% end %>
+    <% end %>
+  </div>
+
+  <div class="auth-card__divider"><span>or</span></div>
+<% end %>
