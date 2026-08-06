@@ -176,7 +176,7 @@ docker compose \
   --project-directory "${RESTORE_OPERATOR}" \
   --env-file "${RESTORE_OPERATOR}/.env" \
   --file "${BASE_COMPOSE}" \
-  exec --no-tty screenote /rails/bin/docker-entrypoint ./bin/rails runner - >"${VERIFY_LOG}" 2>&1 <<'RUBY'
+  exec -T screenote /rails/bin/docker-entrypoint ./bin/rails runner - >"${VERIFY_LOG}" 2>&1 <<'RUBY'
 raise "installation was not restored" unless Installation.current!.claimed?
 raise "administrator was not restored" unless User.exists?(email: "backup-smoke@example.test")
 raise "cache database was not restored" unless Rails.cache.read("screenote-backup-smoke") == "restored"

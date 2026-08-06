@@ -3,7 +3,7 @@ title: Testing and CI
 type: operations
 source: test/, bin/ci, config/ci.rb, .github/workflows/ci.yml
 created: 2026-07-28
-updated: 2026-08-05
+updated: 2026-08-06
 tags: [testing, ci, minitest, capybara, playwright]
 ---
 
@@ -143,6 +143,14 @@ image intentionally isolates deployment gems under `BUNDLE_PATH`, so a bare
 `ruby` process is not equivalent to the Rails runtime and can report false
 missing-gem failures. The CI image probe uses `bundle exec ruby` and verifies
 both the selected S3 SDK and libvips binding from the final image.
+
+Non-interactive commands inside a running Compose service use the portable
+short `exec -T` spelling. The hosted runner's Compose 2.38.2 frontend exposes
+the case-sensitive long spelling `--no-TTY`, while other plugin versions accept
+`--no-tty`; the short form works across both. A rejected poll must not disguise
+a healthy container as a durability timeout. Source contracts cover the
+final-image processing poll, backup restore verification, and operator
+diagnostics command.
 
 Required pull-request jobs prove source contracts and are recorded with
 `scope: pr_contract_only`; their names or success conclusions are never release

@@ -862,7 +862,7 @@ module Screenote
           raise Error.new("Screenote is not running", exit_code: 73) if container_id.empty?
           inspect_state!(container_id, expected_status: "running")
           output = compose.capture!(
-            "exec", "--no-tty", SERVICE,
+            "exec", "-T", SERVICE,
             "/rails/bin/docker-entrypoint", "./bin/rails", "runner", "script/self_hosted_diagnostics",
             message: "diagnostics failed"
           )

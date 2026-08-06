@@ -1082,10 +1082,16 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
 
   test "container smoke tests a supplied release image without rebuilding it" do
     smoke = Rails.root.join("script/self_hosted_container_smoke").read
+    backup_smoke = Rails.root.join("script/self_hosted_backup_smoke").read
 
     assert_match(/if \[\[ "\$\{REMOVE_IMAGE\}" == true \]\]; then.*docker build.*else.*docker image inspect/m, smoke)
     assert_includes Rails.root.join("script/release_test_matrix").read,
       'SCREENOTE_SMOKE_IMAGE="${SCREENOTE_RELEASE_IMAGE}" script/self_hosted_container_smoke'
+    assert_equal 3, smoke.scan("exec -T screenote sqlite3").length
+    assert_includes backup_smoke,
+      "exec -T screenote /rails/bin/docker-entrypoint ./bin/rails runner -"
+    assert_not_includes smoke, "--no-tty"
+    assert_not_includes backup_smoke, "--no-tty"
   end
 
   test "repository Go checks ignore the Rails vendor directory" do

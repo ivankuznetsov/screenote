@@ -160,13 +160,13 @@ wait_until_processing_complete() {
   local failed_jobs finished_jobs primary_state ready_images variant_records
 
   for _attempt in $(seq 1 60); do
-    if primary_state="$("${compose_command[@]}" exec --no-tty screenote sqlite3 \
+    if primary_state="$("${compose_command[@]}" exec -T screenote sqlite3 \
         /rails/storage/primary.sqlite3 \
         'SELECT (SELECT COUNT(*) FROM screenshot_images WHERE status = 1 AND width = 400 AND height = 300), (SELECT COUNT(*) FROM active_storage_variant_records);')" &&
-      finished_jobs="$("${compose_command[@]}" exec --no-tty screenote sqlite3 \
+      finished_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
         /rails/storage/queue.sqlite3 \
         "SELECT COUNT(*) FROM solid_queue_jobs WHERE class_name = 'ScreenshotDimensionJob' AND finished_at IS NOT NULL;")" &&
-      failed_jobs="$("${compose_command[@]}" exec --no-tty screenote sqlite3 \
+      failed_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
         /rails/storage/queue.sqlite3 \
         'SELECT COUNT(*) FROM solid_queue_failed_executions;')"; then
       IFS='|' read -r ready_images variant_records <<< "${primary_state}"

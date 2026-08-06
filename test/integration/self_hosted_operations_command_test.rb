@@ -363,7 +363,7 @@ class SelfHostedOperationsCommandTest < ActiveSupport::TestCase
       assert status.success?, stderr
       assert_includes stdout, '"status":"ok"'
       assert_includes File.read(fixture.fetch(:trace)),
-        "compose exec --no-tty screenote /rails/bin/docker-entrypoint ./bin/rails runner script/self_hosted_diagnostics"
+        "compose exec -T screenote /rails/bin/docker-entrypoint ./bin/rails runner script/self_hosted_diagnostics"
       assert_not_includes stdout, fixture.fetch(:secret)
       assert_not_includes stderr, fixture.fetch(:secret)
     end
