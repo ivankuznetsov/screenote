@@ -292,38 +292,49 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     end
   end
 
-  test "self hosted server startup refuses application secrets passed directly" do
+  test "server process receives direct and file backed secrets without bootstrap material" do
     Dir.mktmpdir("screenote-entrypoint") do |directory|
+      write_executable(
+        File.join(directory, "bin/screenote-deployment-preflight"),
+        "#!/usr/bin/env bash\nexit 0\n"
+      )
       write_executable(File.join(directory, "bin/rails"), "#!/usr/bin/env bash\nexit 0\n")
-
-      _stdout, stderr, status = run_entrypoint(
-        {
-          "SCREENOTE_EDITION" => "self_hosted",
-          "SECRET_KEY_BASE" => "direct-secret-must-not-be-used"
-        },
-        "./bin/rails", "server",
-        chdir: directory
+      write_executable(
+        File.join(directory, "bin/thrust"),
+        <<~'BASH'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          [[ "${SECRET_KEY_BASE-}" == "${SCREENOTE_TEST_EXPECTED_SECRET-}" ]] || {
+            printf 'secret mismatch\n' >&2
+            exit 1
+          }
+          [[ -z "${SECRET_KEY_BASE_FILE+x}" ]] || {
+            printf 'secret file variable retained\n' >&2
+            exit 1
+          }
+          [[ -z "${SCREENOTE_BOOTSTRAP_TOKEN+x}" ]] || {
+            printf 'bootstrap material retained\n' >&2
+            exit 1
+          }
+          printf 'secret=matched bootstrap=absent secret_file=absent\n' > "$SCREENOTE_TEST_TRACE"
+        BASH
       )
 
-      assert_not status.success?
-      assert_includes stderr, "requires SECRET_KEY_BASE_FILE"
-      assert_not_includes stderr, "direct-secret-must-not-be-used"
-    end
-
-    with_secret_file("s" * 64, mode: 0o400) do |secret_key_path|
-      _stdout, stderr, status = run_entrypoint(
-        {
-          "SCREENOTE_EDITION" => "self_hosted",
-          "SECRET_KEY_BASE_FILE" => secret_key_path,
-          "SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS" => '{"private":"material"}'
-        },
-        "./bin/rails", "server"
+      direct_secret = "direct-secret-#{'s' * 48}"
+      assert_server_receives_secret(
+        directory: directory,
+        secret: direct_secret,
+        environment: { "SECRET_KEY_BASE" => direct_secret }
       )
 
-      assert_not status.success?
-      assert_includes stderr, "requires SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS_FILE"
-      assert_not_includes stderr, "private"
-      assert_not_includes stderr, "material"
+      file_secret = "file-secret-#{'f' * 48}"
+      with_secret_file(file_secret, mode: 0o400) do |path|
+        assert_server_receives_secret(
+          directory: directory,
+          secret: file_secret,
+          environment: { "SECRET_KEY_BASE_FILE" => path }
+        )
+      end
     end
   end
 
@@ -492,6 +503,29 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
   end
 
   private
+
+  def assert_server_receives_secret(directory:, secret:, environment:)
+    trace = File.join(directory, "server-environment")
+    bootstrap_secret = "bootstrap-secret-#{'b' * 32}"
+    FileUtils.rm_f(trace)
+    stdout, stderr, status = run_entrypoint(
+      {
+        "SCREENOTE_EDITION" => "saas",
+        "SCREENOTE_BOOTSTRAP_TOKEN" => bootstrap_secret,
+        "SCREENOTE_TEST_EXPECTED_SECRET" => secret,
+        "SCREENOTE_TEST_TRACE" => trace
+      }.merge(environment),
+      "./bin/thrust", "./bin/rails", "server",
+      chdir: directory
+    )
+
+    assert status.success?, stderr
+    assert_equal "secret=matched bootstrap=absent secret_file=absent\n", File.binread(trace)
+    assert_not_includes stdout, secret
+    assert_not_includes stderr, secret
+    assert_not_includes stdout, bootstrap_secret
+    assert_not_includes stderr, bootstrap_secret
+  end
 
   def run_entrypoint(environment, *command, chdir: Rails.root.to_s)
     clean_environment = FILE_BACKED_SECRET_NAMES.flat_map do |name|

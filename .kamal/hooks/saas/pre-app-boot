@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+# Refuse a rolling credential migration from every command path that can boot
+# an app, then run compatible migrations from the candidate SaaS image.
+bin/saas-deploy-guard "${KAMAL_VERSION:?KAMAL_VERSION is required}"
+
+bin/kamal-saas app exec \
+  --primary \
+  --version "${KAMAL_VERSION}" \
+  "bin/rails db:migrate"

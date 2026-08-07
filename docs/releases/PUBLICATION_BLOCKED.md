@@ -10,5 +10,12 @@ Remove it when all technical prerequisites are ready:
 - Exact AMD64/ARM64 layouts, manifest digest, SBOM, provenance, secret/vulnerability scans, source-contract checks, and public-log scan match the candidate.
 - Native AMD64/ARM64/minimum-host qualification runners, the tracked public-CLI driver, and candidate-backed HTTP/HTTPS origins are configured; qualification uses the profile and load driver fixed by the exact server commit.
 - The retained qualification artifact proves all eight required runtime checks; pull-request contract jobs are not substitutes.
+- The supported `bin/kamal` exact-image path has completed a retained Linux
+  AMD64 deployment qualification through Kamal Proxy and Thruster, including
+  manifest mirroring, remote digest/label identity, HTTPS and client-IP
+  forwarding, spoofed-forwarding rejection, restart, and volume persistence.
+- Kamal-native backup and restore commands are published and a retained drill
+  proves recovery of all four SQLite roles plus local files or the selected S3
+  namespace using the exact release image.
 
 Deleting this file records technical readiness only. Promotion still requires the protected `source-release` environment approval and every exact validator must pass.

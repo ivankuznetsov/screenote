@@ -22,7 +22,7 @@ Before submitting, run:
 
 ```sh
 bin/ci
-SCREENOTE_EDITION=self_hosted PARALLEL_WORKERS=1 bin/rails test
+script/release_test_matrix self-hosted
 ```
 
 Changes to authentication, authorization, persistence, deployment, or release behavior also need focused regression tests on each affected database adapter and edition. Browser-facing changes need system coverage for keyboard use, narrow screens, and the affected multi-user flow.

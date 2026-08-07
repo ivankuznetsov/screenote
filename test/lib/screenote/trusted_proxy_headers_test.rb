@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class Screenote::TrustedProxyHeadersTest < ActiveSupport::TestCase
@@ -61,6 +63,29 @@ class Screenote::TrustedProxyHeadersTest < ActiveSupport::TestCase
     middleware = Screenote::TrustedProxyHeaders.new(remote_ip, trusted_proxies: proxies)
     environment = forwarded_environment(
       "REMOTE_ADDR" => "10.2.3.4",
+      "rack.url_scheme" => "http"
+    )
+
+    _status, _headers, body = middleware.call(environment)
+
+    assert_equal [ "198.51.100.77|https" ], body
+  end
+
+  test "Kamal Proxy headers survive the trusted Thruster loopback hop" do
+    proxies = [
+      IPAddr.new("127.0.0.1/32"),
+      IPAddr.new("::1/128"),
+      IPAddr.new("172.16.0.0/12")
+    ]
+    terminal = lambda do |environment|
+      request = ActionDispatch::Request.new(environment)
+      [ 200, {}, [ "#{request.remote_ip}|#{request.scheme}" ] ]
+    end
+    remote_ip = ActionDispatch::RemoteIp.new(terminal, true, proxies)
+    middleware = Screenote::TrustedProxyHeaders.new(remote_ip, trusted_proxies: proxies)
+    environment = forwarded_environment(
+      "REMOTE_ADDR" => "127.0.0.1",
+      "HTTP_X_FORWARDED_FOR" => "198.51.100.77, 172.18.0.2",
       "rack.url_scheme" => "http"
     )
 

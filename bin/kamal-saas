@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+config="$root/config/deploy.saas.yml"
+
+case "${1-}" in
+  accessory|app|build|lock|proxy|prune|registry|secrets|server)
+    group="$1"
+    shift
+    exec "$root/bin/kamal" "$group" --config-file "$config" "$@"
+    ;;
+  "")
+    exec "$root/bin/kamal" --config-file "$config"
+    ;;
+  *)
+    command="$1"
+    shift
+    exec "$root/bin/kamal" "$command" --config-file "$config" "$@"
+    ;;
+esac

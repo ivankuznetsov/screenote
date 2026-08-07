@@ -64,12 +64,48 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes notices, "Alpine packages installed by `Dockerfile` with `apk`"
     assert_not_includes notices, "Debian packages installed by `Dockerfile`"
 
-    public_installation_docs = Rails.root.join("README.md").read + Rails.root.join("docs/self-hosting.md").read
+    public_installation_docs = [
+      Rails.root.join("README.md"),
+      Rails.root.join("docs/self-hosting.md"),
+      Rails.root.join("docs/kamal-deployment.md")
+    ].sum("") { |path| path.read }
     assert_no_match(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i, public_installation_docs)
+    assert_no_match(/docker\s+compose|compose\.ya?ml/i, public_installation_docs)
+    assert_no_match(/\bmcp\b/i, public_installation_docs)
     assert_not Rails.root.join("config/credentials.yml.enc").exist?
     gitignore = Rails.root.join(".gitignore").read.lines.map(&:strip)
     assert_includes gitignore, "/config/credentials*.yml.enc"
     assert_includes gitignore, "/config/credentials/**/*.yml.enc"
+  end
+
+  test "release validator rejects MCP wording regardless of case" do
+    %w[mcp McP].each do |wording|
+      Dir.mktmpdir("screenote-public-positioning") do |root|
+        %w[
+          README.md
+          CONTRIBUTING.md
+          SECURITY.md
+          SUPPORT.md
+          THIRD_PARTY_NOTICES.md
+          docs/self-hosting.md
+          docs/kamal-deployment.md
+        ].each do |relative|
+          destination = File.join(root, relative)
+          FileUtils.mkdir_p(File.dirname(destination))
+          FileUtils.cp(Rails.root.join(relative), destination)
+        end
+        File.open(File.join(root, "README.md"), "a") do |readme|
+          readme.puts("Use the #{wording} integration.")
+        end
+
+        validator = ReleaseValidation.new(root: root)
+        validator.send(:public_positioning)
+
+        assert_includes validator.errors,
+          "public product docs must use the CLI and agent skill rather than MCP",
+          wording
+      end
+    end
   end
 
   test "complete redacted fixture passes the evidence schema" do
@@ -263,6 +299,18 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       validator = ReleaseValidation.new(root: root)
       validator.validate_publication_blocker
       assert_includes validator.errors, "publication sentinel still exists: docs/releases/PUBLICATION_BLOCKED.md"
+    end
+  end
+
+  test "publication sentinel requires the supported Kamal runtime and recovery drills" do
+    sentinel = Rails.root.join("docs/releases/PUBLICATION_BLOCKED.md").read
+    checklist = Rails.root.join("docs/releases/publication-checklist.md").read
+
+    [ sentinel, checklist ].each do |document|
+      assert_includes document, "Kamal Proxy"
+      assert_includes document, "Kamal-native backup"
+      assert_includes document, "restart"
+      assert_includes document, "persistence"
     end
   end
 
@@ -1001,6 +1049,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     %w[source revision version description licenses].each do |label|
       assert_includes dockerfile, "org.opencontainers.image.#{label}"
     end
+    assert_includes dockerfile, 'LABEL service="screenote"'
+    assert_includes workflow, '"service" => "screenote"'
     assert_includes dockerfile, "LicenseRef-OSaasy"
   end
 

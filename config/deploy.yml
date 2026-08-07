@@ -1,102 +1,109 @@
-# Name of your application. Used to uniquely configure containers.
-service: screenote
+# Screenote self-hosted starter configuration.
+#
+# Set servers.web to the Linux AMD64 server Kamal reaches over SSH. Set
+# proxy.host and SCREENOTE_BASE_URL to the public Screenote hostname, then copy
+# .kamal/secrets.example to .kamal/secrets and fill in its values. On a
+# supported tag, bin/kamal mirrors the exact qualified release image into this
+# loopback registry before asking Kamal to pull it.
 
-# Name of the container image (used with local registry on localhost:5555)
+service: screenote
 image: screenote
 
-# Deploy to these servers.
 servers:
   web:
-    - screenote
+    - screenote.example.com
 
-# Enable SSL via Let's Encrypt on kamal-proxy (origin). Cloudflare terminates SSL at the edge (Full mode).
+ssh:
+  user: root
+
 proxy:
   ssl: true
-  host: screenote.ai
+  host: screenote.example.com
+  app_port: 80
+  # This is the internet/VPN edge. Discard caller-supplied X-Forwarded-*
+  # values and let Kamal Proxy generate authoritative forwarding headers.
+  forward_headers: false
+  healthcheck:
+    path: /ready
+    interval: 3
+    timeout: 5
+  buffering:
+    requests: true
+    responses: true
+    max_request_body: 31_457_280
 
-# Local Docker registry (Kamal will automatically start it)
 registry:
   server: localhost:5555
 
-# Inject ENV variables into containers (secrets come from .kamal/secrets).
 env:
   secret:
     - SECRET_KEY_BASE
-    - DATABASE_PASSWORD
-    - POSTGRES_PASSWORD
-    - DATABASE_URL
-    - QUEUE_DATABASE_URL
-    - CACHE_DATABASE_URL
-    - CABLE_DATABASE_URL
-    - RABATA_ACCESS_KEY_ID
-    - RABATA_SECRET_ACCESS_KEY
-    - GOOGLE_CLIENT_ID
-    - GOOGLE_CLIENT_SECRET
-    - GITHUB_CLIENT_ID
-    - GITHUB_CLIENT_SECRET
-    - HONEYBADGER_API_KEY
-    - HONEYBADGER_JS_API_KEY
-    - RESEND_API_KEY
-    - STRIPE_SECRET_KEY
-    - STRIPE_WEBHOOK_SECRET
-    - STRIPE_PRO_PRICE_ID
-    - SCREENOTE_SAAS_OPERATOR_EMAIL
+    - SCREENOTE_BOOTSTRAP_TOKEN
+    # Uncomment the secrets needed by the optional providers below.
+    # - SMTP_USERNAME
+    # - SMTP_PASSWORD
+    # - SCREENOTE_S3_ACCESS_KEY_ID
+    # - SCREENOTE_S3_SECRET_ACCESS_KEY
+    # - GOOGLE_CLIENT_SECRET
+    # - GITHUB_CLIENT_SECRET
+    # - HONEYBADGER_API_KEY
   clear:
-    # Run Solid Queue Supervisor inside Puma for single-server deployment
+    SCREENOTE_EDITION: self_hosted
+    SCREENOTE_BASE_URL: https://screenote.example.com
+
+    # Kamal Proxy sanitizes forwarding headers at the edge. Thruster is the
+    # private in-container hop to Rails and must pass those generated values.
+    # Neither port 80 nor Rails' target port is published directly.
+    THRUSTER_FORWARD_HEADERS: true
+    SCREENOTE_TRUSTED_PROXIES: 127.0.0.1/32,::1/128,172.16.0.0/12
+
+    SCREENOTE_STORAGE: local
+    SCREENOTE_SMTP_ENABLED: false
+    SCREENOTE_GOOGLE_OAUTH_ENABLED: false
+    SCREENOTE_GITHUB_OAUTH_ENABLED: false
+    SCREENOTE_HONEYBADGER_ENABLED: false
+
+    # External transactional email (Resend example). Set
+    # SCREENOTE_SMTP_ENABLED to true and uncomment both SMTP secrets above.
+    # SMTP_ADDRESS: smtp.resend.com
+    # SMTP_PORT: 587
+    # SMTP_AUTHENTICATION: plain
+    # SMTP_STARTTLS: true
+    # MAILER_FROM: Screenote <screenote@example.com>
+
+    # To store screenshots in S3-compatible object storage, set
+    # SCREENOTE_STORAGE to s3, uncomment both S3 secrets above, and fill these.
+    # SCREENOTE_S3_ENDPOINT: https://objects.example.com
+    # SCREENOTE_S3_REGION: us-east-1
+    # SCREENOTE_S3_BUCKET: screenote-private
+    # SCREENOTE_S3_PREFIX: production
+    # SCREENOTE_S3_PATH_STYLE: true
+
     SOLID_QUEUE_IN_PUMA: true
-
-    # Number of Solid Queue worker threads
     JOB_CONCURRENCY: 3
-
-    # Number of Puma worker processes
-    WEB_CONCURRENCY: 2
-
-    # Rails environment
+    WEB_CONCURRENCY: 1
     RAILS_ENV: production
     RAILS_SERVE_STATIC_FILES: true
     RAILS_LOG_TO_STDOUT: true
+    RAILS_LOG_LEVEL: info
+    RAILS_MAX_THREADS: 3
 
-    # Fail-closed deployment and canonical public origin.
-    SCREENOTE_EDITION: saas
-    SCREENOTE_BASE_URL: https://screenote.ai
-    SCREENOTE_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-
-    # Hosted mail identity.
-    MAILER_FROM: noreply@screenote.ai
-
-    # S3 configuration (Rabata.io)
-    RABATA_ENDPOINT: https://s3.us-east-1.rabata.io
-    RABATA_REGION: us-east-1
-    RABATA_BUCKET: screenote
-
-# Aliases for common commands
 aliases:
   console: app exec --interactive --reuse "bin/rails console"
   shell: app exec --interactive --reuse "bash"
   logs: app logs -f
   dbc: app exec --interactive --reuse "bin/rails dbconsole"
-  migrate: app exec --reuse "bin/rails db:migrate"
-  seed: app exec --reuse "bin/rails db:seed"
+  diagnostics: app exec --reuse "bin/rails runner script/self_hosted_diagnostics"
 
-# Bridge fingerprinted assets between versions
+# Bridge fingerprinted assets between old and new containers during a deploy.
 asset_path: /rails/public/assets
 
-# Configure the image builder
+volumes:
+  - screenote_storage:/rails/storage
+
+minimum_version: 2.10.1
+deploy_timeout: 120
+drain_timeout: 30
+
 builder:
   arch: amd64
-
-# Accessories - PostgreSQL
-accessories:
-  db:
-    image: postgres:16-alpine
-    host: screenote
-    port: "127.0.0.1:5432:5432"
-    env:
-      clear:
-        POSTGRES_USER: screenote
-        POSTGRES_DB: screenote_production
-      secret:
-        - POSTGRES_PASSWORD
-    directories:
-      - /var/lib/screenote/postgresql:/var/lib/postgresql/data
-    cmd: postgres -c shared_buffers=256MB -c max_connections=200

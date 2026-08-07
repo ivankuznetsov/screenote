@@ -10,13 +10,15 @@ The source-available self-hosted edition is provided as-is under the [O'Saasy Li
 
 Before asking for help:
 
-- confirm that the instance runs an immutable digest from a supported release;
+- confirm that the deployment fork is based on an exact supported release,
+  that application source and the running image digest match that release, and
+  that fork changes are limited to documented deployment settings;
 - follow every adjacent upgrade step from the named predecessor;
 - read the [self-hosting guide](docs/self-hosting.md) and release-specific notes;
 - reproduce without sharing customer content or secrets; and
 - include sanitized edition, release digest, storage mode, proxy mode, and relevant error class.
 
-Operators own their host, network, TLS termination, access controls, storage service, SMTP/provider accounts, monitoring, backups, restore drills, secret rotation, and capacity. Custom forks, skipped upgrades, modified images, self-hosted PostgreSQL, clustering, high availability, storage migration, and infrastructure not listed in the release's support matrix are unsupported for the first release.
+Operators own their host, network, TLS termination, access controls, storage service, external email/provider accounts, monitoring, backups, restore drills, secret rotation, and capacity. A deployment fork pinned to an exact supported release is supported when its changes are limited to the documented non-secret Kamal settings. Application-code or dependency changes, modified Dockerfiles or entrypoints, custom images built from modified source, skipped upgrades, self-hosted PostgreSQL, clustering, high availability, storage migration, and infrastructure not listed in the release's support matrix are unsupported for the first release.
 
 ## Commercial and license questions
 

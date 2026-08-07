@@ -1,12 +1,18 @@
-# Self-hosted backup and restore
+# Internal Compose harness: backup and restore
 
-`bin/self-host-backup` and `bin/self-host-restore` are the only supported
-production backup interfaces. They create and consume one stop-the-world,
+> [!WARNING]
+> This page documents Screenote's internal pre-release Docker Compose
+> qualification harness. It is not a supported operator workflow for Kamal
+> deployments. Use [Deploy Screenote with Kamal](../kamal-deployment.md) and
+> the [self-hosting guide](../self-hosting.md) instead.
+
+Within this internal harness, `bin/self-host-backup` and
+`bin/self-host-restore` model one stop-the-world,
 origin-authenticated, age-encrypted recovery boundary for the four SQLite databases,
 local volume state, external configuration, file-backed secrets, and either
 local blobs or a matching S3-compatible object snapshot.
 
-The first release supports Linux Docker Engine with the operator account,
+The qualification fixture uses Linux Docker Engine with the operator account,
 Compose files, `.env`, secret tree, backup destination, and restore destination
 owned by UID/GID `1000:1000`. Sensitive files and directories must grant no
 group or other access. Run these commands as host UID 1000. Rootless Docker,

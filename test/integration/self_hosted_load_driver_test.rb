@@ -252,6 +252,12 @@ class SelfHostedLoadDriverTest < ActiveSupport::TestCase
 
   test "bounded subprocess runner kills and reaps a hanging process" do
     runner = ScreenoteLoadDriver::Runner.allocate
+    signal_process_group = ScreenoteLoadDriver::Runner.instance_method(:signal_process_group)
+    signaled_pid = nil
+    runner.define_singleton_method(:signal_process_group) do |signal, pid|
+      signaled_pid ||= pid
+      signal_process_group.bind_call(self, signal, pid)
+    end
 
     Dir.mktmpdir("screenote-load-driver-hang") do |directory|
       pid_path = File.join(directory, "pid")
@@ -272,8 +278,8 @@ class SelfHostedLoadDriverTest < ActiveSupport::TestCase
 
       assert_equal "command timed out: #{RbConfig.ruby}", error.message
       assert_operator elapsed, :<, 2
-      assert_path_exists pid_path
-      assert_raises(Errno::ECHILD) { Process.waitpid(Integer(File.binread(pid_path)), Process::WNOHANG) }
+      assert_not_nil signaled_pid
+      assert_raises(Errno::ECHILD) { Process.waitpid(signaled_pid, Process::WNOHANG) }
     end
   end
 

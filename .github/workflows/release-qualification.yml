@@ -214,6 +214,8 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
           QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
           PLATFORM_DIGEST: ${{ matrix.architecture == 'amd64' && needs.configure.outputs.amd64_digest || needs.configure.outputs.arm64_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
           case "$ARCHITECTURE:$(uname -m)" in
@@ -223,6 +225,10 @@ jobs:
           docker pull --platform "linux/$ARCHITECTURE" "$QUALIFICATION_IMAGE"
           test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$QUALIFICATION_IMAGE")" = "linux/$ARCHITECTURE"
           test "$(docker image inspect --format '{{index .RepoDigests 0}}' "$QUALIFICATION_IMAGE")" = "$QUALIFICATION_IMAGE"
+          test "$(docker image inspect --format '{{index .Config.Labels "service"}}' "$QUALIFICATION_IMAGE")" = screenote
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.source"}}' "$QUALIFICATION_IMAGE")" = "https://github.com/$GITHUB_REPOSITORY"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$QUALIFICATION_IMAGE")" = "$SOURCE_SHA"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$QUALIFICATION_IMAGE")" = "$RELEASE_TAG"
           test -n "$PLATFORM_DIGEST"
 
       - name: Run exact-image self-hosted boot and durability qualification

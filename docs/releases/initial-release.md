@@ -2,18 +2,20 @@
 
 - Status: **blocked release candidate**
 - Planned server tag: `v1.0.0`
+- Source revision: **pending exact 40-character commit**
 - Supported predecessor: `none`
 - Canonical public CLI tag: **pending immutable tag and compatibility evidence**
-- Canonical image manifest: **pending exact digest**
+- Canonical image manifest: `ghcr.io/ivankuznetsov/screenote@`**pending exact digest**
 
 This document is a release-note template, not a published release or an authorization to create `v1.0.0`.
 
 ## Self-hosted operators
 
-- The supported topology is one non-root Screenote container with four SQLite roles and one durable volume.
-- Local private storage is the default. S3-compatible storage, SMTP, Google/GitHub OAuth, and monitoring are optional explicit overlays.
-- A fresh instance is claimed exactly once with a removable bootstrap-secret overlay. Later admission is project-owner invitation only.
+- The supported topology is one non-root Screenote application container behind Kamal Proxy, with four SQLite roles and one durable volume.
+- Local private storage is the default. S3-compatible storage, external transactional email, Google/GitHub OAuth, and monitoring are optional Kamal settings.
+- A fresh instance is claimed exactly once with a removable bootstrap secret. Later admission is project-owner invitation only.
 - The core product is unlimited and has no billing, Stripe, or license-key dependency.
+- `bin/kamal setup` validates the immutable `public-evidence.json` release asset and mirrors the canonical image manifest without rebuilding it.
 - Backup, restore, upgrade, and rollback must use the commands and immutable digest published with the final release. No predecessor exists for the initial release.
 
 ## SaaS operators

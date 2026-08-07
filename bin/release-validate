@@ -63,6 +63,7 @@ class ReleaseValidation
     SECURITY.md
     SUPPORT.md
     docs/self-hosting.md
+    docs/kamal-deployment.md
     docs/releases.md
     docs/releases/initial-release.md
     docs/releases/security-evidence.md
@@ -77,6 +78,9 @@ class ReleaseValidation
     .github/rulesets/release-tags.json
     .github/rulesets/immutable-release-tags.json
     .github/dependabot.yml
+    .kamal/secrets.example
+    config/deploy.yml
+    config/deploy.saas.yml
   ].freeze
 
   attr_reader :errors
@@ -200,9 +204,15 @@ class ReleaseValidation
         read(relative).match?(/O'Saasy|source-available|as-is|security/i)
     end
 
-    user_docs = %w[README.md docs/self-hosting.md].filter_map { |relative| read(relative) if File.file?(path(relative)) }.join("\n")
+    user_docs = %w[README.md docs/self-hosting.md docs/kamal-deployment.md]
+      .filter_map { |relative| read(relative) if File.file?(path(relative)) }
+      .join("\n")
     error("public installation docs must not instruct operators to set RAILS_MASTER_KEY") if
       user_docs.match?(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i)
+    error("public installation docs must use Kamal rather than Docker Compose") if
+      user_docs.match?(/docker\s+compose|compose\.ya?ml/i)
+    error("public product docs must use the CLI and agent skill rather than MCP") if
+      user_docs.match?(/\bmcp\b/i)
   end
 
   def tracked_secret_surface

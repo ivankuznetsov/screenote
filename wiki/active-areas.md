@@ -3,7 +3,7 @@ title: Active Areas
 type: architecture
 source: git log --since="6 months ago"
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-08-07
 tags: [active, development, roadmap, recent]
 ---
 
@@ -11,7 +11,7 @@ tags: [active, development, roadmap, recent]
 
 TLDR: Recent development focused on multi-viewport screenshot capture, Stripe webhook hardening, CLI-first onboarding, and LLM wiki automation. The public product loop now points users to the standalone Screenote CLI for publishing captures and retrieving visual feedback.
 
-Source: `git log --all --oneline --since="6 months ago"` (112 commits)
+Source: `git log --all --oneline --since="6 months ago"` (353 commits)
 
 ## Recently Completed (Feb-Apr 2026)
 
@@ -82,7 +82,7 @@ Source: `git log --all --oneline --since="6 months ago"` (112 commits)
 | Core annotation workflow | Stable, production-ready |
 | Multi-viewport screenshot workflow | Recently added, maturing |
 | Public CLI | Canonical public agent interface, onboarding added |
-| MCP integration (OAuth 2.1/API keys) | Stable, production-ready |
+| Legacy MCP runtime | Retained in source; CLI + agent skill is the public integration path |
 | REST API (v1) | Stable, minimal surface |
 | Team collaboration | Stable, recently polished |
 | Billing (Stripe) | Recently hardened |
@@ -97,7 +97,10 @@ Cross-referenced with `plans/` (6 files), `todos/` (176 files), and current sour
 
 2. **Multi-viewport follow-up** -- Clean up transitional `Screenshot#image` path and PR review todos after ScreenshotImage proves stable.
 
-3. **MCP tool completeness** -- Source now includes create/reopen/comment annotation tools, create_project, and invitation/membership tools. Remaining visible gaps are delete_screenshot (#054), delete_annotation (#055), batch feedback retrieval (#053), and plan/status or usage-limit tools (#120). See [[mcp-tools]].
+3. **CLI and plugin release parity** -- Publish one immutable CLI tag for each
+   supported server release, keep the agent plugin's command allowlist and
+   documentation aligned with it, and retire the legacy MCP transport as a
+   separate compatibility migration instead of expanding that tool surface.
 
 4. **CLI adoption** -- Keep install and workflow documentation aligned with the public `screenote-cli` repository as packaging and capture capabilities expand.
 

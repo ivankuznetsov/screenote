@@ -48,15 +48,25 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - **NEW:** Specific test coverage gaps identified: CreateScreenshotTool (#056), SQL injection testing (#149), OAuth test helpers (#102).
 
 ### API CLI
-- [[api-cli]] now documents the Go REST CLI surface, including OAuth browser login, aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. REST parity now covers project creation and idempotent annotation resolution; remaining deferred product scope includes `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload.
+- [[api-cli]] now documents the Go REST CLI surface, including OAuth browser login, aggregate annotation listing, upload content-type handling, page selection, JSON output, and stable usage errors. The server has idempotent annotation resolution, but the current public CLI/plugin does not expose it; `annotation resolve`, `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remain deferred agent-surface work.
 
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.
 - Environment variable documentation for production setup.
+- The public self-hosted install now uses Kamal and Kamal Proxy, but the older
+  host-side backup/restore wrappers, qualification harness, and deep operations
+  documents still model the pre-release Docker Compose design. Before the first
+  supported release, migrate those paths to Kamal or replace them with a
+  smaller tested Kamal-native recovery contract.
+- Normal Kamal replacement starts the candidate beside the live container,
+  while the entrypoint runs `db:prepare` against their shared SQLite volume.
+  Supported releases must keep migrations backward-compatible or publish and
+  qualify an explicit stopped-process migration/rollback path; the first
+  successor release cannot publish until this is proven.
 - The unsafe rolling credential migration is resolved in source: ordinary deploys refuse the pending migration and `bin/saas-credential-cutover` now locks deployment, stops and proves predecessor processes quiesced, invokes a reviewed digest-pinned backup hook for that exact window, validates challenge/restore-point-bound evidence, migrates and verifies in one PostgreSQL transaction, and starts only the successor. The remaining production boundary is operational: the private real hook and four-role restore drill must be reviewed and retained for the cutover.
 
 ### Source release publication
-- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64/minimum-host qualification runners; the tracked public-CLI driver; candidate-backed HTTP/HTTPS origins; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain external technical gates. The versioned minimum-host profile and tracked server load driver are source-complete, but only a dedicated exact qualification run can satisfy their live gate. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all remaining gates are complete.
+- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64/minimum-host qualification runners; the tracked public-CLI driver; candidate-backed HTTP/HTTPS origins; a retained end-to-end Linux AMD64 qualification of the exact-image Kamal Proxy/Thruster path; published and drilled Kamal-native backup/restore commands; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain technical gates. The versioned minimum-host profile, tracked server load driver, and exact-image wrapper contracts are source-complete, but only dedicated qualification and recovery runs can satisfy their live gates. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all remaining gates are complete.
 - The initial predecessor-none release supports same-image local/S3 restore. The first successor release must add and qualify the exact adjacent local/S3 upgrade and rollback fixture and reconcile predecessor versus restore-image validation before it can publish.
 
 ## Incomplete Documentation

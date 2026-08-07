@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+revision="${KAMAL_VERSION:?KAMAL_VERSION is required}"
+performer="${KAMAL_PERFORMER:-unknown}"
+[[ "$revision" =~ ^[0-9a-f]{40,64}$ ]] || {
+  echo "post-deploy: KAMAL_VERSION must be a full immutable revision" >&2
+  exit 1
+}
+[[ "$performer" =~ ^[A-Za-z0-9_.@-]{1,64}$ ]] || performer="unknown"
+
+echo "Notifying Honeybadger of deployment..."
+bin/kamal-saas app exec \
+  --reuse \
+  "bundle exec honeybadger deploy --repository https://github.com/ivankuznetsov/screenote --revision ${revision} --environment production --user ${performer}"

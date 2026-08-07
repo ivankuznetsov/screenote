@@ -3,7 +3,7 @@
 
 # This Dockerfile is designed for production, not development. Build it locally with:
 # docker build -t screenote .
-# Run the self-hosted image through compose.yaml so runtime secrets stay in restricted files.
+# Deploy the self-hosted image with the Kamal starter in config/deploy.yml.
 
 # For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
 
@@ -70,7 +70,8 @@ ARG SCREENOTE_IMAGE_SOURCE="https://github.com/ivankuznetsov/screenote"
 ARG SCREENOTE_IMAGE_REVISION="development"
 ARG SCREENOTE_IMAGE_VERSION="development"
 ARG SCREENOTE_IMAGE_DESCRIPTION="Screenote self-hosted visual review server"
-LABEL org.opencontainers.image.source="$SCREENOTE_IMAGE_SOURCE" \
+LABEL service="screenote" \
+      org.opencontainers.image.source="$SCREENOTE_IMAGE_SOURCE" \
       org.opencontainers.image.revision="$SCREENOTE_IMAGE_REVISION" \
       org.opencontainers.image.version="$SCREENOTE_IMAGE_VERSION" \
       org.opencontainers.image.description="$SCREENOTE_IMAGE_DESCRIPTION" \
