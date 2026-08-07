@@ -11,12 +11,24 @@ require "yaml"
 class CoverageGateContractTest < ActiveSupport::TestCase
   COVERAGE_BOOT = Rails.root.join("test/support/coverage_boot.rb").freeze
   CHECKER = Rails.root.join("bin/check_coverage").freeze
+  MATRIX = Rails.root.join("script/release_test_matrix").freeze
   DOMAINS = %w[deployment bootstrap invitation principal suspension recovery transfer].freeze
 
   test "checker can be loaded without executing its CLI entrypoint" do
     assert_nothing_raised { load CHECKER.to_s }
     assert defined?(CoverageGate::ManifestCheck)
     assert Object.private_method_defined?(:run_coverage_check_cli)
+  end
+
+  test "coverage matrix explains the missing event comparison SHA before running suites" do
+    _stdout, stderr, status = Open3.capture3(
+      { "SCREENOTE_COVERAGE_BASE_SHA" => nil },
+      MATRIX.to_s,
+      "coverage"
+    )
+
+    assert_not status.success?
+    assert_includes stderr, "SCREENOTE_COVERAGE_BASE_SHA is required for this gate"
   end
 
   test "coverage boot instruments only the matrix root process" do
@@ -89,6 +101,31 @@ class CoverageGateContractTest < ActiveSupport::TestCase
         Changed security line coverage: 100.00% (7/7)
         Changed security branch coverage: 100.00% (2/2)
       OUTPUT
+      assert_empty stderr
+    end
+  end
+
+  test "manifest mode checks a pushed commit against its before SHA" do
+    with_repository do |root, before_sha, paths|
+      path = paths.fetch("deployment")
+      File.write(root.join(path), "def pushed_security_path = :covered\n")
+      git!(root, "add", "--", path)
+      git!(root, "commit", "--quiet", "-m", "change security path")
+      resultset = write_resultset(
+        root,
+        path,
+        suites: [ { "lines" => [ 1 ], "branches" => {} } ]
+      )
+
+      stdout, stderr, status = run_checker(
+        root,
+        resultset,
+        "--manifest", write_manifest(root, paths).to_s,
+        "--base", before_sha
+      )
+
+      assert status.success?, stderr
+      assert_includes stdout, "Changed security line coverage: 100.00% (1/1)"
       assert_empty stderr
     end
   end

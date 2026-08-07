@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-06
+updated: 2026-08-07
 tags: [gaps, documentation, todo]
 ---
 
@@ -56,7 +56,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - The unsafe rolling credential migration is resolved in source: ordinary deploys refuse the pending migration and `bin/saas-credential-cutover` now locks deployment, stops and proves predecessor processes quiesced, invokes a reviewed digest-pinned backup hook for that exact window, validates challenge/restore-point-bound evidence, migrates and verifies in one PostgreSQL transaction, and starts only the successor. The remaining production boundary is operational: the private real hook and four-role restore drill must be reviewed and retained for the cutover.
 
 ### Source release publication
-- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64 qualification runners; a versioned minimum-host profile; tracked load and public-CLI drivers; candidate-backed HTTP/HTTPS origins; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain external technical gates. Pull-request source-contract jobs cannot substitute for the dedicated exact qualification run. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until they are complete.
+- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64/minimum-host qualification runners; the tracked public-CLI driver; candidate-backed HTTP/HTTPS origins; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain external technical gates. The versioned minimum-host profile and tracked server load driver are source-complete, but only a dedicated exact qualification run can satisfy their live gate. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all remaining gates are complete.
 - The initial predecessor-none release supports same-image local/S3 restore. The first successor release must add and qualify the exact adjacent local/S3 upgrade and rollback fixture and reconcile predecessor versus restore-image validation before it can publish.
 
 ## Incomplete Documentation

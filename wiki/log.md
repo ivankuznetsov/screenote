@@ -3,6 +3,57 @@
 Append-only log of all wiki operations.
 
 <!-- BEGIN GENERATED WIKI LOG FRAGMENTS -->
+## [2026-08-07] Harden retained load qualification evidence
+
+**Action:** Review-hardened the tracked minimum-host qualification. The driver
+now measures capacity on its exact Docker storage volume, bounds and reaps
+Docker subprocess groups, claims deterministic names for cleanup before Docker
+creation completes, allows both bounded cleanup operations to finish on
+termination, and exercises its lifecycle through a deterministic command harness. The incompatible structured evidence
+contract is versioned as `screenote-load-smoke/v2`, and the qualification
+artifact retains and hashes the validated numeric measurements. Coverage-gate
+documentation now shows the required event comparison SHA for local runs.
+
+**Pages updated:** wiki/self-hosting.md, wiki/testing-and-ci.md,
+wiki/log.d/20260807T101500Z-load-qualification-hardening.md, wiki/log.md
+
+**Source:** script/self_hosted_load_driver, script/self_hosted_load_smoke,
+.github/workflows/release-qualification.yml, .github/workflows/release.yml,
+and focused integration contracts
+
+## [2026-08-07] Bind coverage to the event comparison commit
+
+**Action:** Replaced the coverage gate's runtime `origin/main` merge-base
+lookup with an exact event-bound comparison SHA: the pull-request base commit
+for pull requests and the previous default-branch tip for pushes. The matrix
+validates that the supplied value is a full available ancestor before running
+both edition suites, preventing a push checkout from comparing `HEAD` with
+itself and failing only after the full test run.
+
+**Pages updated:** wiki/testing-and-ci.md,
+wiki/log.d/20260807T090000Z-event-bound-coverage-base.md, wiki/log.md
+
+**Source:** .github/workflows/ci.yml, script/release_test_matrix,
+test/integration/release_artifact_contract_test.rb, and CI run 31155056854
+
+## [2026-08-07] Track minimum-host load qualification
+
+**Action:** Added the versioned Linux AMD64 minimum-host profile and a tracked
+release-only driver that constrains the exact candidate to 2 vCPUs and 4 GiB
+RAM, runs 25 authenticated API sessions, overlaps four exact 20 MiB uploads,
+schedules 20 uniquely identified comment mutations per second for ten minutes,
+and reports latency, reconciliation, queue-drain, lock, integrity, and request
+evidence. Qualification now hashes the profile bytes from the exact source
+commit rather than trusting opaque repository-variable text. The live runner
+and exact retained qualification result remain publication blockers.
+
+**Pages updated:** wiki/self-hosting.md, wiki/gaps.md,
+wiki/log.d/20260807T083000Z-minimum-host-load-qualification.md, wiki/log.md
+
+**Source:** config/release/minimum-host-v1.json,
+script/self_hosted_load_driver, script/self_hosted_load_smoke,
+.github/workflows/release-qualification.yml, and focused integration contracts
+
 ## [2026-08-06] Simplify source-release governance
 
 **Action:** Removed legal, ownership, manual repository-history, unused encrypted-credential inventory, and committed preauthorization records from the source-release contract. Public evidence v2 now contains only technical build, scan, ruleset, CI, qualification, and artifact bindings. The protected `source-release` environment remains the live human gate, while GitGuardian history/current-tree/image scans, live incidents, vulnerability policy, exact qualification, SBOM, provenance, immutable objects, and final readback remain fail closed. This supersedes earlier changelog entries that described restricted evidence, credential-history disposition, committed preauthorization, or a published environment-approval record as publication requirements.

@@ -429,6 +429,13 @@ case "${1-}" in
     bin/release-validate
     ;;
   coverage)
+    require_value SCREENOTE_COVERAGE_BASE_SHA
+    [[ "${SCREENOTE_COVERAGE_BASE_SHA}" =~ ^[0-9a-f]{40}$ ]] ||
+      fail "SCREENOTE_COVERAGE_BASE_SHA must be a full lowercase commit SHA"
+    git cat-file -e "${SCREENOTE_COVERAGE_BASE_SHA}^{commit}" 2>/dev/null ||
+      fail "SCREENOTE_COVERAGE_BASE_SHA is not an available commit"
+    git merge-base --is-ancestor "${SCREENOTE_COVERAGE_BASE_SHA}" HEAD ||
+      fail "SCREENOTE_COVERAGE_BASE_SHA is not an ancestor of HEAD"
     self_hosted_tests=()
     read_self_hosted_manifest_group self_hosted self_hosted_tests
     rm -f -- "${REPOSITORY_ROOT}/coverage/.resultset.json"
@@ -445,11 +452,9 @@ case "${1-}" in
       DISABLE_BOOTSNAP_COMPILE_CACHE=1 \
       RUBYOPT="${RUBYOPT:+${RUBYOPT} }${coverage_rubyopt}" \
       PARALLEL_WORKERS=1 bin/rails test "${self_hosted_tests[@]}"
-    coverage_base="$(git merge-base HEAD origin/main)" ||
-      fail "coverage requires origin/main and a common ancestor"
     bin/check_coverage \
       --manifest test/manifests/release_security_coverage.yml \
-      --base "${coverage_base}"
+      --base "${SCREENOTE_COVERAGE_BASE_SHA}"
     ;;
   image)
     printf '%s\n' "${POSTGRESQL_16_IMAGE}"
@@ -461,6 +466,9 @@ Usage: script/release_test_matrix GATE
 PR gates:
   self-hosted saas postgresql saas-upgrade sqlite-production invariants
   security-data system-collaboration container-local s3 coverage
+
+Coverage requires an explicit comparison commit:
+  SCREENOTE_COVERAGE_BASE_SHA=<full-ancestor-sha> script/release_test_matrix coverage
 
 Release-only gates (missing evidence fails closed):
   public-cli backup-restore release-artifact

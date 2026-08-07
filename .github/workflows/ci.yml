@@ -69,6 +69,8 @@ jobs:
         with:
           bundler-cache: true
       - name: Require complete changed-security coverage in both editions
+        env:
+          SCREENOTE_COVERAGE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: script/release_test_matrix coverage
 
   sqlite:

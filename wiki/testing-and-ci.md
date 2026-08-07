@@ -109,7 +109,13 @@ The required-PR source-release coverage gate is narrower and stricter than the
 legacy whole-application option. `script/release_test_matrix coverage` starts
 SimpleCov through `RUBYOPT` before Rails can load edition-specific code, merges
 the independent SaaS and positive-manifest self-hosted runs, and compares the
-working tree with the current branch's `origin/main` merge base. The explicit
+working tree with the exact event comparison commit: the pull request's base
+SHA for pull-request runs and `github.event.before` for pushes to `main`. The
+workflow passes that full SHA explicitly and the matrix rejects missing,
+malformed, unavailable, or non-ancestor values before starting the suites. For
+a local pre-PR run, use
+`SCREENOTE_COVERAGE_BASE_SHA=<full-ancestor-sha> script/release_test_matrix coverage`.
+The explicit
 `test/manifests/release_security_coverage.yml` source manifest must name the
 deployment, bootstrap, invitation, principal, suspension, recovery, and
 administrator-transfer boundaries. Every executable changed line and changed

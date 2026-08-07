@@ -4,16 +4,44 @@
 require "json"
 require "open3"
 require "pathname"
-require "timeout"
 
 ROOT = Pathname.new(__dir__).join("..").realpath
-SCHEMA = "screenote-load-smoke/v1"
+SCHEMA = "screenote-load-smoke/v2"
+DRIVER_TERMINATION_GRACE_SECONDS = 90
+PROFILE_PATH = ROOT.join("config/release/minimum-host-v1.json")
 EXPECTED_PROFILE = {
-  "sessions" => 25,
-  "simultaneous_uploads" => 4,
-  "upload_bytes" => 20 * 1024 * 1024,
-  "mutation_rate_per_second" => 20,
-  "duration_seconds" => 10 * 60
+  "schema" => "screenote-minimum-host-profile/v1",
+  "id" => "minimum-host-v1",
+  "host" => {
+    "operating_system" => "linux",
+    "architecture" => "amd64",
+    "vcpus" => 2,
+    "memory_bytes" => 4 * 1024 * 1024 * 1024,
+    "storage" => {
+      "bytes" => 40 * 1024 * 1024 * 1024,
+      "medium" => "ssd",
+      "mode" => "local"
+    },
+    "uid" => 1_000,
+    "gid" => 1_000
+  },
+  "load" => {
+    "sessions" => 25,
+    "simultaneous_uploads" => 4,
+    "upload_bytes" => 20 * 1024 * 1024,
+    "mutation_rate_per_second" => 20,
+    "duration_seconds" => 10 * 60
+  },
+  "limits" => {
+    "unhandled_lock_errors_max" => 0,
+    "lost_mutations_max" => 0,
+    "duplicate_mutations_max" => 0,
+    "core_p95_ms_exclusive_max" => 1_000,
+    "queue_drain_seconds_max" => 300,
+    "queue_depth_after_drain_max" => 0,
+    "integrity_errors_max" => 0,
+    "request_failures_max" => 0
+  }
 }.freeze
 
 def fail!(message)
@@ -27,8 +55,97 @@ def required_environment(name)
   end
 end
 
+def validate_exact_value!(actual, expected, path)
+  if expected.is_a?(Hash)
+    fail!("#{path} must be an object") unless actual.is_a?(Hash)
+    fail!("#{path} keys do not match the versioned contract") unless actual.keys.sort == expected.keys.sort
+    expected.each { |key, value| validate_exact_value!(actual.fetch(key), value, "#{path}.#{key}") }
+  else
+    fail!("#{path} does not match the versioned contract") unless actual.eql?(expected)
+  end
+end
+
+def numeric_metric!(metrics, key)
+  value = metrics.fetch(key)
+  fail!("metric #{key} must be a non-negative finite number") unless
+    value.is_a?(Numeric) && value.finite? && value >= 0
+  value
+end
+
+class DriverTimeout < StandardError; end
+
+def signal_process_group(signal, pid)
+  Process.kill(signal, -pid)
+rescue Errno::ESRCH
+  nil
+end
+
+def monotonic_time
+  Process.clock_gettime(Process::CLOCK_MONOTONIC)
+end
+
+def threads_finish_before?(threads, deadline)
+  threads.all? do |thread|
+    remaining = [ deadline - monotonic_time, 0 ].max
+    thread.join(remaining)
+  end
+end
+
+def terminate_driver_process_group(wait_thread, readers)
+  signal_process_group("TERM", wait_thread.pid)
+  deadline = monotonic_time + DRIVER_TERMINATION_GRACE_SECONDS
+  unless threads_finish_before?([ wait_thread, *readers ], deadline)
+    signal_process_group("KILL", wait_thread.pid)
+  end
+ensure
+  wait_thread.value
+  readers.each(&:join)
+end
+
+def capture_driver(environment, driver, timeout_seconds)
+  timed_out = false
+  stdout = stderr = status = nil
+
+  Open3.popen3(environment, driver.to_s, chdir: ROOT.to_s, pgroup: true) do |input, output, error, wait_thread|
+    input.close
+    stdout_reader = Thread.new { output.read }
+    stderr_reader = Thread.new { error.read }
+    readers = [ stdout_reader, stderr_reader ]
+    process_reaped = false
+    begin
+      deadline = monotonic_time + timeout_seconds
+      unless threads_finish_before?([ wait_thread, *readers ], deadline)
+        timed_out = true
+        terminate_driver_process_group(wait_thread, readers)
+      end
+
+      status = wait_thread.value
+      stdout = stdout_reader.value
+      stderr = stderr_reader.value
+      process_reaped = true
+    ensure
+      terminate_driver_process_group(wait_thread, readers) unless process_reaped
+    end
+  end
+
+  raise DriverTimeout if timed_out
+
+  [ stdout, stderr, status ]
+end
+
+previous_term_handler = Signal.trap("TERM") { raise Interrupt }
 begin
-  driver = Pathname.new(required_environment("SCREENOTE_LOAD_DRIVER")).realpath
+  fail!("minimum-host profile must be a regular non-symlink file") unless
+    PROFILE_PATH.file? && !PROFILE_PATH.symlink?
+  profile = JSON.parse(PROFILE_PATH.binread)
+  validate_exact_value!(profile, EXPECTED_PROFILE, "minimum-host profile")
+  fail!("minimum-host profile must be tracked") unless
+    system("git", "ls-files", "--error-unmatch", PROFILE_PATH.relative_path_from(ROOT).to_s,
+      chdir: ROOT.to_s, out: File::NULL, err: File::NULL)
+
+  driver_path = Pathname.new(required_environment("SCREENOTE_LOAD_DRIVER"))
+  fail!("SCREENOTE_LOAD_DRIVER must not be a symlink") if driver_path.symlink?
+  driver = driver_path.realpath
   fail!("SCREENOTE_LOAD_DRIVER must be a tracked repository executable") unless
     driver.to_s.start_with?("#{ROOT}/") && driver.file? && driver.executable? &&
       system("git", "ls-files", "--error-unmatch", driver.relative_path_from(ROOT).to_s,
@@ -36,54 +153,66 @@ begin
 
   source_sha = required_environment("SCREENOTE_SOURCE_SHA")
   image = required_environment("SCREENOTE_RELEASE_IMAGE")
-  host_profile = required_environment("SCREENOTE_MINIMUM_HOST_PROFILE")
   fail!("SCREENOTE_SOURCE_SHA must be an exact commit") unless source_sha.match?(/\A[0-9a-f]{40}\z/)
   fail!("SCREENOTE_RELEASE_IMAGE must be immutable") unless image.match?(/@sha256:[0-9a-f]{64}\z/)
 
-  stdout = stderr = nil
-  status = nil
-  Timeout.timeout(EXPECTED_PROFILE.fetch("duration_seconds") + (15 * 60)) do
-    stdout, stderr, status = Open3.capture3(
-      {
-        "SCREENOTE_LOAD_EXPECTED_PROFILE" => JSON.generate(EXPECTED_PROFILE),
-        "SCREENOTE_LOAD_HOST_PROFILE" => host_profile,
-        "SCREENOTE_LOAD_IMAGE" => image,
-        "SCREENOTE_LOAD_SOURCE_SHA" => source_sha
-      },
-      driver.to_s,
-      chdir: ROOT.to_s
-    )
-  end
-  fail!("driver failed without qualifying evidence: #{stderr.lines.last(20).join}") unless status.success?
+  load = profile.fetch("load")
+  stdout, _stderr, status = capture_driver(
+    {
+      "SCREENOTE_LOAD_EXPECTED_PROFILE" => JSON.generate(profile),
+      "SCREENOTE_LOAD_IMAGE" => image,
+      "SCREENOTE_LOAD_SOURCE_SHA" => source_sha
+    },
+    driver,
+    load.fetch("duration_seconds") + (15 * 60)
+  )
+  fail!("driver failed without qualifying evidence") unless status.success?
 
   evidence = JSON.parse(stdout)
+  expected_evidence_keys = %w[host_profile_id image_digest metrics profile schema source_sha]
+  fail!("evidence keys do not match the contract") unless
+    evidence.is_a?(Hash) && evidence.keys.sort == expected_evidence_keys.sort
   fail!("unexpected evidence schema") unless evidence["schema"] == SCHEMA
   fail!("evidence source revision mismatch") unless evidence["source_sha"] == source_sha
   fail!("evidence image digest mismatch") unless evidence["image_digest"] == image
-  fail!("evidence host profile mismatch") unless evidence["host_profile"] == host_profile
+  fail!("evidence host profile mismatch") unless evidence["host_profile_id"] == profile.fetch("id")
 
-  profile = evidence.fetch("profile")
-  EXPECTED_PROFILE.each do |key, expected|
-    actual = profile.fetch(key)
-    comparator = key == "mutation_rate_per_second" || key == "duration_seconds" ? :>= : :==
-    fail!("profile #{key} is #{actual.inspect}, expected #{comparator} #{expected}") unless
-      actual.public_send(comparator, expected)
-  end
+  validate_exact_value!(evidence.fetch("profile"), load, "evidence profile")
 
   metrics = evidence.fetch("metrics")
-  fail!("unhandled busy/deadlock errors were observed") unless metrics.fetch("unhandled_lock_errors").zero?
-  fail!("load test lost mutations") unless metrics.fetch("lost_mutations").zero?
-  fail!("load test duplicated mutations") unless metrics.fetch("duplicate_mutations").zero?
-  fail!("core p95 exceeded 1000ms") unless metrics.fetch("core_p95_ms") < 1_000
-  fail!("queue drain exceeded five minutes") unless metrics.fetch("queue_drain_seconds") <= 300
-  fail!("queue did not drain") unless metrics.fetch("queue_depth_after_drain").zero?
-  fail!("database integrity check failed") unless metrics.fetch("integrity_errors").zero?
-  fail!("driver reported request failures") unless metrics.fetch("request_failures").zero?
+  expected_metric_keys = %w[
+    core_p95_ms duplicate_mutations integrity_errors lost_mutations queue_depth_after_drain
+    queue_drain_seconds request_failures unhandled_lock_errors
+  ]
+  fail!("metric keys do not match the contract") unless
+    metrics.is_a?(Hash) && metrics.keys.sort == expected_metric_keys.sort
+
+  limits = profile.fetch("limits")
+  fail!("unhandled busy/deadlock errors were observed") unless
+    numeric_metric!(metrics, "unhandled_lock_errors") <= limits.fetch("unhandled_lock_errors_max")
+  fail!("load test lost mutations") unless
+    numeric_metric!(metrics, "lost_mutations") <= limits.fetch("lost_mutations_max")
+  fail!("load test duplicated mutations") unless
+    numeric_metric!(metrics, "duplicate_mutations") <= limits.fetch("duplicate_mutations_max")
+  fail!("core p95 exceeded 1000ms") unless
+    numeric_metric!(metrics, "core_p95_ms") < limits.fetch("core_p95_ms_exclusive_max")
+  fail!("queue drain exceeded five minutes") unless
+    numeric_metric!(metrics, "queue_drain_seconds") <= limits.fetch("queue_drain_seconds_max")
+  fail!("queue did not drain") unless
+    numeric_metric!(metrics, "queue_depth_after_drain") <= limits.fetch("queue_depth_after_drain_max")
+  fail!("database integrity check failed") unless
+    numeric_metric!(metrics, "integrity_errors") <= limits.fetch("integrity_errors_max")
+  fail!("driver reported request failures") unless
+    numeric_metric!(metrics, "request_failures") <= limits.fetch("request_failures_max")
 
   puts JSON.pretty_generate(evidence)
   warn "self-hosted load smoke: qualification evidence validated"
 rescue JSON::ParserError, KeyError, TypeError => error
   fail!("malformed driver evidence (#{error.class})")
-rescue Timeout::Error
+rescue DriverTimeout
   fail!("driver exceeded the bounded qualification window")
+rescue Interrupt
+  fail!("driver was interrupted")
+ensure
+  Signal.trap("TERM", previous_term_handler)
 end

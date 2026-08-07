@@ -53,7 +53,7 @@ See [technical release evidence](releases/security-evidence.md), the [publicatio
 - `candidate` accepts a full commit and semantic tag only when the commit is the current protected default-branch head. It runs source/history checks, builds one retained AMD64/ARM64 layout, scans the imported bytes, and uploads the candidate bundle for 30 days. It creates no public object.
 - `publish` accepts the exact successful candidate run/bundle hash and exact successful qualification run/artifact hash. One direct-parent release-metadata commit may delete the sentinel, add final technical evidence, and finalize release notes; any other path or commit shape requires a new candidate. The job verifies those bytes, the live qualification run and its eight checks, the current CLI tag, the candidate manifest, SBOMs, provenance, scanner results, and ruleset evidence before retaining a one-day promotion input.
 
-`.github/workflows/release-qualification.yml` is the separate release-only runtime gate. It uses configured native runner labels and a versioned minimum-host profile. Its final artifact contains exactly eight checks: self-hosted and SaaS boot on AMD64 and ARM64, backup/restore, SQLite load, and public CLI behavior over HTTP and HTTPS. Pull-request jobs with similar names are contract checks and never substitute for qualification.
+`.github/workflows/release-qualification.yml` is the separate release-only runtime gate. It uses configured native runner labels and the tracked `config/release/minimum-host-v1.json` profile from the exact qualification commit. The SQLite driver emits the `screenote-load-smoke/v2` evidence contract, including the profile identity and measured latency, queue, lock, reconciliation, integrity, and request outcomes. The workflow hashes those file bytes into its final artifact, which contains exactly eight checks: self-hosted and SaaS boot on AMD64 and ARM64, backup/restore, SQLite load, and public CLI behavior over HTTP and HTTPS. Pull-request jobs with similar names are contract checks and never substitute for qualification.
 
 The promotion job performs no checkout and executes no repository code. It is gated by the protected `source-release` environment and verifies the current workflow run has exactly one approved review for that environment. It publishes no approval record. Scanner details stay in job-private diagnostics; public release assets contain only technical manifests and hashes.
 
@@ -70,13 +70,11 @@ Qualification requires these repository variables:
 - `SCREENOTE_RELEASE_AMD64_RUNNER_LABEL`
 - `SCREENOTE_RELEASE_ARM64_RUNNER_LABEL`
 - `SCREENOTE_RELEASE_MINIMUM_HOST_RUNNER_LABEL`
-- `SCREENOTE_RELEASE_MINIMUM_HOST_PROFILE`
-- `SCREENOTE_RELEASE_LOAD_DRIVER_PATH`
 - `SCREENOTE_PUBLIC_CLI_CONTRACT_PATH`
 - `SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN`
 - `SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN`
 
-The runner labels select ephemeral trusted native runners. Driver paths must be tracked executables in the exact server or CLI commit, and the HTTP/HTTPS origins must be distinct candidate-backed endpoints.
+The runner labels select ephemeral trusted native runners. The minimum-host profile and server load driver are fixed by the exact server commit rather than repository variables. The public-CLI driver must be a tracked executable in the exact CLI commit, and the HTTP/HTTPS origins must be distinct candidate-backed endpoints.
 
 ## Protection configuration
 

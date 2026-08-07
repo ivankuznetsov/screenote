@@ -3,7 +3,7 @@ title: Self-Hosted Distribution
 type: initiative
 source: docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md
 created: 2026-08-05
-updated: 2026-08-06
+updated: 2026-08-07
 tags: [self-hosting, docker, licensing, storage, release]
 ---
 
@@ -55,6 +55,24 @@ the selected Active Storage configuration without calling external providers
 or disclosing a failing component. The release image also bounds Thruster
 request bodies at 30 MiB, preserving the 28 MiB MCP base64 JSON contract with
 finite envelope overhead.
+
+The versioned minimum-host source contract is now
+`config/release/minimum-host-v1.json`: Linux AMD64, 2 vCPUs, 4 GiB RAM, 40 GiB
+free local SSD storage, and UID/GID 1000. The tracked
+`script/self_hosted_load_driver` constrains the exact candidate container to
+that CPU/RAM profile, creates 25 independently authenticated API sessions,
+runs four overlapping exact 20 MiB uploads and a ten-minute 20-mutation/second
+workload, includes scheduler backlog in core p95 latency, reconciles unique
+mutation identities, drains upload processing, checks all four SQLite
+databases, and emits only strict redacted evidence. The wrapper validates the
+profile and the incompatible `screenote-load-smoke/v2` evidence shape. Capacity
+is measured on the exact named volume mounted at `/rails/storage`, and bounded
+process groups plus termination handling keep failed qualification commands
+from occupying the runner indefinitely. Deterministic container and volume
+names are marked for cleanup before Docker creation can complete, and the outer
+shutdown grace covers both bounded cleanup operations. The qualification
+workflow hashes the profile file bytes from the exact source commit and retains
+the validated load measurements with the canonical qualification artifact.
 
 The primary database stores exactly one constrained `Installation` identity: edition, ownership state, storage service, namespace fingerprint, and—until claim—the bootstrap digest. Before any mode-specific database preparation, the supported entrypoint runs a standalone, Bundler-backed deployment preflight that makes no provider connection. SaaS refuses a mounted self-hosted primary; self-hosted startup refuses retained SaaS database-role settings and inspects an existing local primary read-only for conflicting edition, storage service, storage namespace, or unclaimed bootstrap material. Schema preparation runs only after that complete persisted identity matches, and `Installations::Prepare` repeats the check after migrations as defense in depth. Credential rotation is allowed when the persisted namespace remains the same. See [[authentication]], [[data-model]], and [[dependencies]].
 
@@ -114,9 +132,10 @@ HTTPS also proves wrong-CA and wrong-hostname rejection.
 Promotion live-verifies the qualification workflow identity, attempt, exact job
 set, artifact ID/archive digest, downloaded record bytes, candidate bindings,
 and current CLI tag; missing or ambiguous API state fails closed. Native runner
-labels, the minimum-host profile, tracked load/CLI drivers, candidate-backed
-origins, and the immutable CLI tag are not configured yet, so qualification
-cannot currently emit publishable evidence.
+labels, the tracked public-CLI driver, candidate-backed origins, the immutable
+CLI tag, and an exact successful run on the tracked minimum-host profile are not
+configured or retained yet, so qualification cannot currently emit publishable
+evidence.
 
 `bin/release-validate` has independent `prepare`, technical `evidence`, and `publish` modes. `docs/releases/PUBLICATION_BLOCKED.md` is a hard sentinel: while present, even otherwise valid evidence cannot publish. Fixture evidence is also rejected in publish mode. Live GitGuardian, repository-setting, CLI-tag, native-runner, driver/origin, and exact-candidate evidence is still incomplete, so no source tag, image, attestation, or release is ready.
 
