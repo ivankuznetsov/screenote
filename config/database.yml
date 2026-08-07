@@ -11,27 +11,55 @@ test:
   <<: *default
   database: storage/test.sqlite3
 
+<% if ENV["SCREENOTE_EDITION"] == "self_hosted" %>
+self_hosted_production: &self_hosted_production
+  adapter: sqlite3
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  timeout: 5000
+  pragmas:
+    journal_mode: wal
+    synchronous: full
+    foreign_keys: true
+
 production:
   primary:
-    adapter: postgresql
-    encoding: unicode
-    url: <%= ENV["DATABASE_URL"] %>
-    pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+    <<: *self_hosted_production
+    url: sqlite3:/rails/storage/primary.sqlite3
   cache:
-    adapter: postgresql
-    encoding: unicode
-    url: <%= ENV["CACHE_DATABASE_URL"] %>
-    pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+    <<: *self_hosted_production
+    url: sqlite3:/rails/storage/cache.sqlite3
     migrations_paths: db/cache_migrate
   queue:
-    adapter: postgresql
-    encoding: unicode
-    url: <%= ENV["QUEUE_DATABASE_URL"] %>
-    pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+    <<: *self_hosted_production
+    url: sqlite3:/rails/storage/queue.sqlite3
+    # Solid Queue reserves one connection for polling and one for heartbeats
+    # in addition to its worker threads.
+    pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 }.to_i + 2 %>
     migrations_paths: db/queue_migrate
   cable:
-    adapter: postgresql
-    encoding: unicode
-    url: <%= ENV["CABLE_DATABASE_URL"] %>
-    pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+    <<: *self_hosted_production
+    url: sqlite3:/rails/storage/cable.sqlite3
     migrations_paths: db/cable_migrate
+<% else %>
+saas_production: &saas_production
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
+production:
+  primary:
+    <<: *saas_production
+    url: <%= ENV["DATABASE_URL"] %>
+  cache:
+    <<: *saas_production
+    url: <%= ENV["CACHE_DATABASE_URL"] %>
+    migrations_paths: db/cache_migrate
+  queue:
+    <<: *saas_production
+    url: <%= ENV["QUEUE_DATABASE_URL"] %>
+    migrations_paths: db/queue_migrate
+  cable:
+    <<: *saas_production
+    url: <%= ENV["CABLE_DATABASE_URL"] %>
+    migrations_paths: db/cable_migrate
+<% end %>

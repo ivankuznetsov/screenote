@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class ScreenshotTest < ActiveSupport::TestCase
@@ -55,6 +57,43 @@ class ScreenshotTest < ActiveSupport::TestCase
     screenshot = Screenshot.new(title: "Ad-hoc", page: pages(:alice_page), snapshot: nil)
 
     assert screenshot.valid?, "Screenshot should be valid without a snapshot"
+  end
+
+  test "create with image is atomic when storage writes and then fails" do
+    bytes = File.binread(Rails.root.join("test/fixtures/files/test_image.png"))
+    upload_tempfiles = Rails.root.join("tmp/screenote-upload-#{Process.pid}-*.image")
+    service = ActiveStorage::Blob.service
+    original_upload = service.method(:upload)
+    written_key = nil
+
+    assert_no_difference [
+      "Screenshot.count",
+      "ScreenshotImage.count",
+      "ActiveStorage::Blob.count",
+      "ActiveStorage::Attachment.count"
+    ] do
+      service.define_singleton_method(:upload) do |*arguments, **options|
+        written_key = arguments.first
+        original_upload.call(*arguments, **options)
+        raise IOError, "storage failed after writing"
+      end
+
+      assert_raises(IOError) do
+        Screenshot.create_with_image!(
+          page: pages(:alice_page),
+          title: "Atomic storage failure",
+          io: StringIO.new(bytes),
+          filename: "test.png",
+          content_type: "image/png"
+        )
+      end
+    end
+
+    assert_not_nil written_key
+    assert_not service.exist?(written_key)
+    assert_empty Dir.glob(upload_tempfiles)
+  ensure
+    service&.define_singleton_method(:upload, original_upload) if original_upload
   end
 
   test "belongs to snapshot when provided" do

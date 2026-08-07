@@ -25,7 +25,7 @@ class ScreenshotThumbnailJob < ApplicationJob
       next if warmed_digests.include?(variant.variation.digest)
 
       begin
-        variant.processed
+        ImageDecoding::Guard.synchronize { variant.processed }
       rescue StandardError => error
         raise ThumbnailProcessingError, "thumbnail variant processing failed", cause: error
       end

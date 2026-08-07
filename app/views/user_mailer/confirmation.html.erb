@@ -13,11 +13,15 @@
   Thanks for signing up for Screenote. Please confirm your email address to activate your account and start giving visual feedback to your AI agents.
 </p>
 
-<%= render "user_mailer/email_cta_button", url: main_app.confirmation_url(@confirmation_token), label: "Confirm Email" %>
+<%= render "user_mailer/email_cta_button", url: @authentication_link_url, label: "Confirm Email" %>
 
 <!-- Expiry note -->
 <p style="margin: 0 0 20px 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
   This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
 </p>
 
-<%= render "user_mailer/email_fallback_url", url: main_app.confirmation_url(@confirmation_token) %>
+<%= render "user_mailer/email_fallback_url", url: @authentication_link_url %>
+
+<p style="color: #b0b0c0; font-size: 14px; line-height: 1.6;">
+  Manual code: <strong><%= @authentication_link_manual_code %></strong>
+</p>

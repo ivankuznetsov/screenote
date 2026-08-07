@@ -1,0 +1,118 @@
+version: 1
+
+discovery:
+  - app/controllers/**/*.rb
+  - app/models/concerns/oauth_principal_record.rb
+  - app/models/{api_key,authentication_token,installation,oauth_device_grant,project_invitation,user}.rb
+  - app/services/account_recoveries/*.rb
+  - app/services/api/bearer_authenticator.rb
+  - app/services/api/v1/project_scope.rb
+  - app/services/authentication_links/*.rb
+  - app/services/installations/*.rb
+  - app/services/instance_accounts/*.rb
+  - app/services/instance_administration/*.rb
+  - app/services/oauth/principal_binding.rb
+  - app/services/project_invitations/*.rb
+  - app/services/project_memberships/remove.rb
+  - app/services/{admission_lock,authenticated_principal,authority_lock,database_retry}.rb
+  - lib/screenote/deployment*.rb
+
+domains:
+  deployment:
+    - app/controllers/admin/dashboard_controller.rb
+    - app/controllers/health_controller.rb
+    - app/controllers/static_pages_controller.rb
+    - app/controllers/stripe_webhooks_controller.rb
+    - app/controllers/subscriptions_controller.rb
+    - lib/screenote/deployment.rb
+    - lib/screenote/deployment_preflight.rb
+  bootstrap:
+    - app/controllers/bootstrap_controller.rb
+    - app/models/installation.rb
+    - app/services/admission_lock.rb
+    - app/services/database_retry.rb
+    - app/services/installations/claim.rb
+    - app/services/installations/prepare.rb
+  invitation:
+    - app/controllers/invitation_acceptances_controller.rb
+    - app/controllers/project_invitations_controller.rb
+    - app/controllers/project_memberships_controller.rb
+    - app/models/project_invitation.rb
+    - app/services/project_invitations/accept.rb
+    - app/services/project_invitations/cancel.rb
+    - app/services/project_invitations/cancel_for_issuer.rb
+    - app/services/project_invitations/identity_proof.rb
+    - app/services/project_invitations/issue.rb
+  principal:
+    - app/controllers/annotation_comments_controller.rb
+    - app/controllers/annotations_controller.rb
+    - app/controllers/api/base_controller.rb
+    - app/controllers/api/screenshot_uploads_controller.rb
+    - app/controllers/api/v1/annotation_comments_controller.rb
+    - app/controllers/api/v1/annotation_resolutions_controller.rb
+    - app/controllers/api/v1/annotations_controller.rb
+    - app/controllers/api/v1/pages_controller.rb
+    - app/controllers/api/v1/projects_controller.rb
+    - app/controllers/api/v1/screenshot_images_controller.rb
+    - app/controllers/api/v1/screenshots_controller.rb
+    - app/controllers/api/v1/snapshots_controller.rb
+    - app/controllers/api_keys_controller.rb
+    - app/controllers/application_controller.rb
+    - app/controllers/collaborator_suggestions_controller.rb
+    - app/controllers/concerns/page_workspace_navigation.rb
+    - app/controllers/concerns/project_authorization.rb
+    - app/controllers/concerns/screenote_session_management.rb
+    - app/controllers/media_controller.rb
+    - app/controllers/oauth/authorizations_controller.rb
+    - app/controllers/oauth/device_authorization_requests_controller.rb
+    - app/controllers/oauth/device_authorizations_controller.rb
+    - app/controllers/oauth/registrations_controller.rb
+    - app/controllers/oauth/tokens_controller.rb
+    - app/controllers/oauth_metadata_controller.rb
+    - app/controllers/omniauth_callbacks_controller.rb
+    - app/controllers/pages_controller.rb
+    - app/controllers/projects_controller.rb
+    - app/controllers/screenshots_controller.rb
+    - app/models/api_key.rb
+    - app/models/concerns/oauth_principal_record.rb
+    - app/models/oauth_device_grant.rb
+    - app/services/api/bearer_authenticator.rb
+    - app/services/api/v1/project_scope.rb
+    - app/services/authenticated_principal.rb
+    - app/services/authority_lock.rb
+    - app/services/oauth/principal_binding.rb
+  suspension:
+    - app/controllers/instance/accounts_controller.rb
+    - app/models/user.rb
+    - app/services/instance_accounts/credential_revoker.rb
+    - app/services/instance_accounts/list.rb
+    - app/services/instance_accounts/restore.rb
+    - app/services/instance_accounts/revoke_credentials.rb
+    - app/services/instance_accounts/suspend.rb
+    - app/services/project_memberships/remove.rb
+  recovery:
+    - app/controllers/account_recoveries_controller.rb
+    - app/controllers/authentication_links_controller.rb
+    - app/controllers/confirmations_controller.rb
+    - app/controllers/magic_links_controller.rb
+    - app/controllers/passwords_controller.rb
+    - app/controllers/registrations_controller.rb
+    - app/controllers/sessions_controller.rb
+    - app/models/authentication_token.rb
+    - app/services/account_recoveries/consume.rb
+    - app/services/account_recoveries/validate.rb
+    - app/services/authentication_links/base32.rb
+    - app/services/authentication_links/deriver.rb
+    - app/services/authentication_links/issuer.rb
+    - app/services/authentication_links/keyring.rb
+    - app/services/authentication_links/keyring_preflight.rb
+    - app/services/authentication_links/presentation.rb
+    - app/services/authentication_links/resolver.rb
+    - app/services/authentication_links/runtime.rb
+    - app/services/instance_accounts/issue_recovery.rb
+  transfer:
+    - app/controllers/instance/administrators_controller.rb
+    - app/services/installations/transfer_administrator.rb
+    - app/services/instance_administration/audit.rb
+    - app/services/instance_administration/authority.rb
+    - app/services/instance_administration/result.rb

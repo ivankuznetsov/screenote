@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -116,6 +117,13 @@ func TestServerStatusExitCodes(t *testing.T) {
 
 func runCLI(t *testing.T, args []string, stdin string) (string, string, int) {
 	t.Helper()
+	for _, key := range []string{"SCREENOTE_TOKEN", "SCREENOTE_BASE_URL", "SCREENOTE_PROJECT"} {
+		t.Setenv(key, "")
+	}
+	if !hasConfigFlag(args) {
+		args = append([]string{"--config", filepath.Join(t.TempDir(), "config.toml")}, args...)
+	}
+
 	var out, errOut bytes.Buffer
 	cmd := NewTestCommand(context.Background(), strings.NewReader(stdin), &out, &errOut, http.DefaultClient)
 	cmd.SetArgs(args)
@@ -124,4 +132,13 @@ func runCLI(t *testing.T, args []string, stdin string) (string, string, int) {
 		return out.String(), errOut.String(), code
 	}
 	return out.String(), errOut.String(), ExitOK
+}
+
+func hasConfigFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "--config" || strings.HasPrefix(arg, "--config=") {
+			return true
+		}
+	}
+	return false
 }

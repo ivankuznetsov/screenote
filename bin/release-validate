@@ -1,0 +1,1028 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "digest"
+require "json"
+require "open3"
+require "optparse"
+require "time"
+require "yaml"
+
+class ReleaseValidation
+  SHA256 = /\A[0-9a-f]{64}\z/
+  GIT_SHA = /\A[0-9a-f]{40}\z/
+  OCI_DIGEST = /\Asha256:[0-9a-f]{64}\z/
+  SEMVER_TAG = /\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z/
+  EVIDENCE_ID = /\A[a-z][a-z0-9]*(?:[-_.:][a-z0-9]+)+\z/
+  PLACEHOLDER = /\b(?:pending|todo|tbd|changeme|placeholder)\b/i
+  MAX_EVIDENCE_BYTES = 128 * 1024
+  EXPECTED_REPOSITORY = "ivankuznetsov/screenote"
+  EXPECTED_BASE_IMAGE = "docker.io/library/ruby:3.4.10-alpine3.24@sha256:c5a5064d190055633011c03aa800170cc36945ff3afb5f6c915329f92d6f1e00"
+  REQUIRED_CHECKS = %w[
+    ruby-security
+    lint
+    coverage
+    sqlite
+    postgresql
+    system-collaboration
+    public-cli
+    container-local
+    container-s3
+    backup-restore
+    release-artifact
+  ].freeze
+  REQUIRED_QUALIFICATION_CHECKS = [
+    [ "self-hosted-boot", "linux-amd64" ],
+    [ "self-hosted-boot", "linux-arm64" ],
+    [ "saas-boot", "linux-amd64" ],
+    [ "saas-boot", "linux-arm64" ],
+    [ "backup-restore", "minimum-host" ],
+    [ "sqlite-load", "minimum-host" ],
+    [ "public-cli", "http" ],
+    [ "public-cli", "https" ]
+  ].freeze
+
+  EXPECTED_LICENSE = <<~LICENSE
+    # O'Saasy License Agreement
+
+    Copyright © 2026, Future Spin Ltd.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+    1. The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+    2. No licensee or downstream recipient may use the Software (including any modified or derivative versions) to directly compete with the original Licensor by offering it to third parties as a hosted, managed, or Software-as-a-Service (SaaS) product or cloud service where the primary value of the service is the functionality of the Software itself.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+  LICENSE
+
+  REQUIRED_FILES = %w[
+    LICENSE
+    THIRD_PARTY_NOTICES.md
+    README.md
+    CONTRIBUTING.md
+    SECURITY.md
+    SUPPORT.md
+    docs/self-hosting.md
+    docs/releases.md
+    docs/releases/initial-release.md
+    docs/releases/security-evidence.md
+    docs/releases/action-pins.md
+    docs/releases/publication-checklist.md
+    docs/releases/evidence/public-evidence.example.json
+    .gitguardian.yaml
+    .github/workflows/secrets.yml
+    .github/workflows/release.yml
+    .github/workflows/release-qualification.yml
+    .github/rulesets/main.json
+    .github/rulesets/release-tags.json
+    .github/rulesets/immutable-release-tags.json
+    .github/dependabot.yml
+  ].freeze
+
+  attr_reader :errors
+
+  def initialize(root:, now: Time.now.utc)
+    @root = File.expand_path(root)
+    @now = now.utc
+    @errors = []
+  end
+
+  def validate_prepare
+    required_files
+    exact_license
+    public_positioning
+    tracked_secret_surface
+    docker_context
+    gitguardian_configuration
+    workflow_contracts
+    ruleset_templates
+    dependabot_contract
+    self
+  end
+
+  def validate_evidence(
+    path:,
+    source_sha:,
+    tag:,
+    allow_fixture:,
+    qualification_run_id: nil,
+    qualification_artifact_sha256: nil
+  )
+    evidence = load_evidence(path)
+    return self unless evidence
+
+    check_public_payload(evidence)
+    exact_keys(evidence, %w[
+      schema fixture repository source_sha release artifacts gitguardian vulnerability rulesets source_contracts
+      qualification public_artifacts
+    ], "evidence")
+    value(evidence, "schema", "screenote-release-evidence/v2")
+    boolean(evidence, "fixture")
+    error("fixture evidence cannot authorize publication") if evidence["fixture"] == true && !allow_fixture
+    value(evidence, "repository", EXPECTED_REPOSITORY)
+    sha(evidence, "source_sha", source_sha)
+
+    validate_release(evidence["release"], tag)
+    validate_artifacts(evidence["artifacts"], source_sha, tag)
+    validate_gitguardian(evidence["gitguardian"], source_sha, evidence["artifacts"])
+    validate_vulnerability(evidence["vulnerability"], evidence["artifacts"])
+    validate_rulesets(evidence["rulesets"])
+    validate_source_contracts(evidence["source_contracts"], source_sha)
+    validate_qualification(
+      evidence["qualification"],
+      evidence,
+      source_sha,
+      tag,
+      run_id: qualification_run_id,
+      artifact_sha256: qualification_artifact_sha256,
+      require_external_binding: !allow_fixture
+    )
+    validate_public_artifacts(evidence["public_artifacts"])
+    validate_final_release_notes(evidence) unless allow_fixture
+    self
+  end
+
+  def validate_qualification_record(path:, evidence_path:)
+    evidence = load_evidence(evidence_path)
+    report = load_json_path(path, "qualification record")
+    return self unless evidence && report
+
+    check_public_payload(report, "qualification record")
+    qualification = evidence["qualification"]
+    unless qualification.is_a?(Hash)
+      error("evidence.qualification must be an object")
+      return self
+    end
+
+    expected = qualification.reject { |key, _value| %w[artifact_sha256 record_sha256].include?(key) }
+    error("qualification record bytes do not match public evidence") unless report == expected
+    digest = Digest::SHA256.file(File.expand_path(path, @root)).hexdigest
+    value(qualification, "record_sha256", digest, "qualification")
+    self
+  end
+
+  def validate_publication_blocker
+    blocker = path("docs/releases/PUBLICATION_BLOCKED.md")
+    error("publication sentinel still exists: docs/releases/PUBLICATION_BLOCKED.md") if
+      File.exist?(blocker) || File.symlink?(blocker)
+    self
+  end
+
+  def success?
+    errors.empty?
+  end
+
+  private
+
+  def required_files
+    REQUIRED_FILES.each do |relative|
+      file = path(relative)
+      error("missing required release artifact: #{relative}") unless File.file?(file) && File.size?(file)
+    end
+  end
+
+  def exact_license
+    return unless File.file?(path("LICENSE"))
+    error("LICENSE differs from the frozen O'Saasy text and Future Spin Ltd notice") unless
+      File.binread(path("LICENSE")) == EXPECTED_LICENSE.b
+  end
+
+  def public_positioning
+    readme = read("README.md")
+    %w[source-available self-hostable O'Saasy].each do |term|
+      error("README.md is missing #{term.inspect} positioning") unless readme.include?(term)
+    end
+    error("README.md must not install the canonical CLI from a moving @latest reference") if
+      readme.match?(%r{screenote-cli/cmd/screenote@latest})
+
+    %w[CONTRIBUTING.md SECURITY.md SUPPORT.md THIRD_PARTY_NOTICES.md].each do |relative|
+      error("#{relative} does not identify the source-available license/support boundary") unless
+        read(relative).match?(/O'Saasy|source-available|as-is|security/i)
+    end
+
+    user_docs = %w[README.md docs/self-hosting.md].filter_map { |relative| read(relative) if File.file?(path(relative)) }.join("\n")
+    error("public installation docs must not instruct operators to set RAILS_MASTER_KEY") if
+      user_docs.match?(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i)
+  end
+
+  def tracked_secret_surface
+    error("config/credentials.yml.enc must not exist in the publication tree") if
+      File.exist?(path("config/credentials.yml.enc"))
+    error("config/master.key must not exist in the publication tree") if File.exist?(path("config/master.key"))
+
+    gitignore = read(".gitignore").lines.map(&:strip)
+    %w[/config/*.key /config/credentials*.yml.enc /config/credentials/**/*.yml.enc].each do |entry|
+      error(".gitignore is missing #{entry}") unless gitignore.include?(entry)
+    end
+
+    output, status = Open3.capture2e("git", "-C", @root, "ls-files", "-z")
+    unless status.success?
+      error("could not inventory tracked paths")
+      return
+    end
+
+    tracked = output.split("\0").select { |relative| File.exist?(path(relative)) }
+    blocked = tracked.select do |relative|
+      relative == "config/master.key" ||
+        relative.match?(%r{\Aconfig/credentials(?:\.yml\.enc|/.*\.(?:key|yml\.enc))\z}) ||
+        (relative.match?(%r{(?:\A|/)\.env(?:\.|\z)}) && relative != ".env.self-hosted.example") ||
+        relative.match?(/\.(?:pem|p12|pfx|jks|keystore)\z/i) ||
+        relative.match?(%r{(?:\A|/)id_(?:rsa|dsa|ecdsa|ed25519)\z})
+    end
+    error("tracked credential-like paths remain: #{blocked.sort.join(', ')}") if blocked.any?
+
+    scanner_autoconfig = tracked & %w[
+      .trivyignore
+      .trivyignore.yaml
+      .trivyignore.yml
+      trivy.yaml
+      trivy.yml
+      .syft.yaml
+      .syft.yml
+      .syft/config.yaml
+      .syft/config.yml
+    ]
+    error("tracked scanner auto-configuration paths remain: #{scanner_autoconfig.sort.join(', ')}") if scanner_autoconfig.any?
+  end
+
+  def docker_context
+    contents = read(".dockerignore")
+    %w[/config/master.key /config/credentials/*.key /config/credentials*.yml.enc /config/credentials/**/*.yml.enc /.env* /secrets/ /go.mod /go.sum /cmd/ /internal/ /vendor/bundle/].each do |entry|
+      error(".dockerignore is missing #{entry}") unless contents.lines.map(&:strip).include?(entry)
+    end
+
+    dockerfile = read("Dockerfile")
+    base_references = dockerfile.scan(/^FROM\s+(\S+)/).flatten
+    error("Dockerfile must use the frozen multi-architecture Ruby base #{EXPECTED_BASE_IMAGE}") unless
+      base_references == [ EXPECTED_BASE_IMAGE, "base", "base" ]
+    error(".ruby-version must match the frozen container Ruby version") unless read(".ruby-version").strip == "ruby-3.4.10"
+    %w[
+      SCREENOTE_IMAGE_SOURCE
+      SCREENOTE_IMAGE_REVISION
+      SCREENOTE_IMAGE_VERSION
+      SCREENOTE_IMAGE_DESCRIPTION
+      org.opencontainers.image.source
+      org.opencontainers.image.revision
+      org.opencontainers.image.version
+      org.opencontainers.image.description
+      org.opencontainers.image.licenses="LicenseRef-OSaasy"
+    ].each do |marker|
+      error("Dockerfile is missing release identity marker #{marker}") unless dockerfile.include?(marker)
+    end
+  end
+
+  def gitguardian_configuration
+    config = YAML.safe_load(read(".gitguardian.yaml"), permitted_classes: [], aliases: false)
+    unless config.is_a?(Hash)
+      error(".gitguardian.yaml is not a mapping")
+      return
+    end
+
+    exact_keys(config, %w[version exit_zero verbose instance insecure secret], ".gitguardian.yaml")
+    value(config, "version", 2, ".gitguardian.yaml")
+    value(config, "exit_zero", false, ".gitguardian.yaml")
+    value(config, "verbose", false, ".gitguardian.yaml")
+    value(config, "instance", "https://dashboard.gitguardian.com", ".gitguardian.yaml")
+    value(config, "insecure", false, ".gitguardian.yaml")
+    secret = config["secret"]
+    unless secret.is_a?(Hash)
+      error(".gitguardian.yaml secret configuration is missing")
+      return
+    end
+    exact_keys(
+      secret,
+      %w[ignored_paths ignored_matches ignored_detectors show_secrets ignore_known_secrets],
+      ".gitguardian.yaml secret"
+    )
+    value(secret, "show_secrets", false, ".gitguardian.yaml secret")
+    value(secret, "ignore_known_secrets", false, ".gitguardian.yaml secret")
+    %w[ignored_paths ignored_matches ignored_detectors].each do |key|
+      error(".gitguardian.yaml #{key} must be an empty array") unless secret[key] == []
+    end
+  rescue Psych::Exception => error_object
+    error(".gitguardian.yaml is invalid YAML (#{error_object.class})")
+  end
+
+  def workflow_contracts
+    workflows = Dir.glob(path(".github/workflows/*.{yml,yaml}"))
+    action_references = []
+    workflows.each do |workflow|
+      relative = workflow.delete_prefix("#{@root}/")
+      contents = File.binread(workflow)
+      contents.scan(/^\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/).flatten.each do |reference|
+        action_references << reference
+        revision = reference.split("@").last
+        error("#{relative} uses mutable Action reference #{reference}") unless revision&.match?(/\A[0-9a-f]{40}\z/)
+      end
+      error("#{relative} weakens a required command with continue-on-error") if contents.match?(/^\s*continue-on-error\s*:\s*true\s*$/)
+    end
+
+    provenance = read("docs/releases/action-pins.md")
+    action_references.uniq.each do |reference|
+      error("action pin provenance is missing #{reference}") unless provenance.include?("`#{reference}`")
+    end
+
+    all = workflows.map { |workflow| File.binread(workflow) }.join("\n")
+    %w[--exit-zero --ignore-known-secrets --show-secrets].each do |flag|
+      error("workflow contains prohibited GitGuardian flag #{flag}") if all.include?(flag)
+    end
+
+    secrets = read(".github/workflows/secrets.yml")
+    error("secrets workflow must use metadata-only pull_request_target") unless secrets.include?("pull_request_target:")
+    error("secrets workflow must not check out repository code") if secrets.match?(/actions\/checkout|\bgit\s+(?:checkout|show|archive)\b/)
+    error("secrets workflow must not invoke an Action") if secrets.match?(/^\s*uses:/)
+    %w[
+      /v1/sources/
+      TRIGGERED
+      ASSIGNED
+      pagination_next
+      GITGUARDIAN_SOURCE_ID
+      statuses:\ write
+      PR_HEAD_SHA
+      PR_MERGE_SHA
+      /statuses/
+    ].each do |marker|
+      error("secrets workflow is missing fail-closed marker #{marker}") unless secrets.include?(marker)
+    end
+
+    release = read(".github/workflows/release.yml")
+    error("release workflow must not use pull_request_target") if release.include?("pull_request_target:")
+    error("release workflow must use the protected source-release environment") unless release.match?(/^\s*environment:\s*source-release\s*$/)
+    error("release workflow must invoke publish-mode validation") unless release.include?("--mode publish")
+    error("release workflow must bind builds to the requested source SHA") unless release.include?("SCREENOTE_IMAGE_REVISION")
+    error("release workflow must publish retained artifacts without checkout in the promotion job") unless
+      release.include?("promotion-does-not-checkout")
+    ggshield_prefix = 'ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan'
+    error("release workflow must isolate every ggshield scan from discovered configuration") unless
+      release.scan(ggshield_prefix).length == 4 &&
+        release.scan("GITGUARDIAN_INSTANCE: https://dashboard.gitguardian.com").length == 3
+    %w[
+      --config\ "$RUNNER_TEMP/trivy-release.yaml"
+      --ignorefile\ "$RUNNER_TEMP/trivy-release.ignore"
+      --show-suppressed
+    ].each do |marker|
+      error("release workflow is missing isolated Trivy marker #{marker}") unless release.include?(marker)
+    end
+    error("release workflow must isolate Syft from discovered configuration") unless
+      release.include?('--config "$RUNNER_TEMP/syft-release.yaml"')
+
+    qualification = read(".github/workflows/release-qualification.yml")
+    error("qualification workflow must not infer release qualification from pull-request CI") if
+      qualification.include?("pull_request:") || qualification.include?("workflow_run:")
+    error("qualification workflow must bind the exact candidate artifact by live ID and bytes") unless
+      qualification.include?("candidate_artifact_id") && qualification.include?("artifact-ids:") &&
+        qualification.include?('sha256sum --check --strict')
+    REQUIRED_QUALIFICATION_CHECKS.each do |name, target|
+      marker = name == "public-cli" ? "#{name}:#{target}" : "\"#{name}\", \"#{target}\""
+      error("qualification workflow is missing exact check #{name}/#{target}") unless qualification.include?(marker)
+    end
+  end
+
+  def ruleset_templates
+    main = parse_json_file(".github/rulesets/main.json")
+    creation = parse_json_file(".github/rulesets/release-tags.json")
+    immutable = parse_json_file(".github/rulesets/immutable-release-tags.json")
+    return unless [ main, creation, immutable ].all?
+
+    error("main ruleset must be active and target the default branch") unless
+      main["enforcement"] == "active" && main["target"] == "branch" &&
+        main.dig("conditions", "ref_name", "include") == [ "~DEFAULT_BRANCH" ]
+    error("main ruleset must have no bypass actors") unless main["bypass_actors"] == []
+    main_types = Array(main["rules"]).map { |rule| rule["type"] }
+    %w[deletion non_fast_forward pull_request required_status_checks].each do |type|
+      error("main ruleset is missing #{type}") unless main_types.include?(type)
+    end
+    status_rule = Array(main["rules"]).find { |rule| rule["type"] == "required_status_checks" }
+    statuses = Array(status_rule&.dig("parameters", "required_status_checks"))
+    error("main ruleset must require strict, non-skippable status checks") unless
+      status_rule&.dig("parameters", "strict_required_status_checks_policy") == true &&
+        status_rule&.dig("parameters", "do_not_enforce_on_create") == false
+    gitguardian = statuses.find { |check| check["context"] == "GitGuardian Security Checks" }
+    incidents = statuses.find { |check| check["context"] == "Secrets / GitGuardian repository incidents" }
+    expected_product_contexts = REQUIRED_CHECKS.map { |name| "CI / #{name}" }
+    actual_product_contexts = statuses.filter_map do |check|
+      check["context"] if check["context"].to_s.start_with?("CI / ")
+    end
+    error("main ruleset product checks do not match the release matrix") unless
+      actual_product_contexts.sort == expected_product_contexts.sort &&
+        statuses.select { |check| expected_product_contexts.include?(check["context"]) }.all? do |check|
+          check["integration_id"] == 15_368
+        end
+    error("main ruleset must bind the GitGuardian App check to an integration placeholder") unless gitguardian&.fetch("integration_id", nil) == 0
+    error("main ruleset must require the metadata-only incident check from GitHub Actions") unless incidents&.fetch("integration_id", nil) == 15_368
+
+    error("tag-creation ruleset must be active and target v* tags") unless tag_template?(creation)
+    error("tag-creation ruleset must contain only the creation restriction") unless
+      Array(creation["rules"]).map { |rule| rule["type"] } == [ "creation" ]
+    bypass = creation["bypass_actors"]
+    expected_bypass = [ { "actor_id" => 0, "actor_type" => "Integration", "bypass_mode" => "always" } ]
+    error("tag creation must have only the narrow release-integration placeholder") unless bypass == expected_bypass
+
+    error("tag-immutability ruleset must be active and target v* tags") unless tag_template?(immutable)
+    error("tag-immutability ruleset must have no bypass actors") unless immutable["bypass_actors"] == []
+    immutable_types = Array(immutable["rules"]).map { |rule| rule["type"] }
+    %w[update deletion non_fast_forward].each do |type|
+      error("tag-immutability ruleset is missing #{type}") unless immutable_types.include?(type)
+    end
+  end
+
+  def dependabot_contract
+    config = YAML.safe_load(read(".github/dependabot.yml"), permitted_classes: [], aliases: false)
+    updates = config.is_a?(Hash) ? config["updates"] : nil
+    ecosystems = Array(updates).map { |update| update["package-ecosystem"] }
+    %w[bundler gomod docker github-actions].each do |ecosystem|
+      error("Dependabot is missing #{ecosystem}") unless ecosystems.include?(ecosystem)
+    end
+  rescue Psych::Exception => error_object
+    error(".github/dependabot.yml is invalid YAML (#{error_object.class})")
+  end
+
+  def validate_release(release, tag)
+    exact_keys(release, %w[tag predecessor_tag predecessor_image_digest cli_tag notes_sha256], "release")
+    return unless release.is_a?(Hash)
+    semver(release, "tag", tag, "release")
+    semver(release, "cli_tag", nil, "release")
+    digest(release, "notes_sha256", "release")
+    value(release, "notes_sha256", Digest::SHA256.file(path("docs/releases/initial-release.md")).hexdigest, "release") if
+      File.file?(path("docs/releases/initial-release.md"))
+
+    if tag == "v1.0.0"
+      value(release, "predecessor_tag", "none", "release")
+      value(release, "predecessor_image_digest", "none", "release")
+    else
+      semver(release, "predecessor_tag", nil, "release")
+      oci_digest(release, "predecessor_image_digest", "release")
+      error("release predecessor cannot equal the release tag") if release["predecessor_tag"] == tag
+    end
+  end
+
+  def validate_artifacts(artifacts, source_sha, tag)
+    exact_keys(artifacts, %w[
+      source_sha amd64_digest arm64_digest manifest_digest sbom_sha256 provenance_sha256 oci_labels evidence_sha256
+    ], "artifacts")
+    return unless artifacts.is_a?(Hash)
+    sha(artifacts, "source_sha", source_sha, "artifacts")
+    %w[amd64_digest arm64_digest manifest_digest].each { |key| oci_digest(artifacts, key, "artifacts") }
+    digests = %w[amd64_digest arm64_digest manifest_digest].map { |key| artifacts[key] }
+    error("platform and manifest digests must be distinct") unless digests.compact.uniq.length == 3
+    %w[sbom_sha256 provenance_sha256 evidence_sha256].each { |key| digest(artifacts, key, "artifacts") }
+
+    labels = artifacts["oci_labels"]
+    exact_keys(labels, %w[source revision version description licenses], "artifacts.oci_labels")
+    return unless labels.is_a?(Hash)
+    value(labels, "source", "https://github.com/#{EXPECTED_REPOSITORY}", "artifacts.oci_labels")
+    value(labels, "revision", source_sha, "artifacts.oci_labels")
+    value(labels, "version", tag, "artifacts.oci_labels")
+    value(labels, "description", "Screenote visual feedback workspace", "artifacts.oci_labels")
+    value(labels, "licenses", "LicenseRef-OSaasy", "artifacts.oci_labels")
+  end
+
+  def validate_gitguardian(gitguardian, source_sha, artifacts)
+    exact_keys(gitguardian, %w[app_check source_scan incidents image_scan], "gitguardian")
+    return unless gitguardian.is_a?(Hash)
+
+    app = gitguardian["app_check"]
+    exact_keys(app, %w[status check_name app_id_sha256 skip_actions_disabled history_scan evidence_sha256], "gitguardian.app_check")
+    if app.is_a?(Hash)
+      value(app, "status", "passed", "gitguardian.app_check")
+      value(app, "check_name", "GitGuardian Security Checks", "gitguardian.app_check")
+      digest(app, "app_id_sha256", "gitguardian.app_check")
+      value(app, "skip_actions_disabled", true, "gitguardian.app_check")
+      value(app, "history_scan", "finished", "gitguardian.app_check")
+      digest(app, "evidence_sha256", "gitguardian.app_check")
+    end
+
+    source = gitguardian["source_scan"]
+    exact_keys(source, %w[status source_sha ggshield_version history_findings tree_findings evidence_sha256], "gitguardian.source_scan")
+    if source.is_a?(Hash)
+      value(source, "status", "passed", "gitguardian.source_scan")
+      sha(source, "source_sha", source_sha, "gitguardian.source_scan")
+      version(source, "ggshield_version", "gitguardian.source_scan")
+      zero(source, "history_findings", "gitguardian.source_scan")
+      zero(source, "tree_findings", "gitguardian.source_scan")
+      digest(source, "evidence_sha256", "gitguardian.source_scan")
+    end
+
+    incidents = gitguardian["incidents"]
+    exact_keys(incidents, %w[status source_id_sha256 pages total open checked_at evidence_sha256], "gitguardian.incidents")
+    if incidents.is_a?(Hash)
+      value(incidents, "status", "passed", "gitguardian.incidents")
+      digest(incidents, "source_id_sha256", "gitguardian.incidents")
+      positive_integer(incidents, "pages", "gitguardian.incidents")
+      nonnegative_integer(incidents, "total", "gitguardian.incidents")
+      zero(incidents, "open", "gitguardian.incidents")
+      recent_time(incidents, "checked_at", 24 * 60 * 60, "gitguardian.incidents")
+      digest(incidents, "evidence_sha256", "gitguardian.incidents")
+    end
+
+    image = gitguardian["image_scan"]
+    exact_keys(image, %w[status ggshield_version platforms evidence_sha256], "gitguardian.image_scan")
+    return unless image.is_a?(Hash)
+    value(image, "status", "passed", "gitguardian.image_scan")
+    version(image, "ggshield_version", "gitguardian.image_scan")
+    digest(image, "evidence_sha256", "gitguardian.image_scan")
+    validate_platforms(image["platforms"], artifacts, "gitguardian.image_scan")
+  end
+
+  def validate_vulnerability(vulnerability, artifacts)
+    exact_keys(vulnerability, %w[
+      status scanner scanner_version database_version policy_version critical high waivers checked_at evidence_sha256
+    ], "vulnerability")
+    return unless vulnerability.is_a?(Hash)
+    value(vulnerability, "status", "passed", "vulnerability")
+    value(vulnerability, "scanner", "trivy", "vulnerability")
+    version(vulnerability, "scanner_version", "vulnerability")
+    nonempty(vulnerability, "database_version", "vulnerability")
+    value(vulnerability, "policy_version", "screenote-critical-high/v1", "vulnerability")
+    zero(vulnerability, "critical", "vulnerability")
+    zero(vulnerability, "high", "vulnerability")
+    recent_time(vulnerability, "checked_at", 24 * 60 * 60, "vulnerability")
+    digest(vulnerability, "evidence_sha256", "vulnerability")
+
+    waivers = vulnerability["waivers"]
+    unless waivers.is_a?(Array)
+      error("vulnerability.waivers must be an array")
+      return
+    end
+    waivers.each_with_index { |waiver, index| validate_waiver(waiver, artifacts, index) }
+  end
+
+  def validate_rulesets(rulesets)
+    exact_keys(rulesets, %w[
+      status main_export_sha256 tag_creation_export_sha256 tag_immutability_export_sha256
+      gitguardian_app_id_sha256 release_app_id_sha256 no_broad_bypass evidence_sha256
+    ], "rulesets")
+    return unless rulesets.is_a?(Hash)
+    value(rulesets, "status", "passed", "rulesets")
+    hashes = %w[
+      main_export_sha256 tag_creation_export_sha256 tag_immutability_export_sha256
+      gitguardian_app_id_sha256 release_app_id_sha256 evidence_sha256
+    ]
+    hashes.each { |key| digest(rulesets, key, "rulesets") }
+    value(rulesets, "no_broad_bypass", true, "rulesets")
+  end
+
+  def validate_source_contracts(contracts, source_sha)
+    context = "source_contracts"
+    exact_keys(contracts, %w[scope source_sha workflow_run_id required_checks evidence_sha256], context)
+    return unless contracts.is_a?(Hash)
+    value(contracts, "scope", "pr_contract_only", context)
+    sha(contracts, "source_sha", source_sha, context)
+    evidence_id(contracts, "workflow_run_id", context)
+    digest(contracts, "evidence_sha256", context)
+
+    checks = contracts["required_checks"]
+    unless checks.is_a?(Array)
+      error("#{context}.required_checks must be an array")
+      return
+    end
+    names = checks.filter_map do |check|
+      exact_keys(check, %w[name conclusion evidence_sha256], "#{context}.required_checks[]")
+      next unless check.is_a?(Hash)
+      value(check, "conclusion", "success", "#{context}.required_checks.#{check['name']}")
+      digest(check, "evidence_sha256", "#{context}.required_checks.#{check['name']}")
+      check["name"]
+    end
+    error("#{context}.required_checks has duplicate names") unless names.uniq.length == names.length
+    missing = REQUIRED_CHECKS - names
+    extra = names - REQUIRED_CHECKS
+    error("#{context}.required_checks is missing: #{missing.join(', ')}") if missing.any?
+    error("#{context}.required_checks has unknown names: #{extra.join(', ')}") if extra.any?
+  end
+
+  def validate_qualification(
+    qualification,
+    evidence,
+    source_sha,
+    tag,
+    run_id:,
+    artifact_sha256:,
+    require_external_binding:
+  )
+    context = "qualification"
+    exact_keys(qualification, %w[
+      status workflow_path workflow_run_id workflow_run_attempt artifact_name artifact_sha256
+      record_sha256 source_sha release_tag candidate_sha256 manifest_digest platforms cli_tag
+      cli_sha minimum_host_profile_sha256 checks
+    ], context)
+    return unless qualification.is_a?(Hash)
+
+    value(qualification, "status", "passed", context)
+    value(qualification, "workflow_path", ".github/workflows/release-qualification.yml", context)
+    positive_integer_string(qualification, "workflow_run_id", context)
+    positive_integer(qualification, "workflow_run_attempt", context)
+    expected_artifact = "release-qualification-#{source_sha}-#{tag}"
+    value(qualification, "artifact_name", expected_artifact, context)
+    %w[artifact_sha256 record_sha256 candidate_sha256 minimum_host_profile_sha256].each do |key|
+      digest(qualification, key, context)
+    end
+    sha(qualification, "source_sha", source_sha, context)
+    semver(qualification, "release_tag", tag, context)
+    oci_digest(qualification, "manifest_digest", context)
+    value(qualification, "candidate_sha256", evidence.dig("artifacts", "evidence_sha256"), context)
+    value(qualification, "manifest_digest", evidence.dig("artifacts", "manifest_digest"), context)
+    semver(qualification, "cli_tag", evidence.dig("release", "cli_tag"), context)
+    git_sha(qualification, "cli_sha", nil, context)
+
+    if require_external_binding
+      error("qualification run ID is required for publication") if run_id.to_s.empty?
+      error("qualification artifact SHA-256 is required for publication") if artifact_sha256.to_s.empty?
+      value(qualification, "workflow_run_id", run_id.to_s, context) unless run_id.to_s.empty?
+      value(qualification, "artifact_sha256", artifact_sha256, context) unless artifact_sha256.to_s.empty?
+    end
+
+    platforms = qualification["platforms"]
+    unless platforms.is_a?(Array) && platforms.length == 2
+      error("qualification.platforms must contain exactly amd64 and arm64")
+    else
+      expected_platforms = {
+        "amd64" => evidence.dig("artifacts", "amd64_digest"),
+        "arm64" => evidence.dig("artifacts", "arm64_digest")
+      }
+      actual = {}
+      platforms.each do |platform|
+        exact_keys(platform, %w[architecture digest], "qualification.platforms[]")
+        next unless platform.is_a?(Hash)
+        architecture = platform["architecture"]
+        error("qualification has unknown architecture #{architecture.inspect}") unless expected_platforms.key?(architecture)
+        error("qualification has duplicate architecture #{architecture}") if actual.key?(architecture)
+        actual[architecture] = platform["digest"]
+        oci_digest(platform, "digest", "qualification.#{architecture}")
+      end
+      error("qualification platform digests do not match retained candidate") unless actual == expected_platforms
+    end
+
+    checks = qualification["checks"]
+    unless checks.is_a?(Array)
+      error("qualification.checks must be an array")
+      return
+    end
+    identities = checks.filter_map do |check|
+      exact_keys(check, %w[name target status evidence_sha256], "qualification.checks[]")
+      next unless check.is_a?(Hash)
+      value(check, "status", "passed", "qualification.checks.#{check['name']}.#{check['target']}")
+      digest(check, "evidence_sha256", "qualification.checks.#{check['name']}.#{check['target']}")
+      [ check["name"], check["target"] ]
+    end
+    error("qualification.checks contains duplicates") unless identities.uniq.length == identities.length
+    missing = REQUIRED_QUALIFICATION_CHECKS - identities
+    extra = identities - REQUIRED_QUALIFICATION_CHECKS
+    error("qualification.checks is missing: #{missing.map { |pair| pair.join('/') }.join(', ')}") if missing.any?
+    error("qualification.checks has unknown identities: #{extra.map { |pair| pair.join('/') }.join(', ')}") if extra.any?
+  end
+
+  def validate_public_artifacts(public_artifacts)
+    exact_keys(public_artifacts, %w[status sentinel_matches logs_sha256 release_notes_sha256 evidence_sha256], "public_artifacts")
+    return unless public_artifacts.is_a?(Hash)
+    value(public_artifacts, "status", "passed", "public_artifacts")
+    zero(public_artifacts, "sentinel_matches", "public_artifacts")
+    %w[logs_sha256 release_notes_sha256 evidence_sha256].each { |key| digest(public_artifacts, key, "public_artifacts") }
+    value(
+      public_artifacts,
+      "release_notes_sha256",
+      Digest::SHA256.file(path("docs/releases/initial-release.md")).hexdigest,
+      "public_artifacts"
+    ) if File.file?(path("docs/releases/initial-release.md"))
+  end
+
+  def validate_final_release_notes(evidence)
+    notes = read("docs/releases/initial-release.md")
+    release = evidence["release"]
+    artifacts = evidence["artifacts"]
+
+    error("final release notes still contain a placeholder or blocked-candidate marker") if
+      notes.match?(PLACEHOLDER) || notes.match?(/blocked release candidate|not a published release|publication (?:remains blocked|evidence still required)/i)
+
+    expected_identity = {
+      "source SHA" => evidence["source_sha"],
+      "release tag" => release.is_a?(Hash) ? release["tag"] : nil,
+      "predecessor" => release.is_a?(Hash) ? release["predecessor_tag"] : nil,
+      "CLI tag" => release.is_a?(Hash) ? release["cli_tag"] : nil,
+      "image manifest digest" => artifacts.is_a?(Hash) ? artifacts["manifest_digest"] : nil
+    }
+    expected_identity.each do |label, identity|
+      error("final release notes do not name the exact #{label}") unless identity.is_a?(String) && notes.include?(identity)
+    end
+  end
+
+  def validate_platforms(platforms, artifacts, context)
+    unless platforms.is_a?(Array) && platforms.length == 2
+      error("#{context}.platforms must contain exactly amd64 and arm64")
+      return
+    end
+    expected = { "amd64" => artifacts&.fetch("amd64_digest", nil), "arm64" => artifacts&.fetch("arm64_digest", nil) }
+    seen = {}
+    platforms.each do |platform|
+      exact_keys(platform, %w[architecture digest findings evidence_sha256], "#{context}.platforms[]")
+      next unless platform.is_a?(Hash)
+      architecture = platform["architecture"]
+      error("#{context} has unknown architecture #{architecture.inspect}") unless expected.key?(architecture)
+      error("#{context} has duplicate architecture #{architecture}") if seen[architecture]
+      seen[architecture] = true
+      value(platform, "digest", expected[architecture], "#{context}.#{architecture}") if expected.key?(architecture)
+      oci_digest(platform, "digest", "#{context}.#{architecture}")
+      zero(platform, "findings", "#{context}.#{architecture}")
+      digest(platform, "evidence_sha256", "#{context}.#{architecture}")
+    end
+    error("#{context}.platforms must cover amd64 and arm64") unless seen.keys.sort == expected.keys.sort
+  end
+
+  def validate_waiver(waiver, artifacts, index)
+    context = "vulnerability.waivers[#{index}]"
+    exact_keys(waiver, %w[id_sha256 severity architecture image_digest finding_id_sha256 approver_role approved_at expires_at evidence_sha256], context)
+    return unless waiver.is_a?(Hash)
+    %w[id_sha256 finding_id_sha256 evidence_sha256].each { |key| digest(waiver, key, context) }
+    allowed_value(waiver, "severity", %w[critical high], context)
+    allowed_value(waiver, "architecture", %w[amd64 arm64], context)
+    expected_digest = artifacts&.fetch("#{waiver['architecture']}_digest", nil)
+    value(waiver, "image_digest", expected_digest, context) if expected_digest
+    oci_digest(waiver, "image_digest", context)
+    value(waiver, "approver_role", "security_approver", context)
+    approved = parsed_time(waiver, "approved_at", context)
+    expires = parsed_time(waiver, "expires_at", context)
+    return unless approved && expires
+    error("#{context}.approved_at is in the future") if approved > @now
+    error("#{context}.expires_at must be in the future") unless expires > @now
+    error("#{context} lasts longer than 30 days") if expires > approved + (30 * 24 * 60 * 60)
+  end
+
+  def check_public_payload(value, trail = "evidence")
+    case value
+    when Hash
+      value.each { |key, child| check_public_payload(child, "#{trail}.#{key}") }
+    when Array
+      value.each_with_index { |child, index| check_public_payload(child, "#{trail}[#{index}]") }
+    when String
+      error("#{trail} contains a placeholder") if value.match?(PLACEHOLDER)
+      sensitive = [
+        /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+        /\bAuthorization:\s*(?:Bearer|Token)\s+/i,
+        %r{https?://[^/@:\s]+:[^/@\s]+@},
+        %r{(?:\A|\s)/(?:home|tmp|run/secrets|var/lib/private)/},
+        %r{https://dashboard\.gitguardian\.[^/]+/.*/incidents/}i
+      ]
+      error("#{trail} contains prohibited public security detail") if sensitive.any? { |pattern| value.match?(pattern) }
+    end
+  end
+
+  def load_evidence(relative_or_absolute)
+    unless relative_or_absolute
+      error("an evidence path is required")
+      return
+    end
+    file = File.expand_path(relative_or_absolute, @root)
+    unless File.file?(file)
+      error("evidence file does not exist")
+      return
+    end
+    if File.size(file) > MAX_EVIDENCE_BYTES
+      error("evidence file exceeds #{MAX_EVIDENCE_BYTES} bytes")
+      return
+    end
+    value = JSON.parse(File.binread(file), create_additions: false)
+    unless value.is_a?(Hash)
+      error("evidence root must be an object")
+      return
+    end
+    value
+  rescue JSON::ParserError
+    error("evidence file is malformed JSON")
+    nil
+  end
+
+  def load_json_path(relative_or_absolute, label)
+    unless relative_or_absolute
+      error("a #{label} path is required")
+      return
+    end
+    file = File.expand_path(relative_or_absolute, @root)
+    unless File.file?(file)
+      error("#{label} file does not exist")
+      return
+    end
+    unless File.size(file).positive? && File.size(file) <= MAX_EVIDENCE_BYTES
+      error("#{label} file is empty or exceeds #{MAX_EVIDENCE_BYTES} bytes")
+      return
+    end
+    value = JSON.parse(File.binread(file), create_additions: false)
+    unless value.is_a?(Hash)
+      error("#{label} root must be an object")
+      return
+    end
+    value
+  rescue JSON::ParserError
+    error("#{label} file is malformed JSON")
+    nil
+  end
+
+  def parse_json_file(relative)
+    JSON.parse(read(relative), create_additions: false)
+  rescue JSON::ParserError
+    error("#{relative} is malformed JSON")
+    nil
+  end
+
+  def exact_keys(record, expected, context)
+    unless record.is_a?(Hash)
+      error("#{context} must be an object")
+      return
+    end
+    missing = expected - record.keys
+    unknown = record.keys - expected
+    error("#{context} is missing keys: #{missing.join(', ')}") if missing.any?
+    error("#{context} has unknown keys: #{unknown.join(', ')}") if unknown.any?
+  end
+
+  def value(record, key, expected, context = "evidence")
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must equal #{expected.inspect}") unless actual == expected
+  end
+
+  def allowed_value(record, key, allowed, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be one of #{allowed.join(', ')}") unless allowed.include?(actual)
+  end
+
+  def nonempty(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a non-empty string") unless actual.is_a?(String) && !actual.strip.empty?
+  end
+
+  def boolean(record, key, context = "evidence")
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be boolean") unless [ true, false ].include?(actual)
+  end
+
+  def digest(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a lowercase SHA-256") unless actual.is_a?(String) && actual.match?(SHA256)
+  end
+
+  def sha(record, key, expected, context = "evidence")
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a full lowercase Git SHA") unless actual.is_a?(String) && actual.match?(GIT_SHA)
+    error("#{context}.#{key} does not match the requested source SHA") if expected && actual != expected
+  end
+
+  def git_sha(record, key, expected, context)
+    sha(record, key, expected, context)
+  end
+
+  def oci_digest(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a sha256 OCI digest") unless actual.is_a?(String) && actual.match?(OCI_DIGEST)
+  end
+
+  def semver(record, key, expected, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be an immutable vMAJOR.MINOR.PATCH tag") unless actual.is_a?(String) && actual.match?(SEMVER_TAG)
+    error("#{context}.#{key} does not match the requested tag") if expected && actual != expected
+  end
+
+  def evidence_id(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be an opaque evidence identifier") unless actual.is_a?(String) && actual.match?(EVIDENCE_ID)
+  end
+
+  def version(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a numeric tool version") unless actual.is_a?(String) && actual.match?(/\A[0-9]+(?:\.[0-9]+){1,3}\z/)
+  end
+
+  def zero(record, key, context)
+    value(record, key, 0, context)
+  end
+
+  def nonnegative_integer(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a non-negative integer") unless actual.is_a?(Integer) && actual >= 0
+  end
+
+  def positive_integer(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a positive integer") unless actual.is_a?(Integer) && actual.positive?
+  end
+
+  def positive_integer_string(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    error("#{context}.#{key} must be a positive-integer string") unless
+      actual.is_a?(String) && actual.match?(/\A[1-9][0-9]*\z/)
+  end
+
+  def recent_time(record, key, max_age, context)
+    parsed = parsed_time(record, key, context)
+    return unless parsed
+    error("#{context}.#{key} is in the future") if parsed > @now + 60
+    error("#{context}.#{key} is older than #{max_age} seconds") if parsed < @now - max_age
+  end
+
+  def parsed_time(record, key, context)
+    actual = record.is_a?(Hash) ? record[key] : nil
+    parsed = Time.iso8601(actual)
+    error("#{context}.#{key} must use UTC Z notation") unless actual.end_with?("Z")
+    parsed.utc
+  rescue TypeError, ArgumentError
+    error("#{context}.#{key} must be an ISO-8601 timestamp")
+    nil
+  end
+
+  def tag_template?(record)
+    record["enforcement"] == "active" && record["target"] == "tag" &&
+      record.dig("conditions", "ref_name", "include") == [ "refs/tags/v*" ]
+  end
+
+  def read(relative)
+    file = path(relative)
+    return "" unless File.file?(file)
+    File.binread(file)
+  end
+
+  def path(relative)
+    File.join(@root, relative)
+  end
+
+  def error(message)
+    errors << message unless errors.include?(message)
+  end
+end
+
+def run_release_validation_cli(arguments)
+  options = {
+    mode: "prepare",
+    root: File.expand_path("..", __dir__),
+    now: Time.now.utc
+  }
+
+  parser = OptionParser.new do |command|
+    command.banner = "Usage: bin/release-validate [options]"
+    command.on(
+      "--mode MODE",
+      %w[prepare evidence qualification publish],
+      "prepare, evidence, qualification, or publish"
+    ) { |value| options[:mode] = value }
+    command.on("--evidence PATH", "redacted evidence JSON") { |value| options[:evidence] = value }
+    command.on("--qualification-report PATH", "downloaded exact qualification record JSON") do |value|
+      options[:qualification_report] = value
+    end
+    command.on("--qualification-run-id ID", "exact successful qualification workflow run") do |value|
+      options[:qualification_run_id] = value
+    end
+    command.on("--qualification-artifact-sha256 SHA", "exact qualification artifact archive SHA-256") do |value|
+      options[:qualification_artifact_sha256] = value
+    end
+    command.on("--source-sha SHA", "exact source commit") { |value| options[:source_sha] = value }
+    command.on("--tag TAG", "exact semantic release tag") { |value| options[:tag] = value }
+    command.on("--root PATH", "repository root (primarily for contract tests)") { |value| options[:root] = value }
+    command.on("--now ISO8601", "validation time (primarily for contract tests)") { |value| options[:now] = Time.iso8601(value) }
+  end
+
+  begin
+    parser.parse!(arguments)
+  rescue OptionParser::ParseError, ArgumentError => error
+    warn "release validation failed: #{error.message}"
+    warn parser
+    return 2
+  end
+
+  validator = ReleaseValidation.new(root: options[:root], now: options[:now])
+
+  case options[:mode]
+  when "prepare"
+    validator.validate_prepare
+  when "evidence"
+    validator.validate_evidence(
+      path: options[:evidence],
+      source_sha: options[:source_sha],
+      tag: options[:tag],
+      allow_fixture: true
+    )
+  when "qualification"
+    validator.validate_qualification_record(
+      path: options[:qualification_report],
+      evidence_path: options[:evidence]
+    )
+  when "publish"
+    validator
+      .validate_prepare
+      .validate_publication_blocker
+      .validate_evidence(
+        path: options[:evidence],
+        source_sha: options[:source_sha],
+        tag: options[:tag],
+        allow_fixture: false,
+        qualification_run_id: options[:qualification_run_id],
+        qualification_artifact_sha256: options[:qualification_artifact_sha256]
+      )
+  end
+
+  if validator.success?
+    puts "release validation passed (#{options[:mode]})"
+    return 0
+  end
+
+  warn "release validation failed (#{options[:mode]}):"
+  validator.errors.each { |message| warn "- #{message}" }
+  1
+end
+
+exit run_release_validation_cli(ARGV) if $PROGRAM_NAME == __FILE__

@@ -9,10 +9,13 @@
 
 # Ignore all environment files.
 /.env*
+/secrets/
 
 # Ignore all default key files.
 /config/master.key
 /config/credentials/*.key
+/config/credentials*.yml.enc
+/config/credentials/**/*.yml.enc
 
 # Ignore all logfiles and tempfiles.
 /log/*
@@ -45,6 +48,15 @@
 
 # Ignore development files
 /.devcontainer
+
+# The transitional Go CLI is tested separately and is not part of the Rails
+# runtime image. Excluding its module sources keeps the server SBOM and
+# vulnerability scan scoped to software that is actually shipped in the image.
+/go.mod
+/go.sum
+/cmd/
+/internal/
+/vendor/bundle/
 
 # Ignore Docker-related files
 /.dockerignore

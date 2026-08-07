@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class PagesControllerTest < ActionDispatch::IntegrationTest
@@ -148,6 +150,25 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
       count: 1
     )
     assert_select "[data-testid='version-selector-item'][data-version-id='#{failed.id}']", text: /Failed older.*Failed/m
+  end
+
+  test "show renders API-key-authored annotations without impersonating a user" do
+    sign_in(@user)
+    screenshot = screenshots(:alice_screenshot)
+    annotation = screenshot.annotations.create!(
+      user: nil,
+      api_key: api_keys(:alice_key),
+      viewport: :desktop,
+      x_percent: 20,
+      y_percent: 30,
+      comment: "Automated review"
+    )
+
+    get page_path(@page, version_id: screenshot.id, viewport: :desktop)
+
+    assert_response :success
+    assert_select "##{dom_id(annotation)} [data-testid='annotation-author-marker']", text: "AI"
+    assert_select "##{dom_id(annotation)} .annotation-item__author", text: api_keys(:alice_key).name
   end
 
   test "version links preserve an available viewport and otherwise use the target default" do

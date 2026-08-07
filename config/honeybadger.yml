@@ -1,7 +1,8 @@
 ---
 # For more options, see https://docs.honeybadger.io/lib/ruby/gem-reference/configuration
 
-api_key: '<%= ENV.fetch("HONEYBADGER_API_KEY", "") %>'
+<% deployment = Screenote::Deployment.current %>
+api_key: <%= (deployment.monitoring_configuration[:api_key] || "").to_json %>
 
 # The environment your app is running in.
 env: "<%= Rails.env %>"
@@ -18,6 +19,19 @@ development_environments:
 # Enable verbose debug logging (useful for troubleshooting).
 debug: false
 
+exceptions:
+  enabled: <%= deployment.monitoring? %>
+  local_variables: false
+
+request:
+  disable_session: <%= deployment.self_hosted? %>
+  disable_params: <%= deployment.self_hosted? %>
+  disable_environment: <%= deployment.self_hosted? %>
+  disable_url: <%= deployment.self_hosted? %>
+
+breadcrumbs:
+  enabled: <%= deployment.saas? && deployment.monitoring? %>
+
 # Enable Honeybadger Insights
 insights:
-  enabled: true
+  enabled: <%= deployment.saas? && deployment.monitoring? %>

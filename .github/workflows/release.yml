@@ -1,0 +1,1436 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Build a retained candidate, or promote a previously retained candidate
+        required: true
+        type: choice
+        options:
+          - candidate
+          - publish
+      source_sha:
+        description: Exact 40-character commit built and tagged by the release
+        required: true
+        type: string
+      release_tag:
+        description: Immutable vMAJOR.MINOR.PATCH tag
+        required: true
+        type: string
+      candidate_run_id:
+        description: Successful candidate run ID (publish only)
+        required: false
+        type: string
+      candidate_sha256:
+        description: SHA-256 of screenote-candidate.tar (publish only)
+        required: false
+        type: string
+      qualification_run_id:
+        description: Successful exact release-qualification run ID (publish only)
+        required: false
+        type: string
+      qualification_artifact_sha256:
+        description: SHA-256 reported by the exact qualification artifact (publish only)
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: source-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  candidate-source:
+    name: Candidate source and history gate
+    if: inputs.operation == 'candidate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Validate immutable inputs before checkout
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test "$RELEASE_REF" = "refs/heads/$DEFAULT_BRANCH"
+
+      - name: Resolve the exact candidate default-branch head
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref_json="$RUNNER_TEMP/candidate-default-branch-ref.json"
+          commit_json="$RUNNER_TEMP/candidate-default-branch-commit.json"
+          gh api \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" >"$ref_json"
+          gh api \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/git/commits/$EXPECTED_SHA" >"$commit_json"
+          DEFAULT_REF_JSON="$ref_json" DEFAULT_COMMIT_JSON="$commit_json" ruby -rjson <<'RUBY'
+          ref = JSON.parse(File.binread(ENV.fetch("DEFAULT_REF_JSON")))
+          commit = JSON.parse(File.binread(ENV.fetch("DEFAULT_COMMIT_JSON")))
+          expected_ref = "refs/heads/#{ENV.fetch('DEFAULT_BRANCH')}"
+          expected_sha = ENV.fetch("EXPECTED_SHA")
+          object = ref["object"] if ref.is_a?(Hash)
+
+          abort "default branch ref does not resolve to the expected commit" unless
+            ref.is_a?(Hash) && ref["ref"] == expected_ref &&
+              object.is_a?(Hash) && object["type"] == "commit" && object["sha"] == expected_sha
+          abort "default branch commit lookup does not match the expected commit" unless
+            commit.is_a?(Hash) && commit["sha"] == expected_sha
+          RUBY
+
+      - name: Checkout the exact candidate with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the current protected default-branch commit
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          bin/release-validate --mode prepare
+
+      - name: Install checksum-pinned ggshield
+        env:
+          GGSHIELD_ARCHIVE_SHA256: 181b440917943e1efac0ff58403b24181fddc152f0f2be7a932911a588eba03c
+          GGSHIELD_VERSION: 1.52.2
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/ggshield.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            "https://github.com/GitGuardian/ggshield/releases/download/v${GGSHIELD_VERSION}/ggshield-${GGSHIELD_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$GGSHIELD_ARCHIVE_SHA256  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/ggshield-${GGSHIELD_VERSION}-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
+
+      - name: Scan full history and current tree without public findings
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GITGUARDIAN_DONT_LOAD_ENV: "1"
+          GITGUARDIAN_INSTANCE: https://dashboard.gitguardian.com
+        run: |
+          set -euo pipefail
+          history_report="$RUNNER_TEMP/ggshield-history.txt"
+          tree_report="$RUNNER_TEMP/ggshield-tree.txt"
+          if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan repo . >"$history_report" 2>&1; then
+            echo "::error::GitGuardian full-history scan failed; inspect job-local diagnostics"
+            exit 1
+          fi
+          if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan path --recursive --yes --all-secrets . >"$tree_report" 2>&1; then
+            echo "::error::GitGuardian current-tree scan failed; inspect job-local diagnostics"
+            exit 1
+          fi
+          echo "GitGuardian source gates passed with redacted workflow output"
+
+  candidate-image:
+    name: Build and scan retained OCI candidate
+    if: inputs.operation == 'candidate'
+    needs: candidate-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      candidate_sha256: ${{ steps.bundle.outputs.candidate_sha256 }}
+      manifest_digest: ${{ steps.oci.outputs.manifest_digest }}
+    steps:
+      - name: Checkout the exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: Set up emulation
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build the multi-platform OCI layout once
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/candidate"
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --provenance=false \
+            --tag "ghcr.io/ivankuznetsov/screenote:$RELEASE_TAG" \
+            --build-arg "SCREENOTE_IMAGE_SOURCE=https://github.com/${GITHUB_REPOSITORY}" \
+            --build-arg "SCREENOTE_IMAGE_REVISION=$SOURCE_SHA" \
+            --build-arg "SCREENOTE_IMAGE_VERSION=$RELEASE_TAG" \
+            --build-arg "SCREENOTE_IMAGE_DESCRIPTION=Screenote visual feedback workspace" \
+            --output "type=oci,dest=$RUNNER_TEMP/candidate/screenote.oci.tar" \
+            .
+
+      - name: Install checksum-pinned release tools
+        env:
+          GGSHIELD_ARCHIVE_SHA256: 181b440917943e1efac0ff58403b24181fddc152f0f2be7a932911a588eba03c
+          GGSHIELD_VERSION: 1.52.2
+          SYFT_ARCHIVE_SHA256: 0e91737aee2b5baf1d255b959630194a302335d848ff97bb07921eb6205b5f5a
+          SYFT_VERSION: 1.44.0
+          TRIVY_ARCHIVE_SHA256: 8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9
+          TRIVY_VERSION: 0.70.0
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/release-tools"
+          mkdir -p "$tools"
+
+          curl --fail --silent --show-error --location \
+            --output "$tools/ggshield.tar.gz" \
+            "https://github.com/GitGuardian/ggshield/releases/download/v${GGSHIELD_VERSION}/ggshield-${GGSHIELD_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$GGSHIELD_ARCHIVE_SHA256  $tools/ggshield.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tools/ggshield.tar.gz" -C "$tools"
+
+          curl --fail --silent --show-error --location \
+            --output "$tools/trivy.tar.gz" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "$TRIVY_ARCHIVE_SHA256  $tools/trivy.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tools/trivy.tar.gz" -C "$tools" trivy
+
+          curl --fail --silent --show-error --location \
+            --output "$tools/syft.tar.gz" \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "$SYFT_ARCHIVE_SHA256  $tools/syft.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tools/syft.tar.gz" -C "$tools" syft
+
+          echo "$tools" >> "$GITHUB_PATH"
+          echo "$tools/ggshield-${GGSHIELD_VERSION}-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
+
+      - name: Import exact platform manifests and record OCI identity
+        id: oci
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y skopeo
+          layout="$RUNNER_TEMP/oci-layout"
+          mkdir -p "$layout"
+          tar -xf "$RUNNER_TEMP/candidate/screenote.oci.tar" -C "$layout"
+          CANDIDATE_DIR="$RUNNER_TEMP/candidate" LAYOUT_DIR="$layout" ruby <<'RUBY'
+          require "digest"
+          require "json"
+
+          candidate = ENV.fetch("CANDIDATE_DIR")
+          layout = ENV.fetch("LAYOUT_DIR")
+          index = JSON.parse(File.binread(File.join(layout, "index.json")))
+          raise "OCI archive must contain one tagged index" unless index["manifests"].is_a?(Array) && index["manifests"].length == 1
+          descriptor = index["manifests"].first
+          digest = descriptor.fetch("digest")
+          algorithm, hex = digest.split(":", 2)
+          raise "unexpected OCI digest" unless algorithm == "sha256" && hex&.match?(/\A[0-9a-f]{64}\z/)
+          manifest_path = File.join(layout, "blobs", algorithm, hex)
+          raise "OCI descriptor size mismatch" unless File.size(manifest_path) == descriptor.fetch("size")
+          raise "OCI descriptor digest mismatch" unless Digest::SHA256.file(manifest_path).hexdigest == hex
+          image_index = JSON.parse(File.binread(manifest_path))
+          raise "OCI index must contain exactly two platform manifests" unless image_index["manifests"].is_a?(Array) && image_index["manifests"].length == 2
+          expected_labels = {
+            "org.opencontainers.image.source" => "https://github.com/#{ENV.fetch('GITHUB_REPOSITORY')}",
+            "org.opencontainers.image.revision" => ENV.fetch("SOURCE_SHA"),
+            "org.opencontainers.image.version" => ENV.fetch("RELEASE_TAG"),
+            "org.opencontainers.image.description" => "Screenote visual feedback workspace",
+            "org.opencontainers.image.licenses" => "LicenseRef-OSaasy"
+          }
+          platforms = image_index.fetch("manifests").filter_map do |platform|
+            os = platform.dig("platform", "os")
+            architecture = platform.dig("platform", "architecture")
+            next unless os == "linux" && %w[amd64 arm64].include?(architecture)
+            platform_algorithm, platform_hex = platform.fetch("digest").split(":", 2)
+            raise "unexpected platform digest" unless platform_algorithm == "sha256" && platform_hex&.match?(/\A[0-9a-f]{64}\z/)
+            platform_path = File.join(layout, "blobs", platform_algorithm, platform_hex)
+            raise "platform descriptor mismatch" unless File.size(platform_path) == platform.fetch("size")
+            raise "platform digest mismatch" unless Digest::SHA256.file(platform_path).hexdigest == platform_hex
+            manifest = JSON.parse(File.binread(platform_path))
+            config_descriptor = manifest.fetch("config")
+            config_algorithm, config_hex = config_descriptor.fetch("digest").split(":", 2)
+            raise "unexpected config digest" unless config_algorithm == "sha256" && config_hex&.match?(/\A[0-9a-f]{64}\z/)
+            config_path = File.join(layout, "blobs", config_algorithm, config_hex)
+            raise "config descriptor size mismatch" unless File.size(config_path) == config_descriptor.fetch("size")
+            raise "config descriptor digest mismatch" unless Digest::SHA256.file(config_path).hexdigest == config_hex
+            config = JSON.parse(File.binread(config_path))
+            labels = config.dig("config", "Labels")
+            raise "OCI labels do not match release identity" unless labels.is_a?(Hash) && expected_labels.all? { |key, value| labels[key] == value }
+            manifest.fetch("layers").each do |layer|
+              layer_algorithm, layer_hex = layer.fetch("digest").split(":", 2)
+              raise "unexpected layer digest" unless layer_algorithm == "sha256" && layer_hex&.match?(/\A[0-9a-f]{64}\z/)
+              layer_path = File.join(layout, "blobs", layer_algorithm, layer_hex)
+              raise "layer descriptor size mismatch" unless File.size(layer_path) == layer.fetch("size")
+              raise "layer descriptor digest mismatch" unless Digest::SHA256.file(layer_path).hexdigest == layer_hex
+            end
+            {
+              "os" => os,
+              "architecture" => architecture,
+              "digest" => platform.fetch("digest"),
+              "config_digest" => config_descriptor.fetch("digest")
+            }
+          end
+          raise "OCI index must contain exactly AMD64 and ARM64" unless platforms.map { |entry| entry["architecture"] }.sort == %w[amd64 arm64]
+
+          metadata = {
+            "schema" => "screenote-oci-candidate/v1",
+            "repository" => ENV.fetch("GITHUB_REPOSITORY"),
+            "source_sha" => ENV.fetch("SOURCE_SHA"),
+            "release_tag" => ENV.fetch("RELEASE_TAG"),
+            "image_repository" => "ghcr.io/ivankuznetsov/screenote",
+            "manifest_digest" => digest,
+            "platforms" => platforms.sort_by { |entry| entry["architecture"] },
+            "oci_labels" => {
+              "source" => "https://github.com/#{ENV.fetch('GITHUB_REPOSITORY')}",
+              "revision" => ENV.fetch("SOURCE_SHA"),
+              "version" => ENV.fetch("RELEASE_TAG"),
+              "description" => "Screenote visual feedback workspace",
+              "licenses" => "LicenseRef-OSaasy"
+            },
+            "sbom_sha256" => nil,
+            "provenance_sha256" => nil,
+            "toolchain" => {
+              "ggshield" => ENV.fetch("GGSHIELD_VERSION", "1.52.2"),
+              "trivy" => ENV.fetch("TRIVY_VERSION", "0.70.0"),
+              "syft" => ENV.fetch("SYFT_VERSION", "1.44.0"),
+              "skopeo" => `skopeo --version`.strip
+            }
+          }
+          File.write(File.join(candidate, "candidate.json"), JSON.pretty_generate(metadata) << "\n")
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |output| output.puts("manifest_digest=#{digest}") }
+          RUBY
+
+          for architecture in amd64 arm64; do
+            skopeo copy \
+              --override-os linux \
+              --override-arch "$architecture" \
+              "oci-archive:$RUNNER_TEMP/candidate/screenote.oci.tar" \
+              "docker-daemon:screenote-release-scan:$architecture"
+            expected_config="$(ruby -rjson -e 'entry=JSON.parse(File.read(ARGV[0])).fetch("platforms").find { |item| item["architecture"] == ARGV[1] }; puts entry.fetch("config_digest")' "$RUNNER_TEMP/candidate/candidate.json" "$architecture")"
+            expected_manifest="$(ruby -rjson -e 'entry=JSON.parse(File.read(ARGV[0])).fetch("platforms").find { |item| item["architecture"] == ARGV[1] }; puts entry.fetch("digest").delete_prefix("sha256:")' "$RUNNER_TEMP/candidate/candidate.json" "$architecture")"
+            test "$(docker image inspect --format '{{.Id}}' "screenote-release-scan:$architecture")" = "$expected_config"
+            skopeo inspect --raw "docker-daemon:screenote-release-scan:$architecture" > "$RUNNER_TEMP/imported-$architecture-manifest.json"
+            test "$(sha256sum "$RUNNER_TEMP/imported-$architecture-manifest.json" | cut -d' ' -f1)" = "$expected_manifest"
+          done
+
+      - name: Scan exact imported images with GitGuardian
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GITGUARDIAN_DONT_LOAD_ENV: "1"
+          GITGUARDIAN_INSTANCE: https://dashboard.gitguardian.com
+        run: |
+          set -euo pipefail
+          for architecture in amd64 arm64; do
+            report="$RUNNER_TEMP/ggshield-image-$architecture.txt"
+            if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan docker "screenote-release-scan:$architecture" >"$report" 2>&1; then
+              echo "::error::GitGuardian image scan failed for $architecture; inspect job-local diagnostics"
+              exit 1
+            fi
+          done
+          echo "GitGuardian image gates passed with redacted workflow output"
+
+      - name: Fail on any Critical or High vulnerability
+        run: |
+          set -euo pipefail
+          printf '{}\n' >"$RUNNER_TEMP/trivy-release.yaml"
+          : >"$RUNNER_TEMP/trivy-release.ignore"
+          for architecture in amd64 arm64; do
+            report="$RUNNER_TEMP/trivy-$architecture.json"
+            if ! trivy image \
+              --config "$RUNNER_TEMP/trivy-release.yaml" \
+              --ignorefile "$RUNNER_TEMP/trivy-release.ignore" \
+              --quiet \
+              --scanners vuln \
+              --severity CRITICAL,HIGH \
+              --exit-code 1 \
+              --show-suppressed \
+              --list-all-pkgs \
+              --format json \
+              --output "$report" \
+              "screenote-release-scan:$architecture"; then
+              echo "::error::Trivy rejected the $architecture image; inspect job-local diagnostics"
+              exit 1
+            fi
+            ruby -rjson -e '
+              report = JSON.parse(File.binread(ARGV.fetch(0)))
+              abort "Trivy report must be one schema-v2 object" unless
+                report.is_a?(Hash) && report["SchemaVersion"] == 2
+              results = report["Results"]
+              abort "Trivy report Results must be a nonempty array" unless results.is_a?(Array) && results.any?
+              results.each do |result|
+                abort "Trivy result must be an object" unless result.is_a?(Hash)
+                abort "Trivy result identity is missing" unless
+                  result["Target"].is_a?(String) && !result["Target"].empty? &&
+                    result["Class"].is_a?(String) && !result["Class"].empty? &&
+                    result["Type"].is_a?(String) && !result["Type"].empty?
+                next unless result.key?("Vulnerabilities")
+                vulnerabilities = result["Vulnerabilities"]
+                abort "Trivy result Vulnerabilities must be an array" unless vulnerabilities.is_a?(Array)
+                abort "Trivy reported a prohibited vulnerability despite a successful exit" unless vulnerabilities.empty?
+              end
+            ' "$report"
+          done
+
+      - name: Generate platform SBOMs and provenance input
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/candidate"
+          printf '{}\n' >"$RUNNER_TEMP/syft-release.yaml"
+          for architecture in amd64 arm64; do
+            syft "screenote-release-scan:$architecture" \
+              --config "$RUNNER_TEMP/syft-release.yaml" \
+              --output "spdx-json=$candidate/sbom-$architecture.spdx.json"
+          done
+          SOURCE_SHA="$SOURCE_SHA" RELEASE_TAG="$RELEASE_TAG" ruby <<'RUBY'
+          require "digest"
+          require "json"
+
+          candidate = File.join(ENV.fetch("RUNNER_TEMP"), "candidate")
+          provenance = {
+            "schema" => "screenote-provenance-input/v1",
+            "repository" => ENV.fetch("GITHUB_REPOSITORY"),
+            "source_sha" => ENV.fetch("SOURCE_SHA"),
+            "release_tag" => ENV.fetch("RELEASE_TAG"),
+            "workflow_ref" => ENV.fetch("GITHUB_WORKFLOW_REF"),
+            "workflow_run_id" => ENV.fetch("GITHUB_RUN_ID"),
+            "workflow_run_attempt" => ENV.fetch("GITHUB_RUN_ATTEMPT")
+          }
+          provenance_path = File.join(candidate, "provenance.json")
+          File.write(provenance_path, JSON.pretty_generate(provenance) << "\n")
+
+          sbom_set = %w[amd64 arm64].to_h do |architecture|
+            path = File.join(candidate, "sbom-#{architecture}.spdx.json")
+            [architecture, Digest::SHA256.file(path).hexdigest]
+          end
+          sbom_set_path = File.join(candidate, "sbom-set.json")
+          File.write(sbom_set_path, JSON.pretty_generate(sbom_set) << "\n")
+
+          metadata_path = File.join(candidate, "candidate.json")
+          metadata = JSON.parse(File.binread(metadata_path))
+          metadata["sbom_sha256"] = Digest::SHA256.file(sbom_set_path).hexdigest
+          metadata["provenance_sha256"] = Digest::SHA256.file(provenance_path).hexdigest
+          File.write(metadata_path, JSON.pretty_generate(metadata) << "\n")
+          RUBY
+
+      - name: Create one retained candidate bundle
+        id: bundle
+        env:
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/screenote-candidate.tar"
+          tar \
+            --sort=name \
+            --mtime="@$SOURCE_DATE_EPOCH" \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -cf "$bundle" \
+            -C "$RUNNER_TEMP/candidate" \
+            candidate.json provenance.json sbom-amd64.spdx.json sbom-arm64.spdx.json sbom-set.json screenote.oci.tar
+          digest="$(sha256sum "$bundle" | cut -d' ' -f1)"
+          echo "candidate_sha256=$digest" >> "$GITHUB_OUTPUT"
+          echo "Retained candidate SHA-256: $digest"
+
+      - name: Retain exact candidate bytes
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: screenote-candidate-${{ inputs.source_sha }}-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/screenote-candidate.tar
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  authorize:
+    name: Validate retained publication evidence
+    if: inputs.operation == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      authorizing_sha: ${{ steps.authorization-source.outputs.authorizing_sha }}
+      manifest_digest: ${{ steps.verify.outputs.manifest_digest }}
+    steps:
+      - name: Validate publication inputs before checkout
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          QUALIFICATION_ARTIFACT_SHA256: ${{ inputs.qualification_artifact_sha256 }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CANDIDATE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$QUALIFICATION_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$RELEASE_REF" = "refs/heads/$DEFAULT_BRANCH"
+
+      - name: Resolve the exact authorizing default-branch head
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ref_json="$RUNNER_TEMP/authorizing-default-branch-ref.json"
+          commit_json="$RUNNER_TEMP/authorizing-default-branch-commit.json"
+          gh api \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" >"$ref_json"
+          gh api \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/git/commits/$EXPECTED_SHA" >"$commit_json"
+          DEFAULT_REF_JSON="$ref_json" DEFAULT_COMMIT_JSON="$commit_json" ruby -rjson <<'RUBY'
+          ref = JSON.parse(File.binread(ENV.fetch("DEFAULT_REF_JSON")))
+          commit = JSON.parse(File.binread(ENV.fetch("DEFAULT_COMMIT_JSON")))
+          expected_ref = "refs/heads/#{ENV.fetch('DEFAULT_BRANCH')}"
+          expected_sha = ENV.fetch("EXPECTED_SHA")
+          object = ref["object"] if ref.is_a?(Hash)
+
+          abort "default branch ref does not resolve to the expected commit" unless
+            ref.is_a?(Hash) && ref["ref"] == expected_ref &&
+              object.is_a?(Hash) && object["type"] == "commit" && object["sha"] == expected_sha
+          abort "default branch commit lookup does not match the expected commit" unless
+            commit.is_a?(Hash) && commit["sha"] == expected_sha
+          RUBY
+
+      - name: Checkout the authorizing default-branch revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Permit only release evidence after the built source commit
+        id: authorization-source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
+          mapfile -t authorization_commits < <(git rev-list --reverse "$SOURCE_SHA..$GITHUB_SHA")
+          test "${#authorization_commits[@]}" -eq 1
+          test "${authorization_commits[0]}" = "$GITHUB_SHA"
+          mapfile -t authorization_parents < <(git show --no-patch --format=%P "$GITHUB_SHA")
+          read -r -a authorization_parents <<<"${authorization_parents[0]}"
+          test "${#authorization_parents[@]}" -eq 1
+          test "${authorization_parents[0]}" = "$SOURCE_SHA"
+          authorization_changes="$RUNNER_TEMP/authorization-changes.z"
+          git diff-tree --no-commit-id --name-status --no-renames -r -z "$SOURCE_SHA" "$GITHUB_SHA" >"$authorization_changes"
+          AUTHORIZATION_CHANGES="$authorization_changes" ruby <<'RUBY'
+          fields = File.binread(ENV.fetch("AUTHORIZATION_CHANGES")).split("\0")
+          error = "authorizing commit must exactly delete the sentinel, add evidence, and modify notes"
+          abort error unless fields.length.even?
+
+          actual = fields.each_slice(2).map { |status, path| [path, status] }
+          expected = {
+            "docs/releases/PUBLICATION_BLOCKED.md" => "D",
+            "docs/releases/evidence/public-evidence.json" => "A",
+            "docs/releases/initial-release.md" => "M"
+          }
+          abort error unless actual.sort == expected.to_a.sort
+          RUBY
+          test ! -e docs/releases/PUBLICATION_BLOCKED.md
+          test ! -L docs/releases/PUBLICATION_BLOCKED.md
+          echo "authorizing_sha=$GITHUB_SHA" >>"$GITHUB_OUTPUT"
+
+      - name: Validate every publication gate and evidence binding
+        env:
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          QUALIFICATION_ARTIFACT_SHA256: ${{ inputs.qualification_artifact_sha256 }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          bin/release-validate \
+            --mode publish \
+            --evidence docs/releases/evidence/public-evidence.json \
+            --source-sha "$SOURCE_SHA" \
+            --tag "$RELEASE_TAG" \
+            --qualification-run-id "$QUALIFICATION_RUN_ID" \
+            --qualification-artifact-sha256 "$QUALIFICATION_ARTIFACT_SHA256"
+          ruby -rjson -e '
+            evidence = JSON.parse(File.binread(ARGV.fetch(0)))
+            abort "candidate bundle hash does not match evidence" unless
+              evidence.dig("artifacts", "evidence_sha256") == ENV.fetch("CANDIDATE_SHA256")
+          ' docs/releases/evidence/public-evidence.json
+
+      - name: Install checksum-pinned final evidence scanner
+        env:
+          GGSHIELD_ARCHIVE_SHA256: 181b440917943e1efac0ff58403b24181fddc152f0f2be7a932911a588eba03c
+          GGSHIELD_VERSION: 1.52.2
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/ggshield-final.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            "https://github.com/GitGuardian/ggshield/releases/download/v${GGSHIELD_VERSION}/ggshield-${GGSHIELD_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$GGSHIELD_ARCHIVE_SHA256  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/ggshield-${GGSHIELD_VERSION}-x86_64-unknown-linux-gnu" >>"$GITHUB_PATH"
+
+      - name: Verify candidate workflow identity
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_ARTIFACT: screenote-candidate-${{ inputs.source_sha }}-${{ inputs.release_tag }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          run="$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID")"
+          RUN_JSON="$run" ruby -rjson -e '
+            run = JSON.parse(ENV.fetch("RUN_JSON"))
+            default_branch = ENV.fetch("DEFAULT_BRANCH")
+            expected = {
+              "event" => "workflow_dispatch",
+              "head_branch" => default_branch,
+              "head_sha" => ENV.fetch("SOURCE_SHA"),
+              "conclusion" => "success",
+              "path" => ".github/workflows/release.yml@#{default_branch}"
+            }
+            valid = run.is_a?(Hash) && expected.all? { |key, value| run[key] == value } &&
+              run.dig("repository", "full_name") == ENV.fetch("EXPECTED_REPOSITORY")
+            abort "candidate workflow identity does not match" unless valid
+          '
+          artifact_count="$(gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.name == env.EXPECTED_ARTIFACT and .expired == false)] | length')"
+          test "$artifact_count" -eq 1
+
+      - name: Download retained candidate from the exact run
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: screenote-candidate-${{ inputs.source_sha }}-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/download
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+
+      - name: Verify retained bytes and candidate metadata
+        id: verify
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/download/screenote-candidate.tar"
+          echo "$CANDIDATE_SHA256  $bundle" | sha256sum --check --strict
+          CANDIDATE_ARCHIVE="$bundle" ruby -rrubygems/package <<'RUBY'
+          File.open(ENV.fetch("CANDIDATE_ARCHIVE"), "rb") do |file|
+            Gem::Package::TarReader.new(file) do |archive|
+              archive.each do |entry|
+                path = entry.full_name
+                safe_path = !path.empty? && !path.start_with?("/") && !path.split("/").include?("..")
+                abort "unsafe candidate archive path" unless safe_path
+                abort "unsafe candidate archive member type" unless entry.file? || entry.directory?
+              end
+            end
+          end
+          RUBY
+          mkdir -p "$RUNNER_TEMP/verified"
+          tar -xf "$bundle" -C "$RUNNER_TEMP/verified"
+          CANDIDATE_SHA256="$CANDIDATE_SHA256" ruby <<'RUBY'
+          require "digest"
+          require "json"
+
+          root = File.join(ENV.fetch("RUNNER_TEMP"), "verified")
+          evidence = JSON.parse(File.binread(File.join(ENV.fetch("GITHUB_WORKSPACE"), "docs/releases/evidence/public-evidence.json")))
+          candidate = JSON.parse(File.binread(File.join(root, "candidate.json")))
+          expected_candidate_keys = %w[
+            schema repository source_sha release_tag image_repository manifest_digest platforms oci_labels
+            sbom_sha256 provenance_sha256 toolchain
+          ]
+          abort "candidate metadata shape does not match" unless candidate.keys.sort == expected_candidate_keys.sort
+          expected = {
+            "schema" => "screenote-oci-candidate/v1",
+            "repository" => ENV.fetch("GITHUB_REPOSITORY"),
+            "source_sha" => ENV.fetch("SOURCE_SHA"),
+            "release_tag" => ENV.fetch("RELEASE_TAG"),
+            "image_repository" => "ghcr.io/ivankuznetsov/screenote",
+            "manifest_digest" => evidence.dig("artifacts", "manifest_digest"),
+            "oci_labels" => evidence.dig("artifacts", "oci_labels"),
+            "sbom_sha256" => evidence.dig("artifacts", "sbom_sha256"),
+            "provenance_sha256" => evidence.dig("artifacts", "provenance_sha256")
+          }
+          abort "candidate metadata does not match evidence" unless expected.all? { |key, value| candidate[key] == value }
+          abort "candidate must contain exactly two platform records" unless candidate["platforms"].is_a?(Array) && candidate["platforms"].length == 2
+          candidate.fetch("platforms").each do |platform|
+            abort "candidate platform metadata shape does not match" unless platform.keys.sort == %w[architecture config_digest digest os]
+            abort "candidate platform OS does not match" unless platform["os"] == "linux"
+          end
+          platforms = candidate.fetch("platforms").to_h { |item| [item.fetch("architecture"), item.fetch("digest")] }
+          abort "candidate platform digests do not match evidence" unless platforms == {
+            "amd64" => evidence.dig("artifacts", "amd64_digest"),
+            "arm64" => evidence.dig("artifacts", "arm64_digest")
+          }
+          toolchain = candidate.fetch("toolchain")
+          abort "candidate toolchain shape does not match" unless toolchain.keys.sort == %w[ggshield skopeo syft trivy]
+          abort "candidate ggshield version does not match evidence" unless
+            toolchain["ggshield"] == evidence.dig("gitguardian", "source_scan", "ggshield_version") &&
+              toolchain["ggshield"] == evidence.dig("gitguardian", "image_scan", "ggshield_version")
+          abort "candidate Trivy version does not match evidence" unless
+            toolchain["trivy"] == evidence.dig("vulnerability", "scanner_version")
+          abort "candidate Syft version does not match the reviewed pin" unless toolchain["syft"] == "1.44.0"
+          abort "candidate skopeo version is missing" unless toolchain["skopeo"].to_s.match?(/\Askopeo version [0-9]+(?:\.[0-9]+)+\z/)
+
+          sbom_set_path = File.join(root, "sbom-set.json")
+          abort "candidate SBOM set changed" unless Digest::SHA256.file(sbom_set_path).hexdigest == candidate.fetch("sbom_sha256")
+          sbom_set = JSON.parse(File.binread(sbom_set_path))
+          abort "candidate SBOM set shape does not match" unless sbom_set.keys.sort == %w[amd64 arm64]
+          sbom_set.each do |architecture, digest|
+            sbom_path = File.join(root, "sbom-#{architecture}.spdx.json")
+            abort "candidate SBOM changed" unless Digest::SHA256.file(sbom_path).hexdigest == digest
+          end
+          abort "candidate provenance input changed" unless Digest::SHA256.file(File.join(root, "provenance.json")).hexdigest == candidate.fetch("provenance_sha256")
+          provenance = JSON.parse(File.binread(File.join(root, "provenance.json")))
+          abort "candidate provenance identity does not match" unless
+            provenance["schema"] == "screenote-provenance-input/v1" &&
+              provenance["repository"] == ENV.fetch("GITHUB_REPOSITORY") &&
+              provenance["source_sha"] == ENV.fetch("SOURCE_SHA") &&
+              provenance["release_tag"] == ENV.fetch("RELEASE_TAG") &&
+              provenance["workflow_run_id"] == ENV.fetch("CANDIDATE_RUN_ID")
+          RUBY
+          cp docs/releases/initial-release.md "$RUNNER_TEMP/verified/release-notes.md"
+          cp docs/releases/evidence/public-evidence.json "$RUNNER_TEMP/verified/public-evidence.json"
+          echo "manifest_digest=$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("manifest_digest")' "$RUNNER_TEMP/verified/candidate.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact qualification run jobs and artifact identity live
+        id: qualification
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          QUALIFICATION_ARTIFACT_SHA256: ${{ inputs.qualification_artifact_sha256 }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          evidence="docs/releases/evidence/public-evidence.json"
+          qualification_attempt="$(ruby -rjson -e 'puts JSON.parse(File.binread(ARGV.fetch(0))).dig("qualification", "workflow_run_attempt")' "$evidence")"
+          expected_artifact="release-qualification-$SOURCE_SHA-$RELEASE_TAG"
+          [[ "$qualification_attempt" =~ ^[1-9][0-9]*$ ]]
+
+          run_json="$RUNNER_TEMP/qualification-run.json"
+          jobs_json="$RUNNER_TEMP/qualification-jobs.json"
+          artifacts_json="$RUNNER_TEMP/qualification-artifacts.json"
+          gh api --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID/attempts/$qualification_attempt" >"$run_json"
+          gh api --paginate --slurp --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID/attempts/$qualification_attempt/jobs?per_page=100" >"$jobs_json"
+          gh api --paginate --slurp --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID/artifacts?per_page=100" >"$artifacts_json"
+
+          RUN_JSON="$run_json" JOBS_JSON="$jobs_json" ARTIFACTS_JSON="$artifacts_json" \
+            EXPECTED_ARTIFACT="$expected_artifact" QUALIFICATION_ATTEMPT="$qualification_attempt" \
+            ruby -rjson <<'RUBY'
+          run = JSON.parse(File.binread(ENV.fetch("RUN_JSON")))
+          expected_run = {
+            "id" => Integer(ENV.fetch("QUALIFICATION_RUN_ID"), 10),
+            "run_attempt" => Integer(ENV.fetch("QUALIFICATION_ATTEMPT"), 10),
+            "event" => "workflow_dispatch",
+            "head_branch" => ENV.fetch("DEFAULT_BRANCH"),
+            "head_sha" => ENV.fetch("SOURCE_SHA"),
+            "status" => "completed",
+            "conclusion" => "success",
+            "path" => ".github/workflows/release-qualification.yml@#{ENV.fetch('DEFAULT_BRANCH')}"
+          }
+          abort "qualification workflow run identity does not match" unless
+            run.is_a?(Hash) && expected_run.all? { |key, value| run[key] == value } &&
+              run.dig("repository", "full_name") == ENV.fetch("EXPECTED_REPOSITORY")
+
+          job_pages = JSON.parse(File.binread(ENV.fetch("JOBS_JSON")))
+          abort "qualification job response is malformed" unless job_pages.is_a?(Array)
+          jobs = job_pages.flat_map { |page| page.fetch("jobs") }
+          expected_jobs = [
+            "Bind exact qualification inputs",
+            "Native amd64 image qualification",
+            "Native arm64 image qualification",
+            "Minimum-host restore load and CLI qualification",
+            "Create exact qualification evidence"
+          ]
+          observed = jobs.map { |job| job["name"] }
+          abort "qualification jobs are missing duplicated or unexpected" unless observed.sort == expected_jobs.sort
+          abort "a qualification job did not complete successfully" unless jobs.all? do |job|
+            job["status"] == "completed" && job["conclusion"] == "success" &&
+              job["run_id"] == Integer(ENV.fetch("QUALIFICATION_RUN_ID"), 10) &&
+              job["run_attempt"] == Integer(ENV.fetch("QUALIFICATION_ATTEMPT"), 10)
+          end
+
+          artifact_pages = JSON.parse(File.binread(ENV.fetch("ARTIFACTS_JSON")))
+          abort "qualification artifact response is malformed" unless artifact_pages.is_a?(Array)
+          artifacts = artifact_pages.flat_map { |page| page.fetch("artifacts") }
+          matches = artifacts.select do |artifact|
+            artifact.is_a?(Hash) && artifact["name"] == ENV.fetch("EXPECTED_ARTIFACT") &&
+              artifact["expired"] == false
+          end
+          abort "qualification run must contain exactly one live final artifact" unless matches.length == 1
+          artifact = matches.first
+          abort "qualification artifact archive digest does not match" unless
+            artifact["digest"] == "sha256:#{ENV.fetch('QUALIFICATION_ARTIFACT_SHA256')}"
+          abort "qualification artifact run identity does not match" unless
+            artifact.dig("workflow_run", "id") == Integer(ENV.fetch("QUALIFICATION_RUN_ID"), 10) &&
+              artifact.dig("workflow_run", "head_sha") == ENV.fetch("SOURCE_SHA")
+          artifact_id = artifact["id"]
+          abort "qualification artifact ID is invalid" unless artifact_id.is_a?(Integer) && artifact_id.positive?
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |output| output.puts "artifact_id=#{artifact_id}" }
+          RUBY
+
+      - name: Download exact live qualification artifact by ID
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          artifact-ids: ${{ steps.qualification.outputs.artifact_id }}
+          path: ${{ runner.temp }}/qualification
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.qualification_run_id }}
+
+      - name: Verify exact qualification bytes and live CLI tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          qualification="$RUNNER_TEMP/qualification"
+          report="$qualification/release-qualification.json"
+          evidence="docs/releases/evidence/public-evidence.json"
+          test -f "$report"
+          test ! -L "$report"
+          bin/release-validate \
+            --mode qualification \
+            --evidence "$evidence" \
+            --qualification-report "$report"
+
+          QUALIFICATION_DIR="$qualification" QUALIFICATION_REPORT="$report" ruby -rjson -rdigest <<'RUBY'
+          directory = File.realpath(ENV.fetch("QUALIFICATION_DIR"))
+          report = JSON.parse(File.binread(ENV.fetch("QUALIFICATION_REPORT")))
+          expected_files = ["release-qualification.json"] + report.fetch("checks").map do |check|
+            "checks/#{check.fetch('name')}-#{check.fetch('target')}.json"
+          end
+          actual_files = Dir.glob(File.join(directory, "**", "*"), File::FNM_DOTMATCH).filter_map do |path|
+            next if [".", ".."].include?(File.basename(path)) || File.directory?(path)
+            abort "qualification artifact contains a symlink" if File.symlink?(path)
+            File.realpath(path).delete_prefix("#{directory}/")
+          end
+          abort "qualification artifact file set does not match" unless actual_files.sort == expected_files.sort
+          report.fetch("checks").each do |check|
+            path = File.join(directory, "checks", "#{check.fetch('name')}-#{check.fetch('target')}.json")
+            abort "qualification check digest does not match" unless
+              Digest::SHA256.file(path).hexdigest == check.fetch("evidence_sha256")
+            record = JSON.parse(File.binread(path))
+            expected = {
+              "schema" => "screenote-release-qualification-check/v1",
+              "name" => check.fetch("name"), "target" => check.fetch("target"), "status" => "passed",
+              "source_sha" => report.fetch("source_sha"),
+              "candidate_sha256" => report.fetch("candidate_sha256"),
+              "manifest_digest" => report.fetch("manifest_digest")
+            }
+            abort "qualification check record identity does not match" unless record == expected
+          end
+          RUBY
+
+          cli_tag="$(ruby -rjson -e 'puts JSON.parse(File.binread(ARGV.fetch(0))).fetch("cli_tag")' "$report")"
+          cli_sha="$(ruby -rjson -e 'puts JSON.parse(File.binread(ARGV.fetch(0))).fetch("cli_sha")' "$report")"
+          cli_ref="$RUNNER_TEMP/qualification-cli-ref.json"
+          gh api --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/ivankuznetsov/screenote-cli/git/ref/tags/$cli_tag" >"$cli_ref"
+          CLI_REF_JSON="$cli_ref" CLI_SHA="$cli_sha" CLI_TAG="$cli_tag" ruby -rjson -e '
+            ref = JSON.parse(File.binread(ENV.fetch("CLI_REF_JSON")))
+            object = ref["object"] if ref.is_a?(Hash)
+            abort "live CLI tag no longer matches qualification" unless
+              ref["ref"] == "refs/tags/#{ENV.fetch("CLI_TAG")}" && object.is_a?(Hash) &&
+                object["type"] == "commit" && object["sha"] == ENV.fetch("CLI_SHA")
+          '
+          cp "$report" "$RUNNER_TEMP/verified/release-qualification.json"
+
+      - name: Scan exact authorizing release bytes
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GITGUARDIAN_DONT_LOAD_ENV: "1"
+          GITGUARDIAN_INSTANCE: https://dashboard.gitguardian.com
+        run: |
+          set -euo pipefail
+          for path in \
+            "$RUNNER_TEMP/verified/release-notes.md" \
+            "$RUNNER_TEMP/verified/public-evidence.json" \
+            "$RUNNER_TEMP/verified/release-qualification.json"; do
+            report="$RUNNER_TEMP/ggshield-final-$(basename "$path").txt"
+            if ! ggshield --config-path "$GITHUB_WORKSPACE/.gitguardian.yaml" secret scan path --yes --all-secrets "$path" >"$report" 2>&1; then
+              echo "::error::GitGuardian rejected final authorizing release bytes; inspect job-local diagnostics"
+              exit 1
+            fi
+          done
+          echo "GitGuardian final authorizing-byte gate passed with redacted workflow output"
+
+      - name: Retain only the verified promotion input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-promotion-${{ inputs.source_sha }}-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/verified
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  promotion:
+    name: Promote exact retained bytes
+    if: inputs.operation == 'publish'
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: source-release
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      # promotion-does-not-checkout: this job never checks out or executes repository code.
+      - name: Require this run's protected-environment approval
+        id: current-run-approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          approvals_json="$RUNNER_TEMP/current-run-environment-approvals.json"
+          trap 'rm -f "$approvals_json"' EXIT
+          gh api --method GET \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" >"$approvals_json"
+          APPROVALS_JSON="$approvals_json" ruby -rjson <<'RUBY'
+          approvals = JSON.parse(File.binread(ENV.fetch("APPROVALS_JSON")))
+          abort "current workflow run must have exactly one environment review" unless
+            approvals.is_a?(Array) && approvals.length == 1
+
+          review = approvals.first
+          abort "current workflow run review must be approved" unless
+            review.is_a?(Hash) && review["state"] == "approved"
+
+          environments = review["environments"]
+          exact_environment = environments.is_a?(Array) && environments.length == 1 &&
+            environments.first.is_a?(Hash) && environments.first["name"] == "source-release"
+          abort "current workflow run approval must cover exactly source-release" unless exact_environment
+          RUBY
+
+      - name: Recheck live GitGuardian incidents after approval
+        id: live-incidents
+        shell: ruby {0}
+        env:
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_INCIDENTS_API_KEY }}
+          GITGUARDIAN_API_URL: ${{ vars.GITGUARDIAN_API_URL }}
+          GITGUARDIAN_SOURCE_ID: ${{ secrets.GITGUARDIAN_SOURCE_ID }}
+        run: |
+          require "json"
+          require "net/http"
+          require "uri"
+
+          class GateFailure < StandardError; end
+
+          def required_env(name)
+            value = ENV[name].to_s.strip
+            raise GateFailure, "#{name} is not configured" if value.empty?
+            value
+          end
+
+          def parse_json(response, expected_type)
+            raise GateFailure, "GitGuardian response exceeded 2 MiB" if response.body.bytesize > 2 * 1024 * 1024
+            value = JSON.parse(response.body)
+            raise GateFailure, "GitGuardian returned an unexpected JSON shape" unless value.is_a?(expected_type)
+            value
+          rescue JSON::ParserError
+            raise GateFailure, "GitGuardian returned malformed JSON"
+          end
+
+          def request(uri, token)
+            request = Net::HTTP::Get.new(uri)
+            request["Accept"] = "application/json"
+            request["Authorization"] = "Token #{token}"
+            request["User-Agent"] = "screenote-release-incident-gate/1"
+            response = Net::HTTP.start(
+              uri.host,
+              uri.port,
+              use_ssl: true,
+              open_timeout: 10,
+              read_timeout: 30
+            ) { |http| http.request(request) }
+            status = Integer(response.code, 10)
+            raise GateFailure, "GitGuardian request failed with HTTP #{status}" unless (200..299).cover?(status)
+            response
+          rescue GateFailure
+            raise
+          rescue StandardError => error
+            raise GateFailure, "GitGuardian request failed (#{error.class})"
+          end
+
+          def pagination_next(response, base_uri, expected_path)
+            header = response["link"].to_s.strip
+            return nil if header.empty?
+
+            links = header.split(",").map(&:strip).map do |entry|
+              match = entry.match(/\A<([^>]+)>;\s*rel="([a-z]+)"\z/)
+              raise GateFailure, "GitGuardian returned a malformed pagination link" unless match
+              [match[2], URI.parse(match[1])]
+            rescue URI::InvalidURIError
+              raise GateFailure, "GitGuardian returned an invalid pagination URI"
+            end
+            next_links = links.select { |rel, _uri| rel == "next" }
+            raise GateFailure, "GitGuardian returned duplicate next links" if next_links.length > 1
+            return nil if next_links.empty?
+
+            uri = next_links.first.last
+            same_origin = uri.scheme == "https" && uri.host == base_uri.host && uri.port == base_uri.port
+            safe_target = same_origin && uri.userinfo.nil? && uri.fragment.nil? && uri.path == expected_path
+            query_pairs = URI.decode_www_form(uri.query.to_s)
+            query = query_pairs.to_h
+            cursor = query["cursor"].to_s
+            safe_query = query_pairs.length == 2 && query_pairs.map(&:first).sort == %w[cursor per_page] &&
+              query["per_page"] == "100" && cursor.bytesize.between?(1, 2_048) &&
+              cursor.match?(/\A[A-Za-z0-9._~+\/=\-]+\z/)
+            raise GateFailure, "GitGuardian returned an unsafe pagination target" unless safe_target && safe_query
+            uri
+          rescue ArgumentError
+            raise GateFailure, "GitGuardian returned an invalid pagination query"
+          end
+
+          begin
+            token = required_env("GITGUARDIAN_API_KEY")
+            source_id = required_env("GITGUARDIAN_SOURCE_ID")
+            repository = required_env("EXPECTED_REPOSITORY")
+            raise GateFailure, "GITGUARDIAN_SOURCE_ID is invalid" unless source_id.match?(/\A[1-9][0-9]*\z/)
+
+            configured_url = ENV["GITGUARDIAN_API_URL"].to_s.strip
+            configured_url = "https://api.gitguardian.com" if configured_url.empty?
+            base_uri = URI.parse(configured_url)
+            allowed_origins = ["https://api.gitguardian.com", "https://api.eu1.gitguardian.com"]
+            origin = "#{base_uri.scheme}://#{base_uri.host}#{base_uri.port == 443 ? "" : ":#{base_uri.port}"}"
+            raise GateFailure, "GITGUARDIAN_API_URL is not an approved API origin" unless allowed_origins.include?(origin)
+            raise GateFailure, "GITGUARDIAN_API_URL contains unsupported components" unless
+              ["", "/"].include?(base_uri.path) && base_uri.query.nil? && base_uri.fragment.nil? && base_uri.userinfo.nil?
+
+            source_uri = URI.join("#{origin}/", "v1/sources/#{source_id}")
+            source = parse_json(request(source_uri, token), Hash)
+            valid_source = source["id"].to_s == source_id && source["type"] == "github" &&
+              source["full_name"].to_s.casecmp?(repository)
+            raise GateFailure, "GitGuardian source does not match this GitHub repository" unless valid_source
+            raise GateFailure, "GitGuardian source monitoring is not active" unless source["monitoring_status"] == "active"
+            provider_metadata = source["provider_metadata"]
+            raise GateFailure, "GitGuardian source provider metadata is malformed" unless provider_metadata.is_a?(Hash)
+            unless provider_metadata["archived"] == false && provider_metadata["deleted"] == false
+              raise GateFailure, "GitGuardian source archived or deleted state is not explicitly false"
+            end
+
+            path = "/v1/sources/#{source_id}/incidents/secrets"
+            uri = URI("#{origin}#{path}?per_page=100")
+            pages = 0
+            incident_count = 0
+            open_count = 0
+            seen_urls = {}
+            seen_incidents = {}
+            allowed_statuses = %w[IGNORED TRIGGERED ASSIGNED RESOLVED]
+            while uri
+              raise GateFailure, "GitGuardian pagination loop detected" if seen_urls[uri.to_s]
+              raise GateFailure, "GitGuardian pagination exceeded 1,000 pages" if pages >= 1_000
+              seen_urls[uri.to_s] = true
+
+              response = request(uri, token)
+              parse_json(response, Array).each do |incident|
+                raise GateFailure, "GitGuardian returned a malformed incident" unless incident.is_a?(Hash)
+                id = incident["id"]
+                status = incident["status"]
+                raise GateFailure, "GitGuardian returned an invalid incident identifier" unless id.is_a?(Integer) && id.positive?
+                raise GateFailure, "GitGuardian returned an unknown incident status" unless allowed_statuses.include?(status)
+                raise GateFailure, "GitGuardian returned a duplicate incident" if seen_incidents[id]
+                seen_incidents[id] = true
+                incident_count += 1
+                open_count += 1 if %w[TRIGGERED ASSIGNED].include?(status)
+              end
+              pages += 1
+              uri = pagination_next(response, base_uri, path)
+            end
+
+            raise GateFailure, "GitGuardian has #{open_count} open repository incident(s)" unless open_count.zero?
+            puts "GitGuardian release incident gate passed: #{incident_count} incident(s), #{pages} page(s), 0 open"
+          rescue GateFailure => error
+            warn "GitGuardian release incident gate failed: #{error.message}"
+            exit 1
+          rescue StandardError => error
+            warn "GitGuardian release incident gate failed closed (#{error.class})"
+            exit 1
+          end
+
+      - name: Create narrow release integration token
+        id: release-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.SCREENOTE_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SCREENOTE_RELEASE_APP_PRIVATE_KEY }}
+          permission-administration: read
+          permission-contents: write
+          permission-packages: write
+
+      - name: Download same-run verified promotion input
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: verified-promotion-${{ inputs.source_sha }}-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/promotion
+
+      - name: Install checksum-pinned ORAS
+        env:
+          ORAS_ARCHIVE_SHA256: 9229ccc6d17bb282039ad4a69abb16dcb887a5bce567c075d731d9b3c7ad8eaf
+          ORAS_VERSION: 1.3.2
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/oras.tar.gz"
+          curl --fail --silent --show-error --location \
+            --output "$archive" \
+            "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          echo "$ORAS_ARCHIVE_SHA256  $archive" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/oras"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/oras" oras
+          echo "$RUNNER_TEMP/oras" >> "$GITHUB_PATH"
+
+      - name: Authenticate to the release registry
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | oras login ghcr.io --username "${GITHUB_REPOSITORY_OWNER}" --password-stdin
+
+      - name: Preflight every remote publication object
+        id: preflight
+        env:
+          ATTESTATION_TOKEN: ${{ github.token }}
+          ATTESTATION_PREDICATE_TYPE: https://screenote.ai/attestations/release-provenance/v1
+          AUTHORIZING_SHA: ${{ needs.authorize.outputs.authorizing_sha }}
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          IMAGE_REPOSITORY: ghcr.io/ivankuznetsov/screenote
+          MANIFEST_DIGEST: ${{ needs.authorize.outputs.manifest_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          promotion="$RUNNER_TEMP/promotion"
+
+          github_not_found() {
+            GITHUB_ERROR="$1" ruby <<'RUBY'
+          error = File.binread(ENV.fetch("GITHUB_ERROR"))
+          expected = "gh: Not Found (HTTP 404)\n"
+          abort "GitHub response does not prove object absence" unless error == expected
+          RUBY
+          }
+
+          immutable_releases="$RUNNER_TEMP/immutable-releases.json"
+          gh api \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/immutable-releases" >"$immutable_releases"
+          IMMUTABLE_RELEASES_JSON="$immutable_releases" ruby -rjson <<'RUBY'
+            status = JSON.parse(File.binread(ENV.fetch("IMMUTABLE_RELEASES_JSON")))
+            exact_keys = %w[enabled enforced_by_owner]
+            valid = status.is_a?(Hash) && status.keys.sort == exact_keys &&
+              status["enabled"] == true && [ true, false ].include?(status["enforced_by_owner"])
+            abort "immutable GitHub releases are not explicitly enabled" unless valid
+          RUBY
+
+          remote_descriptor="$RUNNER_TEMP/remote-descriptor.json"
+          remote_error="$RUNNER_TEMP/remote-descriptor.error"
+          if oras manifest fetch --descriptor "$IMAGE_REPOSITORY:$RELEASE_TAG" >"$remote_descriptor" 2>"$remote_error"; then
+            remote_digest="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("digest")' "$remote_descriptor")"
+            test "$remote_digest" = "$MANIFEST_DIGEST"
+            image_state=exact
+          elif IMAGE_REFERENCE="$IMAGE_REPOSITORY:$RELEASE_TAG" REGISTRY_ERROR="$remote_error" ruby <<'RUBY'
+          error = File.binread(ENV.fetch("REGISTRY_ERROR")).delete_suffix("\n")
+          reference = ENV.fetch("IMAGE_REFERENCE")
+          exact_not_found = %(Error response from registry: failed to find "#{reference}": #{reference}: not found)
+          exact_manifest_unknown = "Error response from registry: manifest unknown: manifest unknown"
+          abort "registry response does not prove manifest absence" unless
+            error == exact_not_found || error == exact_manifest_unknown
+          RUBY
+          then
+            image_state=absent
+          else
+            echo "::error::Registry preflight failed without a definitive absent response"
+            exit 1
+          fi
+
+          ref_json="$RUNNER_TEMP/tag-ref.json"
+          ref_error="$RUNNER_TEMP/tag-ref.error"
+          if gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >"$ref_json" 2>"$ref_error"; then
+            test "$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("object", "sha")' "$ref_json")" = "$SOURCE_SHA"
+            tag_state=exact
+          elif github_not_found "$ref_error"; then
+            tag_state=absent
+          else
+            echo "::error::Tag preflight failed without a definitive absent response"
+            exit 1
+          fi
+
+          digest_hex="${MANIFEST_DIGEST#sha256:}"
+          attestations_json="$RUNNER_TEMP/attestations.json"
+          GH_TOKEN="$ATTESTATION_TOKEN" gh api --paginate --slurp \
+            "/repos/$GITHUB_REPOSITORY/attestations/sha256:$digest_hex?per_page=100" >"$attestations_json"
+          attestation_count="$(ruby -rjson -e '
+            pages = JSON.parse(File.binread(ARGV.fetch(0)))
+            abort "invalid attestation response" unless pages.is_a?(Array)
+            puts pages.sum { |page| page.fetch("attestations").length }
+          ' "$attestations_json")"
+          if test "$attestation_count" = 0; then
+            attestation_state=absent
+          elif test "$attestation_count" = 1; then
+            test "$image_state" = exact
+            GH_TOKEN="$ATTESTATION_TOKEN" gh attestation verify \
+              "oci://$IMAGE_REPOSITORY@$MANIFEST_DIGEST" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$AUTHORIZING_SHA" \
+              --predicate-type "$ATTESTATION_PREDICATE_TYPE" \
+              --deny-self-hosted-runners \
+              --limit 2 \
+              --format json >"$RUNNER_TEMP/verified-attestation.json"
+            VERIFIED_ATTESTATION="$RUNNER_TEMP/verified-attestation.json" \
+              PROVENANCE_INPUT="$promotion/provenance.json" \
+              ruby -rjson -e '
+                verified = JSON.parse(File.binread(ENV.fetch("VERIFIED_ATTESTATION")))
+                abort "expected exactly one verified attestation" unless verified.is_a?(Array) && verified.length == 1
+                statement = verified.first.dig("verificationResult", "statement")
+                expected_predicate = JSON.parse(File.binread(ENV.fetch("PROVENANCE_INPUT")))
+                abort "signed provenance type does not match" unless statement["predicateType"] == ENV.fetch("ATTESTATION_PREDICATE_TYPE")
+                abort "signed provenance predicate does not match retained input" unless statement["predicate"] == expected_predicate
+                algorithm, digest = ENV.fetch("MANIFEST_DIGEST").split(":", 2)
+                expected_subject = [{ "name" => ENV.fetch("IMAGE_REPOSITORY"), "digest" => { algorithm => digest } }]
+                abort "signed provenance subject does not match" unless statement["subject"] == expected_subject
+              '
+            attestation_state=exact
+          else
+            echo "::error::Expected zero or one exact provenance attestation, found $attestation_count"
+            exit 1
+          fi
+
+          release_json="$RUNNER_TEMP/release.json"
+          release_error="$RUNNER_TEMP/release.error"
+          if gh api "/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json" 2>"$release_error"; then
+            PROMOTION_DIR="$promotion" RELEASE_JSON="$release_json" ruby -rjson -rdigest <<'RUBY'
+            release = JSON.parse(File.binread(ENV.fetch("RELEASE_JSON")))
+            promotion = ENV.fetch("PROMOTION_DIR")
+            expected_notes = Digest::SHA256.file(File.join(promotion, "release-notes.md")).hexdigest
+            actual_notes = Digest::SHA256.hexdigest(release.fetch("body"))
+            abort "release notes do not match" unless actual_notes == expected_notes
+            abort "release identity does not match" unless
+              release["tag_name"] == ENV.fetch("RELEASE_TAG") &&
+                release["name"] == "Screenote #{ENV.fetch('RELEASE_TAG')}" &&
+                release["draft"] == false && release["prerelease"] == false &&
+                release["immutable"] == true
+
+            expected_assets = %w[
+              provenance.json
+              public-evidence.json
+              release-qualification.json
+              sbom-amd64.spdx.json
+              sbom-arm64.spdx.json
+            ].to_h do |name|
+              [name, "sha256:#{Digest::SHA256.file(File.join(promotion, name)).hexdigest}"]
+            end
+            assets = release.fetch("assets")
+            abort "release assets are malformed" unless assets.is_a?(Array) && assets.all? { |asset| asset.is_a?(Hash) }
+            names = assets.map { |asset| asset.fetch("name") }
+            abort "release assets contain duplicate names" unless names.uniq.length == names.length
+            actual_assets = assets.to_h { |asset| [asset.fetch("name"), asset.fetch("digest")] }
+            abort "release assets do not match" unless actual_assets == expected_assets
+          RUBY
+            gh release verify "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --format json >/dev/null
+            release_state=exact
+          elif github_not_found "$release_error"; then
+            release_state=absent
+          else
+            echo "::error::Release preflight failed without a definitive absent response"
+            exit 1
+          fi
+
+          publication_state="$image_state:$tag_state:$attestation_state:$release_state"
+          case "$publication_state" in
+            absent:absent:absent:absent|\
+            exact:absent:absent:absent|\
+            exact:exact:absent:absent|\
+            exact:exact:exact:absent|\
+            exact:exact:exact:exact)
+              ;;
+            *)
+              echo "::error::Remote publication objects are not an exact resumable prefix: $publication_state"
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "image_state=$image_state"
+            echo "tag_state=$tag_state"
+            echo "attestation_state=$attestation_state"
+            echo "release_state=$release_state"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Publish the exact OCI layout
+        if: steps.preflight.outputs.image_state == 'absent'
+        env:
+          IMAGE_REPOSITORY: ghcr.io/ivankuznetsov/screenote
+          MANIFEST_DIGEST: ${{ needs.authorize.outputs.manifest_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          oras cp --from-oci-layout \
+            "$RUNNER_TEMP/promotion/screenote.oci.tar@$MANIFEST_DIGEST" \
+            "$IMAGE_REPOSITORY:$RELEASE_TAG"
+          test "$(oras resolve "$IMAGE_REPOSITORY:$RELEASE_TAG")" = "$MANIFEST_DIGEST"
+
+      - name: Create the exact source tag
+        if: steps.preflight.outputs.tag_state == 'absent'
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "/repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$RELEASE_TAG" \
+            -f "sha=$SOURCE_SHA" >/dev/null
+          ref_json="$RUNNER_TEMP/created-tag-ref.json"
+          gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >"$ref_json"
+          test "$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("object", "sha")' "$ref_json")" = "$SOURCE_SHA"
+
+      - name: Create GitHub provenance attestation
+        if: steps.preflight.outputs.attestation_state == 'absent'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/ivankuznetsov/screenote
+          subject-digest: ${{ needs.authorize.outputs.manifest_digest }}
+          predicate-type: https://screenote.ai/attestations/release-provenance/v1
+          predicate-path: ${{ runner.temp }}/promotion/provenance.json
+          push-to-registry: false
+
+      - name: Create the immutable GitHub release
+        if: steps.preflight.outputs.release_state == 'absent'
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          promotion="$RUNNER_TEMP/promotion"
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "Screenote $RELEASE_TAG" \
+            --notes-file "$promotion/release-notes.md" \
+            "$promotion/public-evidence.json" \
+            "$promotion/release-qualification.json" \
+            "$promotion/sbom-amd64.spdx.json" \
+            "$promotion/sbom-arm64.spdx.json" \
+            "$promotion/provenance.json"
+
+      - name: Verify every published object
+        env:
+          ATTESTATION_TOKEN: ${{ github.token }}
+          ATTESTATION_PREDICATE_TYPE: https://screenote.ai/attestations/release-provenance/v1
+          AUTHORIZING_SHA: ${{ needs.authorize.outputs.authorizing_sha }}
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          IMAGE_REPOSITORY: ghcr.io/ivankuznetsov/screenote
+          MANIFEST_DIGEST: ${{ needs.authorize.outputs.manifest_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          promotion="$RUNNER_TEMP/promotion"
+          test "$(oras resolve "$IMAGE_REPOSITORY:$RELEASE_TAG")" = "$MANIFEST_DIGEST"
+
+          ref_json="$RUNNER_TEMP/final-tag-ref.json"
+          gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >"$ref_json"
+          test "$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("object", "sha")' "$ref_json")" = "$SOURCE_SHA"
+
+          digest_hex="${MANIFEST_DIGEST#sha256:}"
+          attestations_json="$RUNNER_TEMP/final-attestations.json"
+          GH_TOKEN="$ATTESTATION_TOKEN" gh api --paginate --slurp \
+            "/repos/$GITHUB_REPOSITORY/attestations/sha256:$digest_hex?per_page=100" >"$attestations_json"
+          test "$(ruby -rjson -e '
+            pages = JSON.parse(File.binread(ARGV.fetch(0)))
+            puts pages.sum { |page| page.fetch("attestations").length }
+          ' "$attestations_json")" = 1
+          GH_TOKEN="$ATTESTATION_TOKEN" gh attestation verify \
+            "oci://$IMAGE_REPOSITORY@$MANIFEST_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-digest "$AUTHORIZING_SHA" \
+            --predicate-type "$ATTESTATION_PREDICATE_TYPE" \
+            --deny-self-hosted-runners \
+            --limit 2 \
+            --format json >"$RUNNER_TEMP/final-verified-attestation.json"
+          VERIFIED_ATTESTATION="$RUNNER_TEMP/final-verified-attestation.json" \
+            PROVENANCE_INPUT="$promotion/provenance.json" \
+            ruby -rjson -e '
+              verified = JSON.parse(File.binread(ENV.fetch("VERIFIED_ATTESTATION")))
+              abort "expected exactly one verified attestation" unless verified.is_a?(Array) && verified.length == 1
+              statement = verified.first.dig("verificationResult", "statement")
+              expected_predicate = JSON.parse(File.binread(ENV.fetch("PROVENANCE_INPUT")))
+              abort "signed provenance type does not match" unless statement["predicateType"] == ENV.fetch("ATTESTATION_PREDICATE_TYPE")
+              abort "signed provenance predicate does not match retained input" unless statement["predicate"] == expected_predicate
+              algorithm, digest = ENV.fetch("MANIFEST_DIGEST").split(":", 2)
+              expected_subject = [{ "name" => ENV.fetch("IMAGE_REPOSITORY"), "digest" => { algorithm => digest } }]
+              abort "signed provenance subject does not match" unless statement["subject"] == expected_subject
+            '
+
+          release_json="$RUNNER_TEMP/final-release.json"
+          gh api "/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json"
+          PROMOTION_DIR="$promotion" RELEASE_JSON="$release_json" ruby -rjson -rdigest <<'RUBY'
+          release = JSON.parse(File.binread(ENV.fetch("RELEASE_JSON")))
+          promotion = ENV.fetch("PROMOTION_DIR")
+          expected_notes = Digest::SHA256.file(File.join(promotion, "release-notes.md")).hexdigest
+          actual_notes = Digest::SHA256.hexdigest(release.fetch("body"))
+          abort "release notes do not match" unless actual_notes == expected_notes
+          abort "release identity does not match" unless
+            release["tag_name"] == ENV.fetch("RELEASE_TAG") &&
+              release["name"] == "Screenote #{ENV.fetch('RELEASE_TAG')}" &&
+              release["draft"] == false && release["prerelease"] == false &&
+              release["immutable"] == true
+
+          expected_assets = %w[
+            provenance.json
+            public-evidence.json
+            release-qualification.json
+            sbom-amd64.spdx.json
+            sbom-arm64.spdx.json
+          ].to_h do |name|
+            [name, "sha256:#{Digest::SHA256.file(File.join(promotion, name)).hexdigest}"]
+          end
+          assets = release.fetch("assets")
+          abort "release assets are malformed" unless assets.is_a?(Array) && assets.all? { |asset| asset.is_a?(Hash) }
+          names = assets.map { |asset| asset.fetch("name") }
+          abort "release assets contain duplicate names" unless names.uniq.length == names.length
+          actual_assets = assets.to_h { |asset| [asset.fetch("name"), asset.fetch("digest")] }
+          abort "release assets do not match" unless actual_assets == expected_assets
+          RUBY
+          gh release verify "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --format json >/dev/null

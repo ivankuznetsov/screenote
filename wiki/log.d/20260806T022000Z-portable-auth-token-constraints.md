@@ -1,0 +1,3 @@
+2026-08-06 — Made authentication-token character constraints portable between SQLite and PostgreSQL by expressing the allowlists with their shared `replace`, `substr`, and `length` functions. This prevents a self-hosted-generated `db/schema.rb` from embedding SQLite-only `GLOB` syntax that breaks a fresh SaaS PostgreSQL schema load. See [[schema-evolution]] and [[models/authentication-token]].
+
+The preceding identity migration now also distinguishes the exact legacy, exact completed, and partial schema shapes. If its transactional work committed but Rails was interrupted before recording the migration version, rerunning verifies the completed data and records the version without repeating DDL; any non-exact partial shape fails closed for restore.

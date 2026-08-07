@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 # Creates one Screenshot with N ScreenshotImages (one per viewport) and returns
-# signed upload URLs for each. Image bytes never enter the MCP transport.
+# one-time upload credentials for each. Image bytes never enter MCP transport.
 class CreateMultiViewportScreenshotTool < ApplicationTool
   tool_name "create_multi_viewport_screenshot"
-  description "Create a screenshot with one or more viewport variants (desktop, tablet, mobile). Returns signed upload URLs for each variant — PUT each binary separately."
+  description "Create desktop, tablet, or mobile variants. PUT each binary to upload_url with Authorization: Bearer <token> and the returned content_type."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -57,20 +58,22 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
             {
               viewport: v[:viewport],
               upload_url: Rails.application.routes.url_helpers.api_screenshot_upload_url(
-                screenshot, token: token, mime_type: v[:mime_type]
+                screenshot,
+                Screenote::Deployment.current.url_options
               ),
-              token: token
+              token: token,
+              content_type: v[:mime_type]
             }
           end
         end
       rescue ActiveRecord::RecordNotUnique => e
-        Honeybadger.notify(e)
+        Screenote::Monitoring.notify(e)
         next invalid("A ScreenshotImage with that viewport already exists for this Screenshot (concurrent request?)")
       rescue ActiveRecord::InvalidForeignKey => e
         # TOCTOU: snapshot existed at the pre-check but was destroyed before
         # the INSERT landed. Surface the same envelope as the pre-check so
         # agents can rely on a stable error shape.
-        Honeybadger.notify(e)
+        Screenote::Monitoring.notify(e)
         next invalid("snapshot not found in project")
       end
 
@@ -78,7 +81,10 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
         screenshot_id: screenshot.id,
         snapshot_id: screenshot.snapshot_id,
         page_id: page.id,
-        annotate_url: Rails.application.routes.url_helpers.screenshot_url(screenshot),
+        annotate_url: Rails.application.routes.url_helpers.screenshot_url(
+          screenshot,
+          Screenote::Deployment.current.url_options
+        ),
         uploads: uploads
       }.to_json
     end

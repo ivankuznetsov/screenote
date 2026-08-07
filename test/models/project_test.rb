@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class ProjectTest < ActiveSupport::TestCase
@@ -50,12 +52,13 @@ class ProjectTest < ActiveSupport::TestCase
     token = create_oauth_token(
       application: application,
       user: user,
+      project: project,
       scopes: "mcp_read"
     )
-    token.update_column(:project_id, project.id)
     grant = Doorkeeper::AccessGrant.create!(
       application: application,
       resource_owner_id: user.id,
+      principal_kind: "project",
       project_id: project.id,
       expires_in: 10.minutes.to_i,
       redirect_uri: application.redirect_uri,

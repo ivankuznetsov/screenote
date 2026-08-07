@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "optparse"
+require "pathname"
+require_relative "../lib/screenote/self_hosted/backup_set"
+
+options = {}
+parser = OptionParser.new do |value|
+  value.banner = "Usage: script/self_hosted_restore_internal [options]"
+  value.on("--source PATH") { |input| options[:source] = input }
+  value.on("--identity FILE") { |input| options[:identity] = input }
+  value.on("--storage-root PATH") { |input| options[:storage_root] = input }
+  value.on("--operator-destination PATH") { |input| options[:operator_destination] = input }
+  value.on("--compose-contract FILE") { |input| options[:compose_contract] = input }
+  value.on("--authentication-key FILE") { |input| options[:authentication_key] = input }
+  value.on("--image IMAGE@SHA256") { |input| options[:image] = input }
+  value.on("--predecessor IMAGE_OR_NONE") { |input| options[:predecessor] = input }
+end
+
+begin
+  parser.parse!(ARGV)
+  raise Screenote::SelfHosted::BackupSet::Error.new(parser.to_s, exit_code: 64) unless ARGV.empty?
+  required = %i[
+    source identity storage_root operator_destination compose_contract authentication_key image predecessor
+  ]
+  missing = required.find { |name| options[name].to_s.empty? }
+  raise Screenote::SelfHosted::BackupSet::Error.new("missing --#{missing.to_s.tr('_', '-')}", exit_code: 64) if missing
+
+  manifest = Screenote::SelfHosted::BackupSet::Restorer.new(**options).call
+  puts JSON.generate(
+    status: "restored",
+    restore_image: manifest.fetch("restore_image"),
+    predecessor: manifest.fetch("predecessor"),
+    storage_service: manifest.fetch("storage_service")
+  )
+rescue OptionParser::ParseError => error
+  warn "self-host restore: #{error.message}"
+  exit 64
+rescue Screenote::SelfHosted::BackupSet::Error => error
+  warn "self-host restore: #{error.message}"
+  exit error.exit_code
+end

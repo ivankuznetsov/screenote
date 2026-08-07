@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+version = ARGV.fetch(0, "")
+abort "usage: bin/saas-deploy-guard VERSION" unless ARGV.one?
+abort "saas deploy guard: VERSION must be a full immutable revision" unless version.match?(/\A[0-9a-f]{40,64}\z/)
+
+kamal = ENV.fetch("SCREENOTE_KAMAL_BIN", File.expand_path("kamal", __dir__))
+command = [
+  kamal,
+  "app", "exec",
+  "--primary",
+  "--version", version,
+  "bin/rails runner script/saas_deploy_guard"
+]
+
+abort "saas deploy guard: candidate verification failed" unless system(*command)

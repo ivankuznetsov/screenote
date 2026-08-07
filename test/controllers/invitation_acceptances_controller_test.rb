@@ -1,126 +1,317 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class InvitationAcceptancesControllerTest < ActionDispatch::IntegrationTest
+  self.use_transactional_tests = false
+
   setup do
     @invitation = project_invitations(:pending_invitation)
-    @token = @invitation.generate_token_for(:accept)
     @project = @invitation.project
+    @issued = nil
+    ProjectInvitation.transaction do
+      @issued = AuthenticationLinks::Issuer.new(
+        origin: AuthenticationLinks::Runtime.origin,
+        keyring: AuthenticationLinks::Runtime.keyring
+      ).call(
+        purpose: :invitation,
+        subject: ProjectInvitation.lock.find(@invitation.id),
+        expires_at: 7.days.from_now
+      )
+    end
   end
 
-  # Show
+  teardown do
+    AuthenticationToken.delete_all
+  end
 
-  test "show renders confirmation page with valid token" do
-    get accept_invitation_path(@token)
-    assert_response :success
+  test "requires a tokenless exchanged context" do
+    get invitation_acceptance_path
+
+    assert_response :unprocessable_content
     assert_select ".invitation-acceptance"
-    assert_select ".invitation-acceptance__button"
+    assert_select "[role=alert]", text: /invalid/i
   end
 
-  test "show redirects with invalid token" do
-    get accept_invitation_path("invalid-token")
-    assert_redirected_to root_path
+  test "an exchanged context whose token disappeared is terminal and reveals no invitation" do
+    exchange_invitation
+    @issued.token.destroy!
+
+    get invitation_acceptance_path
+
+    assert_response :success
+    assert_select ".invitation-acceptance", text: /context is invalid/i
+    assert_select ".invitation-acceptance__form", count: 0
+
+    get invitation_acceptance_path
+    assert_response :unprocessable_content
   end
 
-  # Create — existing user must be signed in
+  test "shows project inviter and invited address after body-only exchange" do
+    exchange_invitation
+    assert_redirected_to invitation_acceptance_path
+    assert_not_includes response.location, @issued.presentation.fragment
 
-  test "existing user must sign in to accept invitation" do
-    User.create!(
-      email: @invitation.email,
-      password: "password123",
-      confirmed_at: Time.current
-    )
+    get invitation_acceptance_path
 
-    post accept_invitation_path(@token)
-    assert_redirected_to new_session_path
-    follow_redirect!
-    assert_select ".flash--alert"
+    assert_response :success
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@project.name)}/
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@invitation.inviter.email)}/
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@invitation.email)}/
+    assert_select "input[name='acceptance[password]']"
+    assert_not_includes response.body, @issued.presentation.fragment
   end
 
-  test "accepts invitation for signed-in existing user" do
-    existing_user = User.create!(
-      email: @invitation.email,
-      password: "password123",
-      confirmed_at: Time.current
-    )
-    sign_in(existing_user)
+  test "matching session accepts while a different session is told to switch account" do
+    invited_user = create_user(@invitation.email)
+    sign_in(users(:bob))
+    exchange_invitation
+    get invitation_acceptance_path
+    assert_select "form[action='#{session_path}'] button", text: /Sign out and continue/
+
+    delete session_path
+    assert_redirected_to invitation_acceptance_path
+    get invitation_acceptance_path
+    assert_response :success
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@invitation.email)}/
+
+    sign_in(invited_user)
 
     assert_difference "ProjectMembership.count", 1 do
-      post accept_invitation_path(@token)
+      post invitation_acceptance_path, params: { acceptance: { method: "session" } }
     end
 
     assert_redirected_to project_path(@project)
-    assert @project.member?(existing_user), "User should be a project member"
-    @invitation.reload
-    assert @invitation.accepted?, "Invitation should be accepted"
+    assert @project.member?(invited_user)
+    assert @issued.token.reload.consumed?
   end
 
-  # Create — new user (auto-creates account)
+  test "new invitee creates durable local credentials during acceptance" do
+    exchange_invitation
 
-  test "creates account for new user and accepts invitation" do
-    assert_difference [ "User.count", "ProjectMembership.count" ], 1 do
-      post accept_invitation_path(@token)
+    assert_difference [ "User.count", "ProjectMembership.count", "Session.count" ], 1 do
+      post invitation_acceptance_path, params: {
+        acceptance: {
+          method: "local",
+          password: "new-password",
+          password_confirmation: "new-password"
+        }
+      }
     end
 
-    new_user = User.find_by(email: @invitation.email)
-    assert_not_nil new_user
-    assert_not_nil new_user.confirmed_at, "New user should be auto-confirmed"
-    assert @project.member?(new_user), "New user should be a project member"
+    user = User.find_by!(email: @invitation.email)
+    assert user.authenticate("new-password")
+    assert user.confirmed_at.present?
     assert_redirected_to project_path(@project)
   end
 
-  # Create — invalid/expired token
+  test "password confirmation mismatch preserves invitation context for retry" do
+    exchange_invitation
 
-  test "rejects invalid token" do
-    post accept_invitation_path("bogus-token")
-    assert_redirected_to root_path
+    assert_no_difference [ "User.count", "ProjectMembership.count", "Session.count" ] do
+      post invitation_acceptance_path, params: {
+        acceptance: {
+          method: "local",
+          password: "new-password",
+          password_confirmation: "different-password"
+        }
+      }
+    end
+
+    assert_response :unprocessable_content
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@project.name)}/
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@invitation.email)}/
+    assert_select "[role=alert]", text: /doesn't match/i
+    assert_select "input[name='acceptance[password]']"
+    assert_select "input[name='acceptance[password_confirmation]']"
+    assert @invitation.reload.pending?
+    assert @issued.token.reload.outstanding?
+
+    counts_before_retry = [ User.count, ProjectMembership.count, Session.count ]
+    post invitation_acceptance_path, params: {
+      acceptance: {
+        method: "local",
+        password: "new-password",
+        password_confirmation: "new-password"
+      }
+    }
+
+    assert_redirected_to project_path(@project)
+    assert_equal counts_before_retry.map { |count| count + 1 },
+      [ User.count, ProjectMembership.count, Session.count ]
   end
 
-  test "rejects token from before status change" do
-    # Accept once using the original token
-    post accept_invitation_path(@token)
 
-    # Original token should be invalidated because status changed
-    found = ProjectInvitation.find_by_token_for(:accept, @token)
-    assert_nil found, "Original token should be invalidated after acceptance"
+  test "unsupported identity proof keeps a valid invitation context available for retry" do
+    exchange_invitation
+
+    post invitation_acceptance_path, params: { acceptance: { method: "unsupported" } }
+
+    assert_response :unprocessable_content
+    assert @issued.token.reload.outstanding?
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@project.name)}/
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@invitation.email)}/
+    assert_select ".invitation-acceptance", text: /context is invalid/i, count: 0
+
+    get invitation_acceptance_path
+    assert_response :success
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@project.name)}/
   end
 
-  # Create — already logged in as correct user
+  test "a token terminalized after exchange is cleared by the acceptance request" do
+    exchange_invitation
+    @issued.token.transition_to!(:cancelled)
 
-  test "accepts when already logged in with matching email" do
-    existing_user = User.create!(
-      email: @invitation.email,
-      password: "password123",
-      confirmed_at: Time.current
-    )
-    sign_in(existing_user)
+    post invitation_acceptance_path, params: {
+      acceptance: {
+        method: "local",
+        password: "new-password",
+        password_confirmation: "new-password"
+      }
+    }
+
+    assert_response :unprocessable_content
+    assert_select "[role=alert]", text: /cancelled/i
+
+    get invitation_acceptance_path
+    assert_response :unprocessable_content
+    assert_select "[role=alert]", text: /invalid/i
+  end
+
+  test "a busy acceptance returns service unavailable and preserves its invitation context" do
+    exchange_invitation
+    result = acceptance_result(:retryable_busy)
+
+    with_singleton_method_stub(ProjectInvitations::Accept, :call, ->(**) { result }) do
+      post invitation_acceptance_path, params: {
+        acceptance: {
+          method: "local",
+          password: "new-password",
+          password_confirmation: "new-password"
+        }
+      }
+    end
+
+    assert_response :service_unavailable
+    assert_select "[role=alert]", text: /busy/i
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@project.name)}/
+    assert_select ".invitation-acceptance", text: /context is invalid/i, count: 0
+
+    get invitation_acceptance_path
+    assert_response :success
+    assert_select ".invitation-acceptance", text: /#{Regexp.escape(@project.name)}/
+  end
+
+  test "a terminal transition during retry-state recovery clears the context" do
+    exchange_invitation
+    @issued.token.transition_to!(:cancelled)
+    result = acceptance_result(:retryable_busy)
+
+    with_singleton_method_stub(ProjectInvitations::Accept, :call, ->(**) { result }) do
+      post invitation_acceptance_path, params: {
+        acceptance: {
+          method: "local",
+          password: "new-password",
+          password_confirmation: "new-password"
+        }
+      }
+    end
+
+    assert_response :unprocessable_content
+    assert_nil session[:authentication_link]
+    assert_select "[role=alert]", text: /cancelled/i
+  end
+
+  test "existing invitee signs in through the normal session flow before accepting" do
+    invited_user = create_user(@invitation.email)
+    exchange_invitation
+
+    get invitation_acceptance_path
+    assert_response :success
+    assert_select "a[href='#{new_session_path}']", text: /Sign in and continue/
+    assert_select "input[name='acceptance[password]']", count: 0
+
+    get new_session_path
+    post session_path, params: { email: invited_user.email, password: "password123" }
+    assert_redirected_to invitation_acceptance_path
 
     assert_difference "ProjectMembership.count", 1 do
-      post accept_invitation_path(@token)
+      post invitation_acceptance_path, params: { acceptance: { method: "session" } }
     end
 
     assert_redirected_to project_path(@project)
+    assert invited_user.sessions.exists?
   end
 
-  # Pending invitation token consumed after sign-in
+  test "wrong existing-user password is handled only by the normal login endpoint" do
+    user = create_user(@invitation.email)
+    exchange_invitation
 
-  test "pending invitation token is consumed after sign-in" do
-    existing_user = User.create!(
-      email: @invitation.email,
-      password: "password123",
-      confirmed_at: Time.current
+    assert_no_difference [ "ProjectMembership.count", "Session.count" ] do
+      post session_path, params: { email: user.email, password: "wrong-password" }
+    end
+    assert_response :unprocessable_content
+    assert @invitation.reload.pending?
+    assert @issued.token.reload.outstanding?
+
+    post session_path, params: { email: user.email, password: "password123" }
+    assert_redirected_to invitation_acceptance_path
+    assert @invitation.reload.pending?
+
+    post invitation_acceptance_path, params: { acceptance: { method: "session" } }
+    assert_redirected_to project_path(@project)
+    assert @project.member?(user)
+  end
+
+  test "terminalized context renders a stable state and cannot create an account" do
+    exchange_invitation
+    @issued.token.transition_to!(:cancelled)
+
+    assert_no_difference [ "User.count", "ProjectMembership.count" ] do
+      get invitation_acceptance_path
+    end
+
+    assert_response :success
+    assert_select "[role=alert]", text: /cancelled/i
+    post invitation_acceptance_path, params: {
+      acceptance: {
+        method: "local",
+        password: "new-password",
+        password_confirmation: "new-password"
+      }
+    }
+    assert_response :unprocessable_content
+  end
+
+  private
+
+  def exchange_invitation
+    post exchange_authentication_link_path(:invitation),
+      params: { token: @issued.presentation.fragment }
+  end
+
+  def create_user(email)
+    User.create!(email: email, password: "password123", confirmed_at: Time.current)
+  end
+
+  def acceptance_result(status, invitation: nil, errors: [])
+    ProjectInvitations::Accept::Result.new(
+      status: status,
+      invitation: invitation,
+      user: nil,
+      project: invitation&.project,
+      errors: errors
     )
+  end
 
-    # Simulate: existing user tries to accept without being signed in
-    post accept_invitation_path(@token)
-    assert_redirected_to new_session_path
-
-    # Sign in and visit any authenticated page — token should be consumed
-    sign_in(existing_user)
-    get projects_path
-
-    assert @invitation.reload.accepted?, "Invitation should be accepted after sign-in"
-    assert @project.member?(existing_user), "User should be a project member"
+  def with_singleton_method_stub(object, method_name, replacement)
+    singleton = object.singleton_class
+    original = object.method(method_name)
+    singleton.define_method(method_name, replacement)
+    yield
+  ensure
+    singleton&.define_method(method_name, original)
   end
 end

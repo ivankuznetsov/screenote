@@ -3,6 +3,8 @@
 class CreateProjectTool < ApplicationTool
   tool_name "create_project"
   description "Create a new project. Returns the project_id to use with other tools."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
+  authorize { current_principal&.can_create_project? }
 
   arguments do
     required(:name).filled(:string).description("Name for the new project")
@@ -10,11 +12,10 @@ class CreateProjectTool < ApplicationTool
 
   def call(name:)
     with_error_handling do
-      if project_scoped_oauth?
-        return { error: "forbidden", message: "Project-scoped tokens cannot create projects" }.to_json
-      end
-
-      project = current_user.owned_projects.create!(name: name)
+      project = Projects::Create.call(
+        principal: current_principal,
+        attributes: { name: name }
+      )
 
       {
         project: {

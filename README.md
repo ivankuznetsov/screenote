@@ -1,83 +1,41 @@
 # Screenote
 
-Screenote is a Rails visual feedback app for screenshots, annotations, and agent workflows. The browser app is the review surface, and the Go CLI is the shell and automation contract.
+Screenote is a visual feedback workspace for screenshots. Teams can capture several viewports, place point or area comments directly on an image, reply and resolve in one review surface, and automate the same project-scoped workflow through OAuth, REST, the CLI, or MCP.
 
-## Go CLI
+This repository is **source-available and self-hostable**. It contains both the unlimited self-hosted core and the explicitly enabled services Future Spin Ltd uses to operate `screenote.ai`.
 
-Install:
+> **Release status:** the first source release is being prepared. Do not treat an untagged branch, a moving image tag, or a candidate CLI build as a supported release. Publication remains blocked until the automated GitGuardian, repository-protection, exact-artifact, and runtime-qualification gates in [the release guide](docs/releases.md) are complete.
 
-```sh
-go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
-```
+## Self-host Screenote
 
-Authorize the CLI with OAuth against a self-hosted, local, staging, or production base URL:
+The supported first-release topology is one Docker container, four SQLite databases on one durable volume, and either local or S3-compatible screenshot storage. It has no Stripe dependency, license key, or product limit.
 
-```sh
-screenote --base-url https://screenote.ai login
-```
+Start with the [self-hosting guide](docs/self-hosting.md). It links the copyable Docker Compose install, secret setup, storage options, reverse-proxy configuration, health checks, backups, restores, upgrades, and rollback procedure. Always pin the immutable image digest named by a release; never operate from `latest`.
 
-The default login opens a browser and uses PKCE with a loopback callback. SSH, tmux, and other headless sessions can use the OAuth device flow instead:
+## CLI and automation
+
+The canonical public CLI lives at [ivankuznetsov/screenote-cli](https://github.com/ivankuznetsov/screenote-cli). Each Screenote release names one exact tested CLI tag. Install that tag, not a moving branch:
 
 ```sh
-screenote --base-url https://screenote.ai login --device
+go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@<release-cli-tag>
+screenote --base-url http://screenote.internal login
 ```
 
-Device login prints a one-time code and authorization link that can be approved in any browser. It does not bind a callback port or require SSH forwarding. Both login methods store OAuth credentials with owner-only permissions; `screenote logout` removes them.
+Use `login --device` from SSH, tmux, or another headless session. The Go client still present in this repository is transitional and is not a supported release artifact.
 
-Configuration precedence for non-secret settings is:
+## Develop
 
-1. Flags: `--base-url`, `--project`
-2. Environment: `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
-3. Config file: `~/.config/screenote/config.toml`
-
-Ordinary commands never prompt or open a browser. Only explicit `screenote login` starts OAuth. Project-scoped commands require `--project`, `SCREENOTE_PROJECT`, or config `project`.
-
-Examples:
+Screenote is a Rails 8.1 application with a small transitional Go client. Run the normal quality gate before opening a pull request:
 
 ```sh
-screenote --base-url http://localhost:3005 login
-screenote project list
-screenote --project 7 page list
-screenote --project 7 screenshot create --title "Homepage" --file screenshot.png
-cat screenshot.png | screenote --project 7 screenshot create --title "Homepage"
-screenote --project 7 screenshot list --status ready --limit 25
-screenote --project 7 annotation list --screenshot 123 --status open
-screenote --project 7 annotation get --annotation 456
-screenote --project 7 comment add --annotation 456 --body "Fix pushed in abc123"
-screenote --project 7 snapshot --manifest snapshot.json
+bin/setup --skip-server
+bin/ci
 ```
 
-`snapshot` publishes a browser-free multi-page capture from locally produced PNG/JPEG files. An unchanged manifest is resumable after upload, transport, or processing failures; see the public CLI's [snapshot manifest reference](https://github.com/ivankuznetsov/screenote-cli/blob/main/docs/snapshot-manifest.md) for the versioned contract.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution expectations, [SECURITY.md](SECURITY.md) for private vulnerability reporting, and [SUPPORT.md](SUPPORT.md) for the support boundary.
 
-Successful commands write JSON to stdout. Errors write JSON to stderr:
+## License
 
-```json
-{"code":"missing_base_url","error":"base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url"}
-```
+Copyright © 2026, Future Spin Ltd.
 
-Exit codes:
-
-| Code | Meaning |
-| --- | --- |
-| 0 | OK |
-| 1 | Generic error |
-| 2 | Usage/config error |
-| 3 | Authentication or authorization failed |
-| 4 | Not found |
-| 5 | Rate limited |
-
-## Development
-
-Rails tests:
-
-```sh
-bin/rails test
-```
-
-Go tests:
-
-```sh
-GOFLAGS=-mod=mod go test ./...
-```
-
-`GOFLAGS=-mod=mod` is required because this Rails repo has a top-level `vendor/` directory that is not a Go vendor tree.
+Screenote is distributed under the [O'Saasy License Agreement](LICENSE). It permits use, modification, and redistribution, but does not permit offering Screenote or a derivative to third parties as a directly competing hosted, managed, SaaS, or cloud service whose primary value is Screenote's functionality. The license text—not this summary—is authoritative.

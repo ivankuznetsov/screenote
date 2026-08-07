@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 module Api
@@ -51,8 +53,11 @@ module Api
       test "project-scoped oauth token resolves within its issued project" do
         annotation = annotations(:point_annotation)
         user = users(:alice)
-        token = oauth_token(user: user, scopes: "mcp_write")
-        token.update_column(:project_id, projects(:alice_project).id)
+        token = oauth_token(
+          user: user,
+          project: projects(:alice_project),
+          scopes: "mcp_write"
+        )
 
         post resolve_path(annotation),
           params: { project_id: projects(:alice_project).id },
@@ -201,8 +206,11 @@ module Api
       test "project-scoped oauth token cannot cross into another member project" do
         annotation = annotations(:point_annotation)
         user = users(:bob)
-        token = oauth_token(user: user, scopes: "mcp_write")
-        token.update_column(:project_id, projects(:bob_project).id)
+        token = oauth_token(
+          user: user,
+          project: projects(:bob_project),
+          scopes: "mcp_write"
+        )
 
         post resolve_path(annotation),
           params: { project_id: projects(:alice_project).id },
@@ -234,8 +242,13 @@ module Api
         { "Authorization" => "Bearer #{token}" }
       end
 
-      def oauth_token(user:, scopes:)
-        create_oauth_token(application: create_oauth_application, user: user, scopes: scopes)
+      def oauth_token(user:, project: nil, scopes:)
+        create_oauth_token(
+          application: create_oauth_application,
+          user: user,
+          project: project,
+          scopes: scopes
+        )
       end
     end
   end

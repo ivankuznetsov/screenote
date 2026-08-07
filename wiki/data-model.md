@@ -3,15 +3,15 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-08-06
 tags: [database, schema, models, relationships]
 ---
 
 # Data Model
 
-TLDR: Screenote has 14 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth.
+TLDR: Screenote has 17 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth. Installation persists the one deployment/storage/ownership identity, and authentication-link credentials are digest-only rows.
 
-Source: `db/schema.rb` (schema version `2026_07_13_160000`)
+Source: `db/schema.rb` (schema version `2026_08_05_134000`)
 
 ## ER Diagram
 
@@ -22,6 +22,10 @@ erDiagram
     User ||--o{ ProjectMembership : "has many"
     User ||--o{ Annotation : "has many"
     User ||--o| Subscription : "has one"
+    User |o--o| Installation : "may administer"
+    User ||--o{ AuthenticationToken : "receives account links"
+    User ||--o{ AuthenticationToken : "issues recovery links"
+    User ||--o{ InstallationAuditEvent : "actor or target"
 
     Project ||--o{ ProjectMembership : "has many"
     Project ||--o{ ProjectInvitation : "has many"
@@ -50,6 +54,9 @@ erDiagram
 
     ProjectInvitation }o--|| Project : "belongs to"
     ProjectInvitation }o--|| User : "invited by (inviter)"
+    ProjectInvitation ||--o{ AuthenticationToken : "receives invitation links"
+
+    Installation ||--o{ InstallationAuditEvent : "records"
 
     ApiKey }o--|| Project : "belongs to"
 
@@ -69,7 +76,7 @@ erDiagram
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| `users` | User accounts with auth | email, password_digest, confirmed_at, oauth_provider, oauth_uid |
+| `users` | User accounts with auth and checked activity state | email, password_digest, confirmed_at, oauth_provider, oauth_uid, access_status |
 | `projects` | Top-level container | name, description, user_id (creator) |
 | `pages` | Groups screenshots within a project | name, project_id |
 | `snapshots` | Capture-run records for a project | project_id, git_commit, taken_at, optional manifest_digest |
@@ -83,14 +90,17 @@ erDiagram
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `project_memberships` | User-project join table with roles | project_id, user_id, role (enum: member/owner) |
-| `project_invitations` | Email-based invites with token | email, project_id, inviter_id, status (enum: pending/accepted) |
+| `project_invitations` | Durable email-based admission intent | email, project_id, inviter_id, status (enum: pending/accepted/cancelled) |
 
 ### Auth & Access
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `sessions` | Database-backed user sessions | user_id, ip_address, user_agent |
-| `api_keys` | Bearer token auth for API/MCP | name, token_digest, token_prefix, project_id, revoked_at, last_used_at |
+| `api_keys` | Bearer token auth for API/MCP | name, token_digest, token_prefix, project_id, issued_by_user_id, revoked_at, last_used_at |
+| `installations` | Singleton persisted deployment and claim identity | singleton_key, deployment_mode, state, storage_service, storage_namespace_fingerprint, bootstrap_token_digest, administrator_id, claimed_at |
+| `installation_audit_events` | Append-only installation claim/administration audit history | installation_id, actor_user_id, target_user_id, event_type, metadata, created_at |
+| `authentication_tokens` | Digest-only, purpose/subject-bound link credentials | purpose, user_id/project_invitation_id, issued_by_user_id (recovery only), generation, derivation_id, derivation_key_id, token_digest, expires_at, state, terminal_at |
 
 ### Billing
 
@@ -103,10 +113,10 @@ erDiagram
 
 | Table | Purpose |
 |-------|---------|
-| `oauth_applications` | Registered OAuth clients (supports dynamic registration) |
-| `oauth_access_grants` | Authorization codes with PKCE |
-| `oauth_access_tokens` | Bearer tokens scoped to project |
-| `oauth_device_grants` | Short-lived RFC 8628 device requests with hashed device code, human code, polling state, and approval/denial state |
+| `oauth_applications` | Registered OAuth clients, dynamic-registration fingerprint, and last-use time |
+| `oauth_access_grants` | Digest-only authorization codes with PKCE and explicit user/project principal |
+| `oauth_access_tokens` | Digest-only access/refresh credentials with explicit user/project principal |
+| `oauth_device_grants` | Short-lived RFC 8628 requests with hashed device code, user/project consent, polling state, and approval/denial state |
 
 ### Active Storage
 
@@ -118,7 +128,12 @@ erDiagram
 
 ## Key Indexes
 
-- `users.email` -- unique
+- `users.LOWER(TRIM(email))` -- unique canonical identity; a CHECK requires the stored value to already be normalized
+- `users.(oauth_provider, oauth_uid)` -- partial unique provider identity; a CHECK requires both fields or neither
+- `project_invitations.(project_id, LOWER(TRIM(email)))` -- partial unique index for pending rows only
+- `authentication_tokens.(purpose, subject, generation)` -- separate partial user/invitation indexes avoid nullable-column uniqueness gaps
+- `authentication_tokens.(purpose, subject)` -- separate partial indexes permit only one outstanding credential for each exact purpose and subject
+- `authentication_tokens.(issued_by_user_id, state)` -- partial account-recovery index preserves immutable administrator provenance and supports revocation after an administrator transfer
 - `pages.(project_id, LOWER(name))` -- unique, case-insensitive
 - `snapshots.(project_id, taken_at)` -- powers the project-page "recent snapshots" sidebar (`Snapshot.recent` within a project scope). The id-equality `find_by(id:)` path used elsewhere is served by the PK, not this composite.
 - `snapshots.(project_id, manifest_digest)` -- partial unique identity for resumable manifest-backed captures.
@@ -126,9 +141,12 @@ erDiagram
 - `screenshots.(snapshot_id, manifest_entry_digest)` -- partial unique identity for prepared screenshot entries.
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique
+- `api_keys.issued_by_user_id` -- immutable provenance for newly issued and active keys; null only on preserved revoked legacy actors
+- `installations.singleton_key` -- unique and constrained to `screenote`; mode, ownership state, storage service, namespace fingerprint, bootstrap digest, and administrator relationships are database-constrained
 - `oauth_device_grants.device_code` -- unique SHA-256 digest; the raw device credential is never stored
 - `oauth_device_grants.user_code` -- unique short-lived human verification code
 - `oauth_device_grants.expires_at` -- indexed absolute expiry used for request validation and scheduled bulk cleanup after a bounded terminal-error retention period
+- `oauth_applications.registration_fingerprint` -- partial unique index for retry-safe dynamic registration
 - `subscriptions.user_id` -- unique (one subscription per user)
 - `subscriptions.stripe_customer_id` -- unique
 - `stripe_webhook_events.stripe_event_id` -- unique
@@ -141,12 +159,10 @@ erDiagram
 ## Foreign Key Cascade Rules
 
 - `annotation_comments -> annotations`: ON DELETE CASCADE
-- `annotation_comments -> users/api_keys`: ON DELETE SET NULL
-- `annotations -> resolved_by_user`: ON DELETE SET NULL
-- `annotations -> resolved_by_api_key`: ON DELETE SET NULL
+- Annotation and comment actor foreign keys are restrictive because their database checks require exactly one durable user or API-key actor.
 - `oauth_access_grants/tokens -> oauth_applications`: ON DELETE CASCADE
-- `oauth_access_grants/tokens -> projects`: ON DELETE SET NULL
-- `oauth_device_grants -> oauth_applications/users`: ON DELETE CASCADE so ephemeral grants cannot block client or account deletion and approved grants cannot outlive their user
+- `oauth_access_grants/tokens/device_grants -> projects`: ON DELETE CASCADE so project credentials are revoked rather than widened to account authority
+- `oauth_device_grants -> oauth_applications/users`: ON DELETE CASCADE so ephemeral grants cannot outlive their client or resource owner
 - `screenshots -> snapshots`: ON DELETE SET NULL
 - `screenshot_images -> screenshots`: no database cascade; Rails `dependent: :destroy` preserves Active Storage purge callbacks
 - Duplicate snapshots for the same `(project_id, git_commit)` are allowed because repeated `/snapshot` captures of one commit can be useful at different times; `taken_at` distinguishes the runs.

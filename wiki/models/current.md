@@ -3,13 +3,13 @@ title: Current
 type: model
 source: app/models/current.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-08-05
 tags: [model, current-attributes, auth, context]
 ---
 
 # Current
 
-TLDR: Thread-local request context using ActiveSupport::CurrentAttributes. Delegates user/session to RailsSimpleAuth::Current and adds MCP-specific attributes.
+TLDR: Thread-local request context using ActiveSupport::CurrentAttributes. Browser user/session state remains delegated to RailsSimpleAuth, while bearer-authenticated requests carry one immutable principal.
 
 Source: `app/models/current.rb`
 
@@ -18,16 +18,14 @@ Source: `app/models/current.rb`
 - `user`, `user=` -- from `RailsSimpleAuth::Current`
 - `session`, `session=` -- from `RailsSimpleAuth::Current`
 
-## Attributes
+## Attribute
 
-- `mcp_user` -- The authenticated user for MCP requests
-- `mcp_project` -- The project scoped by the MCP OAuth token
-- `mcp_api_key` -- The API key associated with the MCP session
-- `mcp_oauth_token` -- The Doorkeeper OAuth token for the current MCP request
+- `authenticated_principal` -- The immutable user- or project-principal resolved for REST/MCP OAuth tokens and project API keys. It contains exact scopes and the credential's authoritative project/actor provenance; the same value object can represent a browser user for shared domain operations.
 
 ## Notes
 
 - `Current.user` is the primary way to access the authenticated user throughout the app.
-- MCP attributes are set separately from web session attributes because MCP uses OAuth 2.1 auth, not cookie sessions.
+- MCP transport identity is separate from web session state because MCP uses bearer authentication, not cookie sessions.
+- MCP transport resets `authenticated_principal` at both request entry and exit. Tools may resolve a project from the principal but cannot mutate request identity or treat an API-key issuer as the acting user.
 
-See also: [[user]], [[architecture]]
+See also: [[user]], [[architecture]], [[mcp-tools]]

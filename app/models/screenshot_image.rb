@@ -11,6 +11,8 @@ class ScreenshotImage < ApplicationRecord
   # has_one_attached :image is dropped (todo 172).
   ALLOWED_CONTENT_TYPES = %w[image/png image/jpeg].freeze
   MAX_FILE_SIZE = 20.megabytes
+  MAX_DIMENSION = 32_768
+  MAX_PIXELS = 50_000_000
   THUMBNAIL_VARIANT_NAMES = %i[page_card_1x page_card_2x project_strip].freeze
   OVERVIEW_IMAGE_PRELOAD = {
     image_attachment: {
@@ -217,7 +219,7 @@ class ScreenshotImage < ApplicationRecord
     return unless image.attached?
     return if status_ready?
 
-    ScreenshotDimensionJob.perform_later(self, image.blob.id)
+    ScreenshotImages::EnsureProcessing.call(image: self)
   end
 
   def thumbnail_variants

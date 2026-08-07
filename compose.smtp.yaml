@@ -1,0 +1,22 @@
+services:
+  screenote:
+    environment:
+      SCREENOTE_SMTP_ENABLED: "true"
+      SMTP_ADDRESS: ${SMTP_ADDRESS:?Set SMTP_ADDRESS}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:?Set SMTP_USERNAME}
+      SMTP_PASSWORD_FILE: /run/secrets/screenote_smtp_password
+      SMTP_DOMAIN: ${SMTP_DOMAIN:-}
+      SMTP_AUTHENTICATION: ${SMTP_AUTHENTICATION:-plain}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      MAILER_FROM: ${MAILER_FROM:?Set MAILER_FROM}
+    secrets:
+      - source: screenote_smtp_password
+        target: screenote_smtp_password
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+
+secrets:
+  screenote_smtp_password:
+    file: ${SCREENOTE_SMTP_PASSWORD_PATH:?Set SCREENOTE_SMTP_PASSWORD_PATH to the restricted SMTP-password file}

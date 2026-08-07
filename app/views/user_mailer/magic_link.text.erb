@@ -4,7 +4,9 @@ Sign in to Screenote
 Click the link below to sign in to your Screenote account. No password needed.
 
 Sign in:
-<%= main_app.magic_link_url(token: @token) %>
+<%= @authentication_link_url %>
+
+Manual code: <%= @authentication_link_manual_code %>
 
 This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
 

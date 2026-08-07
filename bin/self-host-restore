@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "optparse"
+require_relative "../lib/screenote/self_hosted/host_operations"
+
+options = { compose_files: [], project_name: "screenote", timeout: 120 }
+parser = OptionParser.new do |value|
+  value.banner = <<~USAGE
+    Usage: bin/self-host-restore --source ABSOLUTE_DIRECTORY --identity ABSOLUTE_FILE \
+      --authentication-key ABSOLUTE_FILE \
+      --target-volume NAME --operator-destination ABSOLUTE_EMPTY_DIRECTORY \
+      --image IMAGE@SHA256 --predecessor IMAGE_OR_NONE --compose-file ABSOLUTE_FILE
+  USAGE
+  value.on("--source DIRECTORY") { |input| options[:source] = input }
+  value.on("--identity FILE") { |input| options[:identity] = input }
+  value.on("--authentication-key FILE") { |input| options[:authentication_key] = input }
+  value.on("--target-volume NAME") { |input| options[:target_volume] = input }
+  value.on("--operator-destination DIRECTORY") { |input| options[:operator_destination] = input }
+  value.on("--image IMAGE@SHA256") { |input| options[:image] = input }
+  value.on("--predecessor IMAGE_OR_NONE") { |input| options[:predecessor] = input }
+  value.on("--compose-file FILE") { |input| options[:compose_files] << input }
+  value.on("--project-name NAME") { |input| options[:project_name] = input }
+  value.on("--timeout SECONDS") { |input| options[:timeout] = input }
+end
+
+begin
+  parser.parse!(ARGV)
+  required = %i[source identity authentication_key target_volume operator_destination image predecessor]
+  missing = required.find { |name| options[name].to_s.empty? }
+  if !ARGV.empty? || missing
+    warn missing ? "self-host restore: missing --#{missing.to_s.tr('_', '-')}" : parser.to_s
+    exit 64
+  end
+  exit Screenote::SelfHosted::HostOperations::RestoreCommand.new(options).call
+rescue OptionParser::ParseError => error
+  warn "self-host restore: #{error.message}"
+  exit 64
+end

@@ -3,7 +3,7 @@ title: ApiKey
 type: model
 source: app/models/api_key.rb
 created: 2026-04-10
-updated: 2026-07-12
+updated: 2026-08-05
 tags: [model, auth, api, security]
 ---
 
@@ -20,6 +20,7 @@ Source: `app/models/api_key.rb`
 | id | integer | PK |
 | name | string | NOT NULL, max 255 |
 | project_id | integer | NOT NULL, FK to projects |
+| issued_by_user_id | integer | Immutable FK to the issuing user; null only for revoked legacy keys whose issuer was never recorded |
 | token_digest | string | NOT NULL, unique, SHA-256 hash of raw token |
 | token_prefix | string | First 12 chars of raw token (for identification) |
 | revoked_at | datetime | Soft-delete timestamp |
@@ -32,11 +33,13 @@ Source: `app/models/api_key.rb`
 | Association | Type | Target |
 |-------------|------|--------|
 | project | belongs_to | [[project]] |
+| issued_by_user | belongs_to | [[user]] (optional only for revoked legacy provenance; never used for impersonation) |
 
 ## Validations
 
 - `token_digest`: presence, uniqueness
 - `name`: presence, length max 255
+- `issued_by_user`: required and must be a current project owner when any new key is created
 
 ## Scopes
 
@@ -60,7 +63,7 @@ Source: `app/models/api_key.rb`
 
 ## Read-Only Columns
 
-- `token_digest`, `token_prefix` -- Declared via `attr_readonly`, cannot be changed after creation
+- `token_digest`, `token_prefix`, `issued_by_user_id` -- Declared via `attr_readonly`, cannot be changed after creation
 
 ## Notes
 
@@ -68,6 +71,11 @@ Source: `app/models/api_key.rb`
 - The `raw_token` is flashed to the user once via `flash[:api_key_token]` in the controller and never shown again.
 - Used by `Api::BaseController` for bearer token authentication on REST API endpoints.
 - Also used as the author of annotation comments when agents resolve/reopen annotations.
+- API-key-created annotations and thread events persist the key as their actor. The issuer is checked for account activity but is never substituted as the content author.
+- Preexisting keys are revoked during the issuer migration and keep a null issuer because later project ownership cannot prove who historically created a credential. Their rows remain as durable actors for existing annotations and thread events.
+- The database permits a null issuer only when `revoked_at` is present, so no active credential can lack issuer provenance.
+- Browser key creation holds the issuer, project, and owner-membership locks through insertion, closing the validation/removal race on both PostgreSQL and SQLite.
+- Removing the issuer from a project revokes every active key they issued for that project in the same serialized membership transaction; keys issued by other current owners are unchanged.
 - `20260712153000_repair_legacy_api_key_token_storage` repairs databases that ran the original plaintext-token create migration before it was rewritten. It hashes any legacy values, removes the plaintext column, and is intentionally irreversible.
 
 See also: [[project]], [[controllers/api-controllers]], [[annotation-comment]]

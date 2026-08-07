@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class ApiKeysControllerTest < ActionDispatch::IntegrationTest
@@ -109,6 +111,23 @@ class ApiKeysControllerTest < ActionDispatch::IntegrationTest
       post project_api_keys_path(@project), params: { api_key: { name: "" } }
     end
     assert_response :unprocessable_entity
+  end
+
+  test "create fails closed if owner authority is lost before the locked save" do
+    sign_in(@user)
+    original = Oauth::PrincipalBinding.method(:with_locked_project)
+    membership = @project.project_memberships.find_by!(user: @user)
+    Oauth::PrincipalBinding.define_singleton_method(:with_locked_project) do |**, &block|
+      block.call(false, membership)
+    end
+
+    assert_no_difference "ApiKey.count" do
+      post project_api_keys_path(@project), params: { api_key: { name: "Racing key" } }
+    end
+
+    assert_redirected_to projects_path
+  ensure
+    Oauth::PrincipalBinding.define_singleton_method(:with_locked_project, original) if original
   end
 
   # Destroy (revoke)

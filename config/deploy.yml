@@ -40,6 +40,7 @@ env:
     - STRIPE_SECRET_KEY
     - STRIPE_WEBHOOK_SECRET
     - STRIPE_PRO_PRICE_ID
+    - SCREENOTE_SAAS_OPERATOR_EMAIL
   clear:
     # Run Solid Queue Supervisor inside Puma for single-server deployment
     SOLID_QUEUE_IN_PUMA: true
@@ -55,8 +56,13 @@ env:
     RAILS_SERVE_STATIC_FILES: true
     RAILS_LOG_TO_STDOUT: true
 
-    # Domain configuration
-    APP_HOST: screenote.ai
+    # Fail-closed deployment and canonical public origin.
+    SCREENOTE_EDITION: saas
+    SCREENOTE_BASE_URL: https://screenote.ai
+    SCREENOTE_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+
+    # Hosted mail identity.
+    MAILER_FROM: noreply@screenote.ai
 
     # S3 configuration (Rabata.io)
     RABATA_ENDPOINT: https://s3.us-east-1.rabata.io

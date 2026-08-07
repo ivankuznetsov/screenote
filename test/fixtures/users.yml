@@ -14,7 +14,7 @@ unconfirmed:
   confirmed_at: null
 
 admin:
-  email: ivan@ikuznetsov.com
+  email: admin@example.com
   password_digest: <%= BCrypt::Password.create("password123") %>
   confirmed_at: <%= Time.current %>
 

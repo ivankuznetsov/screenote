@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class OauthDeviceConcurrencyTest < ActionDispatch::IntegrationTest
@@ -19,6 +21,7 @@ class OauthDeviceConcurrencyTest < ActionDispatch::IntegrationTest
       user_code: "C#{SecureRandom.alphanumeric(9).upcase.first(4)}-#{SecureRandom.alphanumeric(5).upcase}",
       scopes: "mcp_read mcp_write",
       expires_at: OauthDeviceGrant::DEFAULT_EXPIRES_IN.seconds.from_now,
+      principal_kind: "user",
       approved_at: Time.current
     )
   end

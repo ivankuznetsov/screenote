@@ -5,6 +5,7 @@
 # mail side-effects. State transitions live on Subscription.
 class StripeWebhooksController < ActionController::Base
   skip_forgery_protection
+  before_action :require_billing!
 
   def create
     payload = request.body.read
@@ -13,7 +14,7 @@ class StripeWebhooksController < ActionController::Base
     begin
       event = Stripe::Webhook.construct_event(payload, sig_header, ENV.fetch("STRIPE_WEBHOOK_SECRET"))
     rescue JSON::ParserError, Stripe::SignatureVerificationError => e
-      Honeybadger.notify(e)
+      Screenote::Monitoring.notify(e)
       head :bad_request
       return
     end
@@ -41,14 +42,18 @@ class StripeWebhooksController < ActionController::Base
 
     head :ok unless response.committed? || performed?
   rescue ActiveRecord::RecordInvalid => e
-    Honeybadger.notify(e, context: { event_type: event&.type, event_id: event&.id })
+    Screenote::Monitoring.notify(e, context: { event_type: event&.type, event_id: event&.id })
     head :ok # Stop retries for permanent validation failures
   rescue Stripe::StripeError => e
-    Honeybadger.notify(e, context: { event_type: event&.type, event_id: event&.id })
+    Screenote::Monitoring.notify(e, context: { event_type: event&.type, event_id: event&.id })
     head :internal_server_error
   end
 
   private
+
+  def require_billing!
+    head :not_found unless Screenote::Deployment.current.billing?
+  end
 
   def handle_checkout_completed(session)
     subscription = find_subscription(session[:customer], "checkout.session.completed")
@@ -77,13 +82,13 @@ class StripeWebhooksController < ActionController::Base
   def notify_new_pro_subscriber(subscription)
     AdminMailer.new_pro_subscriber(subscription.user).deliver_later
   rescue StandardError => e
-    Honeybadger.notify(e, context: { user_id: subscription.user_id })
+    Screenote::Monitoring.notify(e, context: { user_id: subscription.user_id })
   end
 
   def find_subscription(stripe_customer_id, event_type)
     subscription = Subscription.find_by(stripe_customer_id: stripe_customer_id)
     unless subscription
-      Honeybadger.notify("Stripe webhook: no subscription found", context: {
+      Screenote::Monitoring.notify("Stripe webhook: no subscription found", context: {
         stripe_customer_id: stripe_customer_id,
         event_type: event_type
       })

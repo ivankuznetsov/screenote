@@ -15,12 +15,11 @@ class OauthMetadataController < ApplicationController
 
   # GET /.well-known/oauth-authorization-server (RFC 8414)
   def authorization_server
-    render json: {
+    metadata = {
       issuer: base_url,
       authorization_endpoint: "#{base_url}/oauth/authorize",
       device_authorization_endpoint: "#{base_url}/oauth/authorize_device",
       token_endpoint: "#{base_url}/oauth/token",
-      registration_endpoint: "#{base_url}/oauth/register",
       revocation_endpoint: "#{base_url}/oauth/revoke",
       response_types_supported: [ "code" ],
       response_modes_supported: [ "query" ],
@@ -34,11 +33,18 @@ class OauthMetadataController < ApplicationController
       scopes_supported: %w[mcp_read mcp_write],
       client_id_metadata_document_supported: false
     }
+    metadata[:registration_endpoint] = "#{base_url}/oauth/register" if registration_available?
+
+    render json: metadata
   end
 
   private
 
   def base_url
-    root_url.chomp("/")
+    Screenote::Deployment.current.base_url
+  end
+
+  def registration_available?
+    Screenote::Deployment.current.saas? || Installation.current&.claimed?
   end
 end

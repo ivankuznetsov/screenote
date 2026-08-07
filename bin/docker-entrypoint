@@ -1,8 +1,137 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
 
-# If running the rails server then create or migrate existing database
-if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
+set -Eeuo pipefail
+umask 077
+
+readonly SCREENOTE_STORAGE_ROOT="/rails/storage"
+export SCREENOTE_STORAGE_ROOT
+readonly -a SCREENOTE_FILE_BACKED_SECRETS=(
+  SECRET_KEY_BASE
+  SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS
+  SCREENOTE_BOOTSTRAP_TOKEN
+  SCREENOTE_S3_ACCESS_KEY_ID
+  SCREENOTE_S3_SECRET_ACCESS_KEY
+  SMTP_PASSWORD
+  GOOGLE_CLIENT_SECRET
+  GITHUB_CLIENT_SECRET
+  HONEYBADGER_API_KEY
+  HONEYBADGER_JS_API_KEY
+)
+
+declare -A SCREENOTE_LOADED_SECRET_FILES=()
+
+fail() {
+  printf 'screenote entrypoint: %s\n' "$*" >&2
+  exit 1
+}
+
+load_secret_file() {
+  local name="$1"
+  local file_variable="${name}_FILE"
+  local path="${!file_variable-}"
+  local existing="${!name-}"
+  local owner mode group_permission other_permission value
+
+  [[ -n "$path" ]] || return 0
+  [[ -z "$existing" ]] || fail "set either ${name} or ${file_variable}, not both"
+  [[ -f "$path" && ! -L "$path" ]] || fail "${file_variable} must name a regular, non-symlink file: ${path}"
+  [[ -r "$path" ]] || fail "${file_variable} is not readable by uid $(id -u): ${path}"
+
+  owner="$(stat -Lc '%u' "$path")"
+  [[ "$owner" == "$(id -u)" ]] || fail "${file_variable} must be owned by uid $(id -u): ${path}"
+
+  mode="$(stat -Lc '%a' "$path")"
+  mode="$(printf '%03d' "$mode")"
+  group_permission="${mode: -2:1}"
+  other_permission="${mode: -1}"
+  [[ "$group_permission" == "0" && "$other_permission" == "0" ]] ||
+    fail "${file_variable} must not grant group or other permissions: ${path}"
+
+  value="$(< "$path")"
+  [[ -n "$value" ]] || fail "${file_variable} must not be empty: ${path}"
+  [[ "$value" != *$'\n'* ]] || fail "${file_variable} must contain exactly one line: ${path}"
+
+  printf -v "$name" '%s' "$value"
+  export "$name"
+  unset "$file_variable"
+  SCREENOTE_LOADED_SECRET_FILES["$name"]="$path"
+}
+
+server_command?() {
+  local previous="" argument
+
+  for argument in "$@"; do
+    if [[ ( "$previous" == "./bin/rails" || "$previous" == "bin/rails" ) && "$argument" == "server" ]]; then
+      return 0
+    fi
+    previous="$argument"
+  done
+
+  return 1
+}
+
+require_file_backed_self_hosted_secrets() {
+  local name
+
+  [[ -n "${SCREENOTE_LOADED_SECRET_FILES[SECRET_KEY_BASE]-}" ]] ||
+    fail "self-hosted server startup requires SECRET_KEY_BASE_FILE"
+
+  for name in "${SCREENOTE_FILE_BACKED_SECRETS[@]}"; do
+    if [[ -n "${!name-}" && -z "${SCREENOTE_LOADED_SECRET_FILES[$name]-}" ]]; then
+      fail "self-hosted server startup requires ${name}_FILE instead of ${name}"
+    fi
+  done
+}
+
+preflight_storage() {
+  local owner filesystem probe
+
+  [[ -d "$SCREENOTE_STORAGE_ROOT" ]] ||
+    fail "persistent storage directory is missing: ${SCREENOTE_STORAGE_ROOT}"
+
+  owner="$(stat -Lc '%u' "$SCREENOTE_STORAGE_ROOT")"
+  [[ "$owner" == "$(id -u)" ]] ||
+    fail "persistent storage must be owned by uid $(id -u): ${SCREENOTE_STORAGE_ROOT}"
+
+  filesystem="$(stat -f -c '%T' "$SCREENOTE_STORAGE_ROOT")"
+  case "$filesystem" in
+    nfs|nfs4|cifs|smb2|fuse.sshfs)
+      fail "persistent storage must use a local block filesystem, not ${filesystem}: ${SCREENOTE_STORAGE_ROOT}"
+      ;;
+  esac
+
+  probe="$(mktemp "${SCREENOTE_STORAGE_ROOT}/.screenote-write-test.XXXXXX")" ||
+    fail "persistent storage is not writable by uid $(id -u): ${SCREENOTE_STORAGE_ROOT}"
+  rm -f "$probe"
+}
+
+for secret_name in "${SCREENOTE_FILE_BACKED_SECRETS[@]}"; do
+  load_secret_file "$secret_name"
+done
+
+if server_command? "$@"; then
+  if [[ "${SCREENOTE_EDITION-}" == "self_hosted" ]]; then
+    require_file_backed_self_hosted_secrets
+  fi
+
+  ./bin/screenote-deployment-preflight
+
+  if [[ "${SCREENOTE_EDITION-}" == "self_hosted" ]]; then
+    preflight_storage
+  else
+    # Server startup itself enforces the stopped-process OAuth credential
+    # cutover. This cannot be bypassed with Kamal's --skip-hooks option.
+    ./bin/rails runner script/saas_deploy_guard
+  fi
+
   ./bin/rails db:prepare
+  ./bin/rails runner "Installations::Prepare.call"
+  ./bin/rails runner "AuthenticationLinks::KeyringPreflight.call"
+  ./bin/rails runner "ReconcileScreenshotProcessingJob.perform_now"
+
+  # Bootstrap material is needed only by the preparation process. Do not pass
+  # it to the long-lived web and job process after the installation is ready.
+  unset SCREENOTE_BOOTSTRAP_TOKEN
 fi
 
-exec "${@}"
+exec "$@"

@@ -3,6 +3,7 @@
 class ResolveAnnotationTool < ApplicationTool
   tool_name "resolve_annotation"
   description "Mark an annotation as resolved. Optionally include a comment explaining what was fixed."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -18,7 +19,7 @@ class ResolveAnnotationTool < ApplicationTool
       annotation = project_annotations(current_project).find(annotation_id)
 
       body = comment.presence || "Marked as resolved"
-      annotation.resolve!(user: Current.mcp_user, body: body)
+      annotation.resolve!(**current_actor_attributes, body: body)
 
       { success: true, annotation: { id: annotation.id, status: annotation.status } }.to_json
     end

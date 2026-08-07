@@ -3,7 +3,7 @@ title: Architectural Decisions
 type: decision
 source: git log
 created: 2026-04-10
-updated: 2026-05-14
+updated: 2026-08-05
 tags: [decisions, adr, architecture, history]
 ---
 
@@ -93,13 +93,13 @@ Source: `git log --all --oneline` (112 commits total)
 **Decision**: Separate AnnotationComment model with action enum (comment/resolved/reopened). Resolve and reopen are transactional operations that update annotation status and create a comment atomically.
 **Rationale**: Full audit trail of who resolved/reopened and when. Comments can come from users or API keys (agents).
 
-## ADR-011: Signed URL Upload for MCP
+## ADR-011: Single-use Bearer Upload for MCP
 
 **Date**: 2026-02-16 (commit `f53042b`)
 **Status**: Active
 **Context**: MCP tools need to upload screenshot binary data, but MCP transport has size limits.
-**Decision**: Two-step upload: (1) MCP creates screenshot record and gets a signed upload URL + token, (2) agent PUTs binary data directly to the upload endpoint.
-**Rationale**: Avoids base64-encoding large images through the MCP transport. Upload tokens expire in 5 minutes and are single-use.
+**Decision**: Two-step upload: (1) MCP creates a screenshot record and receives a credential-free upload URL plus a separate token, (2) the agent PUTs binary data with `Authorization: Bearer <token>` and the declared `Content-Type`.
+**Rationale**: Avoids base64-encoding large images through MCP while keeping the five-minute single-use credential out of proxy logs, browser history, request paths, and query strings.
 
 ## ADR-012: Hourly Digest Notifications
 
@@ -124,5 +124,21 @@ Source: `git log --all --oneline` (112 commits total)
 **Context**: Responsive review needs desktop/tablet/mobile images under one logical capture without splitting feedback into unrelated screenshots.
 **Decision**: Add `ScreenshotImage` child rows with per-viewport blobs, dimensions, status, and upload tokens. Add `Annotation#viewport` and a viewport switcher route `/screenshots/:id/viewports/:viewport`.
 **Rationale**: Per-variant rows make upload tokens, analysis status, retry, and UI filtering explicit. Annotations remain percentage-based but are scoped to the layout they reference.
+
+## ADR-015: Explicit Authenticated Principals and Server-Owned OAuth Consent
+
+**Date**: 2026-08-05
+**Status**: Active
+**Context**: REST and MCP had separate identity fields, API keys impersonated project creators, nullable OAuth project IDs could widen authority, and read/write scope behavior drifted by transport.
+**Decision**: Use one immutable `AuthenticatedPrincipal` across REST and MCP. OAuth grants are user-scoped by default or project-scoped only after a signed-in user selects a current membership on Screenote's consent screen. Persist that binding through code/device exchange and refresh; reject membership loss and cascade project deletion. Serialize project consent, code/device exchange, refresh, and member removal in user -> project -> membership -> credential order, retaining authority locks through credential creation. API-key content records the key as actor while retaining a separate immutable issuer. Register only an explicit MCP allowlist with exact scopes and safety metadata.
+**Rationale**: Authority is server-derived, auditable, and transport-independent. Transactional serialization closes membership-loss TOCTOU windows and preserves at least one owner under concurrent removals on both PostgreSQL and SQLite. A deleted project, removed member, revoked key, or future tool subclass cannot silently widen remote access.
+
+## ADR-016: Digest-Only Authentication Links and Global Admission Locking
+
+**Date**: 2026-08-05
+**Status**: Accepted for U4 implementation
+**Context**: Invitation and Rails authentication links currently place signed bearer values in URL paths and can create users through multiple controllers. The first U4 draft also ordered invitation locks project-first, opposite the user-first authority order established by OAuth and membership removal.
+**Decision**: Persist purpose/subject-bound `AuthenticationToken` rows containing only a digest plus public derivation metadata. Reproduce 32-byte credentials through a versioned domain-separated HMAC keyring, carry them in URL fragments or equivalent Base32 manual codes, and exchange them by filtered POST into a tokenless session context. Missing historical derivation keys fail closed. All account and authority transitions lock in this order: Installation when relevant, normalized-email admission lock, users by ascending ID, projects by ascending ID, invitations by ascending ID, memberships, then tokens/credentials. PostgreSQL uses a transaction advisory lock for normalized email; production SQLite uses its immediate outer write transaction. Only outermost domain services perform bounded database retries. An invitation may create credentials for a new address, but an existing local account must authenticate through the ordinary rate-limited session flow before its matching signed-in identity can accept; the invitation endpoint never verifies an existing password.
+**Rationale**: Database or job-queue access alone cannot reveal live link credentials; routine key rotation remains operable without silently retaining removed keys; no raw credential enters a request URL, referrer, session, or job argument; invitation links cannot become reusable password oracles; and invitation acceptance cannot deadlock against suspension, ownership loss, or membership removal by acquiring the same authority rows in reverse order.
 
 See also: [[architecture]], [[schema-evolution]], [[active-areas]], [[models/screenshot-image]]

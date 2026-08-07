@@ -11,7 +11,7 @@ class OauthMetadataControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     json = JSON.parse(response.body)
 
-    assert_includes json["resource"], "/mcp", "resource should include MCP path"
+    assert_equal "#{Screenote::Deployment.current.base_url}/mcp", json["resource"]
     assert_kind_of Array, json["authorization_servers"], "authorization_servers should be an array"
     assert_equal [ "header" ], json["bearer_methods_supported"]
   end
@@ -33,6 +33,52 @@ class OauthMetadataControllerTest < ActionDispatch::IntegrationTest
     assert_includes json["token_endpoint_auth_methods_supported"], "none"
     assert_includes json["scopes_supported"], "mcp_read"
     assert_includes json["scopes_supported"], "mcp_write"
+  end
+
+  test "self hosted metadata publishes registration only after installation claim" do
+    deployment = Screenote::Deployment.new(
+      {
+        "SCREENOTE_EDITION" => "self_hosted",
+        "SCREENOTE_BASE_URL" => "http://screenote.internal:3000"
+      },
+      production: false
+    )
+
+    original_deployment = Screenote::Deployment.method(:current)
+    original_installation = Installation.method(:current)
+    Screenote::Deployment.define_singleton_method(:current) { deployment }
+    Installation.define_singleton_method(:current) { nil }
+    get "/.well-known/oauth-authorization-server"
+    assert_response :success
+    assert_not response.parsed_body.key?("registration_endpoint")
+
+    unclaimed = Struct.new(:claimed?).new(false)
+    Installation.define_singleton_method(:current) { unclaimed }
+    get "/.well-known/oauth-authorization-server"
+    assert_response :success
+    assert_not response.parsed_body.key?("registration_endpoint")
+
+    claimed = Struct.new(:claimed?).new(true)
+    Installation.define_singleton_method(:current) { claimed }
+    get "/.well-known/oauth-authorization-server"
+    assert_response :success
+    assert_equal "#{deployment.base_url}/oauth/register", response.parsed_body["registration_endpoint"]
+  ensure
+    Screenote::Deployment.define_singleton_method(:current, original_deployment) if original_deployment
+    Installation.define_singleton_method(:current, original_installation) if original_installation
+  end
+
+  test "metadata never reflects a forged request host" do
+    host! "attacker.example.test"
+
+    get "/.well-known/oauth-authorization-server",
+      headers: { "X-Forwarded-Host" => "forwarded-attacker.example.test" }
+
+    assert_response :success
+    json = response.parsed_body
+    assert_equal Screenote::Deployment.current.base_url, json.fetch("issuer")
+    assert_equal "#{Screenote::Deployment.current.base_url}/oauth/token", json.fetch("token_endpoint")
+    assert_not_includes response.body, "attacker.example.test"
   end
 
   test "metadata endpoints do not require authentication" do

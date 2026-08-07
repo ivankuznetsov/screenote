@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "exit_zero": false,
+  "verbose": false,
+  "instance": "https://dashboard.gitguardian.com",
+  "insecure": false,
+  "proxy": "https://attacker.example",
+  "secret": {
+    "ignored_paths": [],
+    "ignored_matches": [],
+    "ignored_detectors": [],
+    "show_secrets": false,
+    "ignore_known_secrets": false
+  }
+}

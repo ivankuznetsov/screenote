@@ -1,0 +1,122 @@
+{
+  "schema": "screenote-release-evidence/v2",
+  "fixture": false,
+  "repository": "ivankuznetsov/screenote",
+  "source_sha": "PENDING",
+  "release": {
+    "tag": "v1.0.0",
+    "predecessor_tag": "none",
+    "predecessor_image_digest": "none",
+    "cli_tag": "PENDING",
+    "notes_sha256": "PENDING"
+  },
+  "artifacts": {
+    "source_sha": "PENDING",
+    "amd64_digest": "PENDING",
+    "arm64_digest": "PENDING",
+    "manifest_digest": "PENDING",
+    "sbom_sha256": "PENDING",
+    "provenance_sha256": "PENDING",
+    "oci_labels": {
+      "source": "https://github.com/ivankuznetsov/screenote",
+      "revision": "PENDING",
+      "version": "v1.0.0",
+      "description": "Screenote visual feedback workspace",
+      "licenses": "LicenseRef-OSaasy"
+    },
+    "evidence_sha256": "PENDING"
+  },
+  "gitguardian": {
+    "app_check": {
+      "status": "PENDING",
+      "check_name": "GitGuardian Security Checks",
+      "app_id_sha256": "PENDING",
+      "skip_actions_disabled": false,
+      "history_scan": "PENDING",
+      "evidence_sha256": "PENDING"
+    },
+    "source_scan": {
+      "status": "PENDING",
+      "source_sha": "PENDING",
+      "ggshield_version": "1.52.2",
+      "history_findings": -1,
+      "tree_findings": -1,
+      "evidence_sha256": "PENDING"
+    },
+    "incidents": {
+      "status": "PENDING",
+      "source_id_sha256": "PENDING",
+      "pages": 0,
+      "total": -1,
+      "open": -1,
+      "checked_at": "PENDING",
+      "evidence_sha256": "PENDING"
+    },
+    "image_scan": {
+      "status": "PENDING",
+      "ggshield_version": "1.52.2",
+      "platforms": [
+        { "architecture": "amd64", "digest": "PENDING", "findings": -1, "evidence_sha256": "PENDING" },
+        { "architecture": "arm64", "digest": "PENDING", "findings": -1, "evidence_sha256": "PENDING" }
+      ],
+      "evidence_sha256": "PENDING"
+    }
+  },
+  "vulnerability": {
+    "status": "PENDING",
+    "scanner": "trivy",
+    "scanner_version": "0.70.0",
+    "database_version": "PENDING",
+    "policy_version": "screenote-critical-high/v1",
+    "critical": -1,
+    "high": -1,
+    "waivers": [],
+    "checked_at": "PENDING",
+    "evidence_sha256": "PENDING"
+  },
+  "rulesets": {
+    "status": "PENDING",
+    "main_export_sha256": "PENDING",
+    "tag_creation_export_sha256": "PENDING",
+    "tag_immutability_export_sha256": "PENDING",
+    "gitguardian_app_id_sha256": "PENDING",
+    "release_app_id_sha256": "PENDING",
+    "no_broad_bypass": false,
+    "evidence_sha256": "PENDING"
+  },
+  "source_contracts": {
+    "scope": "pr_contract_only",
+    "source_sha": "PENDING",
+    "workflow_run_id": "PENDING",
+    "required_checks": [],
+    "evidence_sha256": "PENDING"
+  },
+  "qualification": {
+    "status": "PENDING",
+    "workflow_path": ".github/workflows/release-qualification.yml",
+    "workflow_run_id": "PENDING",
+    "workflow_run_attempt": 0,
+    "artifact_name": "PENDING",
+    "artifact_sha256": "PENDING",
+    "record_sha256": "PENDING",
+    "source_sha": "PENDING",
+    "release_tag": "v1.0.0",
+    "candidate_sha256": "PENDING",
+    "manifest_digest": "PENDING",
+    "platforms": [
+      { "architecture": "amd64", "digest": "PENDING" },
+      { "architecture": "arm64", "digest": "PENDING" }
+    ],
+    "cli_tag": "PENDING",
+    "cli_sha": "PENDING",
+    "minimum_host_profile_sha256": "PENDING",
+    "checks": []
+  },
+  "public_artifacts": {
+    "status": "PENDING",
+    "sentinel_matches": -1,
+    "logs_sha256": "PENDING",
+    "release_notes_sha256": "PENDING",
+    "evidence_sha256": "PENDING"
+  }
+}

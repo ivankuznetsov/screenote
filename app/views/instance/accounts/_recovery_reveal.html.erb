@@ -1,0 +1,30 @@
+<section class="recovery-reveal"
+         aria-labelledby="recovery-reveal-title"
+         data-controller="clipboard"
+         data-turbo-temporary
+         data-testid="recovery-reveal">
+  <h2 id="recovery-reveal-title" class="recovery-reveal__title">Copy this recovery link now</h2>
+  <p class="recovery-reveal__description">
+    It expires <%= time_tag recovery.expires_at, recovery.expires_at.to_fs(:long) %> and is shown only in this response.
+  </p>
+  <label class="form__label" for="recovery_link">Private recovery link</label>
+  <input id="recovery_link"
+         class="form__input recovery-reveal__input"
+         type="text"
+         readonly
+         value="<%= recovery.presentation.url %>"
+         data-clipboard-target="source"
+         data-testid="recovery-link">
+  <div class="recovery-reveal__actions">
+    <button type="button"
+            class="btn btn--primary btn--small"
+            data-action="clipboard#copy"
+            data-clipboard-target="button">
+      Copy recovery link
+    </button>
+    <span class="recovery-reveal__feedback"
+          role="status"
+          aria-live="polite"
+          data-clipboard-target="status"></span>
+  </div>
+</section>

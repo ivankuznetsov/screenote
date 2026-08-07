@@ -29,22 +29,40 @@ module ScreenoteOauth
       private
 
       def exchange(grant)
+        return exchange_approved(grant) if grant.approved?
+
         response = nil
+        approved_while_waiting = false
 
         grant.with_lock do
-          response =
-            if grant.expired?
-              consume_with_error(grant, :expired_token)
-            elsif grant.denied?
-              consume_with_error(grant, :access_denied)
-            elsif grant.approved?
-              issue_token(grant)
-            else
-              pending_response(grant)
-            end
+          if grant.approved?
+            # Approval locks authority before this credential. Release this
+            # lock and retry in that same order rather than inverting it.
+            approved_while_waiting = true
+          else
+            response = exchange_locked(grant)
+          end
         end
 
-        response
+        approved_while_waiting ? exchange_approved(grant) : response
+      end
+
+      def exchange_approved(grant)
+        Oauth::PrincipalBinding.with_locked_credential(grant) do |valid|
+          valid ? exchange_locked(grant) : consume_with_error(grant, :invalid_grant)
+        end
+      end
+
+      def exchange_locked(grant)
+        if grant.expired?
+          consume_with_error(grant, :expired_token)
+        elsif grant.denied?
+          consume_with_error(grant, :access_denied)
+        elsif grant.approved?
+          issue_token(grant)
+        else
+          pending_response(grant)
+        end
       end
 
       def consume_with_error(grant, error)
@@ -76,7 +94,9 @@ module ScreenoteOauth
           resource_owner: grant.resource_owner_id,
           scopes: grant.scopes,
           expires_in: Doorkeeper::OAuth::Authorization::Token.access_token_expires_in(Doorkeeper.config, context),
-          use_refresh_token: Doorkeeper::OAuth::Authorization::Token.refresh_token_enabled?(Doorkeeper.config, context)
+          use_refresh_token: Doorkeeper::OAuth::Authorization::Token.refresh_token_enabled?(Doorkeeper.config, context),
+          principal_kind: grant.principal_kind,
+          project_id: grant.project_id
         )
 
         grant.destroy!

@@ -2,9 +2,10 @@
 
 class AdminMailer < ApplicationMailer
   def new_pro_subscriber(user)
-    return unless user
+    deployment = Screenote::Deployment.current
+    return unless user && deployment.saas?
 
     @user = user
-    mail to: User::ADMIN_EMAIL, subject: "New Pro subscriber: #{user.email}"
+    mail to: deployment.saas_operator_email, subject: "New Pro subscriber: #{user.email}"
   end
 end

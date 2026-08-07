@@ -1,0 +1,720 @@
+name: Release qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact protected default-branch commit used to build the candidate
+        required: true
+        type: string
+      release_tag:
+        description: Immutable vMAJOR.MINOR.PATCH server release tag
+        required: true
+        type: string
+      candidate_run_id:
+        description: Exact successful release-candidate workflow run ID
+        required: true
+        type: string
+      candidate_sha256:
+        description: SHA-256 of screenote-candidate.tar
+        required: true
+        type: string
+      qualification_image:
+        description: Private staging image reference ending in the candidate manifest digest
+        required: true
+        type: string
+      cli_tag:
+        description: Exact immutable public CLI vMAJOR.MINOR.PATCH tag
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-qualification-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    name: Bind exact qualification inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      amd64_digest: ${{ steps.candidate.outputs.amd64_digest }}
+      arm64_digest: ${{ steps.candidate.outputs.arm64_digest }}
+      candidate_artifact_id: ${{ steps.bind.outputs.candidate_artifact_id }}
+      cli_sha: ${{ steps.bind.outputs.cli_sha }}
+      manifest_digest: ${{ steps.candidate.outputs.manifest_digest }}
+      minimum_host_profile_sha256: ${{ steps.bind.outputs.minimum_host_profile_sha256 }}
+      platform_matrix: ${{ steps.bind.outputs.platform_matrix }}
+    steps:
+      - name: Resolve exact source candidate artifact and CLI tag
+        id: bind
+        env:
+          AMD64_RUNNER_LABEL: ${{ vars.SCREENOTE_RELEASE_AMD64_RUNNER_LABEL }}
+          ARM64_RUNNER_LABEL: ${{ vars.SCREENOTE_RELEASE_ARM64_RUNNER_LABEL }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          CLI_TAG: ${{ inputs.cli_tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_ARTIFACT: screenote-candidate-${{ inputs.source_sha }}-${{ inputs.release_tag }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          MINIMUM_HOST_PROFILE: ${{ vars.SCREENOTE_RELEASE_MINIMUM_HOST_PROFILE }}
+          MINIMUM_HOST_RUNNER_LABEL: ${{ vars.SCREENOTE_RELEASE_MINIMUM_HOST_RUNNER_LABEL }}
+          QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$CLI_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CANDIDATE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$AMD64_RUNNER_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$ ]]
+          [[ "$ARM64_RUNNER_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$ ]]
+          [[ "$MINIMUM_HOST_RUNNER_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$ ]]
+          test "$AMD64_RUNNER_LABEL" != "$ARM64_RUNNER_LABEL"
+          test -n "$MINIMUM_HOST_PROFILE"
+          test "$RELEASE_REF" = "refs/heads/$DEFAULT_BRANCH"
+
+          run_json="$RUNNER_TEMP/candidate-run.json"
+          artifacts_json="$RUNNER_TEMP/candidate-artifacts.json"
+          cli_ref_json="$RUNNER_TEMP/cli-ref.json"
+          gh api --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" >"$run_json"
+          gh api --paginate --slurp --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID/artifacts?per_page=100" >"$artifacts_json"
+          gh api --header "X-GitHub-Api-Version: 2026-03-10" \
+            "/repos/ivankuznetsov/screenote-cli/git/ref/tags/$CLI_TAG" >"$cli_ref_json"
+
+          RUN_JSON="$run_json" ARTIFACTS_JSON="$artifacts_json" CLI_REF_JSON="$cli_ref_json" ruby -rjson <<'RUBY'
+          run = JSON.parse(File.binread(ENV.fetch("RUN_JSON")))
+          expected_run = {
+            "id" => Integer(ENV.fetch("CANDIDATE_RUN_ID"), 10),
+            "event" => "workflow_dispatch",
+            "head_branch" => ENV.fetch("DEFAULT_BRANCH"),
+            "head_sha" => ENV.fetch("SOURCE_SHA"),
+            "conclusion" => "success",
+            "path" => ".github/workflows/release.yml@#{ENV.fetch('DEFAULT_BRANCH')}"
+          }
+          abort "candidate workflow identity does not match" unless
+            run.is_a?(Hash) && expected_run.all? { |key, value| run[key] == value } &&
+              run.dig("repository", "full_name") == ENV.fetch("EXPECTED_REPOSITORY")
+
+          pages = JSON.parse(File.binread(ENV.fetch("ARTIFACTS_JSON")))
+          abort "candidate artifact response is malformed" unless pages.is_a?(Array)
+          artifacts = pages.flat_map { |page| page.fetch("artifacts") }
+          matches = artifacts.select do |artifact|
+            artifact.is_a?(Hash) && artifact["name"] == ENV.fetch("EXPECTED_ARTIFACT") &&
+              artifact["expired"] == false
+          end
+          abort "candidate run must contain exactly one live named artifact" unless matches.length == 1
+          artifact_id = matches.first["id"]
+          abort "candidate artifact ID is invalid" unless artifact_id.is_a?(Integer) && artifact_id.positive?
+
+          cli_ref = JSON.parse(File.binread(ENV.fetch("CLI_REF_JSON")))
+          cli_object = cli_ref["object"] if cli_ref.is_a?(Hash)
+          abort "CLI tag must be one exact lightweight commit tag" unless
+            cli_ref["ref"] == "refs/tags/#{ENV.fetch('CLI_TAG')}" && cli_object.is_a?(Hash) &&
+              cli_object["type"] == "commit" && cli_object["sha"].to_s.match?(/\A[0-9a-f]{40}\z/)
+
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
+            output.puts "candidate_artifact_id=#{artifact_id}"
+            output.puts "cli_sha=#{cli_object.fetch('sha')}"
+          end
+          RUBY
+
+          echo "minimum_host_profile_sha256=$(printf '%s' "$MINIMUM_HOST_PROFILE" | sha256sum | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
+          printf 'platform_matrix={"include":[{"architecture":"amd64","runner_label":"%s"},{"architecture":"arm64","runner_label":"%s"}]}\n' \
+            "$AMD64_RUNNER_LABEL" "$ARM64_RUNNER_LABEL" >>"$GITHUB_OUTPUT"
+
+      - name: Download candidate artifact by exact live artifact ID
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          artifact-ids: ${{ steps.bind.outputs.candidate_artifact_id }}
+          path: ${{ runner.temp }}/candidate-download
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+
+      - name: Validate exact candidate bytes and expose OCI identities
+        id: candidate
+        env:
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/candidate-download/screenote-candidate.tar"
+          echo "$CANDIDATE_SHA256  $bundle" | sha256sum --check --strict
+          metadata="$RUNNER_TEMP/candidate.json"
+          tar -xOf "$bundle" candidate.json >"$metadata"
+          CANDIDATE_JSON="$metadata" ruby -rjson <<'RUBY'
+          candidate = JSON.parse(File.binread(ENV.fetch("CANDIDATE_JSON")))
+          abort "candidate metadata identity does not match" unless
+            candidate["schema"] == "screenote-oci-candidate/v1" &&
+              candidate["repository"] == ENV.fetch("GITHUB_REPOSITORY") &&
+              candidate["source_sha"] == ENV.fetch("SOURCE_SHA") &&
+              candidate["release_tag"] == ENV.fetch("RELEASE_TAG")
+          manifest = candidate["manifest_digest"]
+          abort "candidate manifest digest is invalid" unless manifest.to_s.match?(/\Asha256:[0-9a-f]{64}\z/)
+          abort "qualification image is not the exact candidate manifest" unless
+            ENV.fetch("QUALIFICATION_IMAGE").end_with?("@#{manifest}")
+          platforms = candidate["platforms"]
+          abort "candidate platform set does not match" unless
+            platforms.is_a?(Array) && platforms.map { |entry| entry["architecture"] }.sort == %w[amd64 arm64]
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
+            output.puts "manifest_digest=#{manifest}"
+            %w[amd64 arm64].each do |architecture|
+              digest = platforms.find { |entry| entry["architecture"] == architecture }&.fetch("digest")
+              abort "candidate #{architecture} digest is invalid" unless digest.to_s.match?(/\Asha256:[0-9a-f]{64}\z/)
+              output.puts "#{architecture}_digest=#{digest}"
+            end
+          end
+          RUBY
+
+  platform:
+    name: Native ${{ matrix.architecture }} image qualification
+    needs: configure
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.configure.outputs.platform_matrix) }}
+    runs-on: [self-hosted, "${{ matrix.runner_label }}"]
+    timeout-minutes: 75
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout exact qualification source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: Prove native architecture and pull exact candidate manifest
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
+          PLATFORM_DIGEST: ${{ matrix.architecture == 'amd64' && needs.configure.outputs.amd64_digest || needs.configure.outputs.arm64_digest }}
+        run: |
+          set -euo pipefail
+          case "$ARCHITECTURE:$(uname -m)" in
+            amd64:x86_64|arm64:aarch64) ;;
+            *) echo "::error::runner architecture does not match matrix"; exit 1 ;;
+          esac
+          docker pull --platform "linux/$ARCHITECTURE" "$QUALIFICATION_IMAGE"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$QUALIFICATION_IMAGE")" = "linux/$ARCHITECTURE"
+          test "$(docker image inspect --format '{{index .RepoDigests 0}}' "$QUALIFICATION_IMAGE")" = "$QUALIFICATION_IMAGE"
+          test -n "$PLATFORM_DIGEST"
+
+      - name: Run exact-image self-hosted boot and durability qualification
+        env:
+          SCREENOTE_SMOKE_IMAGE: ${{ inputs.qualification_image }}
+        run: script/self_hosted_container_smoke
+
+      - name: Record self-hosted boot qualification
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          MANIFEST_DIGEST: ${{ needs.configure.outputs.manifest_digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/checks"
+          ruby -rjson -e '
+            target = "linux-#{ENV.fetch("ARCHITECTURE")}"
+            puts JSON.generate({
+              "schema" => "screenote-release-qualification-check/v1",
+              "name" => "self-hosted-boot", "target" => target, "status" => "passed",
+              "source_sha" => ENV.fetch("SOURCE_SHA"),
+              "candidate_sha256" => ENV.fetch("CANDIDATE_SHA256"),
+              "manifest_digest" => ENV.fetch("MANIFEST_DIGEST")
+            })
+          ' >"$RUNNER_TEMP/checks/self-hosted-boot-linux-$ARCHITECTURE.json"
+
+      - name: Boot exact image in SaaS production mode
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          MANIFEST_DIGEST: ${{ needs.configure.outputs.manifest_digest }}
+          PLATFORM_DIGEST: ${{ matrix.architecture == 'amd64' && needs.configure.outputs.amd64_digest || needs.configure.outputs.arm64_digest }}
+          QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          readonly POSTGRESQL_IMAGE="docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
+          suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${ARCHITECTURE}-${RANDOM}"
+          network="screenote-qualification-${suffix}"
+          database_container="screenote-qualification-db-${suffix}"
+          application_container="screenote-qualification-app-${suffix}"
+          cleanup() {
+            docker rm --force "$application_container" "$database_container" >/dev/null 2>&1 || true
+            docker network rm "$network" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker network create "$network" >/dev/null
+          docker pull --platform "linux/$ARCHITECTURE" "$POSTGRESQL_IMAGE"
+          docker run --detach --pull=never --platform "linux/$ARCHITECTURE" \
+            --network "$network" --network-alias database --name "$database_container" \
+            --env POSTGRES_DB=screenote_primary \
+            --env POSTGRES_USER=screenote \
+            --env POSTGRES_PASSWORD=qualification-postgres \
+            "$POSTGRESQL_IMAGE" >/dev/null
+
+          database_ready=false
+          for _attempt in $(seq 1 60); do
+            if docker exec "$database_container" pg_isready \
+              --username screenote --dbname screenote_primary >/dev/null 2>&1; then
+              database_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$database_ready" != true ]]; then
+            docker logs "$database_container"
+            echo "::error::digest-pinned PostgreSQL did not become ready"
+            exit 1
+          fi
+          for database in screenote_cache screenote_queue screenote_cable; do
+            docker exec --env PGPASSWORD=qualification-postgres "$database_container" \
+              createdb --host 127.0.0.1 --username screenote "$database"
+          done
+
+          application_environment=(
+            --env RAILS_ENV=production
+            --env RAILS_SERVE_STATIC_FILES=true
+            --env SCREENOTE_EDITION=saas
+            --env SCREENOTE_BASE_URL=https://qualification.invalid
+            --env SECRET_KEY_BASE=qualification-secret-key-base-0123456789abcdef0123456789abcdef
+            --env DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_primary
+            --env CACHE_DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_cache
+            --env QUEUE_DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_queue
+            --env CABLE_DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_cable
+            --env STRIPE_SECRET_KEY=qualification-stripe
+            --env STRIPE_WEBHOOK_SECRET=qualification-webhook
+            --env STRIPE_PRO_PRICE_ID=qualification-price
+            --env RESEND_API_KEY=qualification-resend
+            --env MAILER_FROM=qualification@example.test
+            --env GOOGLE_CLIENT_ID=qualification-google
+            --env GOOGLE_CLIENT_SECRET=qualification-google-secret
+            --env GITHUB_CLIENT_ID=qualification-github
+            --env GITHUB_CLIENT_SECRET=qualification-github-secret
+            --env HONEYBADGER_API_KEY=qualification-honeybadger
+            --env HONEYBADGER_JS_API_KEY=qualification-honeybadger-js
+            --env RABATA_ENDPOINT=https://objects.example.test
+            --env RABATA_REGION=qualification
+            --env RABATA_BUCKET=qualification
+            --env RABATA_ACCESS_KEY_ID=qualification-access
+            --env RABATA_SECRET_ACCESS_KEY=qualification-secret
+            --env SCREENOTE_SAAS_OPERATOR_EMAIL=qualification@example.test
+            --env SCREENOTE_QUALIFICATION_ARCHITECTURE="$ARCHITECTURE"
+            --env SCREENOTE_QUALIFICATION_CANDIDATE_IMAGE="$QUALIFICATION_IMAGE"
+            --env SCREENOTE_QUALIFICATION_CANDIDATE_SHA256="$CANDIDATE_SHA256"
+            --env SCREENOTE_QUALIFICATION_MANIFEST_DIGEST="$MANIFEST_DIGEST"
+            --env SCREENOTE_QUALIFICATION_PLATFORM_DIGEST="$PLATFORM_DIGEST"
+            --env SCREENOTE_QUALIFICATION_SOURCE_SHA="$SOURCE_SHA"
+          )
+
+          # Prepare a fresh database with the exact image through its normal
+          # entrypoint, then boot its unmodified ENTRYPOINT and default CMD.
+          docker run --rm --pull=never --network "$network" \
+            "${application_environment[@]}" "$QUALIFICATION_IMAGE" ./bin/rails db:prepare
+          docker run --detach --pull=never --network "$network" \
+            --name "$application_container" \
+            "${application_environment[@]}" "$QUALIFICATION_IMAGE" >/dev/null
+
+          application_ready=false
+          for _attempt in $(seq 1 90); do
+            if docker exec "$application_container" \
+              curl --fail --silent --show-error http://127.0.0.1:80/ready >/dev/null 2>&1; then
+              application_ready=true
+              break
+            fi
+            if [[ "$(docker inspect --format '{{.State.Running}}' "$application_container")" != true ]]; then
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$application_ready" != true ]]; then
+            docker logs "$application_container"
+            echo "::error::exact candidate SaaS server did not become ready"
+            exit 1
+          fi
+
+          docker exec --interactive \
+            --env SCREENOTE_QUALIFICATION_EVIDENCE=/tmp/saas-qualification.json \
+            "$application_container" ./bin/rails runner - <<'RUBY'
+          require "json"
+          require "pg"
+
+          databases = {
+            "primary" => ["DATABASE_URL", "screenote_primary"],
+            "cache" => ["CACHE_DATABASE_URL", "screenote_cache"],
+            "queue" => ["QUEUE_DATABASE_URL", "screenote_queue"],
+            "cable" => ["CABLE_DATABASE_URL", "screenote_cable"]
+          }.to_h do |role, (environment_key, expected_database)|
+            PG.connect(ENV.fetch(environment_key)) do |connection|
+              row = connection.exec("SELECT current_database(), current_setting('server_version_num')").first
+              abort "#{role} did not connect to #{expected_database}" unless row.fetch("current_database") == expected_database
+              version = row.fetch("current_setting")
+              abort "#{role} is not PostgreSQL 16" unless version.match?(/\A16[0-9]{4}\z/)
+              [role, {"database" => expected_database, "server_version_num" => version}]
+            end
+          end
+          abort "primary adapter is not PostgreSQL" unless ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
+          installation = Installation.current!
+          expected_installation = {
+            "singleton_key" => Installation::SINGLETON_KEY,
+            "deployment_mode" => "saas",
+            "state" => "saas",
+            "storage_service" => "rabata",
+            "administrator_id" => nil
+          }
+          actual_installation = installation.attributes.slice(*expected_installation.keys)
+          abort "SaaS installation identity does not match" unless
+            Installation.where(singleton_key: Installation::SINGLETON_KEY).one? &&
+              actual_installation == expected_installation
+          evidence = {
+            "schema" => "screenote-saas-image-qualification/v1",
+            "source_sha" => ENV.fetch("SCREENOTE_QUALIFICATION_SOURCE_SHA"),
+            "candidate_sha256" => ENV.fetch("SCREENOTE_QUALIFICATION_CANDIDATE_SHA256"),
+            "candidate_image" => ENV.fetch("SCREENOTE_QUALIFICATION_CANDIDATE_IMAGE"),
+            "manifest_digest" => ENV.fetch("SCREENOTE_QUALIFICATION_MANIFEST_DIGEST"),
+            "platform_digest" => ENV.fetch("SCREENOTE_QUALIFICATION_PLATFORM_DIGEST"),
+            "architecture" => ENV.fetch("SCREENOTE_QUALIFICATION_ARCHITECTURE"),
+            "adapter" => ActiveRecord::Base.connection.adapter_name,
+            "databases" => databases,
+            "installation" => actual_installation
+          }
+          File.binwrite(ENV.fetch("SCREENOTE_QUALIFICATION_EVIDENCE"), JSON.generate(evidence))
+          RUBY
+          docker cp "$application_container:/tmp/saas-qualification.json" \
+            "$RUNNER_TEMP/saas-qualification-$ARCHITECTURE.json"
+
+      - name: Record SaaS boot qualification
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          MANIFEST_DIGEST: ${{ needs.configure.outputs.manifest_digest }}
+          PLATFORM_DIGEST: ${{ matrix.architecture == 'amd64' && needs.configure.outputs.amd64_digest || needs.configure.outputs.arm64_digest }}
+          QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          evidence="$RUNNER_TEMP/saas-qualification-$ARCHITECTURE.json"
+          EVIDENCE="$evidence" ruby -rjson -e '
+            evidence = JSON.parse(File.binread(ENV.fetch("EVIDENCE")))
+            expected_keys = %w[adapter architecture candidate_image candidate_sha256 databases installation manifest_digest platform_digest schema source_sha]
+            abort "SaaS qualification evidence shape does not match" unless evidence.keys.sort == expected_keys.sort
+            abort "SaaS qualification evidence identity does not match" unless
+              evidence["schema"] == "screenote-saas-image-qualification/v1" &&
+                evidence["source_sha"] == ENV.fetch("SOURCE_SHA") &&
+                evidence["candidate_sha256"] == ENV.fetch("CANDIDATE_SHA256") &&
+                evidence["candidate_image"] == ENV.fetch("QUALIFICATION_IMAGE") &&
+                evidence["manifest_digest"] == ENV.fetch("MANIFEST_DIGEST") &&
+                evidence["platform_digest"] == ENV.fetch("PLATFORM_DIGEST") &&
+                evidence["architecture"] == ENV.fetch("ARCHITECTURE") &&
+                evidence["adapter"] == "PostgreSQL"
+            expected_databases = {
+              "primary" => "screenote_primary", "cache" => "screenote_cache",
+              "queue" => "screenote_queue", "cable" => "screenote_cable"
+            }
+            abort "SaaS qualification database set does not match" unless evidence["databases"].is_a?(Hash) &&
+              evidence["databases"].keys.sort == expected_databases.keys.sort
+            expected_databases.each do |role, database|
+              actual = evidence["databases"].fetch(role)
+              abort "SaaS #{role} database evidence does not match" unless
+                actual == {"database" => database, "server_version_num" => actual["server_version_num"]} &&
+                  actual["server_version_num"].to_s.match?(/\A16[0-9]{4}\z/)
+            end
+            abort "SaaS installation evidence does not match" unless evidence["installation"] == {
+              "singleton_key" => "screenote", "deployment_mode" => "saas", "state" => "saas",
+              "storage_service" => "rabata", "administrator_id" => nil
+            }
+          '
+          ruby -rjson -e '
+            target = "linux-#{ENV.fetch("ARCHITECTURE")}"
+            puts JSON.generate({
+              "schema" => "screenote-release-qualification-check/v1",
+              "name" => "saas-boot", "target" => target, "status" => "passed",
+              "source_sha" => ENV.fetch("SOURCE_SHA"),
+              "candidate_sha256" => ENV.fetch("CANDIDATE_SHA256"),
+              "manifest_digest" => ENV.fetch("MANIFEST_DIGEST")
+            })
+          ' >"$RUNNER_TEMP/checks/saas-boot-linux-$ARCHITECTURE.json"
+
+      - name: Retain redacted platform check records
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qualification-platform-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/checks
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
+
+  minimum-host:
+    name: Minimum-host restore load and CLI qualification
+    needs: configure
+    runs-on: [self-hosted, "${{ vars.SCREENOTE_RELEASE_MINIMUM_HOST_RUNNER_LABEL }}"]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact qualification source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: Checkout exact public CLI commit selected by its immutable tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ivankuznetsov/screenote-cli
+          ref: ${{ needs.configure.outputs.cli_sha }}
+          path: tmp/release-cli
+          persist-credentials: false
+
+      - name: Require configured tracked qualification drivers
+        env:
+          CLI_CONTRACT_PATH: ${{ vars.SCREENOTE_PUBLIC_CLI_CONTRACT_PATH }}
+          LOAD_DRIVER_PATH: ${{ vars.SCREENOTE_RELEASE_LOAD_DRIVER_PATH }}
+        run: |
+          set -euo pipefail
+          test -n "$CLI_CONTRACT_PATH"
+          test -n "$LOAD_DRIVER_PATH"
+          [[ "$CLI_CONTRACT_PATH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]
+          [[ "$LOAD_DRIVER_PATH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]
+          cli_driver="$GITHUB_WORKSPACE/tmp/release-cli/$CLI_CONTRACT_PATH"
+          load_driver="$GITHUB_WORKSPACE/$LOAD_DRIVER_PATH"
+          test -x "$cli_driver"
+          test -x "$load_driver"
+          git -C "$GITHUB_WORKSPACE/tmp/release-cli" ls-files --error-unmatch "$CLI_CONTRACT_PATH" >/dev/null
+          git -C "$GITHUB_WORKSPACE" ls-files --error-unmatch "$LOAD_DRIVER_PATH" >/dev/null
+
+      - name: Pull the exact candidate on the documented minimum host
+        env:
+          QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          docker pull --platform linux/amd64 "$QUALIFICATION_IMAGE"
+          test "$(docker image inspect --format '{{index .RepoDigests 0}}' "$QUALIFICATION_IMAGE")" = "$QUALIFICATION_IMAGE"
+
+      - name: Run exact-image backup and restore
+        env:
+          SCREENOTE_RELEASE_IMAGE: ${{ inputs.qualification_image }}
+        run: script/release_test_matrix backup-restore
+
+      - name: Run exact-image SQLite minimum-host load profile
+        env:
+          SCREENOTE_LOAD_DRIVER: ${{ github.workspace }}/${{ vars.SCREENOTE_RELEASE_LOAD_DRIVER_PATH }}
+          SCREENOTE_MINIMUM_HOST_PROFILE: ${{ vars.SCREENOTE_RELEASE_MINIMUM_HOST_PROFILE }}
+          SCREENOTE_RELEASE_IMAGE: ${{ inputs.qualification_image }}
+          SCREENOTE_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: script/self_hosted_load_smoke >"$RUNNER_TEMP/sqlite-load-evidence.json"
+
+      - name: Run exact tagged CLI against HTTP and HTTPS candidate origins
+        env:
+          SCREENOTE_PUBLIC_CLI_CONTRACT_SCRIPT: ${{ github.workspace }}/tmp/release-cli/${{ vars.SCREENOTE_PUBLIC_CLI_CONTRACT_PATH }}
+          SCREENOTE_PUBLIC_CLI_EVIDENCE_DIRECTORY: ${{ runner.temp }}/public-cli-evidence
+          SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN: ${{ vars.SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN }}
+          SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN: ${{ vars.SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN }}
+          SCREENOTE_PUBLIC_CLI_SHA: ${{ needs.configure.outputs.cli_sha }}
+          SCREENOTE_PUBLIC_CLI_TAG: ${{ inputs.cli_tag }}
+          SCREENOTE_RELEASE_IMAGE: ${{ inputs.qualification_image }}
+        run: script/release_test_matrix public-cli
+
+      - name: Create redacted minimum-host check records
+        env:
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          MANIFEST_DIGEST: ${{ needs.configure.outputs.manifest_digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/checks"
+          for identity in backup-restore:minimum-host sqlite-load:minimum-host; do
+            name="${identity%%:*}"
+            target="${identity#*:}"
+            NAME="$name" TARGET="$target" ruby -rjson -e '
+              puts JSON.generate({
+                "schema" => "screenote-release-qualification-check/v1",
+                "name" => ENV.fetch("NAME"), "target" => ENV.fetch("TARGET"), "status" => "passed",
+                "source_sha" => ENV.fetch("SOURCE_SHA"),
+                "candidate_sha256" => ENV.fetch("CANDIDATE_SHA256"),
+                "manifest_digest" => ENV.fetch("MANIFEST_DIGEST")
+              })
+            ' >"$RUNNER_TEMP/checks/$name-$target.json"
+          done
+
+      - name: Validate each CLI transport evidence and create its redacted record
+        env:
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          CLI_SHA: ${{ needs.configure.outputs.cli_sha }}
+          CLI_TAG: ${{ inputs.cli_tag }}
+          HTTP_ORIGIN: ${{ vars.SCREENOTE_PUBLIC_CLI_HTTP_ORIGIN }}
+          HTTPS_ORIGIN: ${{ vars.SCREENOTE_PUBLIC_CLI_HTTPS_ORIGIN }}
+          MANIFEST_DIGEST: ${{ needs.configure.outputs.manifest_digest }}
+          QUALIFICATION_IMAGE: ${{ inputs.qualification_image }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          for identity in public-cli:http public-cli:https; do
+            target="${identity#*:}"
+            if [[ "$target" == http ]]; then
+              origin="$HTTP_ORIGIN"
+            else
+              origin="$HTTPS_ORIGIN"
+            fi
+            evidence="$RUNNER_TEMP/public-cli-evidence/$target.json"
+            output="$RUNNER_TEMP/checks/public-cli-$target.json"
+            EVIDENCE="$evidence" ORIGIN="$origin" OUTPUT="$output" TARGET="$target" ruby -rjson <<'RUBY'
+          evidence = JSON.parse(File.binread(ENV.fetch("EVIDENCE")))
+          expected_keys = %w[candidate_image cli_sha cli_tag origin schema status target tls]
+          abort "CLI evidence shape does not match" unless evidence.is_a?(Hash) &&
+            evidence.keys.sort == expected_keys.sort
+          abort "CLI evidence identity does not match" unless
+            evidence["schema"] == "screenote-public-cli-qualification/v1" &&
+              evidence["status"] == "passed" && evidence["target"] == ENV.fetch("TARGET") &&
+              evidence["origin"] == ENV.fetch("ORIGIN") &&
+              evidence["candidate_image"] == ENV.fetch("QUALIFICATION_IMAGE") &&
+              evidence["cli_tag"] == ENV.fetch("CLI_TAG") && evidence["cli_sha"] == ENV.fetch("CLI_SHA")
+          tls = evidence["tls"]
+          abort "CLI TLS evidence shape does not match" unless tls.is_a?(Hash) &&
+            tls.keys.sort == %w[verified wrong_ca_rejected wrong_hostname_rejected]
+          expected_tls = ENV.fetch("TARGET") == "https"
+          abort "CLI TLS evidence does not match target" unless tls.values.all? { |value| value == expected_tls }
+          record = {
+            "schema" => "screenote-release-qualification-check/v1",
+            "name" => "public-cli", "target" => ENV.fetch("TARGET"), "status" => "passed",
+            "source_sha" => ENV.fetch("SOURCE_SHA"),
+            "candidate_sha256" => ENV.fetch("CANDIDATE_SHA256"),
+            "manifest_digest" => ENV.fetch("MANIFEST_DIGEST")
+          }
+          File.binwrite(ENV.fetch("OUTPUT"), JSON.generate(record))
+          RUBY
+          done
+
+      - name: Retain redacted minimum-host check records
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qualification-minimum-host
+          path: ${{ runner.temp }}/checks
+          if-no-files-found: error
+          retention-days: 2
+          compression-level: 0
+
+  record:
+    name: Create exact qualification evidence
+    needs: [configure, platform, minimum-host]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download only same-run qualification check records
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: qualification-*
+          path: ${{ runner.temp }}/qualification-input
+          merge-multiple: true
+
+      - name: Build one canonical redacted qualification record
+        env:
+          AMD64_DIGEST: ${{ needs.configure.outputs.amd64_digest }}
+          ARM64_DIGEST: ${{ needs.configure.outputs.arm64_digest }}
+          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
+          CLI_SHA: ${{ needs.configure.outputs.cli_sha }}
+          CLI_TAG: ${{ inputs.cli_tag }}
+          MANIFEST_DIGEST: ${{ needs.configure.outputs.manifest_digest }}
+          MINIMUM_HOST_PROFILE_SHA256: ${{ needs.configure.outputs.minimum_host_profile_sha256 }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          input="$RUNNER_TEMP/qualification-input"
+          output="$RUNNER_TEMP/qualification-output"
+          mkdir -p "$output/checks"
+          find "$input" -maxdepth 1 -type f -name '*.json' -exec cp '{}' "$output/checks/" ';'
+          INPUT_DIR="$output/checks" OUTPUT="$output/release-qualification.json" ruby -rjson -rdigest <<'RUBY'
+          required = [
+            ["self-hosted-boot", "linux-amd64"],
+            ["self-hosted-boot", "linux-arm64"],
+            ["saas-boot", "linux-amd64"],
+            ["saas-boot", "linux-arm64"],
+            ["backup-restore", "minimum-host"],
+            ["sqlite-load", "minimum-host"],
+            ["public-cli", "http"],
+            ["public-cli", "https"]
+          ]
+          directory = ENV.fetch("INPUT_DIR")
+          files = Dir.glob(File.join(directory, "*.json")).sort
+          abort "qualification must contain exactly eight check records" unless files.length == required.length
+          checks = files.map do |path|
+            check = JSON.parse(File.binread(path))
+            expected_keys = %w[schema name target status source_sha candidate_sha256 manifest_digest]
+            abort "qualification check shape does not match" unless check.keys.sort == expected_keys.sort
+            abort "qualification check identity does not match" unless
+              check["schema"] == "screenote-release-qualification-check/v1" && check["status"] == "passed" &&
+                check["source_sha"] == ENV.fetch("SOURCE_SHA") &&
+                check["candidate_sha256"] == ENV.fetch("CANDIDATE_SHA256") &&
+                check["manifest_digest"] == ENV.fetch("MANIFEST_DIGEST")
+            check.slice("name", "target", "status").merge(
+              "evidence_sha256" => Digest::SHA256.file(path).hexdigest
+            )
+          end
+          abort "qualification check set does not match" unless checks.map { |check| [check["name"], check["target"]] }.sort == required.sort
+          checks.sort_by! { |check| required.index([check["name"], check["target"]]) }
+          report = {
+            "status" => "passed",
+            "workflow_path" => ".github/workflows/release-qualification.yml",
+            "workflow_run_id" => ENV.fetch("GITHUB_RUN_ID"),
+            "workflow_run_attempt" => Integer(ENV.fetch("GITHUB_RUN_ATTEMPT"), 10),
+            "artifact_name" => "release-qualification-#{ENV.fetch('SOURCE_SHA')}-#{ENV.fetch('RELEASE_TAG')}",
+            "source_sha" => ENV.fetch("SOURCE_SHA"),
+            "release_tag" => ENV.fetch("RELEASE_TAG"),
+            "candidate_sha256" => ENV.fetch("CANDIDATE_SHA256"),
+            "manifest_digest" => ENV.fetch("MANIFEST_DIGEST"),
+            "platforms" => [
+              {"architecture" => "amd64", "digest" => ENV.fetch("AMD64_DIGEST")},
+              {"architecture" => "arm64", "digest" => ENV.fetch("ARM64_DIGEST")}
+            ],
+            "cli_tag" => ENV.fetch("CLI_TAG"),
+            "cli_sha" => ENV.fetch("CLI_SHA"),
+            "minimum_host_profile_sha256" => ENV.fetch("MINIMUM_HOST_PROFILE_SHA256"),
+            "checks" => checks
+          }
+          File.binwrite(ENV.fetch("OUTPUT"), JSON.pretty_generate(report) << "\n")
+          RUBY
+
+      - name: Retain exact qualification artifact
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-qualification-${{ inputs.source_sha }}-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/qualification-output
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Report exact evidence identities
+        env:
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          record_sha256="$(sha256sum "$RUNNER_TEMP/qualification-output/release-qualification.json" | cut -d' ' -f1)"
+          {
+            echo "Qualification run: $GITHUB_RUN_ID (attempt $GITHUB_RUN_ATTEMPT)"
+            echo "Qualification artifact ID: $ARTIFACT_ID"
+            echo "Qualification artifact SHA-256: $ARTIFACT_DIGEST"
+            echo "Qualification record SHA-256: $record_sha256"
+          } >>"$GITHUB_STEP_SUMMARY"

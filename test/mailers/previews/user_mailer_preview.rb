@@ -3,15 +3,15 @@
 # Preview all emails at http://localhost:3005/rails/mailers/user_mailer
 class UserMailerPreview < ActionMailer::Preview
   def confirmation
-    UserMailer.confirmation(preview_user, "preview-confirmation-token-abc123")
+    preview_delivery(:email_confirmation, :confirmation)
   end
 
   def magic_link
-    UserMailer.magic_link(preview_user, "preview-magic-link-token-xyz789")
+    preview_delivery(:magic_link, :magic_link)
   end
 
   def password_reset
-    UserMailer.password_reset(preview_user, "preview-password-reset-token-def456")
+    preview_delivery(:password_reset, :password_reset)
   end
 
   def welcome
@@ -20,7 +20,23 @@ class UserMailerPreview < ActionMailer::Preview
 
   private
 
+  def preview_delivery(purpose, mailer_method)
+    issued = nil
+    AuthenticationToken.transaction do
+      user = User.lock.find(preview_user.id)
+      issued = AuthenticationLinks::Issuer.new(
+        origin: AuthenticationLinks::Runtime.origin,
+        keyring: AuthenticationLinks::Runtime.keyring
+      ).call(purpose:, subject: user, expires_at: 15.minutes.from_now)
+    end
+    UserMailer.public_send(mailer_method, preview_user.id, issued.token.id)
+  end
+
   def preview_user
-    User.first || User.new(email: "preview@screenote.app")
+    User.first || User.create!(
+      email: "preview@screenote.app",
+      password: SecureRandom.hex(16),
+      confirmed_at: Time.current
+    )
   end
 end

@@ -1,0 +1,5 @@
+# frozen_string_literal: true
+
+result = Screenote::SelfHostedDiagnostics.new.call
+puts JSON.generate(result.payload)
+exit(result.success? ? 0 : 69)

@@ -1,18 +1,17 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 class McpToolsTest < ActiveSupport::TestCase
   setup do
     @user = users(:alice)
     @project = projects(:alice_project)
-    @api_key = api_keys(:alice_key)
     @screenshot = screenshots(:alice_screenshot)
     @annotation = annotations(:point_annotation)
 
-    Current.mcp_user = @user
-    Current.mcp_project = @project
-    Current.mcp_api_key = @api_key
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(@user)
   end
 
   teardown do
@@ -227,8 +226,6 @@ class McpToolsTest < ActiveSupport::TestCase
   end
 
   test "create_snapshot rejects inaccessible project" do
-    Current.mcp_project = nil
-
     result = JSON.parse(CreateSnapshotTool.new.call(
       project_id: projects(:bob_project).id,
       git_commit: "abc1234"
@@ -317,7 +314,10 @@ class McpToolsTest < ActiveSupport::TestCase
     assert result["annotate_url"].present?
     assert_equal 3, result["uploads"].size
     assert_equal %w[desktop tablet mobile], result["uploads"].map { |u| u["viewport"] }
-    assert result["uploads"].all? { |u| u["upload_url"].present? && u["token"].present? }
+    assert result["uploads"].all? do |upload|
+      upload["upload_url"].present? && upload["token"].present? && upload["content_type"] == "image/png"
+    end
+    assert result["uploads"].none? { |upload| URI(upload["upload_url"]).query.present? }
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal 3, screenshot.screenshot_images.count
@@ -584,8 +584,10 @@ class McpToolsTest < ActiveSupport::TestCase
 
     assert result["screenshot_id"].present?, "Should return screenshot ID"
     assert result["upload_url"].present?, "Should return upload URL"
+    assert result["token"].present?, "Should return the one-time upload credential separately"
+    assert_equal "image/png", result["content_type"]
     assert result["annotate_url"].present?, "Should return annotate URL"
-    assert_match(/token=/, result["upload_url"], "Upload URL should contain a token")
+    assert_nil URI(result["upload_url"]).query, "Upload URL must not contain a credential"
 
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal "Signed Upload", screenshot.title
@@ -611,8 +613,6 @@ class McpToolsTest < ActiveSupport::TestCase
 
   # Project access control
   test "tools reject unauthorized project_id" do
-    Current.mcp_project = nil # Simulate OAuth auth (no pre-set project)
-
     bob_project = projects(:bob_project)
     result = JSON.parse(ListScreenshotsTool.new.call(project_id: bob_project.id))
 
@@ -620,16 +620,12 @@ class McpToolsTest < ActiveSupport::TestCase
   end
 
   test "tools require project_id when no pre-set project" do
-    Current.mcp_project = nil
-
     result = JSON.parse(ListScreenshotsTool.new.call(project_id: nil))
     assert_equal "missing_project_id", result["error"], "Should require project_id for OAuth users"
   end
 
   # ListProjectsTool
   test "list_projects returns user's projects" do
-    Current.mcp_project = nil
-
     result = JSON.parse(ListProjectsTool.new.call)
 
     project_ids = result["projects"].map { |p| p["id"] }
@@ -642,10 +638,27 @@ class McpToolsTest < ActiveSupport::TestCase
     assert project_data["screenshot_count"].is_a?(Integer)
   end
 
+  test "list_projects rechecks a project OAuth membership before serialization" do
+    bob = users(:bob)
+    token = create_oauth_token(
+      application: create_oauth_application,
+      user: bob,
+      project: @project,
+      scopes: "mcp_read"
+    )
+    Current.authenticated_principal = AuthenticatedPrincipal.for_oauth_token(token)
+    assert_equal @project, Current.authenticated_principal.project
+
+    project_memberships(:bob_member_of_alice_project).delete
+
+    result = JSON.parse(ListProjectsTool.new.call)
+
+    assert_empty result.fetch("projects"),
+      "The project cached on an authenticated principal must not survive membership removal"
+  end
+
   # CreateProjectTool
   test "create_project creates a new project" do
-    Current.mcp_project = nil
-
     result = JSON.parse(CreateProjectTool.new.call(name: "Agent Project"))
 
     project_data = result["project"]
@@ -725,30 +738,41 @@ class McpToolsTest < ActiveSupport::TestCase
 
   # InviteCollaboratorTool
   test "invite_collaborator sends invitation" do
-    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "new@example.com"))
+    result = without_database_retry_guard do
+      JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "new@example.com"))
+    end
 
     assert result["invitation"].present?, "Should return invitation data"
     assert_equal "new@example.com", result["invitation"]["email"]
     assert_equal "pending", result["invitation"]["status"]
+    assert_equal "issued", result["issuance_status"]
+    assert_match %r{/authentication-links/invitation#v1\.}, result["private_link"]
+    assert_match(/\Av1\./, result["manual_code"])
   end
 
-  test "invite_collaborator rejects duplicate pending invitation" do
-    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "newuser@example.com"))
+  test "invite_collaborator reissues a pending invitation without duplicating its row" do
+    result = without_database_retry_guard do
+      JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "newuser@example.com"))
+    end
 
-    assert_equal "validation_failed", result["error"], "Should reject duplicate invitation"
+    assert_equal "reissued", result["issuance_status"]
+    assert_equal project_invitations(:pending_invitation).id, result.dig("invitation", "id")
   end
 
   test "invite_collaborator rejects existing member" do
-    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "bob@example.com"))
+    result = without_database_retry_guard do
+      JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "bob@example.com"))
+    end
 
-    assert_equal "validation_failed", result["error"], "Should reject inviting existing member"
+    assert_equal "already_member", result["error"], "Should reject inviting existing member"
   end
 
   test "invite_collaborator requires owner role" do
-    Current.mcp_user = users(:bob)
-    Current.mcp_project = @project
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(users(:bob))
 
-    result = JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "someone@example.com"))
+    result = without_database_retry_guard do
+      JSON.parse(InviteCollaboratorTool.new.call(project_id: @project.id, email: "someone@example.com"))
+    end
 
     assert_equal "forbidden", result["error"], "Non-owner should not be able to invite"
   end
@@ -782,18 +806,22 @@ class McpToolsTest < ActiveSupport::TestCase
   test "cancel_invitation cancels pending invitation" do
     invitation = project_invitations(:pending_invitation)
 
-    result = JSON.parse(CancelInvitationTool.new.call(project_id: @project.id, invitation_id: invitation.id))
+    result = without_database_retry_guard do
+      JSON.parse(CancelInvitationTool.new.call(project_id: @project.id, invitation_id: invitation.id))
+    end
 
     assert result["success"], "Should return success"
-    assert_raises(ActiveRecord::RecordNotFound) { invitation.reload }
+    assert_equal "cancelled", result["status"]
+    assert invitation.reload.cancelled?
   end
 
   test "cancel_invitation requires owner role" do
-    Current.mcp_user = users(:bob)
-    Current.mcp_project = @project
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(users(:bob))
     invitation = project_invitations(:pending_invitation)
 
-    result = JSON.parse(CancelInvitationTool.new.call(project_id: @project.id, invitation_id: invitation.id))
+    result = without_database_retry_guard do
+      JSON.parse(CancelInvitationTool.new.call(project_id: @project.id, invitation_id: invitation.id))
+    end
 
     assert_equal "forbidden", result["error"], "Non-owner should not be able to cancel invitations"
   end
@@ -802,7 +830,9 @@ class McpToolsTest < ActiveSupport::TestCase
   test "remove_project_member removes member" do
     membership = project_memberships(:bob_member_of_alice_project)
 
-    result = JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+    result = without_database_retry_guard do
+      JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+    end
 
     assert result["success"], "Should return success"
     assert_raises(ActiveRecord::RecordNotFound) { membership.reload }
@@ -811,18 +841,33 @@ class McpToolsTest < ActiveSupport::TestCase
   test "remove_project_member cannot remove self" do
     membership = project_memberships(:alice_owns_alice_project)
 
-    result = JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+    result = without_database_retry_guard do
+      JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+    end
 
     assert_equal "cannot_remove_self", result["error"], "Should not allow removing yourself"
   end
 
   test "remove_project_member requires owner role" do
-    Current.mcp_user = users(:bob)
-    Current.mcp_project = @project
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(users(:bob))
     membership = project_memberships(:alice_owns_alice_project)
 
-    result = JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+    result = without_database_retry_guard do
+      JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+    end
 
     assert_equal "forbidden", result["error"], "Non-owner should not be able to remove members"
+  end
+
+  private
+
+  def without_database_retry_guard
+    original = DatabaseRetry.method(:call)
+    DatabaseRetry.define_singleton_method(:call) do |**_options, &operation|
+      operation.call
+    end
+    yield
+  ensure
+    DatabaseRetry.define_singleton_method(:call, original) if original
   end
 end

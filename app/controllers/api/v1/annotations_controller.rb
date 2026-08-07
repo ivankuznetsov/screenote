@@ -11,7 +11,7 @@ module Api
 
         limit, offset = pagination_params
         annotations = project_annotations(project).order(:created_at)
-        annotations = annotations.where(screenshot_id: params[:screenshot_id]) if params[:screenshot_id].present?
+        annotations = annotations.where(screenshot_id: params.fetch(:screenshot_id))
         annotations = annotations.where(status: params[:status]) if params[:status].present?
         annotations = annotations.where(viewport: params[:viewport]) if params[:viewport].present?
         total = annotations.count
@@ -33,7 +33,7 @@ module Api
         cropped_base64 = begin
           annotation.crop
         rescue => e
-          Honeybadger.notify(e, context: {
+          Screenote::Monitoring.notify(e, context: {
             annotation_id: annotation.id,
             screenshot_id: annotation.screenshot_id,
             viewport: annotation.viewport

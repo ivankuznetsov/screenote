@@ -4,7 +4,7 @@
     <strong><%= @pre_auth.client.name %></strong> is requesting access to your Screenote account.
   </p>
   <p class="oauth-consent__explanation">
-    This application is requesting permission to read and write screenshots and annotations in your projects.
+    Review the requested access carefully. Write access includes collaboration administration.
   </p>
 
   <% if @pre_auth.scopes.present? %>
@@ -14,9 +14,9 @@
         <% @pre_auth.scopes.each do |scope| %>
           <li class="oauth-consent__scope-item">
             <% if scope.to_s == "mcp_read" %>
-              Read your screenshots and annotations
+              Read screenshots, annotations, project members, invitations, and their email addresses
             <% elsif scope.to_s == "mcp_write" %>
-              Create screenshots, annotations, and projects
+              Create and change screenshots, annotations, projects, invitations, and project membership, including removing members
             <% else %>
               <%= scope %>
             <% end %>
@@ -35,12 +35,39 @@
     <%= f.hidden_field :code_challenge, value: @pre_auth.code_challenge %>
     <%= f.hidden_field :code_challenge_method, value: @pre_auth.code_challenge_method %>
 
+    <div class="auth-card__field oauth-consent__principal">
+      <%= f.label :principal_project_id, "Authorize access to", class: "auth-card__label" %>
+      <%= f.select :principal_project_id,
+        options_for_select(
+          [ [ "My Screenote account (all current projects)", "" ] ] +
+            @principal_projects.map { |project| [ project.name, project.id ] },
+          @selected_principal_project_id
+        ),
+        {},
+        class: "auth-card__input",
+        data: { testid: "oauth-principal-select" } %>
+      <p class="oauth-consent__explanation">
+        Choose one project to keep this client isolated, or your account to let it use projects you can access.
+      </p>
+      <% if @principal_selection_error %>
+        <p class="auth-card__error" data-testid="oauth-principal-error"><%= @principal_selection_error %></p>
+      <% end %>
+    </div>
+
     <div class="oauth-consent__actions">
       <%= f.submit "Authorize", class: "auth-card__submit", data: { testid: "oauth-authorize-btn" } %>
     </div>
+  <% end %>
 
-    <div class="oauth-consent__deny">
-      <%= button_tag "Deny", type: "submit", name: "deny", value: "1", class: "auth-card__magic-link", data: { testid: "oauth-deny-btn" } %>
-    </div>
+  <%= form_with url: oauth_authorization_path, method: :delete, class: "oauth-consent__deny", data: { turbo: false } do |f| %>
+    <%= f.hidden_field :client_id, value: @pre_auth.client.uid %>
+    <%= f.hidden_field :redirect_uri, value: @pre_auth.redirect_uri %>
+    <%= f.hidden_field :state, value: @pre_auth.state %>
+    <%= f.hidden_field :response_type, value: @pre_auth.response_type %>
+    <%= f.hidden_field :response_mode, value: @pre_auth.response_mode %>
+    <%= f.hidden_field :scope, value: @pre_auth.scope %>
+    <%= f.hidden_field :code_challenge, value: @pre_auth.code_challenge %>
+    <%= f.hidden_field :code_challenge_method, value: @pre_auth.code_challenge_method %>
+    <%= f.submit "Deny", class: "auth-card__magic-link", data: { testid: "oauth-deny-btn" } %>
   <% end %>
 </div>

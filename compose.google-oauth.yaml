@@ -1,0 +1,16 @@
+services:
+  screenote:
+    environment:
+      SCREENOTE_GOOGLE_OAUTH_ENABLED: "true"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET_FILE: /run/secrets/screenote_google_client_secret
+    secrets:
+      - source: screenote_google_client_secret
+        target: screenote_google_client_secret
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+
+secrets:
+  screenote_google_client_secret:
+    file: ${SCREENOTE_GOOGLE_CLIENT_SECRET_PATH:?Set SCREENOTE_GOOGLE_CLIENT_SECRET_PATH to the restricted Google client-secret file}

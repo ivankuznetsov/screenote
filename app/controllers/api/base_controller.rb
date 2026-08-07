@@ -28,10 +28,8 @@ module Api
         return
       end
 
-      @current_api_key = result.api_key
-      @current_oauth_token = result.oauth_token
-      @current_user = result.user
-      @current_project = result.api_key&.project
+      @current_principal = result
+      @current_project = result.project
     end
 
     def extract_bearer_token
@@ -40,53 +38,35 @@ module Api
     end
 
     def require_current_project!(project_id)
-      if api_key_authenticated?
-        if current_project.present? && (project_id.blank? || project_id.to_s == current_project.id.to_s)
-          return current_project
-        end
-
-        render_error("Project is not accessible with this API key", code: "forbidden", status: :forbidden)
-        return nil
-      end
-
-      if project_id.blank?
+      if oauth_authenticated? && project_id.blank?
         render_error("Project is required", code: "missing_project", status: :unprocessable_entity)
         return nil
       end
 
-      if current_oauth_token.project_id.present? && current_oauth_token.project_id.to_s != project_id.to_s
-        render_error("Project is not accessible with this OAuth token", code: "forbidden", status: :forbidden)
-        return nil
-      end
-
-      project = Project.find_by(id: project_id)
-      if project&.member?(current_user)
+      project = Api::V1::ProjectScope.resolve_project(current_principal, project_id)
+      if project
         @current_project = project
         return project
       end
 
-      render_error("Project is not accessible with this OAuth token", code: "forbidden", status: :forbidden)
+      credential_name = api_key_authenticated? ? "API key" : "OAuth token"
+      render_error("Project is not accessible with this #{credential_name}", code: "forbidden", status: :forbidden)
       nil
     end
 
     def require_scope!(scope)
-      return true if api_key_authenticated?
-      return true if oauth_scope?(scope)
+      return true if current_principal.allows_scope?(scope)
 
       render_error("OAuth token is missing required scope #{scope}", code: "insufficient_scope", status: :forbidden)
       false
     end
 
     def api_key_authenticated?
-      current_api_key.present?
+      current_principal.api_key?
     end
 
     def oauth_authenticated?
-      current_oauth_token.present?
-    end
-
-    def oauth_scope?(scope)
-      current_oauth_token&.scopes&.include?(scope.to_s)
+      current_principal.oauth?
     end
 
     def pagination_params
@@ -97,7 +77,7 @@ module Api
     end
 
     def serializer_url_options
-      { host: request.host, port: request.optional_port, protocol: request.protocol }
+      Screenote::Deployment.current.url_options
     end
 
     # Coerce only scalar pagination values; structured params such as
@@ -115,6 +95,11 @@ module Api
       render json: payload, status: status
     end
 
-    attr_reader :current_api_key, :current_oauth_token, :current_user, :current_project
+    attr_reader :current_principal, :current_project
+
+    delegate :api_key, :oauth_token, :user,
+      to: :current_principal,
+      prefix: :current,
+      allow_nil: true
   end
 end

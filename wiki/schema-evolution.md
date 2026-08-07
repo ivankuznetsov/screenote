@@ -3,13 +3,13 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-07-13
+updated: 2026-08-05
 tags: [database, migrations, schema, history]
 ---
 
 # Schema Evolution
 
-TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, and headless device authorization.
+TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, headless device authorization, persisted deployment identity, and hardened admission identities.
 
 Source: `db/migrate/`
 
@@ -95,6 +95,27 @@ Source: `db/migrate/`
 |-----------|---------|
 | `20260713160000_create_oauth_device_grants` | Short-lived RFC 8628 grants with digest-only device credentials, indexed absolute expiry, polling cadence, explicit approval/denial state, and scheduled cleanup support |
 
+### Phase 11: Deployment Identity (2026-08-05)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260805120000_create_installations` | Singleton edition, storage-namespace, bootstrap, and administrator ownership identity with database state checks |
+| `20260805120500_add_installation_bootstrap_digest_constraint` | Append-only constraint requiring any persisted bootstrap digest to retain SHA-256 length |
+
+### Phase 12: Authenticated Principal Provenance (2026-08-05)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260805130000_add_api_key_issuers_and_annotation_actors` | Revoke unattributable legacy API keys, require issuer provenance for active keys, and enforce exactly one user/API-key actor for annotations, replies, and resolution state |
+| `20260805131000_harden_oauth_principals_and_token_secrets` | Backfill explicit user/project OAuth authority, cascade project deletion, hash all reusable OAuth/client secrets during a stopped-process cutover, and add dynamic-registration identity |
+
+### Phase 13: Admission Identity and Authentication Links (2026-08-05)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260805132000_harden_user_and_invitation_identity` | Preflight identity conflicts before mutation; canonicalize email/provider values; add checked active/suspended users, durable cancelled invitations, normalized partial uniqueness, and the append-only installation audit foundation |
+| `20260805133000_create_authentication_tokens` | Create digest-only invitation/account link rows with exact purpose-subject binding, versioned derivation-key identity, monotonic generations, expiry/terminal checks, and separate NULL-safe partial uniqueness indexes |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -118,5 +139,15 @@ Source: `db/migrate/`
 10. **Applied migrations are append-only**: `20260212071431_create_api_keys` was rewritten after one production database had already run its plaintext-token form, while its forward digest migration was deleted. Fresh SQLite databases looked correct, but production PostgreSQL retained the old columns. Repairs must use a new timestamp and an upgrade-path test; never rewrite an applied migration based only on fresh-schema checks. The API-key repair test runs in both SQLite and a dedicated PostgreSQL 16 CI job so adapter-specific production behavior stays covered.
 
 11. **Device credentials are short-lived and digest-only**: RFC 8628 device codes are stored as SHA-256 digests and consumed under a row lock during final exchange. Human codes remain lookupable but use 50 bits of entropy, an indexed 10-minute absolute expiry, fail-closed throttled verification, and scheduled cleanup for abandoned grants after 15 minutes of terminal-error retention.
+
+12. **Deployment identity is persistent, not inferred from providers**: one constrained Installation row records SaaS/self-hosted mode, the credential-free storage namespace, and bootstrap/claim state. Startup may rotate credentials but refuses to reinterpret an existing primary database under a different mode or object namespace.
+
+13. **OAuth authority is explicit and secrets are non-restorable**: grants, device grants, and tokens carry a user/project discriminator instead of treating a nullable project as implicit authority. Project deletion cascades. Existing bearer and confidential-client values are converted to SHA-256 only after old processes stop; runtime has no plaintext fallback. The migration avoids rebuilding the parent `oauth_applications` table solely for SQLite CHECK constraints because that can cascade-delete child credentials during table replacement.
+
+14. **Automation authors are durable actors, not impersonated users**: newly issued and active API keys record their issuing user, while annotations and thread events enforce exactly one user or API-key actor in both Rails and the database. Historical issuer identity cannot be reconstructed from later project ownership, so every preexisting key is revoked and retains a null issuer; its row remains available as the durable actor for existing content. A database check requires every active key to have an issuer, and restrictive actor foreign keys prevent credential deletion from erasing audit provenance. On SQLite, child foreign keys are detached before parent-table rebuilds and restored afterward, with row and API-key attribution counts verified before commit so `ON DELETE` actions cannot silently erase legacy audit links.
+
+15. **Identity hardening fails before mutation**: normalized user-email collisions, half or duplicate provider identities, and duplicate normalized pending invitations report their record IDs instead of merging people or choosing a winner. SQLite disables foreign-key actions before entering one explicit immediate transaction because adding CHECK constraints rebuilds the parent `users` table; it verifies every preexisting row ID and `PRAGMA foreign_key_check` before commit and again after restoring enforcement. PostgreSQL uses one explicit transaction, bounded lock wait, and access-exclusive identity-table locks.
+
+16. **Authentication-link rows contain no bearer material**: each row binds one enumerated purpose to either a user or invitation, records a positive generation, random public derivation ID, a `v1.` Base64url derivation-key fingerprint, a lowercase SHA-256 digest, expiry, and one outstanding/terminal state. Separate partial indexes for nullable user and invitation subjects enforce both generation uniqueness and one outstanding row without relying on NULL equality.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

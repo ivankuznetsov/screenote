@@ -1,41 +1,50 @@
 # frozen_string_literal: true
 
 class ApplicationTool < FastMcp::Tool
+  MCP_SCOPES = %w[mcp_read mcp_write].freeze
+
+  class << self
+    attr_reader :mcp_policy
+
+    def mcp_action(scope:, read_only:, destructive:, idempotent:, open_world:)
+      scope = scope.to_s
+      raise ArgumentError, "unsupported MCP scope: #{scope}" unless MCP_SCOPES.include?(scope)
+
+      safety_annotations = {
+        read_only_hint: read_only,
+        destructive_hint: destructive,
+        idempotent_hint: idempotent,
+        open_world_hint: open_world
+      }.freeze
+      @mcp_policy = { scope: scope, annotations: safety_annotations }.freeze
+      annotations(safety_annotations)
+      authorize { current_principal&.allows_scope?(self.class.mcp_policy.fetch(:scope)) }
+    end
+  end
+
   private
 
+  def current_principal
+    Current.authenticated_principal
+  end
+
   def current_project
-    Current.mcp_project
+    @current_project || current_principal&.project
   end
 
   def current_user
-    Current.mcp_user
+    current_principal&.user
   end
 
-  # Resolves the project for the current request. API key auth pre-sets
-  # Current.mcp_project; user-scoped OAuth auth requires an explicit project_id.
   def resolve_project(project_id)
-    if current_project
-      return current_project if project_id.blank? || project_id.to_i == current_project.id
-
-      return nil
-    end
-
-    unless project_id
-      return nil
-    end
-
-    project = current_user.projects.find_by(id: project_id)
-    return nil unless project
-
-    Current.mcp_project = project
-    project
+    @current_project = current_principal&.resolve_project(project_id)
   end
 
   def require_project(project_id)
     project = resolve_project(project_id)
     unless project
-      if project_id && current_user
-        return { error: "forbidden", message: "You don't have access to project #{project_id}" }.to_json
+      if project_id.present?
+        return { error: "forbidden", message: "You don't have access to that project" }.to_json
       else
         return { error: "missing_project_id", message: "project_id is required" }.to_json
       end
@@ -43,18 +52,22 @@ class ApplicationTool < FastMcp::Tool
     nil
   end
 
-  def project_scoped_oauth?
-    Current.mcp_api_key.nil? && Current.mcp_oauth_token&.project_id.present? && current_project.present?
+  def current_actor_attributes
+    current_principal.annotation_actor_attributes
   end
 
   def with_error_handling
     yield
+  rescue Projects::Create::Forbidden => e
+    { error: "forbidden", message: e.message }.to_json
+  rescue Projects::Create::LimitReached => e
+    { error: "project_limit_reached", message: e.message }.to_json
   rescue ActiveRecord::RecordNotFound => e
     { error: "not_found", message: e.message }.to_json
   rescue ActiveRecord::RecordInvalid => e
     { error: "validation_failed", message: e.message, details: e.record.errors.full_messages }.to_json
   rescue StandardError => e
-    Honeybadger.notify(e)
+    Screenote::Monitoring.notify(e)
     { error: "internal_error", message: "An unexpected error occurred" }.to_json
   end
 

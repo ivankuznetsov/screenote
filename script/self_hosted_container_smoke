@@ -1,0 +1,343 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+umask 077
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly BASE_COMPOSE="${REPOSITORY_ROOT}/compose.yaml"
+readonly BOOTSTRAP_COMPOSE="${REPOSITORY_ROOT}/compose.bootstrap.yaml"
+readonly S3_COMPOSE="${REPOSITORY_ROOT}/compose.s3.yaml"
+readonly SMTP_COMPOSE="${REPOSITORY_ROOT}/compose.smtp.yaml"
+readonly GOOGLE_OAUTH_COMPOSE="${REPOSITORY_ROOT}/compose.google-oauth.yaml"
+readonly GITHUB_OAUTH_COMPOSE="${REPOSITORY_ROOT}/compose.github-oauth.yaml"
+readonly HONEYBADGER_COMPOSE="${REPOSITORY_ROOT}/compose.honeybadger.yaml"
+readonly SMOKE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/screenote-container-smoke.XXXXXX")"
+readonly SECRET_ROOT="${SMOKE_ROOT}/secrets"
+readonly AUDIT_ROOT="${SMOKE_ROOT}/audit"
+readonly CLAIM_LOG="${SMOKE_ROOT}/claim.log"
+readonly VERIFY_LOG="${SMOKE_ROOT}/verify.log"
+readonly COMPOSE_PROJECT_NAME="screenote-smoke-$$"
+
+if [[ -n "${SCREENOTE_SMOKE_IMAGE-}" ]]; then
+  readonly IMAGE_TAG="${SCREENOTE_SMOKE_IMAGE}"
+  readonly REMOVE_IMAGE=false
+else
+  readonly IMAGE_TAG="screenote-self-hosted-smoke:$$"
+  readonly REMOVE_IMAGE=true
+fi
+
+base_compose=(
+  docker compose
+  --project-name "${COMPOSE_PROJECT_NAME}"
+  --file "${BASE_COMPOSE}"
+)
+bootstrap_compose=(
+  "${base_compose[@]}"
+  --file "${BOOTSTRAP_COMPOSE}"
+)
+
+cleanup() {
+  local exit_status=$?
+
+  if (( exit_status != 0 )); then
+    "${base_compose[@]}" logs --no-color >&2 || true
+  fi
+  "${base_compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  if [[ "${REMOVE_IMAGE}" == true ]]; then
+    docker image rm "${IMAGE_TAG}" >/dev/null 2>&1 || true
+  fi
+  rm -rf -- "${SMOKE_ROOT}"
+  exit "${exit_status}"
+}
+trap cleanup EXIT
+
+for command in docker grep openssl sed; do
+  command -v "${command}" >/dev/null 2>&1 || {
+    printf 'self-hosted smoke: required command is unavailable: %s\n' "${command}" >&2
+    exit 1
+  }
+done
+docker compose version >/dev/null
+
+if [[ "${REMOVE_IMAGE}" == true ]]; then
+  printf 'Building final image %s\n' "${IMAGE_TAG}"
+  docker build --tag "${IMAGE_TAG}" "${REPOSITORY_ROOT}"
+else
+  printf 'Testing prebuilt final image %s\n' "${IMAGE_TAG}"
+  docker image inspect "${IMAGE_TAG}" >/dev/null
+fi
+if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}" |
+  grep --fixed-strings --line-regexp --quiet 'MAX_REQUEST_BODY=31457280'; then
+  printf 'self-hosted smoke: final image does not enforce the 30 MiB request limit\n' >&2
+  exit 1
+fi
+
+mkdir -m 0700 "${SECRET_ROOT}" "${AUDIT_ROOT}"
+openssl rand -base64 48 > "${SECRET_ROOT}/secret_key_base"
+openssl rand -base64 48 > "${SECRET_ROOT}/bootstrap_token"
+openssl rand -base64 36 > "${SECRET_ROOT}/s3_access_key_id"
+openssl rand -base64 48 > "${SECRET_ROOT}/s3_secret_access_key"
+openssl rand -base64 48 > "${SECRET_ROOT}/smtp_password"
+openssl rand -base64 48 > "${SECRET_ROOT}/google_client_secret"
+openssl rand -base64 48 > "${SECRET_ROOT}/github_client_secret"
+openssl rand -base64 48 > "${SECRET_ROOT}/honeybadger_api_key"
+cp "${SECRET_ROOT}"/* "${AUDIT_ROOT}/"
+chmod 0400 "${SECRET_ROOT}"/*
+
+if [[ "$(id -u)" != "1000" ]]; then
+  docker run --rm --user 0 --entrypoint chown \
+    --volume "${SECRET_ROOT}:/screenote-secrets" \
+    "${IMAGE_TAG}" \
+    1000:1000 \
+    /screenote-secrets/secret_key_base \
+    /screenote-secrets/bootstrap_token \
+    /screenote-secrets/s3_access_key_id \
+    /screenote-secrets/s3_secret_access_key \
+    /screenote-secrets/smtp_password \
+    /screenote-secrets/google_client_secret \
+    /screenote-secrets/github_client_secret \
+    /screenote-secrets/honeybadger_api_key
+fi
+
+export SCREENOTE_IMAGE="${IMAGE_TAG}"
+export SCREENOTE_BASE_URL="http://screenote.invalid"
+export SCREENOTE_PORT=0
+export SCREENOTE_SECRET_KEY_BASE_PATH="${SECRET_ROOT}/secret_key_base"
+export SCREENOTE_BOOTSTRAP_TOKEN_PATH="${SECRET_ROOT}/bootstrap_token"
+export SCREENOTE_S3_ENDPOINT="http://127.0.0.1:9000"
+export SCREENOTE_S3_REGION="local"
+export SCREENOTE_S3_BUCKET="screenote-smoke"
+export SCREENOTE_S3_PREFIX="smoke"
+export SCREENOTE_S3_ACCESS_KEY_ID_PATH="${SECRET_ROOT}/s3_access_key_id"
+export SCREENOTE_S3_SECRET_ACCESS_KEY_PATH="${SECRET_ROOT}/s3_secret_access_key"
+export SMTP_ADDRESS="smtp.example.test"
+export SMTP_USERNAME="screenote"
+export MAILER_FROM="screenote@example.test"
+export SCREENOTE_SMTP_PASSWORD_PATH="${SECRET_ROOT}/smtp_password"
+export GOOGLE_CLIENT_ID="google-smoke-client"
+export SCREENOTE_GOOGLE_CLIENT_SECRET_PATH="${SECRET_ROOT}/google_client_secret"
+export GITHUB_CLIENT_ID="github-smoke-client"
+export SCREENOTE_GITHUB_CLIENT_SECRET_PATH="${SECRET_ROOT}/github_client_secret"
+export SCREENOTE_HONEYBADGER_API_KEY_PATH="${SECRET_ROOT}/honeybadger_api_key"
+
+provider_overlays=(
+  --file "${S3_COMPOSE}"
+  --file "${SMTP_COMPOSE}"
+  --file "${GOOGLE_OAUTH_COMPOSE}"
+  --file "${GITHUB_OAUTH_COMPOSE}"
+  --file "${HONEYBADGER_COMPOSE}"
+)
+"${base_compose[@]}" "${provider_overlays[@]}" config >/dev/null
+"${bootstrap_compose[@]}" "${provider_overlays[@]}" config >/dev/null
+
+wait_until_healthy() {
+  local compose_command_name="$1"
+  local -n compose_command="${compose_command_name}"
+  local container_id health state
+
+  for _attempt in $(seq 1 180); do
+    container_id="$("${compose_command[@]}" ps --quiet screenote)"
+    if [[ -n "${container_id}" ]]; then
+      read -r state health < <(
+        docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${container_id}"
+      )
+      [[ "${health}" == "healthy" ]] && return 0
+      case "${state}" in
+        dead|exited|restarting)
+          return 1
+          ;;
+      esac
+    fi
+    sleep 1
+  done
+
+  return 1
+}
+
+wait_until_processing_complete() {
+  local compose_command_name="$1"
+  local -n compose_command="${compose_command_name}"
+  local failed_jobs finished_jobs primary_state ready_images variant_records
+
+  for _attempt in $(seq 1 60); do
+    if primary_state="$("${compose_command[@]}" exec -T screenote sqlite3 \
+        /rails/storage/primary.sqlite3 \
+        'SELECT (SELECT COUNT(*) FROM screenshot_images WHERE status = 1 AND width = 400 AND height = 300), (SELECT COUNT(*) FROM active_storage_variant_records);')" &&
+      finished_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
+        /rails/storage/queue.sqlite3 \
+        "SELECT COUNT(*) FROM solid_queue_jobs WHERE class_name = 'ScreenshotDimensionJob' AND finished_at IS NOT NULL;")" &&
+      failed_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
+        /rails/storage/queue.sqlite3 \
+        'SELECT COUNT(*) FROM solid_queue_failed_executions;')"; then
+      IFS='|' read -r ready_images variant_records <<< "${primary_state}"
+      [[ "${failed_jobs}" == "0" ]] || return 1
+      if [[ "${ready_images}" == "1" && "${variant_records}" == "3" && "${finished_jobs}" -ge 1 ]]; then
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+
+  return 1
+}
+
+assert_secret_values_absent() {
+  local secret_file
+
+  for secret_file in "${AUDIT_ROOT}"/*; do
+    if grep --fixed-strings --quiet --file "${secret_file}" "$@"; then
+      printf 'self-hosted smoke: a runtime secret appeared in captured output\n' >&2
+      return 1
+    fi
+  done
+}
+
+assert_secrets_absent() {
+  local compose_command_name="$1"
+  local -n compose_command="${compose_command_name}"
+  local container_id inspect_path logs_path
+
+  container_id="$("${compose_command[@]}" ps --quiet screenote)"
+  inspect_path="${SMOKE_ROOT}/inspect.json"
+  logs_path="${SMOKE_ROOT}/container.log"
+  docker inspect "${container_id}" > "${inspect_path}"
+  "${compose_command[@]}" logs --no-color > "${logs_path}"
+
+  assert_secret_values_absent "${inspect_path}" "${logs_path}"
+}
+
+printf 'Starting fresh local-storage configuration\n'
+"${bootstrap_compose[@]}" up --detach
+wait_until_healthy bootstrap_compose
+assert_secrets_absent bootstrap_compose
+
+printf 'Claiming the prepared instance with the web process stopped\n'
+"${bootstrap_compose[@]}" down --remove-orphans
+set +e
+"${bootstrap_compose[@]}" run --rm --no-deps screenote ./bin/rails runner - \
+  >"${CLAIM_LOG}" 2>&1 <<'RUBY'
+require "stringio"
+require "base64"
+
+raise "fresh installation created an account" unless User.count.zero?
+
+password = "screenote-smoke-password-123"
+administrator = User.create!(
+  email: "container-smoke@example.test",
+  password: password,
+  password_confirmation: password,
+  confirmed_at: Time.current
+)
+Installation.transaction do
+  installation = Installation.current!
+  installation.lock!
+  installation.update!(
+    state: "claimed",
+    administrator: administrator,
+    bootstrap_token_digest: nil,
+    claimed_at: Time.current
+  )
+end
+Rails.cache.write("screenote-container-smoke", "persisted")
+image_data = Base64.strict_decode64(
+  "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsAQMAAADXeXeBAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURf8AAP///0EdNBEAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gILFTs1piYMpQAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wMi0xMVQyMTo1OTo1MyswMDowMOul7ggAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDItMTFUMjE6NTk6NTMrMDA6MDCa+Fa0AAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTAyLTExVDIxOjU5OjUzKzAwOjAwze13awAAACZJREFUaN7twTEBAAAAwqD1T20JT6AAAAAAAAAAAAAAAAAAAICnATvEAAEnf54JAAAAAElFTkSuQmCC"
+)
+project = Project.create!(creator: administrator, name: "Container smoke project")
+page = project.pages.create!(name: "/container-smoke")
+screenshot = page.screenshots.create!(title: "Container smoke screenshot")
+image = screenshot.screenshot_images.create!(viewport: :desktop)
+upload = Snapshots::AttachImage.call(
+  image: image,
+  io: StringIO.new(image_data),
+  filename: "container-smoke.png",
+  declared_content_type: "image/png",
+  declared_length: image_data.bytesize,
+  schedule_processing: false
+)
+raise "screenshot upload did not persist" unless upload.operation == "uploaded" && image.image.attached?
+
+job = ScreenshotDimensionJob.perform_later(image, image.image.blob.id)
+raise "dimension job was not queued" unless job.successfully_enqueued?
+
+Rails.cache.write("screenote-container-smoke-job-id", job.job_id)
+annotation = screenshot.annotations.create!(
+  user: administrator,
+  viewport: :desktop,
+  x_percent: 10,
+  y_percent: 20,
+  width_percent: 30,
+  height_percent: 40,
+  comment: "Persistent smoke annotation"
+)
+annotation.annotation_comments.create!(
+  user: administrator,
+  body: "Persistent smoke reply"
+)
+ActionCable.server.broadcast("screenote-container-smoke", { marker: "persistent-cable-message" })
+RUBY
+claim_status=$?
+set -e
+assert_secret_values_absent "${CLAIM_LOG}"
+if (( claim_status != 0 )); then
+  sed -n '1,240p' "${CLAIM_LOG}" >&2
+  exit "${claim_status}"
+fi
+
+printf 'Replacing the claimed container without bootstrap material\n'
+rm -f -- "${SECRET_ROOT}/bootstrap_token"
+"${base_compose[@]}" up --detach
+wait_until_healthy base_compose
+wait_until_processing_complete base_compose
+assert_secrets_absent base_compose
+
+printf 'Verifying persistent state with the claimed web process stopped\n'
+"${base_compose[@]}" down --remove-orphans
+set +e
+"${base_compose[@]}" run --rm --no-deps screenote ./bin/rails runner - \
+  >"${VERIFY_LOG}" 2>&1 <<'RUBY'
+require "json"
+
+raise "installation did not remain claimed" unless Installation.current!.claimed?
+raise "administrator did not survive replacement" unless User.exists?(email: "container-smoke@example.test")
+raise "cache state did not survive replacement" unless Rails.cache.read("screenote-container-smoke") == "persisted"
+
+project = Project.find_by!(name: "Container smoke project")
+screenshot = project.screenshots.find_by!(title: "Container smoke screenshot")
+image = screenshot.primary_image
+raise "screenshot did not become ready" unless screenshot.ready? && image.status_ready?
+raise "screenshot dimensions did not survive" unless [ image.width, image.height ] == [ 400, 300 ]
+raise "screenshot attachment did not survive" unless image.image.attached?
+raise "screenshot bytes did not survive" unless Digest::SHA256.hexdigest(image.image.download) ==
+  "0d903cfb00125731f7eb7ab582847e4de854b3e835c9219806a2a606fa37ea2d"
+raise "expected screenshot variants did not survive" unless image.thumbnail_variants_warmed? &&
+  image.image.blob.variant_records.count == 3
+
+annotation = screenshot.annotations.find_by!(comment: "Persistent smoke annotation")
+raise "annotation did not survive" unless annotation.viewport_desktop?
+raise "annotation reply did not survive" unless annotation.annotation_comments.exists?(
+  body: "Persistent smoke reply",
+  action: :comment
+)
+
+job_id = Rails.cache.read("screenote-container-smoke-job-id")
+job = SolidQueue::Job.find_by!(active_job_id: job_id)
+raise "queued dimension job did not finish" unless job.finished_at?
+raise "queued dimension job failed" if job.failed_execution
+raise "a queued smoke job failed" if SolidQueue::FailedExecution.exists?
+
+channel = "screenote-container-smoke"
+cable_message = SolidCable::Message
+  .where(channel_hash: SolidCable::Message.channel_hash_for(channel))
+  .find_by!(channel: channel)
+raise "cable state did not survive" unless JSON.parse(cable_message.payload).fetch("marker") ==
+  "persistent-cable-message"
+RUBY
+verify_status=$?
+set -e
+assert_secret_values_absent "${VERIFY_LOG}"
+if (( verify_status != 0 )); then
+  sed -n '1,240p' "${VERIFY_LOG}" >&2
+  exit "${verify_status}"
+fi
+
+printf 'Self-hosted container smoke passed\n'

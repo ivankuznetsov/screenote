@@ -41,14 +41,48 @@ module Api
       end
 
       test "project-scoped oauth token lists only its bound member project" do
-        token = oauth_token(user: users(:alice), scopes: "mcp_read")
-        token.update_column(:project_id, projects(:alice_project).id)
+        token = oauth_token(
+          user: users(:alice),
+          project: projects(:alice_project),
+          scopes: "mcp_read"
+        )
 
         get api_v1_projects_path, headers: auth_header(token.token)
 
         assert_response :success
         assert_equal [ projects(:alice_project).id ],
           response.parsed_body.fetch("projects").pluck("id")
+      end
+
+      test "project-scoped oauth index fails closed if authority disappears after authentication" do
+        token = oauth_token(
+          user: users(:alice),
+          project: projects(:alice_project),
+          scopes: "mcp_read"
+        )
+        original = Api::V1::ProjectScope.method(:resolve_project)
+        Api::V1::ProjectScope.define_singleton_method(:resolve_project) { |*, **| nil }
+
+        get api_v1_projects_path, headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      ensure
+        Api::V1::ProjectScope.define_singleton_method(:resolve_project, original) if original
+      end
+
+      test "project-scoped oauth token is rejected after membership removal" do
+        token = oauth_token(
+          user: users(:bob),
+          project: projects(:alice_project),
+          scopes: "mcp_read"
+        )
+        project_memberships(:bob_member_of_alice_project).destroy!
+
+        get api_v1_projects_path, headers: auth_header(token.token)
+
+        assert_response :unauthorized
+        assert_equal "unauthorized", response.parsed_body["code"]
       end
 
       test "oauth write-only token cannot list projects" do
@@ -158,8 +192,11 @@ module Api
       end
 
       test "project-scoped oauth tokens cannot create projects" do
-        token = oauth_token(user: users(:alice), scopes: "mcp_write")
-        token.update_column(:project_id, projects(:alice_project).id)
+        token = oauth_token(
+          user: users(:alice),
+          project: projects(:alice_project),
+          scopes: "mcp_write"
+        )
 
         assert_no_difference "Project.count" do
           post api_v1_projects_path,
@@ -172,11 +209,30 @@ module Api
         assert_equal "forbidden", response.parsed_body["code"]
       end
 
+      test "project creation maps a principal authorization race to forbidden" do
+        token = oauth_token(user: users(:free_user), scopes: "mcp_write")
+        original = Projects::Create.method(:call)
+        Projects::Create.define_singleton_method(:call) do |**|
+          raise Projects::Create::Forbidden
+        end
+
+        assert_no_difference "Project.count" do
+          post api_v1_projects_path,
+            params: { name: "Racing project" },
+            headers: auth_header(token.token),
+            as: :json
+        end
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      ensure
+        Projects::Create.define_singleton_method(:call, original) if original
+      end
+
       test "project deletion invalidates its project-scoped oauth token" do
         user = users(:alice)
         project = user.owned_projects.create!(name: "Disposable OAuth scope")
-        token = oauth_token(user: user, scopes: "mcp_read")
-        token.update_column(:project_id, project.id)
+        token = oauth_token(user: user, project: project, scopes: "mcp_read")
         raw_token = token.token
 
         project.destroy!
@@ -211,8 +267,15 @@ module Api
         { "Authorization" => "Bearer #{token}" }
       end
 
-      def oauth_token(user:, scopes: "mcp_read", expires_in: 1.year, revoked_at: nil)
-        create_oauth_token(application: create_oauth_application, user: user, scopes: scopes, expires_in: expires_in, revoked_at: revoked_at)
+      def oauth_token(user:, project: nil, scopes: "mcp_read", expires_in: 1.year, revoked_at: nil)
+        create_oauth_token(
+          application: create_oauth_application,
+          user: user,
+          project: project,
+          scopes: scopes,
+          expires_in: expires_in,
+          revoked_at: revoked_at
+        )
       end
     end
   end

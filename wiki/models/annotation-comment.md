@@ -3,7 +3,7 @@ title: AnnotationComment
 type: model
 source: app/models/annotation_comment.rb
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-08-05
 tags: [model, annotation, comments, threading]
 ---
 
@@ -19,8 +19,8 @@ Source: `app/models/annotation_comment.rb`
 |--------|------|-------|
 | id | integer | PK |
 | annotation_id | integer | NOT NULL, FK to annotations (ON DELETE CASCADE) |
-| user_id | integer | FK to users (ON DELETE SET NULL) |
-| api_key_id | integer | FK to api_keys (ON DELETE SET NULL) |
+| user_id | integer | Optional restrictive FK to users; exactly one actor is required |
+| api_key_id | integer | Optional restrictive FK to api_keys; exactly one actor is required |
 | body | text | NOT NULL, max 5000 chars |
 | action | integer | Enum: comment(0), resolved(1), reopened(2). Default: comment |
 | notified_at | datetime | When digest notification was sent for this comment |
@@ -42,12 +42,13 @@ Source: `app/models/annotation_comment.rb`
 ## Validations
 
 - `body`: presence, length max 5000
-- Custom: `has_author` -- exactly one of user_id or api_key_id must be present (XOR constraint)
+- Custom and database check: exactly one of user_id or api_key_id must be present (XOR constraint)
 
 ## Notes
 
 - Comments with action `:resolved` or `:reopened` are created transactionally by `Annotation#resolve!` and `Annotation#reopen!`, not directly by controllers.
 - The `notified_at` field is used by the hourly digest notification system to track which comments have been included in emails. The composite index `(action, notified_at)` supports efficient queries for unnotified resolved/reopened comments.
 - The XOR author validation ensures a comment is attributed to exactly one source: a human user or an AI agent (via API key).
+- Actor foreign keys are restrictive so deleting a user or key cannot erase thread provenance.
 
 See also: [[annotation]], [[user]], [[api-key]]

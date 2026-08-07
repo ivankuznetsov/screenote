@@ -6,12 +6,9 @@ class ReopenAnnotationToolTest < ActiveSupport::TestCase
   setup do
     @user = users(:alice)
     @project = projects(:alice_project)
-    @api_key = api_keys(:alice_key)
     @resolved_annotation = annotations(:resolved_annotation)
 
-    Current.mcp_user = @user
-    Current.mcp_project = @project
-    Current.mcp_api_key = @api_key
+    Current.authenticated_principal = AuthenticatedPrincipal.for_user(@user)
   end
 
   teardown do

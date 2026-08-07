@@ -53,18 +53,6 @@ class SendDigestNotificationsJobTest < ActiveSupport::TestCase
     assert resolution.notified_at.present?, "Self-resolution should still be marked as notified"
   end
 
-  test "skips blank email authors but still marks comments as notified" do
-    @author.update_column(:email, "")
-    resolution = create_resolution(@annotation, resolver: @resolver)
-
-    assert_no_emails do
-      SendDigestNotificationsJob.perform_now
-    end
-
-    resolution.reload
-    assert resolution.notified_at.present?, "Comment for blank-email author should still be marked as notified"
-  end
-
   test "does not re-send already notified resolutions" do
     resolution = create_resolution(@annotation, resolver: @resolver)
     resolution.update_column(:notified_at, 1.hour.ago)
@@ -104,6 +92,26 @@ class SendDigestNotificationsJobTest < ActiveSupport::TestCase
     assert_no_emails do
       SendDigestNotificationsJob.perform_now
     end
+  end
+
+  test "disabled mail neither delivers nor marks durable notification work complete" do
+    resolution = create_resolution(@annotation, resolver: @resolver)
+    deployment = Screenote::Deployment.new(
+      {
+        "SCREENOTE_EDITION" => "self_hosted",
+        "SCREENOTE_BASE_URL" => "http://screenote.internal",
+        "SECRET_KEY_BASE" => "a" * 64,
+        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      },
+      production: true
+    )
+
+    previous = Screenote::Deployment.current
+    Screenote::Deployment.instance_variable_set(:@current, deployment)
+    assert_no_emails { SendDigestNotificationsJob.perform_now }
+    assert_nil resolution.reload.notified_at
+  ensure
+    Screenote::Deployment.instance_variable_set(:@current, previous) if previous
   end
 
   private

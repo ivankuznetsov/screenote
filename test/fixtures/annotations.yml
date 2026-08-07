@@ -23,6 +23,7 @@ resolved_annotation:
   y_percent: 10.0
   comment: "Fixed the alignment"
   status: 1
+  resolved_by_user: bob
 
 bob_annotation:
   screenshot: bob_screenshot

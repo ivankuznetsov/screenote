@@ -3,6 +3,7 @@
 class GetAnnotationTool < ApplicationTool
   tool_name "get_annotation"
   description "Get annotation details with a cropped image of the annotated region (base64-encoded PNG)."
+  mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -20,7 +21,7 @@ class GetAnnotationTool < ApplicationTool
       cropped_base64 = begin
         annotation.crop
       rescue => e
-        Honeybadger.notify(e, context: {
+        Screenote::Monitoring.notify(e, context: {
           annotation_id: annotation.id,
           screenshot_id: screenshot.id,
           viewport: annotation.viewport

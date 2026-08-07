@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-03
+updated: 2026-08-06
 tags: [gaps, documentation, todo]
 ---
 
@@ -53,8 +53,16 @@ Areas where documentation is missing or incomplete. Updated from current source,
 ### Deployment
 - Kamal configuration details beyond what's in CLAUDE.md.
 - Environment variable documentation for production setup.
+- The unsafe rolling credential migration is resolved in source: ordinary deploys refuse the pending migration and `bin/saas-credential-cutover` now locks deployment, stops and proves predecessor processes quiesced, invokes a reviewed digest-pinned backup hook for that exact window, validates challenge/restore-point-bound evidence, migrates and verifies in one PostgreSQL transaction, and starts only the successor. The remaining production boundary is operational: the private real hook and four-role restore drill must be reviewed and retained for the cutover.
+
+### Source release publication
+- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64 qualification runners; a versioned minimum-host profile; tracked load and public-CLI drivers; candidate-backed HTTP/HTTPS origins; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain external technical gates. Pull-request source-contract jobs cannot substitute for the dedicated exact qualification run. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until they are complete.
+- The initial predecessor-none release supports same-image local/S3 restore. The first successor release must add and qualify the exact adjacent local/S3 upgrade and rollback fixture and reconcile predecessor versus restore-image validation before it can publish.
 
 ## Incomplete Documentation
+
+### Screenshot Storage Reconciliation
+- Validated screenshot bytes are synchronously staged before attachment commit, and normal upload errors or transaction rollbacks compensate by removing the object. A hard process termination between the provider write and database commit can still leave an unreferenced object because storage and the primary database do not share a transaction. U7 should add a storage-inventory reconciler or document a dedicated staging-prefix lifecycle policy before claiming orphan-free crash recovery.
 
 ### Project Route Filtering
 - Project route filters normalize and match page names in memory because stored
@@ -65,10 +73,6 @@ Areas where documentation is missing or incomplete. Updated from current source,
 
 ### Admin Features
 - Admin dashboard only has 3 stats. If there are admin-only features beyond the dashboard, they are not documented.
-
-### OAuth Token Scoping
-- Doorkeeper tokens can be scoped to projects (`project_id` FK on oauth_access_tokens). REST project authorization and listing bind such a token to that project, and project deletion removes its scoped grants/tokens instead of widening them; the broader product decision about when to issue user-scoped versus project-scoped tokens remains open.
-- **NEW:** Todo #108 proposes fundamentally rethinking this: user-scoped vs project-scoped tokens. The current architecture may change.
 
 ### Todo / Source Status Drift
 - Several todos have frontmatter that appears stale compared with source. Examples: DCR/MCP rate limiting (#087/#088), Doorkeeper admin route skipping (#089), localhost-only DCR redirect URIs (#094), `CreateAnnotationTool` (#012), `ReopenAnnotationTool` (#132), and `AddAnnotationCommentTool` (#133). Do not rely on todo status alone; verify source before planning work.
@@ -86,10 +90,9 @@ The following gaps from the original bootstrap have been partially or fully addr
 1. What is the intended long-term removal plan for the legacy `Screenshot#image`, `width`, `height`, and `status` path after `ScreenshotImage` stabilizes?
 2. Is there a periodic job runner for `Session.cleanup_expired!`?
 3. How is the digest notification job scheduled? (Solid Queue cron? Rake task?)
-4. **NEW:** Should OAuth be user-scoped or project-scoped? (#108 -- architectural decision pending)
-5. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
-6. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was not present during the 2026-07-08 refresh; neither were the default fallback paths `~/wikis/main/wiki/`, `../wikis/master/wiki/`, or `../wikis/main/wiki/`. `qmd search` returned no matching project-wiki results for the CLI/API refresh query. Cross-project context may be incomplete until the path is restored or config is updated.
-7. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
+4. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
+5. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was not present during the 2026-07-08 refresh; neither were the default fallback paths `~/wikis/main/wiki/`, `../wikis/master/wiki/`, or `../wikis/main/wiki/`. `qmd search` returned no matching project-wiki results for the CLI/API refresh query. Cross-project context may be incomplete until the path is restored or config is updated.
+6. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
 
 See also: [[architecture]], [[active-areas]], [[plans-and-initiatives]], [[technical-debt]]
 

@@ -7,12 +7,15 @@ class OauthDeviceGrant < ApplicationRecord
 
   belongs_to :application, class_name: "Doorkeeper::Application"
   belongs_to :resource_owner, class_name: "User", optional: true
+  belongs_to :project, optional: true
 
   validates :device_code, presence: true, uniqueness: true
   validates :user_code, presence: true, uniqueness: true
   validates :scopes, presence: true
   validates :expires_at, presence: true
   validates :polling_interval, numericality: { only_integer: true, greater_than: 0 }
+  validate :principal_binding_is_consistent
+  validate :approved_principal_is_immutable, on: :update
 
   scope :expired, -> { where(expires_at: ..Time.current) }
   scope :stale, -> { where(expires_at: ..EXPIRED_RETENTION_PERIOD.ago) }
@@ -50,5 +53,25 @@ class OauthDeviceGrant < ApplicationRecord
 
   def denied?
     denied_at.present?
+  end
+
+  private
+
+  def principal_binding_is_consistent
+    if approved?
+      unless resource_owner && Oauth::PrincipalBinding.valid?(self)
+        errors.add(:principal_kind, "must identify authority the resource owner currently holds")
+      end
+    elsif principal_kind.present? || project_id.present?
+      errors.add(:principal_kind, "cannot be selected before approval")
+    end
+  end
+
+  def approved_principal_is_immutable
+    return if principal_kind_in_database.blank?
+    return unless will_save_change_to_principal_kind? || will_save_change_to_project_id? ||
+      will_save_change_to_resource_owner_id?
+
+    errors.add(:principal_kind, "cannot change after approval")
   end
 end

@@ -4,6 +4,8 @@ class SendDigestNotificationsJob < ApplicationJob
   queue_as :default
 
   def perform
+    return unless Screenote::Deployment.current.mail?
+
     resolutions = unnotified_resolutions.to_a
     return if resolutions.empty?
 

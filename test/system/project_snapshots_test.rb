@@ -142,30 +142,32 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
     result = parse_mcp_result(response)
     assert result["screenshot_id"].present?, "create_multi_viewport_screenshot response should include screenshot_id"
 
-    # Complete the signed-URL upload for every viewport variant; without this
+    # Complete the one-time bearer upload for every viewport variant; without this
     # the parent Screenshot stays :pending and never appears in the project
     # show grid's thumbnail set, which would invalidate later assertions.
-    upload_to_signed_urls(result["uploads"])
+    upload_with_one_time_credentials(result["uploads"])
     wait_for_screenshot_ready(result["screenshot_id"])
 
     result
   end
 
-  def upload_to_signed_urls(uploads)
+  def upload_with_one_time_credentials(uploads)
     image_data = File.binread(TEST_IMAGE_PATH)
     uploads.each do |upload|
-      # Route helpers use example.com in the test environment. Keep the signed
-      # path/query from the tool response but target Capybara's actual server.
-      signed_uri = URI(upload["upload_url"])
-      uri = URI("#{app_base_url}#{signed_uri.request_uri}")
+      # Route helpers use example.com in the test environment. Keep the path
+      # from the tool response but target Capybara's actual server.
+      upload_uri = URI(upload["upload_url"])
+      assert_nil upload_uri.query, "one-time upload credentials must not enter the URL"
+      uri = URI("#{app_base_url}#{upload_uri.request_uri}")
       request = Net::HTTP::Put.new(uri)
-      request["Content-Type"] = "image/png"
+      request["Authorization"] = "Bearer #{upload.fetch('token')}"
+      request["Content-Type"] = upload.fetch("content_type")
       request.body = image_data
       response = perform_enqueued_jobs do
         Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(request) }
       end
       assert_equal "200", response.code,
-        "Signed-URL upload should succeed (got #{response.code}: #{response.body})"
+        "Bearer upload should succeed (got #{response.code}: #{response.body})"
     end
   end
 
@@ -185,7 +187,7 @@ class ProjectSnapshotsTest < ApplicationSystemTestCase
   end
 
   def call_mcp_tool(token:, tool_name:, arguments: {})
-    uri = URI("#{app_base_url}/mcp/messages")
+    uri = URI("#{app_base_url}/mcp")
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{token}" if token
     request["Content-Type"] = "application/json"

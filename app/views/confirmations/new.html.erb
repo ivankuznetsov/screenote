@@ -1,0 +1,19 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Resend Confirmation</h1>
+  <p class="auth-card__subtitle">Enter your email and we'll send a new confirmation link.</p>
+
+  <%= form_with url: confirmations_path, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :email, "Email", class: "auth-card__label" %>
+      <%= form.email_field :email, class: "auth-card__input", required: true,
+            autofocus: true, autocomplete: "email" %>
+    </div>
+    <div class="auth-card__actions">
+      <%= form.submit "Resend Confirmation", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+
+  <div class="auth-card__footer">
+    <%= link_to "Back to Sign In", new_session_path, class: "auth-card__link" %>
+  </div>
+</div>

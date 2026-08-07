@@ -1,0 +1,54 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Create your account</h1>
+  <p class="auth-card__subtitle">Start giving visual feedback to AI agents</p>
+
+  <%= render "sessions/oauth_buttons" %>
+
+  <% if @user.errors[:base].any? %>
+    <div class="auth-card__error" role="alert"><%= @user.errors[:base].first %></div>
+  <% end %>
+
+  <%= form_with model: @user, url: sign_up_path, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :email, "Email", class: "auth-card__label" %>
+      <%= form.email_field :email,
+            class: "auth-card__input #{'auth-card__input--error' if @user.errors[:email].any?}",
+            required: true,
+            autofocus: true,
+            autocomplete: "email",
+            aria: { invalid: @user.errors[:email].any? } %>
+      <% if @user.errors[:email].any? %>
+        <p class="auth-card__field-error" role="alert"><%= @user.errors[:email].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password, class: "auth-card__label" %>
+      <%= form.password_field :password,
+            class: "auth-card__input #{'auth-card__input--error' if @user.errors[:password].any?}",
+            required: true,
+            minlength: RailsSimpleAuth.configuration.password_minimum_length,
+            autocomplete: "new-password" %>
+      <% if @user.errors[:password].any? %>
+        <p class="auth-card__field-error" role="alert"><%= @user.errors[:password].first %></p>
+      <% end %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password_confirmation, "Confirm password", class: "auth-card__label" %>
+      <%= form.password_field :password_confirmation,
+            class: "auth-card__input",
+            required: true,
+            minlength: RailsSimpleAuth.configuration.password_minimum_length,
+            autocomplete: "new-password" %>
+    </div>
+
+    <div class="auth-card__actions">
+      <%= form.submit "Create Account", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+
+  <div class="auth-card__footer">
+    <%= link_to "Already have an account? Sign In", new_session_path, class: "auth-card__link" %>
+  </div>
+</div>

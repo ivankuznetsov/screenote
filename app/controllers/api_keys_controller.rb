@@ -12,17 +12,20 @@ class ApiKeysController < ApplicationController
   end
 
   def new
-    @api_key = @project.api_keys.build
+    @api_key = @project.api_keys.build(issued_by_user: Current.user)
   end
 
   def create
-    @api_key = @project.api_keys.build(api_key_params)
+    @api_key = @project.api_keys.build(api_key_params.merge(issued_by_user: Current.user))
 
-    if @api_key.save
+    status = save_api_key_with_current_authority
+    if status == :saved
       flash[:api_key_token] = @api_key.raw_token
       redirect_to project_api_keys_path(@project), notice: "API key created. Copy it now — it won't be shown again."
-    else
+    elsif status == :invalid
       render :new, status: :unprocessable_entity
+    else
+      redirect_to projects_path, alert: "You don't have permission to do that."
     end
   end
 
@@ -39,5 +42,13 @@ class ApiKeysController < ApplicationController
 
   def api_key_params
     params.require(:api_key).permit(:name)
+  end
+
+  def save_api_key_with_current_authority
+    Oauth::PrincipalBinding.with_locked_project(user: Current.user, project_id: @project.id) do |valid, membership|
+      next :forbidden unless valid && membership.owner?
+
+      @api_key.save ? :saved : :invalid
+    end
   end
 end

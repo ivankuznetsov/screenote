@@ -3,5 +3,5 @@
 class Current < ActiveSupport::CurrentAttributes
   delegate :user, :user=, :session, :session=, to: "RailsSimpleAuth::Current"
 
-  attribute :mcp_user, :mcp_project, :mcp_api_key, :mcp_oauth_token
+  attribute :authenticated_principal
 end

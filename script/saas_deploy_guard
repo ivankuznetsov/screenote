@@ -1,0 +1,18 @@
+# frozen_string_literal: true
+
+migration_version = Screenote::SaasCredentialCutover::MIGRATION_VERSION
+connection = ActiveRecord::Base.connection
+applied = connection.data_source_exists?("schema_migrations") &&
+  connection.select_value(<<~SQL.squish).present?
+    SELECT 1
+    FROM schema_migrations
+    WHERE version = #{connection.quote(migration_version)}
+    LIMIT 1
+  SQL
+
+abort(<<~MESSAGE) unless applied
+  Refusing a rolling deploy: irreversible credential migration #{migration_version} is pending.
+  Run bin/saas-credential-cutover with a reviewed, digest-pinned quiesced-backup hook and new evidence.
+MESSAGE
+
+puts "Credential cutover prerequisite is satisfied."

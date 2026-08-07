@@ -1,0 +1,53 @@
+<div class="auth-card">
+  <h1 class="auth-card__title">Welcome back</h1>
+  <p class="auth-card__subtitle">Sign in to your account</p>
+
+  <% if @error_message.present? %>
+    <div class="auth-card__error" role="alert"><%= @error_message %></div>
+  <% end %>
+
+  <%= render "sessions/oauth_buttons" %>
+
+  <%= form_with url: session_path, class: "auth-card__form" do |form| %>
+    <div class="auth-card__field">
+      <%= form.label :email, "Email", class: "auth-card__label" %>
+      <%= form.email_field :email,
+            class: "auth-card__input",
+            required: true,
+            autofocus: true,
+            autocomplete: "email",
+            placeholder: "you@company.com",
+            value: @previous_email %>
+    </div>
+
+    <div class="auth-card__field">
+      <%= form.label :password, class: "auth-card__label" %>
+      <%= form.password_field :password,
+            class: "auth-card__input",
+            required: true,
+            autocomplete: "current-password",
+            placeholder: "Your password" %>
+    </div>
+
+    <div class="auth-card__actions">
+      <%= form.submit "Sign In", class: "auth-card__submit" %>
+    </div>
+  <% end %>
+
+  <% if Screenote::Deployment.current.mail? %>
+    <%= link_to "Sign in with Magic Link", magic_link_form_path, class: "auth-card__magic-link" %>
+  <% end %>
+
+  <div class="auth-card__footer">
+    <% if Screenote::Deployment.current.mail? %>
+      <%= link_to "Forgot password?", new_password_path, class: "auth-card__link" %>
+    <% else %>
+      <span>For password recovery, contact your instance administrator.</span>
+    <% end %>
+
+    <% if Screenote::Deployment.current.saas? %>
+      <span class="auth-card__footer-sep">&middot;</span>
+      <%= link_to "Create an account", sign_up_path, class: "auth-card__link" %>
+    <% end %>
+  </div>
+</div>

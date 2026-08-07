@@ -4,6 +4,9 @@ require "test_helper"
 require Rails.root.join("db/migrate/20260712153000_repair_legacy_api_key_token_storage").to_s
 
 class RepairLegacyApiKeyTokenStorageTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+  self.use_transactional_tests = false
+
   class MigrationDatabaseRecord < ActiveRecord::Base
     self.abstract_class = true
   end
@@ -16,6 +19,7 @@ class RepairLegacyApiKeyTokenStorageTest < ActiveSupport::TestCase
   end
 
   def after_teardown
+    @connection.drop_table(:api_keys, if_exists: true) if @connection
     super
   ensure
     @database_class&.remove_connection
@@ -68,13 +72,13 @@ class RepairLegacyApiKeyTokenStorageTest < ActiveSupport::TestCase
     end
   end
 
-  test "bounds PostgreSQL lock acquisition" do
+  test "runs the PostgreSQL table lock transactionally" do
     skip unless @connection.adapter_name == "PostgreSQL"
 
     create_legacy_schema
     run_migration
 
-    assert_equal "10s", @connection.select_value("SHOW lock_timeout")
+    assert_not @connection.column_exists?(:api_keys, :token)
   end
 
   private
@@ -104,7 +108,11 @@ class RepairLegacyApiKeyTokenStorageTest < ActiveSupport::TestCase
   end
 
   def run_migration
-    capture_io { RepairLegacyApiKeyTokenStorage.new.exec_migration(@connection, :up) }
+    capture_io do
+      @connection.transaction do
+        RepairLegacyApiKeyTokenStorage.new.exec_migration(@connection, :up)
+      end
+    end
   end
 
   def migration_database_config

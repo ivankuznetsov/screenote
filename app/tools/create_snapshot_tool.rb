@@ -5,6 +5,7 @@ class CreateSnapshotTool < ApplicationTool
 
   tool_name "create_snapshot"
   description "Create a project snapshot record for a capture run. Pass the returned snapshot_id into create_multi_viewport_screenshot."
+  mcp_action scope: :mcp_write, read_only: false, destructive: false, idempotent: false, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")

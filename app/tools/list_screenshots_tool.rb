@@ -3,6 +3,7 @@
 class ListScreenshotsTool < ApplicationTool
   tool_name "list_screenshots"
   description "List screenshots (versions) in a project, with annotation counts. Supports filtering by page and pagination via limit/offset."
+  mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -38,7 +39,10 @@ class ListScreenshotsTool < ApplicationTool
             status: s.status,
             annotation_count: s.annotations.size,
             unresolved_count: s.annotations.select(&:open?).size,
-            annotate_url: Rails.application.routes.url_helpers.screenshot_url(s),
+            annotate_url: Rails.application.routes.url_helpers.screenshot_url(
+              s,
+              Screenote::Deployment.current.url_options
+            ),
             created_at: s.created_at.iso8601
           }
         end,

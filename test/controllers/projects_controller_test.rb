@@ -66,7 +66,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       assert_equal "80", image["height"]
       assert_equal "lazy", image["loading"]
       assert_equal "async", image["decoding"]
-      assert_includes image["src"], primary_image.image.variant(:project_strip).variation.key
+      assert_equal screenshot_image_media_path(primary_image, :project_strip), image["src"]
     end
   end
 
@@ -631,7 +631,40 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_path(Project.last)
   end
 
+  test "self-hosted browser project creation is unlimited through the shared operation" do
+    user = users(:bob)
+    assert_equal 1, user.owned_projects.count, "Precondition: Bob owns 1 project"
+    sign_in(user)
+
+    with_self_hosted_deployment do
+      get new_project_path
+      assert_response :success
+
+      assert_difference [ "Project.count", "ProjectMembership.count" ], 1 do
+        post projects_path, params: { project: { name: "Second self-hosted project" } }
+      end
+      assert_redirected_to project_path(Project.order(:id).last)
+    end
+  end
+
   private
+
+  def with_self_hosted_deployment
+    deployment = Screenote::Deployment.new(
+      {
+        "SCREENOTE_EDITION" => "self_hosted",
+        "SCREENOTE_BASE_URL" => "http://screenote.internal",
+        "SECRET_KEY_BASE" => "a" * 64,
+        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      },
+      production: true
+    )
+    previous = Screenote::Deployment.current
+    Screenote::Deployment.instance_variable_set(:@current, deployment)
+    yield
+  ensure
+    Screenote::Deployment.instance_variable_set(:@current, previous)
+  end
 
   def create_ready_screenshot_with_image(page, title:, viewport: :desktop, snapshot: nil)
     screenshot = page.screenshots.create!(title: title, status: :ready, snapshot: snapshot)
@@ -683,9 +716,6 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   def assert_responsive_page_card_image(primary_image)
     assert_select ".page-card__thumbnail img", count: 1 do |images|
       image = images.first
-      one_x = primary_image.image.variant(:page_card_1x)
-      two_x = primary_image.image.variant(:page_card_2x)
-
       assert_equal "480", image["width"]
       assert_equal "270", image["height"]
       assert_equal "lazy", image["loading"]
@@ -697,10 +727,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
           "(max-width: 960px) calc((100vw - 19.75rem) / 2), 322px",
         image["sizes"]
       )
-      assert_includes image["src"], one_x.variation.key
-      assert_includes image["srcset"], "#{one_x.variation.key}"
+      assert_equal screenshot_image_media_path(primary_image, :page_card_1x), image["src"]
+      assert_includes image["srcset"], screenshot_image_media_path(primary_image, :page_card_1x)
       assert_includes image["srcset"], "480w"
-      assert_includes image["srcset"], "#{two_x.variation.key}"
+      assert_includes image["srcset"], screenshot_image_media_path(primary_image, :page_card_2x)
       assert_includes image["srcset"], "960w"
     end
   end

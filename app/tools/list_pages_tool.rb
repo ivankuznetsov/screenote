@@ -3,6 +3,7 @@
 class ListPagesTool < ApplicationTool
   tool_name "list_pages"
   description "List pages in a project with version counts."
+  mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
     required(:project_id).filled(:integer).description("The project ID")
@@ -26,7 +27,10 @@ class ListPagesTool < ApplicationTool
             id: page.id,
             name: page.name,
             version_count: page.version_count,
-            url: Rails.application.routes.url_helpers.page_url(page),
+            url: Rails.application.routes.url_helpers.page_url(
+              page,
+              Screenote::Deployment.current.url_options
+            ),
             created_at: page.created_at.iso8601
           }
         end

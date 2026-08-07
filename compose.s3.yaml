@@ -1,0 +1,32 @@
+services:
+  screenote:
+    environment:
+      SCREENOTE_STORAGE: s3
+      SCREENOTE_S3_ENDPOINT: ${SCREENOTE_S3_ENDPOINT:?Set SCREENOTE_S3_ENDPOINT}
+      SCREENOTE_S3_REGION: ${SCREENOTE_S3_REGION:?Set SCREENOTE_S3_REGION}
+      SCREENOTE_S3_BUCKET: ${SCREENOTE_S3_BUCKET:?Set SCREENOTE_S3_BUCKET}
+      SCREENOTE_S3_PREFIX: ${SCREENOTE_S3_PREFIX:?Set SCREENOTE_S3_PREFIX}
+      SCREENOTE_S3_PATH_STYLE: ${SCREENOTE_S3_PATH_STYLE:-true}
+      SCREENOTE_S3_REQUEST_TIMEOUT: ${SCREENOTE_S3_REQUEST_TIMEOUT:-30}
+      SCREENOTE_S3_RETRY_LIMIT: ${SCREENOTE_S3_RETRY_LIMIT:-3}
+      AWS_REQUEST_CHECKSUM_CALCULATION: ${SCREENOTE_S3_REQUEST_CHECKSUM_CALCULATION:-when_supported}
+      AWS_RESPONSE_CHECKSUM_VALIDATION: ${SCREENOTE_S3_RESPONSE_CHECKSUM_VALIDATION:-when_supported}
+      SCREENOTE_S3_ACCESS_KEY_ID_FILE: /run/secrets/screenote_s3_access_key_id
+      SCREENOTE_S3_SECRET_ACCESS_KEY_FILE: /run/secrets/screenote_s3_secret_access_key
+    secrets:
+      - source: screenote_s3_access_key_id
+        target: screenote_s3_access_key_id
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+      - source: screenote_s3_secret_access_key
+        target: screenote_s3_secret_access_key
+        uid: "1000"
+        gid: "1000"
+        mode: 0400
+
+secrets:
+  screenote_s3_access_key_id:
+    file: ${SCREENOTE_S3_ACCESS_KEY_ID_PATH:?Set SCREENOTE_S3_ACCESS_KEY_ID_PATH to the restricted S3 access-key file}
+  screenote_s3_secret_access_key:
+    file: ${SCREENOTE_S3_SECRET_ACCESS_KEY_PATH:?Set SCREENOTE_S3_SECRET_ACCESS_KEY_PATH to the restricted S3 secret-key file}

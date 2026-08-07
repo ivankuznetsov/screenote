@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+umask 077
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly BASE_COMPOSE="${REPOSITORY_ROOT}/compose.yaml"
+readonly IMAGE="${1:-${SCREENOTE_SMOKE_IMAGE-}}"
+readonly SMOKE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/screenote-backup-smoke.XXXXXX")"
+readonly SECRET_ROOT="${SMOKE_ROOT}/secrets"
+readonly BACKUP_PARENT="${SMOKE_ROOT}/backups"
+readonly BACKUP_SET="${BACKUP_PARENT}/whole-instance.screenote"
+readonly RESTORE_OPERATOR="${SMOKE_ROOT}/restored-operator"
+readonly CONFIGURATION="${SMOKE_ROOT}/.env"
+readonly IDENTITY="${SMOKE_ROOT}/age-identity.txt"
+readonly AUTHENTICATION_KEY="${SMOKE_ROOT}/backup-authentication-key"
+readonly PROJECT_NAME="screenote-backup-smoke-$$"
+readonly TARGET_VOLUME="screenote_backup_restore_$$"
+readonly VERIFY_LOG="${SMOKE_ROOT}/verify.log"
+
+compose=(
+  docker compose
+  --project-name "${PROJECT_NAME}"
+  --project-directory "${SMOKE_ROOT}"
+  --env-file "${CONFIGURATION}"
+  --file "${BASE_COMPOSE}"
+)
+
+cleanup() {
+  local exit_status=$?
+
+  if (( exit_status != 0 )); then
+    "${compose[@]}" logs --no-color >&2 || true
+  fi
+  "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker volume rm "${TARGET_VOLUME}" >/dev/null 2>&1 || true
+  rm -rf -- "${SMOKE_ROOT}"
+  exit "${exit_status}"
+}
+trap cleanup EXIT
+
+if [[ "$(id -u)" != "1000" || "$(id -g)" != "1000" ]]; then
+  printf 'self-hosted backup smoke: run as host uid/gid 1000\n' >&2
+  exit 78
+fi
+if [[ ! "${IMAGE}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._/:+-]*@sha256:[0-9a-f]{64}$ ]]; then
+  printf 'Usage: script/self_hosted_backup_smoke IMAGE@sha256:DIGEST\n' >&2
+  exit 64
+fi
+for command in docker grep openssl; do
+  command -v "${command}" >/dev/null 2>&1 || {
+    printf 'self-hosted backup smoke: required command is unavailable: %s\n' "${command}" >&2
+    exit 69
+  }
+done
+docker compose version >/dev/null
+docker image inspect "${IMAGE}" >/dev/null
+
+mkdir -m 0700 "${SECRET_ROOT}" "${BACKUP_PARENT}" "${RESTORE_OPERATOR}"
+openssl rand -base64 48 > "${SECRET_ROOT}/secret_key_base"
+openssl rand -base64 48 > "${SECRET_ROOT}/bootstrap_token"
+openssl rand 64 > "${AUTHENTICATION_KEY}"
+chmod 0400 "${SECRET_ROOT}"/*
+chmod 0400 "${AUTHENTICATION_KEY}"
+
+cat > "${CONFIGURATION}" <<ENV
+SCREENOTE_IMAGE=${IMAGE}
+SCREENOTE_BASE_URL=http://screenote.invalid
+SCREENOTE_PORT=0
+SCREENOTE_SECRET_KEY_BASE_PATH=./secrets/secret_key_base
+SCREENOTE_BOOTSTRAP_TOKEN_PATH=./secrets/bootstrap_token
+ENV
+chmod 0600 "${CONFIGURATION}"
+
+docker run --rm --pull never --user 1000:1000 --entrypoint /usr/bin/age-keygen \
+  --volume "${SMOKE_ROOT}:/screenote-operator" \
+  "${IMAGE}" -o /screenote-operator/age-identity.txt >/dev/null
+chmod 0400 "${IDENTITY}"
+readonly RECIPIENT="$(docker run --rm --pull never --user 1000:1000 --entrypoint /usr/bin/age-keygen \
+  --volume "${IDENTITY}:/screenote-input/identity:ro" \
+  "${IMAGE}" -y /screenote-input/identity)"
+
+export SCREENOTE_IMAGE="${IMAGE}"
+export SCREENOTE_BASE_URL="http://screenote.invalid"
+export SCREENOTE_PORT=0
+export SCREENOTE_SECRET_KEY_BASE_PATH="${SECRET_ROOT}/secret_key_base"
+export SCREENOTE_BOOTSTRAP_TOKEN_PATH="${SECRET_ROOT}/bootstrap_token"
+
+bootstrap_compose=( "${compose[@]}" --file "${REPOSITORY_ROOT}/compose.bootstrap.yaml" )
+printf 'Starting a fresh instance for backup smoke\n'
+"${bootstrap_compose[@]}" up --detach --wait --wait-timeout 120
+"${bootstrap_compose[@]}" down --remove-orphans
+
+"${bootstrap_compose[@]}" run --rm --no-deps screenote ./bin/rails runner - <<'RUBY'
+require "base64"
+require "stringio"
+
+password = "screenote-backup-smoke-password-123"
+administrator = User.create!(
+  email: "backup-smoke@example.test",
+  password: password,
+  password_confirmation: password,
+  confirmed_at: Time.current
+)
+Installation.transaction do
+  installation = Installation.current!
+  installation.lock!
+  installation.update!(
+    state: "claimed",
+    administrator: administrator,
+    bootstrap_token_digest: nil,
+    claimed_at: Time.current
+  )
+end
+project = Project.create!(creator: administrator, name: "Backup smoke project")
+page = project.pages.create!(name: "/backup-smoke")
+screenshot = page.screenshots.create!(title: "Backup smoke screenshot")
+image = screenshot.screenshot_images.create!(viewport: :desktop)
+bytes = Base64.strict_decode64(
+  "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsAQMAAADXeXeBAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURf8AAP///0EdNBEAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gILFTs1piYMpQAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wMi0xMVQyMTo1OTo1MyswMDowMOul7ggAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDItMTFUMjE6NTk6NTMrMDA6MDCa+Fa0AAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTAyLTExVDIxOjU5OjUzKzAwOjAwze13awAAACZJREFUaN7twTEBAAAAwqD1T20JT6AAAAAAAAAAAAAAAAAAAICnATvEAAEnf54JAAAAAElFTkSuQmCC"
+)
+result = Snapshots::AttachImage.call(
+  image:,
+  io: StringIO.new(bytes),
+  filename: "backup-smoke.png",
+  declared_content_type: "image/png",
+  declared_length: bytes.bytesize,
+  schedule_processing: false
+)
+raise "blob did not attach" unless result.operation == "uploaded" && image.image.attached?
+
+annotation = screenshot.annotations.create!(
+  user: administrator,
+  viewport: :desktop,
+  x_percent: 12,
+  y_percent: 23,
+  width_percent: 34,
+  height_percent: 45,
+  comment: "Backup smoke annotation"
+)
+annotation.annotation_comments.create!(user: administrator, body: "Backup smoke reply")
+Rails.cache.write("screenote-backup-smoke", "restored")
+RUBY
+
+rm "${SECRET_ROOT}/bootstrap_token"
+unset SCREENOTE_BOOTSTRAP_TOKEN_PATH
+"${compose[@]}" up --detach --wait --wait-timeout 120
+
+printf 'Creating whole-instance backup through the supported host command\n'
+"${REPOSITORY_ROOT}/bin/self-host-backup" \
+  --destination "${BACKUP_SET}" \
+  --recipient "${RECIPIENT}" \
+  --authentication-key "${AUTHENTICATION_KEY}" \
+  --configuration "${CONFIGURATION}" \
+  --secret-bundle "${SECRET_ROOT}" \
+  --image "${IMAGE}" \
+  --predecessor none \
+  --compose-file "${BASE_COMPOSE}" \
+  --project-name "${PROJECT_NAME}"
+
+printf 'Restoring into a new empty volume through the supported host command\n'
+"${REPOSITORY_ROOT}/bin/self-host-restore" \
+  --source "${BACKUP_SET}" \
+  --identity "${IDENTITY}" \
+  --authentication-key "${AUTHENTICATION_KEY}" \
+  --target-volume "${TARGET_VOLUME}" \
+  --operator-destination "${RESTORE_OPERATOR}" \
+  --image "${IMAGE}" \
+  --predecessor none \
+  --compose-file "${BASE_COMPOSE}" \
+  --project-name "${PROJECT_NAME}"
+
+set +e
+docker compose \
+  --project-name "${PROJECT_NAME}" \
+  --project-directory "${RESTORE_OPERATOR}" \
+  --env-file "${RESTORE_OPERATOR}/.env" \
+  --file "${BASE_COMPOSE}" \
+  exec -T screenote /rails/bin/docker-entrypoint ./bin/rails runner - >"${VERIFY_LOG}" 2>&1 <<'RUBY'
+raise "installation was not restored" unless Installation.current!.claimed?
+raise "administrator was not restored" unless User.exists?(email: "backup-smoke@example.test")
+raise "cache database was not restored" unless Rails.cache.read("screenote-backup-smoke") == "restored"
+
+project = Project.find_by!(name: "Backup smoke project")
+screenshot = project.screenshots.find_by!(title: "Backup smoke screenshot")
+raise "original blob was not restored" unless screenshot.primary_image.image.download.present?
+annotation = screenshot.annotations.find_by!(comment: "Backup smoke annotation")
+raise "annotation reply was not restored" unless annotation.annotation_comments.exists?(body: "Backup smoke reply")
+RUBY
+verify_status=$?
+set -e
+if (( verify_status != 0 )); then
+  sed -n '1,200p' "${VERIFY_LOG}" >&2
+  exit "${verify_status}"
+fi
+
+if grep --fixed-strings --quiet --file "${SECRET_ROOT}/secret_key_base" "${VERIFY_LOG}"; then
+  printf 'self-hosted backup smoke: a secret appeared in verification output\n' >&2
+  exit 1
+fi
+
+printf 'Self-hosted backup and restore smoke passed\n'

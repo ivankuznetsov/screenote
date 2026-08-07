@@ -1,0 +1,90 @@
+version: 1
+
+capabilities:
+  edition_boundary:
+    - test/integration/self_hosted_capability_boundary_test.rb
+    - test/integration/self_hosted_full_flow_test.rb
+    - test/integration/u4_routes_test.rb
+    - test/models/user_capability_test.rb
+  boot_admission_admin:
+    - test/controllers/account_recoveries_controller_test.rb
+    - test/controllers/bootstrap_controller_test.rb
+    - test/controllers/instance/accounts_controller_test.rb
+    - test/controllers/instance/administrators_controller_test.rb
+    - test/controllers/invitation_acceptances_controller_test.rb
+    - test/integration/bootstrap_concurrency_test.rb
+    - test/integration/instance_administration_concurrency_test.rb
+    - test/integration/instance_credential_issuance_serialization_test.rb
+    - test/integration/invitation_acceptance_concurrency_test.rb
+    - test/integration/production_boot_test.rb
+    - test/integration/production_installation_startup_test.rb
+  shared_core_http_rest:
+    - test/controllers/annotation_comments_controller_test.rb
+    - test/controllers/annotations_controller_test.rb
+    - test/controllers/api/v1/annotation_comments_controller_test.rb
+    - test/controllers/api/v1/annotation_resolutions_controller_test.rb
+    - test/controllers/api/v1/annotations_controller_test.rb
+    - test/controllers/api/v1/pages_controller_test.rb
+    - test/controllers/api/v1/screenshot_images_controller_test.rb
+    - test/controllers/api/v1/screenshots_controller_test.rb
+    - test/controllers/api/v1/snapshots_controller_test.rb
+    - test/controllers/api_keys_controller_test.rb
+    - test/controllers/pages_controller_test.rb
+    - test/controllers/project_memberships_controller_test.rb
+    - test/controllers/screenshots_controller_test.rb
+    - test/integration/authorized_media_delivery_test.rb
+    - test/integration/database_constraint_contract_test.rb
+    - test/integration/snapshot_rest_contract_test.rb
+    - test/models/annotation_comment_test.rb
+    - test/models/annotation_test.rb
+    - test/models/page_test.rb
+    - test/models/project_membership_test.rb
+    - test/models/project_test.rb
+    - test/models/screenshot_image_test.rb
+    - test/models/screenshot_test.rb
+    - test/models/snapshot_test.rb
+  oauth_mcp_agent:
+    - test/controllers/oauth/device_authorizations_controller_test.rb
+    - test/controllers/oauth/self_hosted_registrations_controller_test.rb
+    - test/integration/oauth_device_concurrency_test.rb
+    - test/integration/oauth_device_flow_test.rb
+    - test/tools/mcp_auth_test.rb
+    - test/tools/mcp_security_contract_test.rb
+    - test/tools/mcp_tools_test.rb
+  security_runtime:
+    - test/integration/bearer_secret_upgrade_test.rb
+    - test/integration/offline_assets_test.rb
+    - test/integration/rate_limit_fail_closed_test.rb
+    - test/integration/self_hosted_readiness_test.rb
+  operator_fast:
+    - test/integration/self_hosted_backup_restore_test.rb
+    - test/integration/self_hosted_database_configuration_test.rb
+    - test/integration/self_hosted_key_rotation_compose_test.rb
+    - test/integration/self_hosted_operations_command_test.rb
+    - test/integration/self_hosted_secret_configuration_test.rb
+    - test/services/screenote/self_hosted_diagnostics_test.rb
+    - test/services/screenote/self_hosted_restore_verifier_test.rb
+
+specialized:
+  s3:
+    - test/integration/self_hosted_s3_contract_test.rb
+  system_claimed:
+    - test/system/instance_administration_test.rb
+    - test/system/mcp_tools_test.rb
+    - test/system/self_hosted_collaboration_test.rb
+    - test/system/self_hosted_offline_review_test.rb
+  system_unclaimed:
+    - test/system/self_hosted_admission_test.rb
+
+saas_only:
+  - test/controllers/admin/dashboard_controller_test.rb
+  - test/controllers/oauth/registrations_controller_test.rb
+  - test/controllers/stripe_webhooks_controller_test.rb
+  - test/controllers/subscriptions_controller_test.rb
+  - test/integration/saas_credential_cutover_command_test.rb
+  - test/integration/saas_postgresql_contract_test.rb
+  - test/migrations/current_saas_upgrade_test.rb
+  - test/models/stripe_webhook_event_test.rb
+  - test/models/subscription_test.rb
+  - test/services/screenote/saas_credential_cutover_test.rb
+  - test/system/subscriptions_test.rb

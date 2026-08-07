@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# screenote-edition: self_hosted
+
 require "test_helper"
 
 module Api
@@ -69,6 +71,30 @@ module Api
         assert body["comments"].any? { |comment| comment["body"] == "Fixed the alignment issue" }
       end
 
+      test "crop failures are monitored and return annotation details without a private crop" do
+        error = StandardError.new("crop unavailable")
+        notifications = []
+        original = Annotation.instance_method(:crop)
+        original_notify = Screenote::Monitoring.method(:notify)
+        Annotation.define_method(:crop) { raise error }
+        Screenote::Monitoring.define_singleton_method(:notify) do |raised, context:|
+          notifications << [ raised, context ]
+        end
+
+        get api_v1_annotation_path(annotations(:resolved_annotation)),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        assert_nil response.parsed_body["cropped_image_base64"]
+        assert_equal error, notifications.dig(0, 0)
+        assert_equal annotations(:resolved_annotation).id, notifications.dig(0, 1, :annotation_id)
+        assert_equal annotations(:resolved_annotation).screenshot_id, notifications.dig(0, 1, :screenshot_id)
+        assert_equal annotations(:resolved_annotation).viewport, notifications.dig(0, 1, :viewport)
+      ensure
+        Annotation.define_method(:crop, original) if original
+        Screenote::Monitoring.define_singleton_method(:notify, original_notify) if original_notify
+      end
+
       test "does not get annotation outside the key project" do
         get api_v1_annotation_path(annotations(:bob_annotation)),
           headers: auth_header(ALICE_TOKEN)
@@ -102,6 +128,16 @@ module Api
         assert_equal "missing_project", response.parsed_body["code"]
       end
 
+      test "oauth write-only token cannot list annotations" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        get api_v1_screenshot_annotations_path(@screenshot, project_id: @project.id),
+          headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "insufficient_scope", response.parsed_body["code"]
+      end
+
       test "oauth read token gets annotation details with explicit project" do
         token = oauth_token(user: users(:alice), scopes: "mcp_read")
 
@@ -110,6 +146,20 @@ module Api
 
         assert_response :success
         assert_equal annotations(:resolved_annotation).id, response.parsed_body["id"]
+      end
+
+      test "annotation details fail closed if project authority disappears after authentication" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_read")
+        original = Api::V1::ProjectScope.method(:resolve_project)
+        Api::V1::ProjectScope.define_singleton_method(:resolve_project) { |*, **| nil }
+
+        get api_v1_annotation_path(annotations(:resolved_annotation), project_id: @project.id),
+          headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "forbidden", response.parsed_body["code"]
+      ensure
+        Api::V1::ProjectScope.define_singleton_method(:resolve_project, original) if original
       end
 
       test "oauth token cannot get annotation outside member project by known id" do

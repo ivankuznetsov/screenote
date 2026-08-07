@@ -3,231 +3,312 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  scan_ruby:
+  ruby-security:
+    name: ruby-security
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
-
-      - name: Scan for common Rails security vulnerabilities using static analysis
-        run: bin/brakeman --no-pager
-      
-      - name: Scan for known security vulnerabilities in gems used
+      - name: Audit Ruby dependencies
         run: bin/bundler-audit
-      
-  scan_js:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-
-      - name: Scan for security vulnerabilities in JavaScript dependencies
+      - name: Audit importmap dependencies
         run: bin/importmap audit
+      - name: Scan Rails code
+        run: bin/brakeman --no-pager
 
   lint:
+    name: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       RUBOCOP_CACHE_ROOT: tmp/rubocop
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
-
-      - name: Prepare RuboCop cache
-        uses: actions/cache@v4
-        env:
-          DEPENDENCIES_HASH: ${{ hashFiles('.ruby-version', '**/.rubocop.yml', '**/.rubocop_todo.yml', 'Gemfile.lock') }}
+      - name: Restore RuboCop cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ${{ env.RUBOCOP_CACHE_ROOT }}
-          key: rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-${{ github.ref_name == github.event.repository.default_branch && github.run_id || 'default' }}
-          restore-keys: |
-            rubocop-${{ runner.os }}-${{ env.DEPENDENCIES_HASH }}-
-
-      - name: Lint code for consistent style
+          path: tmp/rubocop
+          key: rubocop-${{ runner.os }}-${{ hashFiles('.ruby-version', '**/.rubocop.yml', 'Gemfile.lock') }}
+      - name: Check whitespace
+        run: git diff --check
+      - name: Lint Ruby
         run: bin/rubocop -f github
 
-  test:
+  coverage:
+    name: coverage
     runs-on: ubuntu-latest
-
-    # services:
-    #  redis:
-    #    image: valkey/valkey:8
-    #    ports:
-    #      - 6379:6379
-    #    options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    timeout-minutes: 45
+    env:
+      RAILS_ENV: test
+      PARALLEL_WORKERS: "1"
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Install system packages
+      - name: Checkout code and trusted comparison history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Install runtime packages
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
-
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
+      - name: Require complete changed-security coverage in both editions
+        run: script/release_test_matrix coverage
 
-      - name: Run tests
-        env:
-          RAILS_ENV: test
-          # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
-          # REDIS_URL: redis://localhost:6379/0
-        run: bin/rails db:test:prepare test
-
-  test-postgresql-migration:
+  sqlite:
+    name: sqlite
     runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      RAILS_ENV: test
+      PARALLEL_WORKERS: "1"
+      SCREENOTE_BOOTSTRAP_TOKEN: screenote-ci-bootstrap-token-0123456789abcdef0123456789abcdef
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
+        with:
+          bundler-cache: true
+      - name: Run SaaS SQLite suite in an independent process
+        run: script/release_test_matrix saas
+      - name: Run self-hosted SQLite suite in an independent process
+        run: script/release_test_matrix self-hosted
+      - name: Verify four-file production SQLite and all security migrations
+        run: script/release_test_matrix sqlite-production
+      - name: Verify private-media, token, and fail-closed rate-limit contracts
+        run: script/release_test_matrix security-data
+
+  postgresql:
+    name: postgresql
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       postgres:
-        image: postgres:16
+        image: docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
         env:
-          POSTGRES_DB: screenote_migration_test
+          POSTGRES_DB: screenote_app_test
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d screenote_migration_test"
+          --health-cmd "pg_isready -U postgres -d screenote_app_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
+    env:
+      RAILS_ENV: test
+      PARALLEL_WORKERS: "1"
+      POSTGRESQL_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_app_test
+      MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_migration_test
+      SAAS_UPGRADE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_upgrade_test
+      SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET: "1"
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
-
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime and PostgreSQL client packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips postgresql-client
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
-
-      - name: Test API key schema repair on PostgreSQL
+      - name: Create isolated migration and upgrade databases
         env:
-          MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_migration_test
-          PARALLEL_WORKERS: "1"
-          RAILS_ENV: test
-        run: bin/rails test test/migrations/repair_legacy_api_key_token_storage_test.rb
+          PGPASSWORD: postgres
+        run: |
+          createdb --host 127.0.0.1 --username postgres screenote_migration_test
+          createdb --host 127.0.0.1 --username postgres screenote_upgrade_test
+      - name: Run full PostgreSQL 16 and migration matrix
+        run: script/release_test_matrix postgresql
+      - name: Upgrade the production-shaped current SaaS fixture
+        run: script/release_test_matrix saas-upgrade
+      - name: Probe invariants on file-backed SQLite and PostgreSQL
+        run: script/release_test_matrix invariants
 
-  cli-contract:
-    name: CLI contract (${{ matrix.label }})
+  system-collaboration:
+    name: system-collaboration
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - label: v1.0.0-candidate
-            ref: 2e8853f90eb2ad902c2a8ac9349f7319d60c2f60
+    timeout-minutes: 25
+    env:
+      RAILS_ENV: test
+      CAPYBARA_RUN_SERVER: "true"
+      PARALLEL_WORKERS: "1"
+      SCREENOTE_EDITION: self_hosted
+      SCREENOTE_BOOTSTRAP_TOKEN: screenote-ci-bootstrap-token-0123456789abcdef0123456789abcdef
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
+        with:
+          bundler-cache: true
+      - name: Install Playwright Chromium
+        run: |
+          PLAYWRIGHT_CLI_VERSION="$(bundle exec ruby -e 'require "playwright"; puts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip')"
+          npm install --no-save "playwright@$PLAYWRIGHT_CLI_VERSION"
+          npx playwright install --with-deps chromium
+      - name: Run the explicit collaboration manifest with a real server
+        run: script/release_test_matrix system-collaboration
+      - name: Preserve failed browser screenshots
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: system-collaboration-screenshots
+          path: ${{ github.workspace }}/tmp/capybara
+          if-no-files-found: ignore
 
+  public-cli:
+    name: public-cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SCREENOTE_CLI_REF: 2e8853f90eb2ad902c2a8ac9349f7319d60c2f60
     steps:
       - name: Checkout service
-        uses: actions/checkout@v6
-
-      - name: Checkout public CLI contract
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Checkout exact public CLI candidate revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: ivankuznetsov/screenote-cli
-          ref: ${{ matrix.ref }}
+          ref: ${{ env.SCREENOTE_CLI_REF }}
           path: tmp/screenote-cli
           persist-credentials: false
-
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
-
-      - name: Run public CLI digest contract
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: tmp/screenote-cli/go.sum
+      - name: Run exact digest contract
         env:
-          RAILS_ENV: test
           SCREENOTE_CLI_CONTRACT_PATH: ${{ github.workspace }}/tmp/screenote-cli/testdata/contracts/snapshot-digests-v1.json
         run: |
           test -s "$SCREENOTE_CLI_CONTRACT_PATH"
           bin/rails db:test:prepare
-          bin/rails test test/integration/public_cli_digest_contract_test.rb
-
-  test_go:
-    runs-on: ubuntu-latest
-    env:
-      GOFLAGS: -mod=mod
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.26.x'
-          cache: true
-
-      - name: Run Go tests
+          PARALLEL_WORKERS=1 bin/rails test test/integration/public_cli_digest_contract_test.rb
+      - name: Test the exact public CLI candidate source
+        working-directory: tmp/screenote-cli
         run: go test ./...
+      - name: Test repository Go compatibility helpers
+        run: env GOFLAGS=-mod=mod go test ./...
+      - name: Record release applicability
+        run: echo "::notice::The tagged HTTP/HTTPS end-to-end CLI gate remains release-only and fail-closed until SCREENOTE_PUBLIC_CLI_TAG exists."
 
-      - name: Cross-compile CLI
-        run: |
-          for os in linux darwin; do
-            for arch in amd64 arm64; do
-              GOOS="$os" GOARCH="$arch" go build -o "tmp/screenote-${os}-${arch}" ./cmd/screenote
-            done
-          done
-
-  system-test:
+  container-local:
+    name: container-local
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    # services:
-    #  redis:
-    #    image: valkey/valkey:8
-    #    ports:
-    #      - 6379:6379
-    #    options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    timeout-minutes: 35
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Run final-image local durability smoke
+        run: script/release_test_matrix container-local
 
-      - name: Install system packages
+  container-s3:
+    name: container-s3
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SCREENOTE_S3_ENDPOINT: http://127.0.0.1:9000
+      SCREENOTE_S3_REGION: us-east-1
+      SCREENOTE_S3_BUCKET: screenote-ci
+      SCREENOTE_S3_PREFIX: ci-contract
+      SCREENOTE_S3_ACCESS_KEY_ID: screenote-ci
+      SCREENOTE_S3_SECRET_ACCESS_KEY: screenote-ci-secret
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime packages
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
-
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
-
-      - name: Install Playwright browsers
+      - name: Start immutable MinIO compatibility target
         run: |
-          export PLAYWRIGHT_CLI_VERSION="$(ruby -e 'require "playwright"; puts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip')"
-          npm install --no-save "playwright@$PLAYWRIGHT_CLI_VERSION"
-          npx playwright install --with-deps chromium
+          docker run --detach --name screenote-minio \
+            --publish 127.0.0.1:9000:9000 \
+            --env MINIO_ROOT_USER="$SCREENOTE_S3_ACCESS_KEY_ID" \
+            --env MINIO_ROOT_PASSWORD="$SCREENOTE_S3_SECRET_ACCESS_KEY" \
+            minio/minio:RELEASE.2025-05-24T17-08-30Z@sha256:a616cd8f37758b0296db62cc9e6af05a074e844cc7b5c0a0e62176d73828d440 \
+            server /data
+          for attempt in $(seq 1 60); do
+            curl --fail --silent "$SCREENOTE_S3_ENDPOINT/minio/health/ready" >/dev/null && exit 0
+            sleep 1
+          done
+          docker logs screenote-minio
+          exit 1
+      - name: Run real MinIO operation and outage contract
+        run: script/release_test_matrix s3
+      - name: Verify final image contains the selected S3 and image runtimes
+        run: |
+          docker build --tag "screenote-s3-ci:${{ github.sha }}" .
+          docker run --rm --entrypoint /usr/local/bin/bundle "screenote-s3-ci:${{ github.sha }}" \
+            exec ruby -e 'require "aws-sdk-s3"; require "vips"; puts "runtime-ok"'
+      - name: Stop MinIO
+        if: always()
+        run: docker rm --force screenote-minio
 
-      - name: Run System Tests
-        env:
-          RAILS_ENV: test
-          CAPYBARA_RUN_SERVER: "true"
-          PARALLEL_WORKERS: "1"
-          TESTOPTS: "--verbose"
-          # RAILS_MASTER_KEY: ${{ secrets.RAILS_MASTER_KEY }}
-          # REDIS_URL: redis://localhost:6379/0
-        run: bin/rails db:test:prepare test:system
-
-      - name: Keep screenshots from failed system tests
-        uses: actions/upload-artifact@v4
-        if: failure()
+  backup-restore:
+    name: backup-restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
-          name: screenshots
-          path: ${{ github.workspace }}/tmp/screenshots
-          if-no-files-found: ignore
+          bundler-cache: true
+      - name: Run backup/restore rejection and manifest contracts
+        run: PARALLEL_WORKERS=1 bin/rails test test/integration/self_hosted_backup_restore_test.rb
+      - name: Validate release smoke entry point
+        run: bash -n script/self_hosted_backup_smoke
+      - name: Record release applicability
+        run: echo "::notice::Same-image restore is rerun for releases against the immutable image digest."
+
+  release-artifact:
+    name: release-artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
+        with:
+          bundler-cache: true
+      - name: Run artifact positive and fail-closed negative contracts
+        run: PARALLEL_WORKERS=1 bin/rails test test/integration/release_artifact_contract_test.rb
+      - name: Record release applicability
+        run: echo "::notice::Exact tag, OCI digest, SBOM, provenance, and release evidence remain release-candidate inputs."
