@@ -7,6 +7,7 @@ readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly POSTGRESQL_16_IMAGE="docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
 readonly SELF_HOSTED_MANIFEST="${REPOSITORY_ROOT}/test/manifests/self_hosted.yml"
 readonly SYSTEM_TEST_BOOTSTRAP_TOKEN="screenote-system-test-bootstrap-token-0123456789abcdef0123456789abcdef"
+readonly COVERAGE_NOT_APPLICABLE_EXIT=3
 readonly MIGRATION_TESTS=(
   test/migrations/repair_legacy_api_key_token_storage_test.rb
   test/migrations/add_api_key_issuers_and_annotation_actors_test.rb
@@ -436,6 +437,19 @@ case "${1-}" in
       fail "SCREENOTE_COVERAGE_BASE_SHA is not an available commit"
     git merge-base --is-ancestor "${SCREENOTE_COVERAGE_BASE_SHA}" HEAD ||
       fail "SCREENOTE_COVERAGE_BASE_SHA is not an ancestor of HEAD"
+    coverage_preflight_status=0
+    coverage_preflight="$(
+      bin/check_coverage \
+        --manifest test/manifests/release_security_coverage.yml \
+        --base "${SCREENOTE_COVERAGE_BASE_SHA}" \
+        --preflight
+    )" || coverage_preflight_status=$?
+    [[ -z "${coverage_preflight}" ]] || printf '%s\n' "${coverage_preflight}"
+    case "${coverage_preflight_status}" in
+      0) ;;
+      "${COVERAGE_NOT_APPLICABLE_EXIT}") exit 0 ;;
+      *) fail "changed-security coverage preflight failed" ;;
+    esac
     self_hosted_tests=()
     read_self_hosted_manifest_group self_hosted self_hosted_tests
     rm -f -- "${REPOSITORY_ROOT}/coverage/.resultset.json"

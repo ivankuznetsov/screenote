@@ -31,6 +31,19 @@ class CoverageGateContractTest < ActiveSupport::TestCase
     assert_includes stderr, "SCREENOTE_COVERAGE_BASE_SHA is required for this gate"
   end
 
+  test "coverage matrix preflights applicability before running either edition suite" do
+    coverage_gate = MATRIX.read.match(/^  coverage\).*?^    ;;$/m).to_s
+
+    assert_not_empty coverage_gate
+    assert_includes MATRIX.read, "readonly COVERAGE_NOT_APPLICABLE_EXIT=3"
+    assert_includes coverage_gate, "--preflight"
+    assert_includes coverage_gate, '"${COVERAGE_NOT_APPLICABLE_EXIT}") exit 0'
+    assert_not_includes coverage_gate, "Changed security coverage:"
+    assert_operator coverage_gate.index("--preflight"), :<, coverage_gate.index("assert_mode_booted saas")
+    assert_operator coverage_gate.index("--preflight"), :<,
+      coverage_gate.index("read_self_hosted_manifest_group self_hosted self_hosted_tests")
+  end
+
   test "coverage boot instruments only the matrix root process" do
     Dir.mktmpdir("screenote-coverage-boot") do |directory|
       script = <<~'RUBY'
@@ -127,6 +140,82 @@ class CoverageGateContractTest < ActiveSupport::TestCase
       assert status.success?, stderr
       assert_includes stdout, "Changed security line coverage: 100.00% (1/1)"
       assert_empty stderr
+    end
+  end
+
+  test "manifest mode passes explicitly as not applicable for a non-security HEAD diff" do
+    with_repository do |root, base, paths|
+      File.write(root.join("README.md"), "non-security change\n")
+      git!(root, "add", "--", "README.md")
+      git!(root, "commit", "--quiet", "-m", "change non-security source")
+
+      stdout, stderr, status = run_checker(
+        root,
+        root.join("missing-resultset.json"),
+        "--manifest", write_manifest(root, paths).to_s,
+        "--base", base
+      )
+
+      assert status.success?, stderr
+      assert_equal \
+        "Changed security coverage: not applicable (no release-security manifest paths changed)\n",
+        stdout
+      assert_empty stderr
+    end
+  end
+
+  test "manifest preflight distinguishes security changes without loading coverage results" do
+    with_repository do |root, base, paths|
+      manifest = write_manifest(root, paths)
+
+      stdout, stderr, status = run_preflight(root, manifest, base)
+
+      assert_equal 1, status.exitstatus
+      assert_empty stdout
+      assert_includes stderr, "coverage comparison diff is empty"
+
+      File.write(root.join("README.md"), "baseline\n")
+      git!(root, "add", "--", "README.md")
+      git!(root, "commit", "--quiet", "-m", "add non-security source")
+      base = git!(root, "rev-parse", "HEAD").strip
+      File.write(root.join("README.md"), "uncommitted non-security change\n")
+
+      stdout, stderr, status = run_preflight(root, manifest, base)
+
+      assert_equal 3, status.exitstatus, stderr
+      assert_equal \
+        "Changed security coverage: not applicable (no release-security manifest paths changed)\n",
+        stdout
+      assert_empty stderr
+
+      File.write(root.join(paths.fetch("deployment")), "def changed_security_path = :covered\n")
+      stdout, stderr, status = run_preflight(root, manifest, base)
+
+      assert status.success?, stderr
+      assert_equal "Changed security coverage: applicable\n", stdout
+      assert_empty stderr
+    end
+  end
+
+  test "manifest preflight rejects removal of a guarded path from current membership" do
+    with_repository do |root, _base, paths|
+      removed = "app/deployment_guard.rb"
+      File.write(root.join(removed), "def deployment_guard = :baseline\n")
+      manifest = write_manifest(root, paths, additional_paths: { "deployment" => [ removed ] })
+      git!(root, "add", "--", removed, manifest.basename.to_s)
+      git!(root, "commit", "--quiet", "-m", "add guarded source")
+      base = git!(root, "rev-parse", "HEAD").strip
+
+      File.write(root.join(removed), "def deployment_guard = :changed\n")
+      narrowed = valid_manifest(paths)
+      narrowed["discovery"] = paths.values.sort
+      File.write(manifest, YAML.dump(narrowed))
+
+      stdout, stderr, status = run_preflight(root, manifest, base)
+
+      assert_equal 1, status.exitstatus
+      assert_empty stdout
+      assert_includes stderr, "coverage manifest removed guarded paths: #{removed}"
     end
   end
 
@@ -482,7 +571,7 @@ class CoverageGateContractTest < ActiveSupport::TestCase
         "--base", base
       )
       assert_not status.success?
-      assert_includes stderr, "manifest diff is empty"
+      assert_includes stderr, "coverage comparison diff is empty"
 
       File.write(root.join(paths.fetch("deployment")), "def changed_security_path = :covered\n")
       malformed = write_resultset(
@@ -561,7 +650,8 @@ class CoverageGateContractTest < ActiveSupport::TestCase
         FileUtils.mkdir_p(root.join(path).dirname)
         File.write(root.join(path), "module #{domain.camelize}; end\n")
       end
-      git!(root, "add", "--", *paths.values)
+      manifest = write_manifest(root, paths)
+      git!(root, "add", "--", *paths.values, manifest.basename.to_s)
       git!(root, "commit", "--quiet", "-m", "baseline")
       base = git!(root, "rev-parse", "HEAD").strip
 
@@ -610,14 +700,24 @@ class CoverageGateContractTest < ActiveSupport::TestCase
     }
   end
 
-  def run_checker(root, resultset, *arguments, env: {})
+  def run_checker(root, resultset = nil, *arguments, env: {})
+    command = [ RbConfig.ruby, CHECKER.to_s ]
+    command << resultset.to_s if resultset
     Open3.capture3(
       env,
-      RbConfig.ruby,
-      CHECKER.to_s,
-      resultset.to_s,
+      *command,
       *arguments,
       chdir: root.to_s
+    )
+  end
+
+  def run_preflight(root, manifest, base)
+    run_checker(
+      root,
+      nil,
+      "--manifest", manifest.to_s,
+      "--base", base,
+      "--preflight"
     )
   end
 

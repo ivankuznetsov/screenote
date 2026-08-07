@@ -911,7 +911,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes live_step.fetch("run"), "TRIGGERED"
     assert_includes live_step.fetch("run"), "ASSIGNED"
     assert_includes live_step.fetch("run"), 'provider_metadata["archived"] == false'
-    assert_includes live_step.fetch("run"), 'provider_metadata["deleted"] == false'
+    assert_includes live_step.fetch("run"), 'source["deleted"] == false'
     [ image_index, tag_index, attestation_index, release_index ].each do |mutation_index|
       assert_operator preflight_index, :<, mutation_index
       assert_operator mutation_index, :<, final_index

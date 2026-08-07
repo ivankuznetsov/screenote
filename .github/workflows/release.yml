@@ -1047,7 +1047,7 @@ jobs:
             raise GateFailure, "GitGuardian source monitoring is not active" unless source["monitoring_status"] == "active"
             provider_metadata = source["provider_metadata"]
             raise GateFailure, "GitGuardian source provider metadata is malformed" unless provider_metadata.is_a?(Hash)
-            unless provider_metadata["archived"] == false && provider_metadata["deleted"] == false
+            unless provider_metadata["archived"] == false && source["deleted"] == false
               raise GateFailure, "GitGuardian source archived or deleted state is not explicitly false"
             end
 

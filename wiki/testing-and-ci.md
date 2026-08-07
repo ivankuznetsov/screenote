@@ -106,21 +106,27 @@ currently commented out as optional in `config/ci.rb`, so run the Playwright
 command above separately when browser behavior changes.
 
 The required-PR source-release coverage gate is narrower and stricter than the
-legacy whole-application option. `script/release_test_matrix coverage` starts
-SimpleCov through `RUBYOPT` before Rails can load edition-specific code, merges
-the independent SaaS and positive-manifest self-hosted runs, and compares the
-working tree with the exact event comparison commit: the pull request's base
-SHA for pull-request runs and `github.event.before` for pushes to `main`. The
-workflow passes that full SHA explicitly and the matrix rejects missing,
-malformed, unavailable, or non-ancestor values before starting the suites. For
-a local pre-PR run, use
+legacy whole-application option. `script/release_test_matrix coverage` first
+compares the working tree with the exact event comparison commit: the pull
+request's base SHA for pull-request runs and `github.event.before` for pushes
+to `main`. The workflow passes that full SHA explicitly and the matrix rejects
+missing, malformed, unavailable, non-ancestor, or genuinely empty overall
+comparisons. It also validates the positive manifest, its discovery union, and
+the guarded-path membership at both the base and current revision before
+deciding applicability. Removing a previously guarded path fails closed. A
+non-empty comparison with no guarded source changes reports an explicit
+not-applicable success without running the two full suites. When a guarded path
+changed, the matrix starts SimpleCov through `RUBYOPT` before Rails can load
+edition-specific code and merges the independent SaaS and positive-manifest
+self-hosted runs. For a local pre-PR run, use
 `SCREENOTE_COVERAGE_BASE_SHA=<full-ancestor-sha> script/release_test_matrix coverage`.
 The explicit
 `test/manifests/release_security_coverage.yml` source manifest must name the
 deployment, bootstrap, invitation, principal, suspension, recovery, and
 administrator-transfer boundaries. Every executable changed line and changed
-branch arm in those files must be covered; missing instrumentation, source
-manifest drift, an invalid base, or an empty security diff fails closed.
+branch arm in those files must be covered; missing instrumentation, removed
+guarded membership, source manifest drift, an invalid base, or an empty overall
+comparison fails closed.
 Coverage processes set `DISABLE_BOOTSNAP_COMPILE_CACHE=1`: Ruby cannot compile
 Bootsnap instruction-sequence cache entries after branch/line coverage has
 started, and a warm CI bundle cache must not make the coverage gate fail before
@@ -128,10 +134,10 @@ the suite runs.
 The manifest includes every changed controller that delivers one of those
 flows, and `CI / coverage` runs this gate for every pull request; controller
 delivery code cannot be deferred to a release-only handoff check.
-The coverage job has a 45-minute budget because it runs the complete SaaS and
-self-hosted suites sequentially before merging their results. A 25-minute
-budget can cancel a healthy self-hosted run after the SaaS suite has already
-passed, leaving the stricter dual-edition assertion unevaluated.
+When applicable, the coverage job has a 45-minute budget because it runs the
+complete SaaS and self-hosted suites sequentially before merging their results.
+A 25-minute budget can cancel a healthy self-hosted run after the SaaS suite has
+already passed, leaving the stricter dual-edition assertion unevaluated.
 Integration and system test bases replace the test environment's `NullStore`
 with a fresh controller `MemoryStore` for each test, then restore it in teardown.
 This keeps the production fail-closed rate-limit wrappers active in tests

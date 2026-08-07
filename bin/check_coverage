@@ -10,6 +10,10 @@ require "yaml"
 module CoverageGate
   DOMAINS = %w[deployment bootstrap invitation principal suspension recovery transfer].freeze
   SIMPLECOV_ID = /\A\[:(?<kind>[A-Za-z_][A-Za-z0-9_!?=]*|"(?:[^"\\]|\\.)*"),\s*-?\d+,\s*(?<start_line>\d+),\s*(?<start_column>\d+),\s*(?<end_line>\d+),\s*(?<end_column>\d+)\]\z/
+  APPLICABLE_MESSAGE = "Changed security coverage: applicable"
+  NOT_APPLICABLE_MESSAGE =
+    "Changed security coverage: not applicable (no release-security manifest paths changed)"
+  NOT_APPLICABLE_EXIT_STATUS = 3
 
   class Error < StandardError; end
 
@@ -193,7 +197,40 @@ module CoverageGate
       Diff.new(changed: true, lines: changed_lines.uniq.sort)
     end
 
+    def paths_changed_since?(paths, base:)
+      tracked_output, = git_capture("ls-files", "--cached", "-z", "--", *paths)
+      tracked_paths = tracked_output.split("\0")
+      return true if paths.any? { |path| !tracked_paths.include?(path) }
+
+      diff_changed?(base, paths)
+    end
+
+    def working_tree_changed_since?(base)
+      diff_changed?(base, [])
+    end
+
+    def file_at(path, revision:)
+      output, status = git_capture("show", "#{revision}:#{path}", allow_failure: true)
+      raise Error, "coverage manifest is unavailable at base commit: #{path}" unless status.success?
+
+      output
+    end
+
     private
+
+    def diff_changed?(base, paths)
+      _output, status = git_capture(
+        "diff", "--quiet", "--no-ext-diff", base, "--", *paths, allow_failure: true
+      )
+      case status.exitstatus
+      when 0
+        false
+      when 1
+        true
+      else
+        raise Error, "could not inspect coverage comparison diff"
+      end
+    end
 
     def tracked?(path)
       _output, status = git_capture("ls-files", "--error-unmatch", "--", path, allow_failure: true)
@@ -216,6 +253,23 @@ module CoverageGate
 
   class Manifest
     attr_reader :paths
+
+    def self.snapshot_paths(document)
+      manifest = YAML.safe_load(document, permitted_classes: [], aliases: false)
+      unless manifest.is_a?(Hash) && manifest["version"] == 1
+        raise Error, "base coverage manifest is malformed"
+      end
+
+      domains = manifest["domains"]
+      unless domains.is_a?(Hash) && domains.keys == DOMAINS &&
+          domains.values.all? { |paths| paths.is_a?(Array) && paths.any? && paths.all?(String) }
+        raise Error, "base coverage manifest is malformed"
+      end
+
+      domains.values.flatten.uniq
+    rescue Psych::Exception
+      raise Error, "base coverage manifest is malformed"
+    end
 
     def initialize(path:, repository_root:)
       @path = Pathname(path)
@@ -341,19 +395,84 @@ module CoverageGate
     end
   end
 
-  class ManifestCheck
-    def initialize(resultset_path:, manifest_path:, base:, cwd:)
+  class ManifestComparison
+    attr_reader :repository, :base
+
+    def initialize(manifest_path:, base:, cwd:)
       @repository = Repository.new(cwd: cwd)
       @base = repository.resolve_base(base)
+      manifest_path = Pathname(manifest_path).expand_path
       @manifest = Manifest.new(path: manifest_path, repository_root: repository.root)
-      @resultset = Resultset.new(path: resultset_path, repository_root: repository.root)
+      @base_paths = Manifest.snapshot_paths(
+        repository.file_at(repository_relative_path(manifest_path), revision: @base)
+      )
+    end
+
+    def applicable?
+      removed_paths = base_paths - manifest.paths
+      if removed_paths.any?
+        raise Error, "coverage manifest removed guarded paths: #{removed_paths.sort.join(', ')}"
+      end
+
+      return true if repository.paths_changed_since?(base_paths | manifest.paths, base: base)
+
+      raise Error, "coverage comparison diff is empty" unless repository.working_tree_changed_since?(base)
+
+      false
+    end
+
+    def changed
+      @changed ||= manifest.paths.each_with_object({}) do |path, changes|
+        diff = repository.diff_for(path, base: base)
+        changes[path] = diff if diff.changed
+      end
+    end
+
+    private
+
+    attr_reader :manifest, :base_paths
+
+    def repository_relative_path(path)
+      relative = path.relative_path_from(repository.root)
+      if relative.to_s == ".." || relative.each_filename.first == ".."
+        raise Error, "coverage manifest must be inside the repository"
+      end
+
+      relative.to_s
+    rescue ArgumentError
+      raise Error, "coverage manifest must be inside the repository"
+    end
+  end
+
+  class ManifestPreflight
+    def initialize(manifest_path:, base:, cwd:)
+      @comparison = ManifestComparison.new(manifest_path: manifest_path, base: base, cwd: cwd)
     end
 
     def call(stdout:)
-      diffs = manifest.paths.to_h { |path| [ path, repository.diff_for(path, base: base) ] }
-      raise Error, "coverage manifest diff is empty" unless diffs.values.any?(&:changed)
+      applicable = comparison.applicable?
+      stdout.puts applicable ? APPLICABLE_MESSAGE : NOT_APPLICABLE_MESSAGE
+      applicable
+    end
 
-      changed = diffs.select { |_path, diff| diff.changed }
+    private
+
+    attr_reader :comparison
+  end
+
+  class ManifestCheck
+    def initialize(resultset_path:, manifest_path:, base:, cwd:)
+      @comparison = ManifestComparison.new(manifest_path: manifest_path, base: base, cwd: cwd)
+      @resultset_path = resultset_path
+    end
+
+    def call(stdout:)
+      unless comparison.applicable?
+        stdout.puts NOT_APPLICABLE_MESSAGE
+        return true
+      end
+
+      changed = comparison.changed
       missing = changed.keys.reject { |path| branch_enabled_coverage?(path) }
       if missing.any?
         raise Error,
@@ -426,7 +545,15 @@ module CoverageGate
 
     private
 
-    attr_reader :repository, :base, :manifest, :resultset
+    attr_reader :comparison, :resultset_path
+
+    def repository
+      comparison.repository
+    end
+
+    def resultset
+      @resultset ||= Resultset.new(path: resultset_path, repository_root: repository.root)
+    end
 
     def coverage_for(path)
       resultset.files.fetch(repository.root.join(path).expand_path.to_s)
@@ -505,9 +632,12 @@ end
 def run_coverage_check_cli(argv = ARGV, stdout: $stdout, stderr: $stderr, env: ENV, cwd: Dir.pwd)
   options = {}
   parser = OptionParser.new do |option_parser|
-    option_parser.banner = "Usage: bin/check_coverage [resultset] [--manifest PATH --base SHA]"
+    option_parser.banner = "Usage: bin/check_coverage [resultset] [--manifest PATH --base SHA] [--preflight]"
     option_parser.on("--manifest PATH", "Security source coverage manifest") { |value| options[:manifest] = value }
     option_parser.on("--base SHA", "Ancestor commit used for changed-line coverage") { |value| options[:base] = value }
+    option_parser.on("--preflight", "Validate and report manifest applicability without coverage results") do
+      options[:preflight] = true
+    end
   end
   positional = parser.parse(argv.dup)
   raise CoverageGate::Error, parser.banner if positional.length > 1
@@ -516,17 +646,32 @@ def run_coverage_check_cli(argv = ARGV, stdout: $stdout, stderr: $stderr, env: E
   if manifest_mode && !(options[:manifest] && options[:base])
     raise CoverageGate::Error, "--manifest and --base must be provided together"
   end
+  if options[:preflight] && !manifest_mode
+    raise CoverageGate::Error, "--preflight requires --manifest and --base"
+  end
+  if options[:preflight] && positional.any?
+    raise CoverageGate::Error, "--preflight does not accept a coverage resultset"
+  end
 
-  resultset_path = Pathname(positional.fetch(0, "coverage/.resultset.json")).expand_path(cwd)
+  if options[:preflight]
+    applicable = CoverageGate::ManifestPreflight.new(
+      manifest_path: Pathname(options.fetch(:manifest)).expand_path(cwd),
+      base: options.fetch(:base),
+      cwd: cwd
+    ).call(stdout: stdout)
+    return applicable ? 0 : CoverageGate::NOT_APPLICABLE_EXIT_STATUS
+  end
+
   passed =
     if manifest_mode
       CoverageGate::ManifestCheck.new(
-        resultset_path: resultset_path,
+        resultset_path: Pathname(positional.fetch(0, "coverage/.resultset.json")).expand_path(cwd),
         manifest_path: Pathname(options.fetch(:manifest)).expand_path(cwd),
         base: options.fetch(:base),
         cwd: cwd
       ).call(stdout: stdout)
     else
+      resultset_path = Pathname(positional.fetch(0, "coverage/.resultset.json")).expand_path(cwd)
       CoverageGate::LegacyCheck.new(
         resultset_path: resultset_path,
         minimum: env.fetch("MIN_COVERAGE", "100")
