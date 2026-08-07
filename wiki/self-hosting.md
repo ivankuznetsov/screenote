@@ -19,6 +19,27 @@ tags: [self-hosting, docker, licensing, storage, release]
 - The production image starts from a digest-pinned Ruby 3.4.10 Alpine 3.24 multi-architecture index. Transitional Go CLI sources are not copied into the Rails runtime image, so its SBOM and vulnerability gate describe shipped runtime software rather than separately tested source.
 - Public language should use “source-available and self-hostable” because O'Saasy restricts directly competing hosted services.
 
+## Public Onboarding
+
+The repository README leads with the three-step publish, review, and feedback
+loop, then separates hosted use from self-hosted operation. Team setup is
+presented as one-time instance claim, project creation, and invitation-based
+admission; advanced storage, provider, backup, and upgrade details remain in
+the operator guide.
+
+Until the first release exists, the README must not turn `main`, a moving image
+tag, or an untagged CLI build into an apparent production quick start. It names
+the inputs a future operator will receive from GitHub Releases—an exact source
+tag, image digest, and CLI tag—and keeps the Docker procedure visibly
+release-gated. This preserves an easy copy-and-follow path without implying
+that unpublished artifacts are supported.
+
+The README lists only Docker, Compose, and OpenSSL as initial host
+requirements. It also states that diagnostics, backup, and restore need the
+release-matched project bundle because bare Ruby and Bundler are insufficient;
+the first release must name or provide that operator-tool installation before
+those commands are presented as runnable.
+
 ## Self-Hosted Product Boundary
 
 - The full core product is unlimited and has no Stripe, plan-limit, or license-key dependency. Core includes projects, screenshot and multi-viewport review, annotations and replies, APIs, CLI, MCP, and agent workflows; selling and operating the managed `screenote.ai` service remains SaaS-only.
