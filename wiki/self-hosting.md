@@ -3,7 +3,7 @@ title: Self-Hosted Distribution
 type: initiative
 source: docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md
 created: 2026-08-05
-updated: 2026-08-06
+updated: 2026-08-07
 tags: [self-hosting, docker, licensing, storage, release]
 ---
 
@@ -56,6 +56,24 @@ or disclosing a failing component. The release image also bounds Thruster
 request bodies at 30 MiB, preserving the 28 MiB MCP base64 JSON contract with
 finite envelope overhead.
 
+The versioned minimum-host source contract is now
+`config/release/minimum-host-v1.json`: Linux AMD64, 2 vCPUs, 4 GiB RAM, 40 GiB
+free local SSD storage, and UID/GID 1000. The tracked
+`script/self_hosted_load_driver` constrains the exact candidate container to
+that CPU/RAM profile, creates 25 independently authenticated API sessions,
+runs four overlapping exact 20 MiB uploads and a ten-minute 20-mutation/second
+workload, includes scheduler backlog in core p95 latency, reconciles unique
+mutation identities, drains upload processing, checks all four SQLite
+databases, and emits only strict redacted evidence. The wrapper validates the
+profile and the incompatible `screenote-load-smoke/v2` evidence shape. Capacity
+is measured on the exact named volume mounted at `/rails/storage`, and bounded
+process groups plus termination handling keep failed qualification commands
+from occupying the runner indefinitely. Deterministic container and volume
+names are marked for cleanup before Docker creation can complete, and the outer
+shutdown grace covers both bounded cleanup operations. The qualification
+workflow hashes the profile file bytes from the exact source commit and retains
+the validated load measurements with the canonical qualification artifact.
+
 The primary database stores exactly one constrained `Installation` identity: edition, ownership state, storage service, namespace fingerprint, and—until claim—the bootstrap digest. Before any mode-specific database preparation, the supported entrypoint runs a standalone, Bundler-backed deployment preflight that makes no provider connection. SaaS refuses a mounted self-hosted primary; self-hosted startup refuses retained SaaS database-role settings and inspects an existing local primary read-only for conflicting edition, storage service, storage namespace, or unclaimed bootstrap material. Schema preparation runs only after that complete persisted identity matches, and `Installations::Prepare` repeats the check after migrations as defense in depth. Credential rotation is allowed when the persisted namespace remains the same. See [[authentication]], [[data-model]], and [[dependencies]].
 
 ## Private Media and Processing Recovery
@@ -89,7 +107,7 @@ The previously tracked but unused Rails encrypted credentials file is absent fro
 GitGuardian duties are deliberately independent:
 
 - the installed GitHub App must finish its historical scan and provide the exact required App check with skip actions disabled;
-- the metadata-only required workflow checks out no code and requires a matching GitHub source whose monitoring state is exactly active, then follows every strict same-origin incident page and rejects Open or unknown states; because GitHub runs `pull_request_target` against the base SHA, it replaces stale results with pending on the validated PR head and test-merge SHAs before querying, then posts success or generic error with narrow status-write permission; and
+- the metadata-only required workflow checks out no code and requires a matching GitHub source whose monitoring state is exactly active, whose provider archive flag is exactly false, and whose top-level deletion flag is exactly false, then follows every strict same-origin incident page and rejects Open or unknown states; because GitHub runs `pull_request_target` against the base SHA, it replaces stale results with pending on the validated PR head and test-merge SHAs before querying, then posts success or generic error with narrow status-write permission; and
 - checksum-pinned `ggshield` scans the frozen source history/current tree and the exact imported AMD64/ARM64 image manifests in trusted candidate CI using a fixed canonical instance and exact reviewed config path; Trivy and Syft likewise receive explicit trusted config paths, with an empty Trivy ignore file and suppressed-finding reporting, so repository or runner auto-configuration cannot weaken vulnerability scans or SBOM inventory.
 
 The self-hosted browser collaboration matrix supplies its own explicit test-only bootstrap token for the unclaimed-installation scenario and removes that value for the claimed-installation scenarios. The gate therefore has the same admission behavior when run directly by an operator as it does under GitHub Actions, without depending on inherited CI configuration. Instance-administration controller coverage is named in the self-hosted positive manifest rather than relying on tests that skip when the SaaS route set is booted.
@@ -114,9 +132,10 @@ HTTPS also proves wrong-CA and wrong-hostname rejection.
 Promotion live-verifies the qualification workflow identity, attempt, exact job
 set, artifact ID/archive digest, downloaded record bytes, candidate bindings,
 and current CLI tag; missing or ambiguous API state fails closed. Native runner
-labels, the minimum-host profile, tracked load/CLI drivers, candidate-backed
-origins, and the immutable CLI tag are not configured yet, so qualification
-cannot currently emit publishable evidence.
+labels, the tracked public-CLI driver, candidate-backed origins, the immutable
+CLI tag, and an exact successful run on the tracked minimum-host profile are not
+configured or retained yet, so qualification cannot currently emit publishable
+evidence.
 
 `bin/release-validate` has independent `prepare`, technical `evidence`, and `publish` modes. `docs/releases/PUBLICATION_BLOCKED.md` is a hard sentinel: while present, even otherwise valid evidence cannot publish. Fixture evidence is also rejected in publish mode. Live GitGuardian, repository-setting, CLI-tag, native-runner, driver/origin, and exact-candidate evidence is still incomplete, so no source tag, image, attestation, or release is ready.
 

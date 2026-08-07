@@ -833,7 +833,7 @@ jobs:
           QUALIFICATION_DIR="$qualification" QUALIFICATION_REPORT="$report" ruby -rjson -rdigest <<'RUBY'
           directory = File.realpath(ENV.fetch("QUALIFICATION_DIR"))
           report = JSON.parse(File.binread(ENV.fetch("QUALIFICATION_REPORT")))
-          expected_files = ["release-qualification.json"] + report.fetch("checks").map do |check|
+          expected_files = ["release-qualification.json", "checks/evidence/sqlite-load.json"] + report.fetch("checks").map do |check|
             "checks/#{check.fetch('name')}-#{check.fetch('target')}.json"
           end
           actual_files = Dir.glob(File.join(directory, "**", "*"), File::FNM_DOTMATCH).filter_map do |path|
@@ -842,11 +842,13 @@ jobs:
             File.realpath(path).delete_prefix("#{directory}/")
           end
           abort "qualification artifact file set does not match" unless actual_files.sort == expected_files.sort
+          load_evidence = File.join(directory, "checks", "evidence", "sqlite-load.json")
           report.fetch("checks").each do |check|
             path = File.join(directory, "checks", "#{check.fetch('name')}-#{check.fetch('target')}.json")
             abort "qualification check digest does not match" unless
               Digest::SHA256.file(path).hexdigest == check.fetch("evidence_sha256")
             record = JSON.parse(File.binread(path))
+            sqlite_load = check.fetch("name") == "sqlite-load" && check.fetch("target") == "minimum-host"
             expected = {
               "schema" => "screenote-release-qualification-check/v1",
               "name" => check.fetch("name"), "target" => check.fetch("target"), "status" => "passed",
@@ -854,6 +856,7 @@ jobs:
               "candidate_sha256" => report.fetch("candidate_sha256"),
               "manifest_digest" => report.fetch("manifest_digest")
             }
+            expected["load_evidence_sha256"] = Digest::SHA256.file(load_evidence).hexdigest if sqlite_load
             abort "qualification check record identity does not match" unless record == expected
           end
           RUBY

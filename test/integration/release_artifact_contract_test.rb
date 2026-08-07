@@ -484,12 +484,28 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal [ "self-hosted", "${{ vars.SCREENOTE_RELEASE_MINIMUM_HOST_RUNNER_LABEL }}" ],
       jobs.dig("minimum-host", "runs-on")
 
+    configure_steps = jobs.fetch("configure").fetch("steps")
+    checkout = configure_steps.find { |step| step["name"] == "Checkout exact qualification source" }
+    bind = configure_steps.find { |step| step["id"] == "bind" }
+    assert_not_nil checkout
+    assert_not_nil bind
+    assert_equal "${{ inputs.source_sha }}", checkout.dig("with", "ref")
+    assert_equal false, checkout.dig("with", "persist-credentials")
+    assert_equal "config/release/minimum-host-v1.json", checkout.dig("with", "sparse-checkout")
+    assert_equal false, checkout.dig("with", "sparse-checkout-cone-mode")
+    assert_includes bind.fetch("run"), 'minimum_host_profile_path="config/release/minimum-host-v1.json"'
+    assert_includes bind.fetch("run"), 'test "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" = "$SOURCE_SHA"'
+    assert_includes bind.fetch("run"), 'test ! -L "$GITHUB_WORKSPACE/$minimum_host_profile_path"'
+    assert_includes bind.fetch("run"), 'sha256sum "$GITHUB_WORKSPACE/$minimum_host_profile_path"'
+
     workflow = path.read
     assert_not_includes workflow, "pull_request:"
     assert_not_includes workflow, "workflow_run:"
     assert_includes workflow, "candidate_artifact_id"
     assert_includes workflow, "artifact-ids:"
-    assert_includes workflow, "SCREENOTE_RELEASE_LOAD_DRIVER_PATH"
+    assert_not_includes workflow, "SCREENOTE_RELEASE_LOAD_DRIVER_PATH"
+    assert_includes workflow, "SCREENOTE_LOAD_DRIVER: ${{ github.workspace }}/script/self_hosted_load_driver"
+    assert_not_includes workflow, "SCREENOTE_RELEASE_MINIMUM_HOST_PROFILE"
     assert_includes workflow, "SCREENOTE_PUBLIC_CLI_CONTRACT_PATH"
     assert_includes workflow, "script/release_test_matrix backup-restore"
     assert_includes workflow, "script/self_hosted_load_smoke"
@@ -516,6 +532,65 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes matrix, "wrong_hostname_rejected"
     assert_includes workflow, "Validate each CLI transport evidence and create its redacted record"
     assert_includes workflow, '"qualification must contain exactly eight check records"'
+  end
+
+  test "SQLite load evidence is retained after verification and transitively hash bound" do
+    qualification = YAML.safe_load(
+      Rails.root.join(".github/workflows/release-qualification.yml").read,
+      permitted_classes: [],
+      aliases: false
+    )
+    jobs = qualification.fetch("jobs")
+    minimum_host_steps = jobs.fetch("minimum-host").fetch("steps")
+    verifier_index = minimum_host_steps.index do |step|
+      step["name"] == "Run exact-image SQLite minimum-host load profile"
+    end
+    retention_index = minimum_host_steps.index do |step|
+      step["name"] == "Retain verifier-approved redacted SQLite load evidence"
+    end
+    check_records = minimum_host_steps.find do |step|
+      step["name"] == "Create redacted minimum-host check records"
+    end
+
+    assert_not_nil verifier_index
+    assert_not_nil retention_index
+    assert_operator verifier_index, :<, retention_index
+    assert_equal 'script/self_hosted_load_smoke >"$RUNNER_TEMP/sqlite-load-evidence.json"',
+      minimum_host_steps.fetch(verifier_index).fetch("run")
+    retention = minimum_host_steps.fetch(retention_index).fetch("run")
+    assert_includes retention, 'source="$RUNNER_TEMP/sqlite-load-evidence.json"'
+    assert_includes retention, 'destination="$RUNNER_TEMP/checks/evidence/sqlite-load.json"'
+    assert_includes retention, 'test ! -L "$source"'
+    assert_includes retention, 'cp -- "$source" "$destination"'
+    assert_includes check_records.fetch("run"),
+      'load_evidence="$RUNNER_TEMP/checks/evidence/sqlite-load.json"'
+    assert_includes check_records.fetch("run"),
+      'if ENV.fetch("NAME") == "sqlite-load" && ENV.fetch("TARGET") == "minimum-host"'
+    assert_includes check_records.fetch("run"),
+      'record["load_evidence_sha256"] = ENV.fetch("LOAD_EVIDENCE_SHA256")'
+
+    record = jobs.fetch("record").fetch("steps").find do |step|
+      step["name"] == "Build one canonical redacted qualification record"
+    end.fetch("run")
+    assert_includes record, 'LOAD_EVIDENCE="$input/evidence/sqlite-load.json"'
+    assert_includes record, 'OUTPUT_EVIDENCE="$output/checks/evidence/sqlite-load.json"'
+    assert_includes record, 'expected_keys << "load_evidence_sha256" if sqlite_load'
+    assert_includes record, "Digest::SHA256.file(load_evidence).hexdigest == load_evidence_sha256"
+    assert_includes record, 'FileUtils.copy_file(load_evidence, ENV.fetch("OUTPUT_EVIDENCE"))'
+    assert_includes record, 'check.slice("name", "target", "status").merge('
+
+    release = YAML.safe_load(
+      Rails.root.join(".github/workflows/release.yml").read,
+      permitted_classes: [],
+      aliases: false
+    )
+    authorization = release.fetch("jobs").fetch("authorize").fetch("steps").find do |step|
+      step["name"] == "Verify exact qualification bytes and live CLI tag"
+    end.fetch("run")
+    assert_includes authorization, '"checks/evidence/sqlite-load.json"'
+    assert_includes authorization,
+      'expected["load_evidence_sha256"] = Digest::SHA256.file(load_evidence).hexdigest if sqlite_load'
+    assert_includes authorization, 'abort "qualification check record identity does not match" unless record == expected'
   end
 
   test "public CLI qualification invokes and validates each transport independently" do
@@ -1029,10 +1104,12 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       aliases: false
     )
     coverage = workflow.fetch("jobs").fetch("coverage")
+    gate = coverage.fetch("steps").find { |step| step["name"]&.include?("changed-security coverage") }
 
     assert_operator coverage.fetch("timeout-minutes"), :>=, 45
-    assert_equal "script/release_test_matrix coverage",
-      coverage.fetch("steps").find { |step| step["name"]&.include?("changed-security coverage") }.fetch("run")
+    assert_equal "script/release_test_matrix coverage", gate.fetch("run")
+    assert_equal "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
+      gate.dig("env", "SCREENOTE_COVERAGE_BASE_SHA")
   end
 
   test "self-hosted coverage is an explicit positive manifest with fail-closed drift detection" do
@@ -1096,7 +1173,14 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes matrix, "SCREENOTE_DEFER_COVERAGE_GATE=1 TEST_ENV_NUMBER=2"
     assert_equal 2, matrix.scan("DISABLE_BOOTSNAP_COMPILE_CACHE=1").length
     assert_includes matrix, "test/support/coverage_boot"
-    assert_includes matrix, "git merge-base HEAD origin/main"
+    assert_includes matrix, "require_value SCREENOTE_COVERAGE_BASE_SHA"
+    assert_includes matrix, '[[ "${SCREENOTE_COVERAGE_BASE_SHA}" =~ ^[0-9a-f]{40}$ ]]'
+    assert_includes matrix, 'git cat-file -e "${SCREENOTE_COVERAGE_BASE_SHA}^{commit}"'
+    assert_includes matrix, 'git merge-base --is-ancestor "${SCREENOTE_COVERAGE_BASE_SHA}" HEAD'
+    assert_includes matrix, '--base "${SCREENOTE_COVERAGE_BASE_SHA}"'
+    assert_includes matrix,
+      "SCREENOTE_COVERAGE_BASE_SHA=<full-ancestor-sha> script/release_test_matrix coverage"
+    assert_not_includes matrix, "git merge-base HEAD origin/main"
     assert_includes matrix, "--manifest test/manifests/release_security_coverage.yml"
     assert_includes matrix, 'SCREENOTE_BOOTSTRAP_TOKEN="${SYSTEM_TEST_BOOTSTRAP_TOKEN}"'
     assert_includes matrix, "env -u SCREENOTE_BOOTSTRAP_TOKEN"

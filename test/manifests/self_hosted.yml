@@ -60,6 +60,8 @@ capabilities:
     - test/integration/self_hosted_backup_restore_test.rb
     - test/integration/self_hosted_database_configuration_test.rb
     - test/integration/self_hosted_key_rotation_compose_test.rb
+    - test/integration/self_hosted_load_driver_test.rb
+    - test/integration/self_hosted_load_qualification_test.rb
     - test/integration/self_hosted_operations_command_test.rb
     - test/integration/self_hosted_secret_configuration_test.rb
     - test/services/screenote/self_hosted_diagnostics_test.rb

@@ -10,6 +10,24 @@ in that release. An untagged branch, `latest`, a custom image, self-hosted
 PostgreSQL, NFS/SMB storage, clustering, and high availability are not supported
 by the first release.
 
+## Minimum host
+
+The first-release minimum profile is Linux AMD64 with 2 vCPUs, 4 GiB of RAM,
+40 GiB of free local SSD storage, and host/container UID/GID `1000:1000`.
+`config/release/minimum-host-v1.json` is the versioned source of truth. Every
+release must run its exact candidate image on that profile with 25 independently
+authenticated API sessions, four simultaneous 20 MiB uploads, and 20 comment
+mutations per second for ten minutes before publication.
+
+The tracked driver and verifier use the `screenote-load-smoke/v2` contract. The
+verifier passes the full tracked profile, immutable image digest, and exact
+source commit to the driver; the retained evidence identifies those inputs and
+contains only numeric qualification results, never API keys or secret values.
+
+This profile is a supported single-instance baseline, not a high-availability
+or unlimited-throughput promise. Operators should provision additional storage
+for retained originals, variants, backups, and normal filesystem headroom.
+
 ## Install with local screenshot storage
 
 Install Docker Engine with the Compose plugin. Copy the release's
