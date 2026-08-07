@@ -4,7 +4,7 @@
       "url": "https://api.gitguardian.com/v1/sources/42",
       "status": 200,
       "headers": {},
-      "body": "{\"id\":42,\"type\":\"github\",\"full_name\":\"ivankuznetsov/screenote\",\"monitoring_status\":\"active\",\"provider_metadata\":{\"archived\":false,\"deleted\":false}}"
+      "body": "{\"id\":42,\"type\":\"github\",\"full_name\":\"ivankuznetsov/screenote\",\"monitoring_status\":\"active\",\"deleted\":false,\"provider_metadata\":{\"archived\":false}}"
     },
     {
       "url": "https://api.gitguardian.com/v1/sources/42/incidents/secrets?per_page=100",

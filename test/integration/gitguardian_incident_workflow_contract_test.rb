@@ -61,11 +61,11 @@ class GitguardianIncidentWorkflowContractTest < ActiveSupport::TestCase
       "unknown" => ->(source) { source["monitoring_status"] = "new_provider_state" },
       "disabled" => ->(source) { source["monitoring_status"] = "disabled" },
       "archived" => ->(source) { source["provider_metadata"]["archived"] = true },
-      "deleted" => ->(source) { source["provider_metadata"]["deleted"] = true },
+      "deleted" => ->(source) { source["deleted"] = true },
       "missing archived" => ->(source) { source["provider_metadata"].delete("archived") },
-      "missing deleted" => ->(source) { source["provider_metadata"].delete("deleted") },
+      "missing deleted" => ->(source) { source.delete("deleted") },
       "null archived" => ->(source) { source["provider_metadata"]["archived"] = nil },
-      "string deleted" => ->(source) { source["provider_metadata"]["deleted"] = "false" }
+      "string deleted" => ->(source) { source["deleted"] = "false" }
     }
 
     cases.each do |label, mutation|
