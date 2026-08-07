@@ -21,7 +21,7 @@ go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@<release-cli-tag
 screenote --base-url http://screenote.internal login
 ```
 
-Use `login --device` from SSH, tmux, or another headless session. The Go client still present in this repository is transitional and is not a supported release artifact.
+Use `login --device` from SSH, tmux, or another headless session.
 
 ## Develop
 
