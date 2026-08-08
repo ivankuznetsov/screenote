@@ -10,7 +10,7 @@ class CreateSnapshots < ActiveRecord::Migration[8.1]
       t.timestamps
     end
 
-    # Direction-less by design: SQLite and Postgres can scan the ASC b-tree
+    # Direction-less by design: supported databases can scan the ASC b-tree
     # backwards for `Snapshot.recent` (taken_at DESC). The id-equality path
     # used by `current_project.snapshots.find_by(id:)` is served by the PK,
     # not this composite — the composite is purely for the recent-snapshots

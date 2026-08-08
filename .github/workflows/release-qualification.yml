@@ -265,44 +265,18 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
-          readonly POSTGRESQL_IMAGE="docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
           suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${ARCHITECTURE}-${RANDOM}"
-          network="screenote-qualification-${suffix}"
-          database_container="screenote-qualification-db-${suffix}"
           application_container="screenote-qualification-app-${suffix}"
+          database_directory="$RUNNER_TEMP/saas-databases-$suffix"
           cleanup() {
-            docker rm --force "$application_container" "$database_container" >/dev/null 2>&1 || true
-            docker network rm "$network" >/dev/null 2>&1 || true
+            docker rm --force "$application_container" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
-          docker network create "$network" >/dev/null
-          docker pull --platform "linux/$ARCHITECTURE" "$POSTGRESQL_IMAGE"
-          docker run --detach --pull=never --platform "linux/$ARCHITECTURE" \
-            --network "$network" --network-alias database --name "$database_container" \
-            --env POSTGRES_DB=screenote_primary \
-            --env POSTGRES_USER=screenote \
-            --env POSTGRES_PASSWORD=qualification-postgres \
-            "$POSTGRESQL_IMAGE" >/dev/null
-
-          database_ready=false
-          for _attempt in $(seq 1 60); do
-            if docker exec "$database_container" pg_isready \
-              --username screenote --dbname screenote_primary >/dev/null 2>&1; then
-              database_ready=true
-              break
-            fi
-            sleep 1
-          done
-          if [[ "$database_ready" != true ]]; then
-            docker logs "$database_container"
-            echo "::error::digest-pinned PostgreSQL did not become ready"
-            exit 1
-          fi
-          for database in screenote_cache screenote_queue screenote_cable; do
-            docker exec --env PGPASSWORD=qualification-postgres "$database_container" \
-              createdb --host 127.0.0.1 --username screenote "$database"
-          done
+          install -d -m 0777 "$database_directory"
+          database_mount=(
+            --mount "type=bind,source=$database_directory,target=/tmp/screenote-saas-databases"
+          )
 
           application_environment=(
             --env RAILS_ENV=production
@@ -310,10 +284,10 @@ jobs:
             --env SCREENOTE_EDITION=saas
             --env SCREENOTE_BASE_URL=https://qualification.invalid
             --env SECRET_KEY_BASE=qualification-secret-key-base-0123456789abcdef0123456789abcdef
-            --env DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_primary
-            --env CACHE_DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_cache
-            --env QUEUE_DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_queue
-            --env CABLE_DATABASE_URL=postgres://screenote:qualification-postgres@database:5432/screenote_cable
+            --env DATABASE_URL=sqlite3:/tmp/screenote-saas-databases/primary.sqlite3
+            --env CACHE_DATABASE_URL=sqlite3:/tmp/screenote-saas-databases/cache.sqlite3
+            --env QUEUE_DATABASE_URL=sqlite3:/tmp/screenote-saas-databases/queue.sqlite3
+            --env CABLE_DATABASE_URL=sqlite3:/tmp/screenote-saas-databases/cable.sqlite3
             --env STRIPE_SECRET_KEY=qualification-stripe
             --env STRIPE_WEBHOOK_SECRET=qualification-webhook
             --env STRIPE_PRO_PRICE_ID=qualification-price
@@ -341,10 +315,12 @@ jobs:
 
           # Prepare a fresh database with the exact image through its normal
           # entrypoint, then boot its unmodified ENTRYPOINT and default CMD.
-          docker run --rm --pull=never --network "$network" \
+          docker run --rm --pull=never --platform "linux/$ARCHITECTURE" \
+            "${database_mount[@]}" \
             "${application_environment[@]}" "$QUALIFICATION_IMAGE" ./bin/rails db:prepare
-          docker run --detach --pull=never --network "$network" \
+          docker run --detach --pull=never --platform "linux/$ARCHITECTURE" \
             --name "$application_container" \
+            "${database_mount[@]}" \
             "${application_environment[@]}" "$QUALIFICATION_IMAGE" >/dev/null
 
           application_ready=false
@@ -368,24 +344,41 @@ jobs:
           docker exec --interactive \
             --env SCREENOTE_QUALIFICATION_EVIDENCE=/tmp/saas-qualification.json \
             "$application_container" ./bin/rails runner - <<'RUBY'
+          require "digest"
           require "json"
-          require "pg"
 
-          databases = {
-            "primary" => ["DATABASE_URL", "screenote_primary"],
-            "cache" => ["CACHE_DATABASE_URL", "screenote_cache"],
-            "queue" => ["QUEUE_DATABASE_URL", "screenote_queue"],
-            "cable" => ["CABLE_DATABASE_URL", "screenote_cable"]
-          }.to_h do |role, (environment_key, expected_database)|
-            PG.connect(ENV.fetch(environment_key)) do |connection|
-              row = connection.exec("SELECT current_database(), current_setting('server_version_num')").first
-              abort "#{role} did not connect to #{expected_database}" unless row.fetch("current_database") == expected_database
-              version = row.fetch("current_setting")
-              abort "#{role} is not PostgreSQL 16" unless version.match?(/\A16[0-9]{4}\z/)
-              [role, {"database" => expected_database, "server_version_num" => version}]
+          database_roles = {
+            "primary" => "DATABASE_URL",
+            "cache" => "CACHE_DATABASE_URL",
+            "queue" => "QUEUE_DATABASE_URL",
+            "cable" => "CABLE_DATABASE_URL"
+          }
+          connection_handler = ActiveRecord::Base.connection_handler
+          configured_urls = {}
+          databases = database_roles.to_h do |role, environment_key|
+            connection_name = nil
+            expected_url = ENV.fetch(environment_key)
+            config = ActiveRecord::Base.configurations.configs_for(env_name: Rails.env, name: role)
+            abort "#{role} is not configured from #{environment_key}" unless
+              config&.respond_to?(:url) && config.url == expected_url
+
+            connection_name = "ScreenoteQualification#{role.capitalize}"
+            connection_pool = connection_handler.establish_connection(config, owner_name: connection_name)
+            connected = connection_pool.with_connection do |connection|
+              connection.select_value("SELECT 1").to_s == "1"
             end
+            abort "#{role} database connection failed" unless connected
+
+            configured_urls[role] = expected_url
+            [role, {
+              "environment_key" => environment_key,
+              "url_sha256" => Digest::SHA256.hexdigest(expected_url)
+            }]
+          ensure
+            connection_handler.remove_connection_pool(connection_name) if connection_name
           end
-          abort "primary adapter is not PostgreSQL" unless ActiveRecord::Base.connection.adapter_name == "PostgreSQL"
+          abort "SaaS database role URLs must be distinct" unless
+            configured_urls.values.uniq.length == database_roles.length
           installation = Installation.current!
           expected_installation = {
             "singleton_key" => Installation::SINGLETON_KEY,
@@ -399,14 +392,13 @@ jobs:
             Installation.where(singleton_key: Installation::SINGLETON_KEY).one? &&
               actual_installation == expected_installation
           evidence = {
-            "schema" => "screenote-saas-image-qualification/v1",
+            "schema" => "screenote-saas-image-qualification/v2",
             "source_sha" => ENV.fetch("SCREENOTE_QUALIFICATION_SOURCE_SHA"),
             "candidate_sha256" => ENV.fetch("SCREENOTE_QUALIFICATION_CANDIDATE_SHA256"),
             "candidate_image" => ENV.fetch("SCREENOTE_QUALIFICATION_CANDIDATE_IMAGE"),
             "manifest_digest" => ENV.fetch("SCREENOTE_QUALIFICATION_MANIFEST_DIGEST"),
             "platform_digest" => ENV.fetch("SCREENOTE_QUALIFICATION_PLATFORM_DIGEST"),
             "architecture" => ENV.fetch("SCREENOTE_QUALIFICATION_ARCHITECTURE"),
-            "adapter" => ActiveRecord::Base.connection.adapter_name,
             "databases" => databases,
             "installation" => actual_installation
           }
@@ -427,29 +419,31 @@ jobs:
           evidence="$RUNNER_TEMP/saas-qualification-$ARCHITECTURE.json"
           EVIDENCE="$evidence" ruby -rjson -e '
             evidence = JSON.parse(File.binread(ENV.fetch("EVIDENCE")))
-            expected_keys = %w[adapter architecture candidate_image candidate_sha256 databases installation manifest_digest platform_digest schema source_sha]
+            expected_keys = %w[architecture candidate_image candidate_sha256 databases installation manifest_digest platform_digest schema source_sha]
             abort "SaaS qualification evidence shape does not match" unless evidence.keys.sort == expected_keys.sort
             abort "SaaS qualification evidence identity does not match" unless
-              evidence["schema"] == "screenote-saas-image-qualification/v1" &&
+              evidence["schema"] == "screenote-saas-image-qualification/v2" &&
                 evidence["source_sha"] == ENV.fetch("SOURCE_SHA") &&
                 evidence["candidate_sha256"] == ENV.fetch("CANDIDATE_SHA256") &&
                 evidence["candidate_image"] == ENV.fetch("QUALIFICATION_IMAGE") &&
                 evidence["manifest_digest"] == ENV.fetch("MANIFEST_DIGEST") &&
                 evidence["platform_digest"] == ENV.fetch("PLATFORM_DIGEST") &&
-                evidence["architecture"] == ENV.fetch("ARCHITECTURE") &&
-                evidence["adapter"] == "PostgreSQL"
+                evidence["architecture"] == ENV.fetch("ARCHITECTURE")
             expected_databases = {
-              "primary" => "screenote_primary", "cache" => "screenote_cache",
-              "queue" => "screenote_queue", "cable" => "screenote_cable"
+              "primary" => "DATABASE_URL", "cache" => "CACHE_DATABASE_URL",
+              "queue" => "QUEUE_DATABASE_URL", "cable" => "CABLE_DATABASE_URL"
             }
             abort "SaaS qualification database set does not match" unless evidence["databases"].is_a?(Hash) &&
               evidence["databases"].keys.sort == expected_databases.keys.sort
-            expected_databases.each do |role, database|
+            database_url_digests = expected_databases.map do |role, environment_key|
               actual = evidence["databases"].fetch(role)
               abort "SaaS #{role} database evidence does not match" unless
-                actual == {"database" => database, "server_version_num" => actual["server_version_num"]} &&
-                  actual["server_version_num"].to_s.match?(/\A16[0-9]{4}\z/)
+                actual == {"environment_key" => environment_key, "url_sha256" => actual["url_sha256"]} &&
+                  actual["url_sha256"].to_s.match?(/\A[0-9a-f]{64}\z/)
+              actual.fetch("url_sha256")
             end
+            abort "SaaS database role URL digests must be distinct" unless
+              database_url_digests.uniq.length == expected_databases.length
             abort "SaaS installation evidence does not match" unless evidence["installation"] == {
               "singleton_key" => "screenote", "deployment_mode" => "saas", "state" => "saas",
               "storage_service" => "rabata", "administrator_id" => nil

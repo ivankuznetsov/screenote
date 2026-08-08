@@ -8,7 +8,7 @@
     "predecessor_tag": "none",
     "predecessor_image_digest": "none",
     "cli_tag": "v1.0.0",
-    "notes_sha256": "ef18ed626e87721529de331ed324d3e496126fbbab641de00be0b30f59e9b072"
+    "notes_sha256": "a029d861a366d9681d567d5d41a0854e7d954f18173b301b59818e2b74a67dc8"
   },
   "artifacts": {
     "source_sha": "1111111111111111111111111111111111111111",
@@ -102,8 +102,7 @@
       { "name": "ruby-security", "conclusion": "success", "evidence_sha256": "3232323232323232323232323232323232323232323232323232323232323232" },
       { "name": "lint", "conclusion": "success", "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333" },
       { "name": "coverage", "conclusion": "success", "evidence_sha256": "edededededededededededededededededededededededededededededededed" },
-      { "name": "sqlite", "conclusion": "success", "evidence_sha256": "3434343434343434343434343434343434343434343434343434343434343434" },
-      { "name": "postgresql", "conclusion": "success", "evidence_sha256": "3535353535353535353535353535353535353535353535353535353535353535" },
+      { "name": "test", "conclusion": "success", "evidence_sha256": "3434343434343434343434343434343434343434343434343434343434343434" },
       { "name": "system-collaboration", "conclusion": "success", "evidence_sha256": "3636363636363636363636363636363636363636363636363636363636363636" },
       { "name": "public-cli", "conclusion": "success", "evidence_sha256": "3737373737373737373737373737373737373737373737373737373737373737" },
       { "name": "container-local", "conclusion": "success", "evidence_sha256": "3838383838383838383838383838383838383838383838383838383838383838" },
@@ -147,7 +146,7 @@
     "status": "passed",
     "sentinel_matches": 0,
     "logs_sha256": "4343434343434343434343434343434343434343434343434343434343434343",
-    "release_notes_sha256": "ef18ed626e87721529de331ed324d3e496126fbbab641de00be0b30f59e9b072",
+    "release_notes_sha256": "a029d861a366d9681d567d5d41a0854e7d954f18173b301b59818e2b74a67dc8",
     "evidence_sha256": "4545454545454545454545454545454545454545454545454545454545454545"
   }
 }

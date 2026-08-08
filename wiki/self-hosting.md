@@ -3,13 +3,13 @@ title: Self-Hosted Distribution
 type: initiative
 source: docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md
 created: 2026-08-05
-updated: 2026-08-07
+updated: 2026-08-08
 tags: [self-hosting, kamal, docker, licensing, storage, release]
 ---
 
 # Self-Hosted Distribution
 
-**TLDR:** Screenote implements a source-available, single-server self-hosted edition alongside `screenote.ai`. The public installation path is now Kamal plus Kamal Proxy, following the Rails-style deployment used by Fizzy; publication remains gated by the release controls below.
+**TLDR:** Screenote implements a source-available, single-server self-hosted edition alongside `screenote.ai`. The public installation path is now Kamal plus Kamal Proxy, following the Rails-style deployment used by Fizzy; publication remains gated by the release controls below. The self-hosted runtime uses SQLite and the hosted Kamal profile may use PostgreSQL, while shared application code and release qualification stay database-adapter-neutral through Active Record.
 
 ## Distribution Model
 
@@ -51,17 +51,17 @@ or images remain outside first-release support.
 - External transactional email through generic SMTP, social OAuth, S3, and monitoring are optional. Screenote runs no mail service; administrators can copy invitation links when email is unavailable.
 - Screenshot originals and variants are never served through default reusable Active Storage routes. Application-owned proxy routes authenticate an active project principal and recheck membership for every byte request.
 - Runtime application, bootstrap, and provider secrets live in ignored Kamal secret configuration and are passed only to the selected container environment. The bootstrap secret is removed from both the Kamal config and secret file after claim; secrets must not appear in image layers, process arguments, logs, diagnostics, or tracked configuration. `_FILE` loading remains available for the legacy qualification harness.
-- OAuth and one-time link credentials become digest-only. Project-scoped OAuth is bound only after a user chooses a joined project on a server-owned consent/device screen. The SaaS credential conversion uses a stopped-process maintenance cutover because predecessor containers cannot read transformed rows.
+- OAuth and one-time link credentials become digest-only. Project-scoped OAuth is bound only after a user chooses a joined project on a server-owned consent/device screen. The SaaS credential conversion uses a stopped-process maintenance cutover because predecessor containers cannot read transformed rows. The operator proves quiescence and a fresh recoverable backup before migration. The cutover then lets each migration use its adapter-supported transaction behavior and verifies migration versions, stored digests, and runtime lookups; it does not promise one outer transaction across the chain. An interrupted run remains in maintenance until the version-aware, idempotent checks resume successfully or the verified backup is restored.
 
 ## SaaS Boundary
 
-The same revision must continue to run `screenote.ai` with PostgreSQL, Stripe, hosted object storage, email, OAuth, and monitoring. Self-hosted defaults must not weaken those production requirements.
+The same revision must continue to run `screenote.ai` with Stripe, hosted object storage, email, OAuth, and monitoring. Shared models, services, tests, CI, and release qualification use Active Record rather than requiring a database adapter. The current hosted Kamal profile may still provision PostgreSQL, while self-hosting retains its supported four-file SQLite topology; neither runtime choice may leak edition-only providers or defaults into the other.
 
 ## Deployment Configuration Boundary
 
 Production now starts from one immutable `Screenote::Deployment` configuration. `SCREENOTE_EDITION` and `SCREENOTE_BASE_URL` are explicit, `SECRET_KEY_BASE` and the initial self-hosted bootstrap token require at least 32 bytes, and malformed origins or broad proxy trust fail before service. The canonical origin controls allowed hosts, URL generation, OmniAuth callbacks, redirects, secure cookies, and HTTP/HTTPS enforcement; IPv6 origins are normalized with exactly one bracket pair before ports are appended. A pre-Rails middleware removes forwarded client and origin headers unless the immediate peer belongs to `SCREENOTE_TRUSTED_PROXIES`, so a direct caller cannot forge a rate-limit identity or TLS termination.
 
-SaaS production requires its four PostgreSQL roles plus Stripe, Resend, Google/GitHub OAuth, Honeybadger, hosted storage, and `SCREENOTE_SAAS_OPERATOR_EMAIL`. Self-hosted production defaults to local private storage and no mail, social OAuth, monitoring, or billing; each optional provider must be explicitly enabled with a complete configuration. No-mail mode does not draw password-reset routes or enqueue reset credentials. S3 storage applies `SCREENOTE_S3_PREFIX` to every object key and persists a credential-free namespace fingerprint covering service, endpoint, region, bucket, prefix, and path-style behavior.
+The current hosted Kamal configuration supplies PostgreSQL URLs for its four database roles plus Stripe, Resend, Google/GitHub OAuth, Honeybadger, hosted storage, and `SCREENOTE_SAAS_OPERATOR_EMAIL`. That is a deployment selection, not an application-level adapter requirement. Self-hosted production defaults to local private storage and no mail, social OAuth, monitoring, or billing; each optional provider must be explicitly enabled with a complete configuration. No-mail mode does not draw password-reset routes or enqueue reset credentials. S3 storage applies `SCREENOTE_S3_PREFIX` to every object key and persists a credential-free namespace fingerprint covering service, endpoint, region, bucket, prefix, and path-style behavior.
 
 The public `config/deploy.yml` is a self-hosted Kamal starter: one application
 role, one `screenote_storage` named volume, Kamal Proxy with automatic HTTPS,
@@ -75,7 +75,7 @@ secrets to `.kamal/secrets`; both SMTP username and password are secret because
 providers such as Postmark use a token as the username. The starter explicitly
 targets the first release's supported Linux AMD64 host. The hosted service has a separate complete
 `config/deploy.saas.yml` and SaaS-only hooks, invoked through `bin/kamal-saas`,
-so its PostgreSQL and provider requirements cannot leak into self-hosting.
+so its database selection and provider requirements cannot leak into self-hosting.
 `GET /up` remains process liveness, while `GET /ready` checks all four SQLite
 schemas, volume writability, and selected Active Storage configuration without
 calling external providers or disclosing a failing component. Kamal Proxy and
@@ -184,9 +184,13 @@ and versioned minimum-host capacity. Its one canonical artifact binds the exact
 source, candidate run and bundle, platform manifests, immutable CLI tag/commit,
 and eight results: self-hosted and SaaS boot on each architecture,
 backup/restore, SQLite load, and public CLI behavior over HTTP and HTTPS.
-Each SaaS result must come from the candidate's unmodified production
-entrypoint and default server command against digest-pinned PostgreSQL 16,
-with all four database roles and the SaaS installation identity verified.
+Each SaaS result still comes from the exact candidate's unmodified production
+entrypoint and default server command. Qualification supplies four
+role-specific database URLs, verifies their primary, cache, queue, and cable
+connections through Active Record, and verifies the SaaS installation
+identity without asserting a database adapter or server version. This
+URL-driven contract preserves both exact-image SaaS boot targets while leaving
+the hosted Kamal profile free to select PostgreSQL.
 Native image qualification also verifies the Kamal service label and the exact
 source, revision, and version labels before booting the candidate.
 The public CLI driver runs once per transport and each structured result binds
@@ -209,7 +213,9 @@ Kamal-native backup, restore, and runtime qualification contract is complete.
 The first successor release must also qualify its adjacent upgrade and rollback
 path. Ordinary `bin/kamal deploy` assumes backward-compatible migrations; a
 release that needs a stopped-process migration must publish explicit
-maintenance and rollback instructions. The older Compose commands remain an
+maintenance, verified backup/restore, resumable verification, and rollback
+instructions; it must not claim that one outer transaction covers the whole
+migration chain. The older Compose commands remain an
 internal qualification harness and are not a supported operator contract.
 Self-hosted PostgreSQL, high availability, clustering, enterprise SSO, SaaS
 import/export, storage migration tooling, and in-product updates remain

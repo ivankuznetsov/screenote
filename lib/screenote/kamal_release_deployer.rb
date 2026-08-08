@@ -19,6 +19,7 @@ module Screenote
     CANONICAL_IMAGE = "ghcr.io/ivankuznetsov/screenote"
     CANONICAL_REPOSITORY = "ivankuznetsov/screenote"
     RELEASE_COMMANDS = %w[setup deploy redeploy].freeze
+    CONFIG_OPTIONS = %w[--config-file --config_file -c].freeze
     RELEASE_TAG = /\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z/
     SHA = /\A[0-9a-f]{40}\z/
     OCI_DIGEST = /\Asha256:[0-9a-f]{64}\z/
@@ -137,23 +138,24 @@ module Screenote
 
     def selected_config(arguments)
       values = arguments.each_with_index.filter_map do |argument, index|
-        if argument == "--config-file" || argument == "--config_file" || argument == "-c"
+        if separate_config_option?(argument)
           arguments[index + 1]
-        elsif argument.start_with?("--config-file=") || argument.start_with?("--config_file=") ||
-            argument.start_with?("-c=")
+        elsif inline_config_option?(argument)
           argument.split("=", 2).last
         end
       end
       return starter_config if values.empty?
 
       value = values.last
-      return Pathname("/__screenote_invalid_config__") if value.to_s.empty?
+      return if value.to_s.empty?
 
       Pathname(value).expand_path
     end
 
     def starter_config_selected?(arguments)
       selected = selected_config(arguments)
+      return false unless selected
+
       File.identical?(selected, starter_config)
     rescue Errno::EACCES, Errno::ENOENT, Errno::ELOOP, Errno::ENOTDIR
       selected == starter_config
@@ -239,16 +241,23 @@ module Screenote
       arguments.each do |argument|
         if skip_value
           skip_value = false
-        elsif argument == "--config-file" || argument == "--config_file" || argument == "-c"
+        elsif separate_config_option?(argument)
           skip_value = true
-        elsif argument.start_with?("--config-file=") || argument.start_with?("--config_file=") ||
-            argument.start_with?("-c=")
+        elsif inline_config_option?(argument)
           next
         else
           filtered << argument
         end
       end
       arguments.replace(filtered)
+    end
+
+    def separate_config_option?(argument)
+      CONFIG_OPTIONS.include?(argument)
+    end
+
+    def inline_config_option?(argument)
+      CONFIG_OPTIONS.any? { |option| argument.start_with?("#{option}=") }
     end
 
     def run_kamal(arguments)
@@ -321,23 +330,21 @@ module Screenote
       MAX_BYTES = 2 * 1024 * 1024
       MAX_REDIRECTS = 5
 
-      def initialize(root:)
+      def initialize(root:, http_start: Net::HTTP.method(:start))
         @root = root
+        @http_start = http_start
       end
 
       def fetch(tag)
         path = root.join(".kamal/releases", tag, "public-evidence.json")
         if path.exist? || path.symlink?
           raise Error, "release evidence cache must be one regular file" unless path.file? && !path.symlink?
-          raise Error, "release evidence is unexpectedly large" if path.size > MAX_BYTES
-          return path.binread
+          return read_bounded_file(path)
         end
 
         body = download(
           URI("https://github.com/#{CANONICAL_REPOSITORY}/releases/download/#{tag}/public-evidence.json")
         )
-        raise Error, "release evidence is unexpectedly large" if body.bytesize > MAX_BYTES
-
         FileUtils.mkdir_p(path.dirname)
         Tempfile.create([ "public-evidence", ".json" ], path.dirname) do |file|
           file.binmode
@@ -347,14 +354,14 @@ module Screenote
           File.chmod(0o644, file.path)
           File.rename(file.path, path)
         end
-        path.binread
+        body
       rescue Errno::EACCES, Errno::ENOENT, SystemCallError => error
         raise Error, "release evidence cache failed (#{error.class})"
       end
 
       private
 
-      attr_reader :root
+      attr_reader :http_start, :root
 
       def download(uri, redirects = 0)
         raise Error, "release evidence redirected too many times" if redirects > MAX_REDIRECTS
@@ -363,22 +370,46 @@ module Screenote
         request = Net::HTTP::Get.new(uri)
         request["Accept"] = "application/json"
         request["User-Agent"] = "screenote-kamal-release/1"
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 10, read_timeout: 30) do |http|
-          http.request(request)
+        redirect = nil
+        body = nil
+        http_start.call(uri.host, uri.port, use_ssl: true, open_timeout: 10, read_timeout: 30) do |http|
+          http.request(request) do |response|
+            case response
+            when Net::HTTPSuccess
+              body = read_bounded_response(response)
+            when Net::HTTPRedirection
+              location = response["location"]
+              raise Error, "release evidence redirect is missing a location" if location.to_s.empty?
+
+              redirect = URI.join(uri, location)
+            else
+              raise Error, "release evidence download returned HTTP #{response.code}"
+            end
+          end
         end
 
-        case response
-        when Net::HTTPSuccess
-          response.body
-        when Net::HTTPRedirection
-          location = response["location"]
-          raise Error, "release evidence redirect is missing a location" if location.to_s.empty?
-          download(URI.join(uri, location), redirects + 1)
-        else
-          raise Error, "release evidence download returned HTTP #{response.code}"
-        end
+        redirect ? download(redirect, redirects + 1) : body
       rescue URI::InvalidURIError, IOError, SocketError, SystemCallError, Timeout::Error => error
         raise Error, "release evidence download failed (#{error.class})"
+      end
+
+      def read_bounded_file(path)
+        path.open("rb") do |file|
+          body = file.read(MAX_BYTES + 1)
+          raise Error, "release evidence is unexpectedly large" if body.bytesize > MAX_BYTES
+
+          body
+        end
+      end
+
+      def read_bounded_response(response)
+        body = +"".b
+        response.read_body do |chunk|
+          raise Error, "release evidence is unexpectedly large" if body.bytesize + chunk.bytesize > MAX_BYTES
+
+          body << chunk
+        end
+        body
       end
     end
 
@@ -390,10 +421,14 @@ module Screenote
         "application/vnd.docker.distribution.manifest.v2+json"
       ].join(", ").freeze
 
+      def initialize(http_start: Net::HTTP.method(:start))
+        @http_start = http_start
+      end
+
       def manifest_digest(tag)
         request = Net::HTTP::Head.new("/v2/screenote/manifests/#{tag}")
         request["Accept"] = ACCEPT
-        response = Net::HTTP.start("127.0.0.1", 5555, open_timeout: 5, read_timeout: 10) do |http|
+        response = http_start.call("127.0.0.1", 5555, open_timeout: 5, read_timeout: 10) do |http|
           http.request(request)
         end
 
@@ -411,6 +446,10 @@ module Screenote
       rescue IOError, SocketError, SystemCallError, Timeout::Error => error
         raise Error, "loopback registry lookup failed (#{error.class})"
       end
+
+      private
+
+      attr_reader :http_start
     end
 
     class Evidence

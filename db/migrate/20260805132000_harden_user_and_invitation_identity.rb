@@ -165,8 +165,6 @@ class HardenUserAndInvitationIdentity < ActiveRecord::Migration[8.1]
 
   def migrate_transactionally!
     connection.transaction do
-      bound_postgresql_lock_wait
-      lock_identity_tables
       before = preservation_snapshot
       preflight_identity!
       migrate_schema!
@@ -360,20 +358,6 @@ class HardenUserAndInvitationIdentity < ActiveRecord::Migration[8.1]
       "Identity migration left SQLite foreign-key violations: #{details}"
   end
 
-  def bound_postgresql_lock_wait
-    execute("SET LOCAL lock_timeout = '10s'") if postgresql?
-  end
-
-  def lock_identity_tables
-    return unless postgresql?
-
-    tables = PRESERVED_TABLES
-      .select { |table| connection.table_exists?(table) }
-      .map { |table| quoted_table(table) }
-      .join(", ")
-    execute "LOCK TABLE #{tables} IN ACCESS EXCLUSIVE MODE"
-  end
-
   def normalize(value)
     value.to_s.strip.downcase
   end
@@ -384,9 +368,5 @@ class HardenUserAndInvitationIdentity < ActiveRecord::Migration[8.1]
 
   def sqlite?
     connection.adapter_name == "SQLite"
-  end
-
-  def postgresql?
-    connection.adapter_name == "PostgreSQL"
   end
 end

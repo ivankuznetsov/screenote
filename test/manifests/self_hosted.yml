@@ -87,8 +87,6 @@ saas_only:
   - test/controllers/stripe_webhooks_controller_test.rb
   - test/controllers/subscriptions_controller_test.rb
   - test/integration/saas_credential_cutover_command_test.rb
-  - test/integration/saas_postgresql_contract_test.rb
-  - test/migrations/current_saas_upgrade_test.rb
   - test/models/stripe_webhook_event_test.rb
   - test/models/subscription_test.rb
   - test/services/screenote/saas_credential_cutover_test.rb

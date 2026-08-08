@@ -3,7 +3,7 @@ title: ProjectMembership
 type: model
 source: app/models/project_membership.rb
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-08
 tags: [model, collaboration, roles]
 ---
 
@@ -50,7 +50,7 @@ Source: `app/models/project_membership.rb`
 - The owner membership is auto-created by `Project#after_create :create_owner_membership`.
 - The sole-owner protection uses `throw(:abort)` to prevent accidental removal.
 - Browser and MCP removal both delegate to `ProjectMemberships::Remove`. It locks the acting user, project, acting membership, and target membership in that order, then rechecks owner authority inside the transaction.
-- Serializing every public removal on the project row prevents two owners from concurrently removing one another and leaving the project ownerless. SQLite uses the shared authority no-op write to acquire its database writer lock before any authority reads.
+- Serializing every public removal with Active Record no-op writes on durable authority rows prevents two owners from concurrently removing one another and leaving the project ownerless without branching on database adapter identity.
 - A successful removal revokes the removed user's project-bound authorization grants and access/refresh tokens, deletes approved device grants awaiting exchange, and revokes API keys that user issued for the project in the same transaction. An unapproved device request has no user/project binding yet, so there is no removed authority to match.
 
 See also: [[project]], [[user]], [[project-invitation]]

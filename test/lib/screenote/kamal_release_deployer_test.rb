@@ -274,6 +274,188 @@ class Screenote::KamalReleaseDeployerTest < ActiveSupport::TestCase
     end
   end
 
+  test "release evidence readers reject oversized input without buffering beyond the limit" do
+    fetcher = Screenote::KamalReleaseDeployer::EvidenceFetcher.new(root: Rails.root)
+    response = ChunkedResponse.new([
+      "a" * Screenote::KamalReleaseDeployer::EvidenceFetcher::MAX_BYTES,
+      "b"
+    ])
+
+    error = assert_raises(Screenote::KamalReleaseDeployer::Error) do
+      fetcher.send(:read_bounded_response, response)
+    end
+
+    assert_includes error.message, "unexpectedly large"
+    assert_equal 2, response.chunks_read
+  end
+
+  test "cached release evidence is read through the same size bound" do
+    Dir.mktmpdir("screenote-release-evidence") do |directory|
+      path = Pathname(directory).join(".kamal/releases/#{RELEASE_TAG}/public-evidence.json")
+      FileUtils.mkdir_p(path.dirname)
+      path.binwrite("a" * (Screenote::KamalReleaseDeployer::EvidenceFetcher::MAX_BYTES + 1))
+      fetcher = Screenote::KamalReleaseDeployer::EvidenceFetcher.new(root: Pathname(directory))
+
+      error = assert_raises(Screenote::KamalReleaseDeployer::Error) { fetcher.fetch(RELEASE_TAG) }
+
+      assert_includes error.message, "unexpectedly large"
+    end
+  end
+
+  test "release evidence fetcher downloads and caches a successful response" do
+    Dir.mktmpdir("screenote-release-evidence") do |directory|
+      response = net_http_response(Net::HTTPOK, "200", chunks: [ '{"status":', '"passed"}' ])
+      http_start = FakeHttpStart.new(response)
+      root = Pathname(directory)
+      fetcher = Screenote::KamalReleaseDeployer::EvidenceFetcher.new(root:, http_start:)
+
+      contents = fetcher.fetch(RELEASE_TAG)
+
+      assert_equal '{"status":"passed"}', contents
+      assert_equal contents, root.join(".kamal/releases/#{RELEASE_TAG}/public-evidence.json").binread
+      assert_equal [ [ "github.com", 443, { use_ssl: true, open_timeout: 10, read_timeout: 30 } ] ],
+        http_start.calls
+      request = http_start.requests.fetch(0)
+      assert_instance_of Net::HTTP::Get, request
+      assert_equal "/ivankuznetsov/screenote/releases/download/#{RELEASE_TAG}/public-evidence.json", request.path
+      assert_equal "application/json", request["Accept"]
+      assert_equal "screenote-kamal-release/1", request["User-Agent"]
+    end
+  end
+
+  test "release evidence fetcher follows redirects" do
+    Dir.mktmpdir("screenote-release-evidence") do |directory|
+      redirect = net_http_response(
+        Net::HTTPFound,
+        "302",
+        headers: { "location" => "https://release-assets.example/evidence.json" }
+      )
+      success = net_http_response(Net::HTTPOK, "200", chunks: [ "evidence" ])
+      http_start = FakeHttpStart.new(redirect, success)
+      fetcher = Screenote::KamalReleaseDeployer::EvidenceFetcher.new(
+        root: Pathname(directory),
+        http_start:
+      )
+
+      assert_equal "evidence", fetcher.fetch(RELEASE_TAG)
+      assert_equal [ "github.com", "release-assets.example" ], http_start.calls.map(&:first)
+      assert_equal [
+        "/ivankuznetsov/screenote/releases/download/#{RELEASE_TAG}/public-evidence.json",
+        "/evidence.json"
+      ], http_start.requests.map(&:path)
+    end
+  end
+
+  test "release evidence fetcher rejects redirects without a location" do
+    Dir.mktmpdir("screenote-release-evidence") do |directory|
+      http_start = FakeHttpStart.new(net_http_response(Net::HTTPFound, "302"))
+      fetcher = Screenote::KamalReleaseDeployer::EvidenceFetcher.new(
+        root: Pathname(directory),
+        http_start:
+      )
+
+      error = assert_raises(Screenote::KamalReleaseDeployer::Error) { fetcher.fetch(RELEASE_TAG) }
+
+      assert_includes error.message, "redirect is missing a location"
+    end
+  end
+
+  test "release evidence fetcher rejects excessive redirects" do
+    Dir.mktmpdir("screenote-release-evidence") do |directory|
+      redirect = net_http_response(
+        Net::HTTPFound,
+        "302",
+        headers: { "location" => "/next.json" }
+      )
+      http_start = FakeHttpStart.new(
+        *Array.new(Screenote::KamalReleaseDeployer::EvidenceFetcher::MAX_REDIRECTS + 1, redirect)
+      )
+      fetcher = Screenote::KamalReleaseDeployer::EvidenceFetcher.new(
+        root: Pathname(directory),
+        http_start:
+      )
+
+      error = assert_raises(Screenote::KamalReleaseDeployer::Error) { fetcher.fetch(RELEASE_TAG) }
+
+      assert_includes error.message, "redirected too many times"
+    end
+  end
+
+  test "release evidence fetcher reports HTTP and network failures" do
+    [
+      [ net_http_response(Net::HTTPInternalServerError, "500"), "returned HTTP 500" ],
+      [ SocketError.new("offline"), "download failed (SocketError)" ]
+    ].each do |result, expected_message|
+      Dir.mktmpdir("screenote-release-evidence") do |directory|
+        fetcher = Screenote::KamalReleaseDeployer::EvidenceFetcher.new(
+          root: Pathname(directory),
+          http_start: FakeHttpStart.new(result)
+        )
+
+        error = assert_raises(Screenote::KamalReleaseDeployer::Error) { fetcher.fetch(RELEASE_TAG) }
+
+        assert_includes error.message, expected_message
+      end
+    end
+  end
+
+  test "registry client resolves a valid manifest digest with the expected HEAD request" do
+    response = net_http_response(
+      Net::HTTPOK,
+      "200",
+      headers: { "docker-content-digest" => MANIFEST_DIGEST }
+    )
+    http_start = FakeHttpStart.new(response)
+    client = Screenote::KamalReleaseDeployer::RegistryClient.new(http_start:)
+
+    assert_equal MANIFEST_DIGEST, client.manifest_digest(SOURCE_SHA)
+    assert_equal [ [ "127.0.0.1", 5555, { open_timeout: 5, read_timeout: 10 } ] ], http_start.calls
+    request = http_start.requests.fetch(0)
+    assert_instance_of Net::HTTP::Head, request
+    assert_equal "/v2/screenote/manifests/#{SOURCE_SHA}", request.path
+    assert_equal Screenote::KamalReleaseDeployer::RegistryClient::ACCEPT, request["Accept"]
+  end
+
+  test "registry client treats a missing manifest as absent" do
+    client = Screenote::KamalReleaseDeployer::RegistryClient.new(
+      http_start: FakeHttpStart.new(net_http_response(Net::HTTPNotFound, "404"))
+    )
+
+    assert_nil client.manifest_digest(SOURCE_SHA)
+  end
+
+  test "registry client rejects missing or invalid manifest digests" do
+    [ nil, "sha256:not-a-digest" ].each do |digest|
+      response = net_http_response(
+        Net::HTTPOK,
+        "200",
+        headers: { "docker-content-digest" => digest }.compact
+      )
+      client = Screenote::KamalReleaseDeployer::RegistryClient.new(
+        http_start: FakeHttpStart.new(response)
+      )
+
+      error = assert_raises(Screenote::KamalReleaseDeployer::Error) { client.manifest_digest(SOURCE_SHA) }
+
+      assert_includes error.message, "invalid manifest identity"
+    end
+  end
+
+  test "registry client reports HTTP and network failures" do
+    [
+      [ net_http_response(Net::HTTPInternalServerError, "500"), "returned HTTP 500" ],
+      [ SocketError.new("offline"), "lookup failed (SocketError)" ]
+    ].each do |result, expected_message|
+      client = Screenote::KamalReleaseDeployer::RegistryClient.new(
+        http_start: FakeHttpStart.new(result)
+      )
+
+      error = assert_raises(Screenote::KamalReleaseDeployer::Error) { client.manifest_digest(SOURCE_SHA) }
+
+      assert_includes error.message, expected_message
+    end
+  end
+
   test "release resolver permits only deployment configuration after an exact tag" do
     Dir.mktmpdir("screenote-kamal-release") do |directory|
       run_git(directory, "init", "--quiet")
@@ -387,6 +569,17 @@ class Screenote::KamalReleaseDeployerTest < ActiveSupport::TestCase
     output
   end
 
+  def net_http_response(response_class, code, headers: {}, chunks: nil)
+    response = response_class.new("1.1", code, "Test response")
+    headers.each { |name, value| response[name] = value }
+    if chunks
+      response.define_singleton_method(:read_body) do |&block|
+        chunks.each(&block)
+      end
+    end
+    response
+  end
+
   class FakeRunner
     attr_reader :commands
 
@@ -417,6 +610,54 @@ class Screenote::KamalReleaseDeployerTest < ActiveSupport::TestCase
     def manifest_digest(tag)
       tags << tag
       @digests.shift
+    end
+  end
+
+  class ChunkedResponse
+    attr_reader :chunks_read
+
+    def initialize(chunks)
+      @chunks = chunks
+      @chunks_read = 0
+    end
+
+    def read_body
+      @chunks.each do |chunk|
+        @chunks_read += 1
+        yield chunk
+      end
+    end
+  end
+
+  class FakeHttpStart
+    attr_reader :calls, :requests
+
+    def initialize(*results)
+      @results = results
+      @calls = []
+      @requests = []
+    end
+
+    def call(host, port, **options)
+      calls << [ host, port, options ]
+      result = @results.shift || raise("unexpected HTTP connection")
+      raise result if result.is_a?(Exception)
+
+      yield FakeHttpConnection.new(result, requests)
+    end
+  end
+
+  class FakeHttpConnection
+    def initialize(response, requests)
+      @response = response
+      @requests = requests
+    end
+
+    def request(request)
+      @requests << request
+      return @response unless block_given?
+
+      yield @response
     end
   end
 

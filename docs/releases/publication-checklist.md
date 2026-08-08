@@ -23,11 +23,16 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] Published Kamal-native backup/restore commands recovered all four SQLite
   roles and the selected local or S3 screenshot namespace with the exact image.
 - [ ] Protected-main jobs are recorded only as `pr_contract_only` source checks.
-- [ ] Exact qualification booted the retained AMD64 and ARM64 candidate in self-hosted and SaaS modes.
+- [ ] Exact qualification booted the retained AMD64 and ARM64 candidate in
+  self-hosted and SaaS modes; both SaaS boots exercised four URL-driven
+  database roles through Active Record without an adapter/version assertion.
 - [ ] Exact qualification passed same-image backup/restore and the minimum-host SQLite load profile.
 - [ ] The immutable public CLI tag passed HTTP and proxied-HTTPS checks against candidate-backed origins.
 - [ ] Qualification run/attempt, five jobs, artifact ID/archive digest, record bytes, and eight check hashes were verified live.
-- [ ] Release notes name the predecessor, image digest, CLI tag, data/configuration changes, irreversible migrations, and rollback boundary.
+- [ ] Release notes name the predecessor, image digest, CLI tag,
+  data/configuration changes, irreversible migrations, maintenance procedure,
+  verified backup/restore boundary, and resumable migration checks; they do
+  not promise one transaction can roll back an entire migration chain.
 
 ## Promotion
 

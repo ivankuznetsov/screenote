@@ -4,6 +4,7 @@ require "test_helper"
 require "digest"
 require "fileutils"
 require "json"
+require "kamal"
 require "open3"
 require "tmpdir"
 
@@ -11,6 +12,8 @@ class SaasCredentialCutoverCommandTest < ActiveSupport::TestCase
   CUTOVER = Rails.root.join("bin/saas-credential-cutover").to_s.freeze
   DEPLOY_GUARD = Rails.root.join("bin/saas-deploy-guard").to_s.freeze
   GUARD_SCRIPT = Rails.root.join("script/saas_deploy_guard").to_s.freeze
+
+  load CUTOVER
 
   test "runs one locked maintenance migration before booting only the successor" do
     with_command_fixture do |fixture|
@@ -20,17 +23,17 @@ class SaasCredentialCutoverCommandTest < ActiveSupport::TestCase
       assert_includes stdout, "SaaS credential cutover completed"
       assert_equal(
         [
-          "lock acquire --message Screenote stopped-process credential cutover --config-file config/deploy.saas.yml",
-          "app maintenance --message Screenote credential maintenance --config-file config/deploy.saas.yml",
-          "app stop --config-file config/deploy.saas.yml",
-          "app containers --quiet --config-file config/deploy.saas.yml",
+          "lock --config-file config/deploy.saas.yml acquire --message Screenote stopped-process credential cutover",
+          "app --config-file config/deploy.saas.yml maintenance --message Screenote credential maintenance",
+          "app --config-file config/deploy.saas.yml stop",
+          "app --config-file config/deploy.saas.yml containers --quiet",
           "backup create",
-          "app exec --primary --version #{fixture.fetch(:version)} " \
+          "app --config-file config/deploy.saas.yml exec --primary --version #{fixture.fetch(:version)} " \
             "--env SCREENOTE_SAAS_CREDENTIAL_CUTOVER:authorized " \
-            "bin/rails runner script/saas_credential_cutover_migrate --config-file config/deploy.saas.yml",
-          "app boot --version #{fixture.fetch(:version)} --config-file config/deploy.saas.yml",
-          "app live --version #{fixture.fetch(:version)} --config-file config/deploy.saas.yml",
-          "lock release --config-file config/deploy.saas.yml"
+            "bin/rails runner script/saas_credential_cutover_migrate",
+          "app --config-file config/deploy.saas.yml boot --version #{fixture.fetch(:version)}",
+          "app --config-file config/deploy.saas.yml live --version #{fixture.fetch(:version)}",
+          "lock --config-file config/deploy.saas.yml release"
         ],
         File.readlines(fixture.fetch(:trace), chomp: true)
       )
@@ -45,10 +48,10 @@ class SaasCredentialCutoverCommandTest < ActiveSupport::TestCase
       assert_includes stderr, "an application or worker process is still running"
       assert_includes stderr, "remains in maintenance"
       commands = File.readlines(fixture.fetch(:trace), chomp: true)
-      assert_equal "lock release --config-file config/deploy.saas.yml", commands.last
+      assert_equal "lock --config-file config/deploy.saas.yml release", commands.last
       assert_not commands.any? { |command| command.include?("saas_credential_cutover_migrate") }
-      assert_not commands.any? { |command| command.start_with?("app boot") }
-      assert_not commands.any? { |command| command.start_with?("app live") }
+      assert_not commands.any? { |command| command.match?(/\Aapp .* boot\b/) }
+      assert_not commands.any? { |command| command.match?(/\Aapp .* live\b/) }
     end
   end
 
@@ -76,11 +79,57 @@ class SaasCredentialCutoverCommandTest < ActiveSupport::TestCase
       assert_not status.success?
       assert_includes stderr, "backup completed before the application was quiesced"
       commands = File.readlines(fixture.fetch(:trace), chomp: true)
-      containers = commands.index { |command| command.start_with?("app containers --quiet") }
+      containers = commands.index { |command| command.match?(/\Aapp .* containers --quiet\z/) }
       assert_operator containers, :<, commands.index("backup create")
       assert_not commands.any? { |command| command.include?("saas_credential_cutover_migrate") }
-      assert_not commands.any? { |command| command.start_with?("app boot") }
+      assert_not commands.any? { |command| command.match?(/\Aapp .* boot\b/) }
     end
+  end
+
+  test "places deployment selectors immediately after the top-level Kamal command" do
+    runner = ScreenoteSaasCredentialCutoverCommand::Runner.new(
+      [ "--destination", "production", "--config", "/tmp/deploy.saas.yml" ],
+      environment: { "SCREENOTE_KAMAL_BIN" => "/tmp/kamal" }
+    )
+
+    assert_equal(
+      [
+        "/tmp/kamal", "app", "--destination", "production", "--config-file", "/tmp/deploy.saas.yml",
+        "exec", "--primary", "--version", "a" * 40, "bin/rails runner script/cutover"
+      ],
+      runner.send(
+        :command_for,
+        [ "app", "exec", "--primary", "--version", "a" * 40, "bin/rails runner script/cutover" ]
+      )
+    )
+  end
+
+  test "real Kamal parser applies the SaaS config to app exec" do
+    runner = ScreenoteSaasCredentialCutoverCommand::Runner.new(
+      [],
+      environment: { "SCREENOTE_KAMAL_BIN" => Rails.root.join("bin/kamal").to_s }
+    )
+    command = runner.send(
+      :command_for,
+      [ "app", "exec", "--primary", "--version", "a" * 40, "bin/rails runner script/cutover" ]
+    )
+    captured_config = nil
+    original_exec = Kamal::Cli::App.instance_method(:exec)
+    original_create = Kamal::Configuration.method(:create_from)
+    Kamal::Configuration.singleton_class.define_method(:create_from) do |**arguments|
+      captured_config = arguments.fetch(:config_file)
+      original_create.call(**arguments)
+    end
+    Kamal::Cli::App.define_method(:exec) { |*| }
+    KAMAL.reset
+
+    Kamal::Cli::Main.start(command.drop(1))
+
+    assert_equal Rails.root.join("config/deploy.saas.yml"), captured_config
+  ensure
+    Kamal::Cli::App.define_method(:exec, original_exec) if original_exec
+    Kamal::Configuration.singleton_class.define_method(:create_from, original_create) if original_create
+    KAMAL.reset
   end
 
   test "deploy guard executes the candidate revision and propagates refusal" do
@@ -220,7 +269,7 @@ class SaasCredentialCutoverCommandTest < ActiveSupport::TestCase
         #!/usr/bin/env bash
         set -Eeuo pipefail
         printf '%s\n' "$*" >> "$SCREENOTE_FAKE_TRACE"
-        if [[ "$*" == *"app containers"* && "${SCREENOTE_FAKE_ACTIVE-}" == "true" ]]; then
+        if [[ "$*" == *"containers --quiet"* && "${SCREENOTE_FAKE_ACTIVE-}" == "true" ]]; then
           printf 'abc image command 1m Up 1 minute ports screenote-web-old\n'
         fi
         if [[ "$*" == *"script/saas_deploy_guard"* && "${SCREENOTE_FAKE_FAIL_GUARD-}" == "true" ]]; then

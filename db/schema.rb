@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_05_134000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_08_090000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -37,6 +37,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_05_134000) do
     t.bigint "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "admission_locks", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "slot", null: false
+    t.datetime "updated_at", null: false
+    t.index ["slot"], name: "index_admission_locks_on_slot", unique: true
+    t.check_constraint "slot >= 0 AND slot < 256", name: "admission_locks_valid_slot"
   end
 
   create_table "annotation_comments", force: :cascade do |t|

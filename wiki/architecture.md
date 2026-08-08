@@ -1,17 +1,17 @@
 ---
 title: Architecture
 type: architecture
-source: CLAUDE.md, Gemfile, config/routes.rb
+source: CLAUDE.md, Gemfile, config/routes.rb, config/database.yml
 created: 2026-04-10
-updated: 2026-08-07
+updated: 2026-08-08
 tags: [architecture, overview, stack, integrations]
 ---
 
 # Architecture
 
-TLDR: Screenote is a Rails 8.1 visual feedback tool for teams and coding agents. Users upload screenshots, annotate them with Figma-style comments, and agents retrieve annotations and image crops through the JSON CLI. Built with Hotwire (Turbo + Stimulus), no build step, SQLite in development/self-hosting, and PostgreSQL for the hosted service. A legacy MCP runtime remains in source but is no longer the public integration path.
+TLDR: Screenote is a Rails 8.1 visual feedback tool for teams and coding agents. Users upload screenshots, annotate them with Figma-style comments, and agents retrieve annotations and image crops through the JSON CLI. Built with Hotwire (Turbo + Stimulus), no build step, and an Active Record database boundary. The supported self-hosted runtime uses SQLite; the hosted Kamal configuration currently selects PostgreSQL, but that is deployment topology rather than an application or release-qualification requirement. A legacy MCP runtime remains in source but is no longer the public integration path.
 
-Source: `CLAUDE.md`, `Gemfile`, `config/routes.rb`
+Source: `CLAUDE.md`, `Gemfile`, `config/routes.rb`, `config/database.yml`
 
 ## High-Level Architecture
 
@@ -27,7 +27,9 @@ Rails 8.1 (Puma + Thruster)
     +-- Stripe Webhooks (hosted SaaS only)
     |
     +-- Active Storage (local/generic S3 self-hosted; Rabata hosted)
-    +-- SQLite (self-hosted) or PostgreSQL (hosted)
+    +-- Active Record -> configured database URLs
+        +-- SQLite (supported self-hosted runtime)
+        +-- PostgreSQL (current hosted Kamal topology)
     +-- Solid Queue (background jobs)
     +-- Solid Cache (caching)
     +-- Solid Cable (WebSockets)
@@ -41,7 +43,7 @@ Rails 8.1 (Puma + Thruster)
 |-------|-----------|
 | Language | Ruby 3.4.10+ |
 | Framework | Rails 8.1.2+ |
-| Database | SQLite for development, test, and self-hosting; PostgreSQL for hosted SaaS |
+| Database | Active Record adapter-neutral application boundary; SQLite for the supported self-hosted runtime; PostgreSQL selected by the current hosted Kamal configuration |
 | Frontend JS | Stimulus (import maps, no build step) |
 | Frontend rendering | Turbo (Turbo Drive, Turbo Frames, Turbo Streams) |
 | Assets | Propshaft |
@@ -78,6 +80,7 @@ User enters URL -> server captures page -> User annotates -> Agent collects
 - **Enum-backed status fields** -- integer enums for annotation status, comment actions, subscription plan/status, project membership roles, invitation status, screenshot status
 - **ScreenshotImage variants** -- a Screenshot is a logical capture/version and one or more ScreenshotImage rows own the actual viewport-specific blobs
 - **Percentage-based coordinates** -- annotations use 0.0-100.0 percentage coordinates and are scoped to desktop/tablet/mobile viewports
+- **Database portability boundary** -- models, services, tests, CI, and release qualification express database behavior through Active Record and role-specific URLs. Deployment configuration chooses the runtime adapter; exact-image SaaS qualification does not assert an adapter name or server version.
 
 ## External Integrations
 

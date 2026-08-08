@@ -4,7 +4,6 @@ set -Eeuo pipefail
 umask 077
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly POSTGRESQL_16_IMAGE="docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
 readonly SELF_HOSTED_MANIFEST="${REPOSITORY_ROOT}/test/manifests/self_hosted.yml"
 readonly SYSTEM_TEST_BOOTSTRAP_TOKEN="screenote-system-test-bootstrap-token-0123456789abcdef0123456789abcdef"
 readonly COVERAGE_NOT_APPLICABLE_EXIT=3
@@ -22,7 +21,6 @@ readonly CONCURRENCY_TESTS=(
   test/integration/instance_administration_concurrency_test.rb
   test/integration/instance_credential_issuance_serialization_test.rb
   test/integration/oauth_device_concurrency_test.rb
-  test/integration/oauth_dynamic_client_cleanup_concurrency_test.rb
 )
 readonly SECURITY_DATA_SELF_HOSTED_TESTS=(
   test/integration/authorized_media_delivery_test.rb
@@ -54,26 +52,6 @@ require_executable() {
 require_value() {
   local name="$1"
   [[ -n "${!name-}" ]] || fail "${name} is required for this gate"
-}
-
-require_postgresql_test_url() {
-  local name="$1"
-  require_value "${name}"
-  ruby -ruri -e '
-    name, value = ARGV
-    uri = URI.parse(value)
-    database = uri.path.to_s.delete_prefix("/")
-    valid_scheme = %w[postgres postgresql].include?(uri.scheme)
-    valid_name = database.match?(/\A[a-zA-Z0-9_]*(?:test|ci)[a-zA-Z0-9_]*\z/)
-    abort "#{name} must be a dedicated PostgreSQL test/ci database URL" unless valid_scheme && valid_name
-  ' "${name}" "${!name}"
-}
-
-assert_distinct_urls() {
-  local first_name="$1"
-  local second_name="$2"
-  [[ "${!first_name}" != "${!second_name}" ]] ||
-    fail "${first_name} and ${second_name} must identify distinct databases"
 }
 
 prepare_database() {
@@ -122,8 +100,6 @@ load_self_hosted_manifest_group() {
       test/controllers/stripe_webhooks_controller_test.rb
       test/controllers/subscriptions_controller_test.rb
       test/integration/saas_credential_cutover_command_test.rb
-      test/integration/saas_postgresql_contract_test.rb
-      test/migrations/current_saas_upgrade_test.rb
       test/models/stripe_webhook_event_test.rb
       test/models/subscription_test.rb
       test/services/screenote/saas_credential_cutover_test.rb
@@ -217,17 +193,6 @@ clobber_precompiled_assets() {
   env RAILS_ENV=test bin/rails assets:clobber
 }
 
-run_postgresql_matrix() {
-  require_postgresql_test_url POSTGRESQL_TEST_DATABASE_URL
-  require_postgresql_test_url MIGRATION_TEST_DATABASE_URL
-  assert_distinct_urls POSTGRESQL_TEST_DATABASE_URL MIGRATION_TEST_DATABASE_URL
-  prepare_database DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" SCREENOTE_EDITION=saas
-  run_mode_suite saas DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" SCREENOTE_REQUIRE_POSTGRESQL=1
-  env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
-    MIGRATION_TEST_DATABASE_URL="${MIGRATION_TEST_DATABASE_URL}" \
-    bin/rails test "${MIGRATION_TESTS[@]}"
-}
-
 cd "${REPOSITORY_ROOT}"
 
 case "${1-}" in
@@ -242,27 +207,6 @@ case "${1-}" in
   saas)
     run_mode_suite saas
     ;;
-  postgresql)
-    validate_manifest test/integration/saas_postgresql_contract_test.rb \
-      "${MIGRATION_TESTS[@]}" "${CONCURRENCY_TESTS[@]}"
-    run_postgresql_matrix
-    ;;
-  saas-upgrade)
-    require_postgresql_test_url SAAS_UPGRADE_DATABASE_URL
-    require_value SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET
-    [[ "${SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET}" == "1" ]] ||
-      fail "SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET must equal 1"
-    [[ -z "${POSTGRESQL_TEST_DATABASE_URL-}" ]] ||
-      assert_distinct_urls SAAS_UPGRADE_DATABASE_URL POSTGRESQL_TEST_DATABASE_URL
-    [[ -z "${MIGRATION_TEST_DATABASE_URL-}" ]] ||
-      assert_distinct_urls SAAS_UPGRADE_DATABASE_URL MIGRATION_TEST_DATABASE_URL
-    require_file test/migrations/current_saas_upgrade_test.rb
-    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
-      SCREENOTE_REQUIRE_SAAS_UPGRADE=1 \
-      SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET=1 \
-      SAAS_UPGRADE_DATABASE_URL="${SAAS_UPGRADE_DATABASE_URL}" \
-      bin/rails test test/migrations/current_saas_upgrade_test.rb
-    ;;
   sqlite-production)
     validate_manifest test/integration/self_hosted_database_configuration_test.rb \
       "${MIGRATION_TESTS[@]}"
@@ -274,7 +218,6 @@ case "${1-}" in
       "${MIGRATION_TESTS[@]}"
     ;;
   invariants)
-    require_postgresql_test_url POSTGRESQL_TEST_DATABASE_URL
     validate_manifest test/integration/database_constraint_contract_test.rb \
       test/tools/mcp_security_contract_test.rb "${CONCURRENCY_TESTS[@]}"
     sqlite_root="$(mktemp -d "${TMPDIR:-/tmp}/screenote-invariants.XXXXXX")"
@@ -283,11 +226,6 @@ case "${1-}" in
       SCREENOTE_EDITION=self_hosted
     env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=self_hosted \
       DATABASE_URL="sqlite3:${sqlite_root}/primary.sqlite3" \
-      bin/rails test test/integration/database_constraint_contract_test.rb \
-      test/tools/mcp_security_contract_test.rb "${CONCURRENCY_TESTS[@]}"
-    prepare_database DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" SCREENOTE_EDITION=saas
-    env RAILS_ENV=test PARALLEL_WORKERS=1 SCREENOTE_EDITION=saas \
-      SCREENOTE_REQUIRE_POSTGRESQL=1 DATABASE_URL="${POSTGRESQL_TEST_DATABASE_URL}" \
       bin/rails test test/integration/database_constraint_contract_test.rb \
       test/tools/mcp_security_contract_test.rb "${CONCURRENCY_TESTS[@]}"
     ;;
@@ -470,15 +408,12 @@ case "${1-}" in
       --manifest test/manifests/release_security_coverage.yml \
       --base "${SCREENOTE_COVERAGE_BASE_SHA}"
     ;;
-  image)
-    printf '%s\n' "${POSTGRESQL_16_IMAGE}"
-    ;;
   *)
     cat >&2 <<'USAGE'
 Usage: script/release_test_matrix GATE
 
 PR gates:
-  self-hosted saas postgresql saas-upgrade sqlite-production invariants
+  self-hosted saas sqlite-production invariants
   security-data system-collaboration container-local s3 coverage
 
 Coverage requires an explicit comparison commit:
@@ -487,7 +422,6 @@ Coverage requires an explicit comparison commit:
 Release-only gates (missing evidence fails closed):
   public-cli backup-restore release-artifact
 
-PostgreSQL is pinned to docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b.
 USAGE
     exit 64
     ;;

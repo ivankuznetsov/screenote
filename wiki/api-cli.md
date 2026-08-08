@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-08-07
+updated: 2026-08-08
 tags: [cli, api, rest, agents]
 ---
 
@@ -77,6 +77,7 @@ screenote screenshot list --project ID [--page ID] [--status pending|ready|faile
 screenote screenshot create --project ID --title TITLE [--page ID_OR_NAME] [--file PATH|-]
 screenote annotation list --project ID [--screenshot ID] [--status open|resolved] [--viewport desktop|tablet|mobile]
 screenote annotation get --project ID --annotation ID [--crop-file PATH]
+screenote annotation resolve --project ID --annotation ID [--comment TEXT]
 screenote comment add --project ID --annotation ID --body TEXT
 screenote snapshot --project ID --manifest PATH
 ```
@@ -85,7 +86,9 @@ User-global commands are `project list`, `project create`, `config`, `login`, an
 
 `annotation list` without `--screenshot` lists annotations across all screenshots in the resolved project. The CLI pages through screenshots and per-screenshot annotations, skips screenshots that become inaccessible during aggregation, reports the aggregate total, and applies `--limit`/`--offset` to the aggregate result.
 
-`annotation get --crop-file PATH` fully validates and writes the PNG crop atomically with owner-only permissions, returns the local path in JSON, and omits the base64 field. The current public CLI and agent plugin do not expose annotation resolution; reviewers resolve or reopen threads in the web workspace.
+`annotation get --crop-file PATH` fully validates and writes the PNG crop atomically with owner-only permissions, returns the local path in JSON, and omits the base64 field. `annotation resolve --annotation ID --comment TEXT` calls the idempotent project-scoped resolution endpoint and returns its JSON response, so an agent can record the fix while closing the thread. Reopening remains web-only until the CLI exposes it.
+
+The public CLI `main` branch implements `annotation resolve`, but an untagged moving branch is not a supported artifact. The first supported Screenote release must name an exact CLI tag that contains the command before this workflow enters the supported release contract.
 
 `screenshot create` reads stdin when `--file` is omitted or set to `-`. When uploading a file, the content type is derived from the file extension; for example, `.png` maps to `image/png`. Stdin uploads fall back to `application/octet-stream` and are re-identified server-side from the bytes.
 
@@ -133,4 +136,4 @@ Project-scoped OAuth tokens are bound to the token's `project_id` throughout RES
 
 ## Deferred
 
-Public CLI wiring for `annotation resolve` and `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remains future work. The server already provides idempotent annotation resolution over REST, but the exact released CLI/plugin surface is authoritative for agent workflows.
+Public CLI wiring for `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remains future work. The exact CLI tag named by a Screenote release is authoritative for supported agent workflows.

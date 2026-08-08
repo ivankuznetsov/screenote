@@ -4,6 +4,7 @@ module Screenote
   class SaasCredentialCutover
     MIGRATION_VERSION = "20260805131000"
     AUTHORIZATION = "authorized"
+    DIGEST_BATCH_SIZE = 1_000
     LEGACY_WITNESS_QUERIES = {
       access_grant: <<~SQL.squish,
         SELECT id, token
@@ -78,11 +79,13 @@ module Screenote
     def initialize(
       deployment: Screenote::Deployment.current,
       connection: ActiveRecord::Base.connection,
-      migration_context: ActiveRecord::Base.connection_pool.migration_context
+      migration_context: ActiveRecord::Base.connection_pool.migration_context,
+      digest_models: nil
     )
       @deployment = deployment
       @connection = connection
       @migration_context = migration_context
+      @digest_models = digest_models
     end
 
     # This process must be started only by bin/saas-credential-cutover after
@@ -92,21 +95,19 @@ module Screenote
     def call
       validate_runtime!
 
-      connection.transaction do
-        credential_migration_was_applied = migration_applied?
-        witnesses = credential_migration_was_applied ? [] : capture_legacy_witnesses
-        migration_context.migrate
-        reset_oauth_models!
-        verify_migration_applied!
-        verify_all_migrations_applied!
-        verify_migrated_storage!
-        verify_runtime_lookups!(witnesses)
+      credential_migration_was_applied = migration_applied?
+      witnesses = credential_migration_was_applied ? [] : capture_legacy_witnesses
+      migration_context.migrate
+      reset_oauth_models!
+      verify_migration_applied!
+      verify_all_migrations_applied!
+      verify_migrated_storage!
+      verify_runtime_lookups!(witnesses)
 
-        Result.new(
-          status: credential_migration_was_applied ? :already_applied : :migrated,
-          witness_count: witnesses.size
-        )
-      end
+      Result.new(
+        status: credential_migration_was_applied ? :already_applied : :migrated,
+        witness_count: witnesses.size
+      )
     rescue Error
       raise
     rescue ActiveRecord::MigrationError => error
@@ -124,18 +125,10 @@ module Screenote
         raise Error, "credential cutover requires the dedicated operator command"
       end
       raise Error, "credential cutover is available only in SaaS mode" unless deployment.saas?
-      raise Error, "credential cutover requires PostgreSQL" unless connection.adapter_name == "PostgreSQL"
     end
 
     def migration_applied?
-      return false unless connection.data_source_exists?("schema_migrations")
-
-      connection.select_value(<<~SQL.squish).present?
-        SELECT 1
-        FROM schema_migrations
-        WHERE version = #{connection.quote(MIGRATION_VERSION)}
-        LIMIT 1
-      SQL
+      migration_context.get_all_versions.include?(MIGRATION_VERSION.to_i)
     end
 
     def verify_migration_applied!
@@ -206,31 +199,39 @@ module Screenote
     end
 
     def verify_migrated_storage!
-      digest_columns.each do |table, column, nullable, blankable|
-        quoted_table = connection.quote_table_name(table)
-        quoted_column = connection.quote_column_name(column)
-        allowed = []
-        allowed << "#{quoted_column} IS NULL" if nullable
-        allowed << "#{quoted_column} = ''" if blankable
-        allowed << "#{quoted_column} ~ '^[0-9a-f]{64}$'"
+      digest_models.each do |model, columns|
+        names = columns.map(&:first)
 
-        invalid_count = connection.select_value(<<~SQL.squish).to_i
-          SELECT COUNT(*)
-          FROM #{quoted_table}
-          WHERE NOT COALESCE((#{allowed.join(' OR ')}), FALSE)
-        SQL
-        raise Error, "credential cutover left invalid #{table}.#{column} rows" unless invalid_count.zero?
+        model.unscoped.in_batches(of: DIGEST_BATCH_SIZE) do |batch|
+          batch.pluck(*names).each do |values|
+            values = [ values ] if names.one?
+
+            columns.zip(values).each do |(column, nullable, blankable), value|
+              next if valid_digest_storage?(value, nullable:, blankable:)
+
+              raise Error, "credential cutover left invalid #{model.table_name}.#{column} rows"
+            end
+          end
+        end
       end
     end
 
-    def digest_columns
-      [
-        [ :oauth_access_grants, :token, false, false ],
-        [ :oauth_access_tokens, :token, false, false ],
-        [ :oauth_access_tokens, :refresh_token, true, false ],
-        [ :oauth_access_tokens, :previous_refresh_token, false, true ],
-        [ :oauth_applications, :secret, true, false ]
+    def digest_models
+      @digest_models || [
+        [ Doorkeeper::AccessGrant, [ [ :token, false, false ] ] ],
+        [ Doorkeeper::AccessToken, [
+          [ :token, false, false ],
+          [ :refresh_token, true, false ],
+          [ :previous_refresh_token, false, true ]
+        ] ],
+        [ Doorkeeper::Application, [ [ :secret, true, false ] ] ]
       ]
+    end
+
+    def valid_digest_storage?(value, nullable:, blankable:)
+      (nullable && value.nil?) ||
+        (blankable && value == "") ||
+        value.to_s.match?(/\A[0-9a-f]{64}\z/)
     end
 
     def verify_runtime_lookups!(witnesses)

@@ -133,13 +133,13 @@ class SelfHostedDatabaseConfigurationTest < ActiveSupport::TestCase
     end
   end
 
-  test "SaaS production retains four PostgreSQL roles" do
+  test "SaaS production takes four database roles entirely from URLs" do
     configs = production_configuration("saas")
 
     assert_equal ROLES, configs.keys
-    assert_equal [ "postgresql" ], configs.values.map { |config| config.fetch("adapter") }.uniq
+    assert configs.values.none? { |config| config.key?("adapter") }
     assert_equal(
-      %w[DATABASE_URL CACHE_DATABASE_URL QUEUE_DATABASE_URL CABLE_DATABASE_URL].map { |key| "postgres://screenote@db/#{key.downcase}" },
+      ROLES.map { |role| "sqlite3:/tmp/screenote-saas-#{role}.sqlite3" },
       configs.values.map { |config| config.fetch("url") }
     )
   end
@@ -181,10 +181,10 @@ class SelfHostedDatabaseConfigurationTest < ActiveSupport::TestCase
   def production_configuration(edition)
     environment = {
       "SCREENOTE_EDITION" => edition,
-      "DATABASE_URL" => "postgres://screenote@db/database_url",
-      "CACHE_DATABASE_URL" => "postgres://screenote@db/cache_database_url",
-      "QUEUE_DATABASE_URL" => "postgres://screenote@db/queue_database_url",
-      "CABLE_DATABASE_URL" => "postgres://screenote@db/cable_database_url"
+      "DATABASE_URL" => "sqlite3:/tmp/screenote-saas-primary.sqlite3",
+      "CACHE_DATABASE_URL" => "sqlite3:/tmp/screenote-saas-cache.sqlite3",
+      "QUEUE_DATABASE_URL" => "sqlite3:/tmp/screenote-saas-queue.sqlite3",
+      "CABLE_DATABASE_URL" => "sqlite3:/tmp/screenote-saas-cable.sqlite3"
     }
     environment["RAILS_MAX_THREADS"] = "3" if edition == "self_hosted"
 

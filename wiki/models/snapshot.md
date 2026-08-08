@@ -3,7 +3,7 @@ title: Snapshot
 type: model
 source: app/models/snapshot.rb
 created: 2026-05-14
-updated: 2026-07-10
+updated: 2026-08-08
 tags: [model, snapshot, project, screenshot]
 ---
 
@@ -19,7 +19,7 @@ Source: `app/models/snapshot.rb`
 |--------|------|-------|
 | id | integer | PK |
 | project_id | integer | NOT NULL, FK to projects |
-| git_commit | string | NOT NULL, varchar(40) on Postgres |
+| git_commit | string | NOT NULL, limit 40 |
 | taken_at | datetime | NOT NULL |
 | manifest_digest | string | Optional 64-character SHA-256 identity for resumable CLI captures |
 | created_at | datetime | |
@@ -46,7 +46,7 @@ Source: `app/models/snapshot.rb`
 
 ## Scopes
 
-- `recent` -- orders by `taken_at DESC, id DESC`. The id tie-break keeps ordering stable across SQLite/Postgres when a `/snapshot` CLI retry creates two rows in the same second.
+- `recent` -- orders by `taken_at DESC, id DESC`. The id tie-break keeps ordering stable across supported databases when a `/snapshot` CLI retry creates two rows in the same second.
 
 ## Key Methods
 

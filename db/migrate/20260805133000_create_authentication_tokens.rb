@@ -88,8 +88,8 @@ class CreateAuthenticationTokens < ActiveRecord::Migration[8.1]
   end
 
   # Active Record dumps check constraints from the adapter that generated
-  # db/schema.rb. Keep the expression valid in both SQLite and PostgreSQL so a
-  # schema dumped by the self-hosted matrix can bootstrap a fresh SaaS database.
+  # db/schema.rb. Keep the expression portable so one schema can bootstrap
+  # every supported deployment.
   def strip_characters(expression, allowed_characters)
     allowed_characters.each_char.reduce(expression) do |remaining, character|
       "replace(#{remaining}, #{connection.quote(character)}, '')"

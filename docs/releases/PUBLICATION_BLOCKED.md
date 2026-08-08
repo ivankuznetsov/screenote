@@ -10,6 +10,9 @@ Remove it when all technical prerequisites are ready:
 - Exact AMD64/ARM64 layouts, manifest digest, SBOM, provenance, secret/vulnerability scans, source-contract checks, and public-log scan match the candidate.
 - Native AMD64/ARM64/minimum-host qualification runners, the tracked public-CLI driver, and candidate-backed HTTP/HTTPS origins are configured; qualification uses the profile and load driver fixed by the exact server commit.
 - The retained qualification artifact proves all eight required runtime checks; pull-request contract jobs are not substitutes.
+- Its two exact-image SaaS boot checks exercise separate primary, cache, queue,
+  and cable URLs through Active Record without binding qualification to a
+  database adapter or server version.
 - The supported `bin/kamal` exact-image path has completed a retained Linux
   AMD64 deployment qualification through Kamal Proxy and Thruster, including
   manifest mirroring, remote digest/label identity, HTTPS and client-IP

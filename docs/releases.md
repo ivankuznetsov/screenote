@@ -22,9 +22,11 @@ The first publication is held by the technical sentinel [`docs/releases/PUBLICAT
 3. Build AMD64 and ARM64 OCI layouts once. Verify imported config/layer digests, scan both layouts with GitGuardian and checksum-pinned Trivy, and generate platform SBOMs plus provenance input.
 4. Treat protected-main CI as source and Kamal-wrapper contract evidence only.
    Run `.github/workflows/release-qualification.yml` against the retained
-   candidate bytes and immutable CLI tag for native AMD64/ARM64 boots,
-   minimum-host backup/restore and SQLite load, and HTTP/HTTPS CLI
-   compatibility.
+   candidate bytes and immutable CLI tag for native AMD64/ARM64 boots. The
+   exact-image SaaS boots receive four role-specific database URLs and verify
+   them through Active Record without requiring an adapter name or server
+   version. The remaining checks cover minimum-host backup/restore and SQLite
+   load plus HTTP/HTTPS CLI compatibility.
 5. Retain an end-to-end Linux AMD64 deployment of the exact image through the supported `bin/kamal` wrapper, Kamal Proxy, and Thruster, including remote digest and label checks, HTTPS, client-IP spoof rejection, restart, and persistence evidence.
 6. Publish the release-matched Kamal-native backup and restore commands, then retain a restore drill covering all four SQLite roles and local or S3 screenshot storage.
 7. Verify live main/tag rulesets, the GitGuardian App check source, the protected `source-release` environment, GHCR permissions, and immutable GitHub releases.
@@ -62,7 +64,7 @@ See [technical release evidence](releases/security-evidence.md), the [publicatio
 - `candidate` accepts a full commit and semantic tag only when the commit is the current protected default-branch head. It runs source/history checks, builds one retained AMD64/ARM64 layout, scans the imported bytes, and uploads the candidate bundle for 30 days. It creates no public object.
 - `publish` accepts the exact successful candidate run/bundle hash and exact successful qualification run/artifact hash. One direct-parent release-metadata commit may delete the sentinel, add final technical evidence, and finalize release notes; any other path or commit shape requires a new candidate. The job verifies those bytes, the live qualification run and its eight checks, the current CLI tag, the candidate manifest, SBOMs, provenance, scanner results, and ruleset evidence before retaining a one-day promotion input.
 
-`.github/workflows/release-qualification.yml` is the separate release-only runtime gate. It uses configured native runner labels and the tracked `config/release/minimum-host-v1.json` profile from the exact qualification commit. The SQLite driver emits the `screenote-load-smoke/v2` evidence contract, including the profile identity and measured latency, queue, lock, reconciliation, integrity, and request outcomes. The workflow hashes those file bytes into its final artifact, which contains exactly eight checks: self-hosted and SaaS boot on AMD64 and ARM64, backup/restore, SQLite load, and public CLI behavior over HTTP and HTTPS. Pull-request jobs with similar names are contract checks and never substitute for qualification.
+`.github/workflows/release-qualification.yml` is the separate release-only runtime gate. It uses configured native runner labels and the tracked `config/release/minimum-host-v1.json` profile from the exact qualification commit. The SQLite driver emits the `screenote-load-smoke/v2` evidence contract, including the profile identity and measured latency, queue, lock, reconciliation, integrity, and request outcomes. The workflow hashes those file bytes into its final artifact, which contains exactly eight checks: self-hosted and SaaS boot on AMD64 and ARM64, backup/restore, SQLite load, and public CLI behavior over HTTP and HTTPS. Each SaaS boot still qualifies the exact retained image through its production entrypoint, but its primary, cache, queue, and cable connections are supplied as URLs and exercised through Active Record; qualification records no database adapter or server-version requirement. The hosted Kamal configuration may continue to select PostgreSQL without turning that runtime choice into an application, CI, or release-qualification constraint. Pull-request jobs with similar names are contract checks and never substitute for qualification.
 
 The supported Kamal Proxy/Thruster deployment drill and the Kamal-native
 backup/restore drill are still sentinel-tracked retained gates, not two of

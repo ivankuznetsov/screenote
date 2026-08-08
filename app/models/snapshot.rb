@@ -26,7 +26,7 @@ class Snapshot < ApplicationRecord
 
   # Unbounded by design — callers must `.limit(...)` before rendering. Tie-break
   # by id so two snapshots created in the same second (CLI retry) sort stably
-  # across SQLite and Postgres.
+  # across supported databases.
   scope :recent, -> { order(taken_at: :desc, id: :desc) }
 
   def short_commit

@@ -559,20 +559,25 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes workflow, "script/self_hosted_load_smoke"
     assert_includes workflow, "script/release_test_matrix public-cli"
     assert_includes workflow, "script/self_hosted_container_smoke"
+    assert_includes workflow, 'database_directory="$RUNNER_TEMP/saas-databases-$suffix"'
     assert_includes workflow,
-      "docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
-    assert_includes workflow, 'docker network create "$network"'
+      "type=bind,source=$database_directory,target=/tmp/screenote-saas-databases"
     assert_includes workflow, '"${application_environment[@]}" "$QUALIFICATION_IMAGE" ./bin/rails db:prepare'
     assert_includes workflow, '"${application_environment[@]}" "$QUALIFICATION_IMAGE" >/dev/null'
     assert_not_includes workflow, "--entrypoint"
-    assert_operator workflow.scan("--pull=never").length, :>=, 3
-    %w[screenote_primary screenote_cache screenote_queue screenote_cable].each do |database|
-      assert_includes workflow, database
+    assert_operator workflow.scan("--pull=never").length, :>=, 2
+    %w[DATABASE_URL CACHE_DATABASE_URL QUEUE_DATABASE_URL CABLE_DATABASE_URL].each do |environment_key|
+      assert_includes workflow, "--env #{environment_key}="
     end
-    assert_includes workflow, "current_setting('server_version_num')"
+    assert_includes workflow, "screenote-saas-image-qualification/v2"
+    assert_includes workflow, "config&.respond_to?(:url) && config.url == expected_url"
+    assert_includes workflow, "connection_handler.establish_connection(config, owner_name: connection_name)"
+    assert_includes workflow, 'connection.select_value("SELECT 1").to_s == "1"'
     assert_includes workflow, "docker exec --interactive"
-    assert_includes workflow, 'ActiveRecord::Base.connection.adapter_name == "PostgreSQL"'
     assert_includes workflow, "SaaS installation identity does not match"
+    assert_not_includes workflow.downcase, "postgres"
+    assert_not_includes workflow, "server_version_num"
+    assert_not_includes workflow, "adapter_name"
     matrix = Rails.root.join("script/release_test_matrix").read
     assert_includes matrix, "SCREENOTE_PUBLIC_CLI_TARGET"
     assert_includes matrix, "SCREENOTE_PUBLIC_CLI_EVIDENCE_PATH"
@@ -580,6 +585,28 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes matrix, "wrong_hostname_rejected"
     assert_includes workflow, "Validate each CLI transport evidence and create its redacted record"
     assert_includes workflow, '"qualification must contain exactly eight check records"'
+  end
+
+  test "release validator rejects adapter-specific qualification coupling" do
+    Dir.mktmpdir("screenote-release-qualification") do |root|
+      workflow_directory = File.join(root, ".github/workflows")
+      FileUtils.mkdir_p(workflow_directory)
+      Rails.root.glob(".github/workflows/*.{yml,yaml}").each do |workflow|
+        FileUtils.cp(workflow, workflow_directory)
+      end
+      action_pins = File.join(root, "docs/releases/action-pins.md")
+      FileUtils.mkdir_p(File.dirname(action_pins))
+      FileUtils.cp(Rails.root.join("docs/releases/action-pins.md"), action_pins)
+      File.open(File.join(workflow_directory, "release-qualification.yml"), "a") do |workflow|
+        workflow.puts("# PostgreSQL-specific qualification regression")
+      end
+
+      validator = ReleaseValidation.new(root: root)
+      validator.send(:workflow_contracts)
+
+      assert_includes validator.errors,
+        "qualification workflow must not couple SaaS boot evidence to a database adapter"
+    end
   end
 
   test "SQLite load evidence is retained after verification and transitively hash bound" do
@@ -1160,6 +1187,49 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal "script/release_test_matrix coverage", gate.fetch("run")
     assert_equal "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
       gate.dig("env", "SCREENOTE_COVERAGE_BASE_SHA")
+  end
+
+  test "source CI has one adapter-neutral test job and matching required checks" do
+    workflow = YAML.safe_load(
+      Rails.root.join(".github/workflows/ci.yml").read,
+      permitted_classes: [],
+      aliases: false
+    )
+    jobs = workflow.fetch("jobs")
+    test_job = jobs.fetch("test")
+
+    assert_equal "test", test_job.fetch("name")
+    assert_not jobs.key?("sqlite")
+    assert_not jobs.key?("postgresql")
+    assert_equal "4", test_job.dig("env", "PARALLEL_WORKERS")
+    assert_not test_job.fetch("env").key?("SCREENOTE_EDITION")
+    assert_not test_job.fetch("env").key?("SCREENOTE_REQUIRED_MODE")
+    assert_includes test_job.fetch("steps").map { |step| step.fetch("run", "") }, "bin/rails test"
+    steps = test_job.fetch("steps")
+    runtime = steps.find { |step| step.fetch("run", "").include?("libvips") }
+    setup = steps.find { |step| step["name"] == "Set up Ruby" }
+    focused = steps.find { |step| step["name"] == "Run self-hosted edition-only tests" }
+
+    assert_not_nil runtime
+    assert_not_nil setup
+    assert_not_nil focused
+    assert_operator steps.index(runtime), :<, steps.index(setup)
+    assert_equal "self_hosted", focused.dig("env", "SCREENOTE_EDITION")
+    assert_equal "self_hosted", focused.dig("env", "SCREENOTE_REQUIRED_MODE")
+    assert_includes focused.fetch("run"),
+      "test/controllers/oauth/self_hosted_registrations_controller_test.rb"
+    assert_includes focused.fetch("run"), "test/integration/self_hosted_full_flow_test.rb"
+
+    ruleset = JSON.parse(Rails.root.join(".github/rulesets/main.json").read)
+    checks = ruleset.fetch("rules").find do |rule|
+      rule.fetch("type") == "required_status_checks"
+    end.fetch("parameters").fetch("required_status_checks")
+    contexts = checks.filter_map do |check|
+      check.fetch("context") if check.fetch("context").start_with?("CI / ")
+    end
+
+    assert_equal ReleaseValidation::REQUIRED_CHECKS.map { |name| "CI / #{name}" }.sort,
+      contexts.sort
   end
 
   test "self-hosted coverage is an explicit positive manifest with fail-closed drift detection" do

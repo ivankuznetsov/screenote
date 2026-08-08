@@ -4,30 +4,20 @@ require "digest"
 
 class AdmissionLock
   class OutsideTransaction < StandardError; end
-  class UnsupportedAdapter < StandardError; end
+  STRIPES = 256
 
-  DOMAIN_SEPARATOR = "screenote:admission-email:v1\0"
-  SQLITE_WRITER_LOCK_SQL =
-    "UPDATE users SET updated_at = updated_at WHERE id = (SELECT MIN(id) FROM users)"
+  class Record < ApplicationRecord
+    self.table_name = "admission_locks"
+  end
 
   class << self
-    def email!(email, connection: ApplicationRecord.connection)
-      raise OutsideTransaction, "admission locks require an open outer transaction" unless connection.transaction_open?
-
-      normalized_email = normalize(email)
-
-      case connection.adapter_name
-      when /PostgreSQL/i
-        connection.select_value("SELECT pg_advisory_xact_lock(#{advisory_key(normalized_email)})")
-      when /SQLite/i
-        # Rails 8.1 opens the outer SQLite transaction in IMMEDIATE mode. This
-        # write materializes a lazy transaction and never attempts to replace
-        # an existing outer transaction with a nested savepoint.
-        connection.execute(SQLITE_WRITER_LOCK_SQL)
-      else
-        raise UnsupportedAdapter, "admission locks do not support #{connection.adapter_name}"
+    def email!(email)
+      unless Record.connection.transaction_open?
+        raise OutsideTransaction, "admission locks require an open outer transaction"
       end
 
+      normalized_email = normalize(email)
+      materialize_lock!(normalized_email)
       normalized_email
     end
 
@@ -39,8 +29,19 @@ class AdmissionLock
 
     private
 
-    def advisory_key(normalized_email)
-      Digest::SHA256.digest("#{DOMAIN_SEPARATOR}#{normalized_email}").unpack1("q>")
+    # A bounded, deterministic stripe serializes matching addresses before user
+    # rows are inspected, including the case where no user exists yet. The row
+    # contains no submitted address or reversible address digest.
+    def materialize_lock!(normalized_email)
+      slot = Digest::SHA256.digest(normalized_email).unpack1("n") % STRIPES
+      return if update_lock!(slot)
+
+      Record.create_or_find_by!(slot: slot)
+      raise ActiveRecord::RecordNotFound unless update_lock!(slot)
+    end
+
+    def update_lock!(slot)
+      Record.where(slot:).update_all(updated_at: Arel.sql("updated_at")) == 1
     end
   end
 end

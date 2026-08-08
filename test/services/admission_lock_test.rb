@@ -3,68 +3,79 @@
 require "test_helper"
 
 class AdmissionLockTest < ActiveSupport::TestCase
-  class RecordingConnection
-    attr_reader :adapter_name, :statements
+  Connection = Data.define(:transaction_open?)
 
-    def initialize(adapter_name:, transaction_open:)
-      @adapter_name = adapter_name
-      @transaction_open = transaction_open
-      @statements = []
-    end
-
-    def transaction_open?
-      @transaction_open
-    end
-
-    def select_value(statement)
-      statements << [ :select_value, statement ]
-    end
-
-    def execute(statement)
-      statements << [ :execute, statement ]
-    end
+  setup do
+    AdmissionLock::Record.delete_all
   end
 
-  test "normalizes email and takes a stable PostgreSQL transaction advisory lock" do
-    connection = RecordingConnection.new(adapter_name: "PostgreSQL", transaction_open: true)
-
-    normalized_email = AdmissionLock.email!(" Person@Example.COM\n", connection: connection)
+  test "normalizes email and materializes a bounded lock stripe" do
+    normalized_email = AdmissionLock.email!(" Person@Example.COM\n")
 
     assert_equal "person@example.com", normalized_email
-    assert_equal [
-      [ :select_value, "SELECT pg_advisory_xact_lock(-4008866821215467476)" ]
-    ], connection.statements
+    assert_includes 0...AdmissionLock::STRIPES, AdmissionLock::Record.pick(:slot)
+    assert_equal %w[created_at id slot updated_at], AdmissionLock::Record.column_names.sort
+    assert AdmissionLock::Record.connection.check_constraints(:admission_locks)
+      .any? { |constraint| constraint.name == "admission_locks_valid_slot" }
   end
 
-  test "uses an already-open SQLite transaction and forces its writer lock" do
-    connection = RecordingConnection.new(adapter_name: "SQLite", transaction_open: true)
+  test "reuses the same lock key for the same normalized email" do
+    AdmissionLock.email!("person@example.com")
+    AdmissionLock.email!(" PERSON@example.com ")
 
-    normalized_email = AdmissionLock.email!(" ALICE@example.com ", connection: connection)
+    assert_equal 1, AdmissionLock::Record.count
+  end
 
-    assert_equal "alice@example.com", normalized_email
-    assert_equal [
-      [ :execute, "UPDATE users SET updated_at = updated_at WHERE id = (SELECT MIN(id) FROM users)" ]
-    ], connection.statements
+  test "fails closed when a new lock row still cannot be updated" do
+    attempts = 0
+    replacement = lambda do |*|
+      attempts += 1
+      false
+    end
+
+    with_lock_update(replacement) do
+      assert_raises(ActiveRecord::RecordNotFound) do
+        AdmissionLock.email!("person@example.com")
+      end
+    end
+
+    assert_equal 2, attempts
+    assert_equal 1, AdmissionLock::Record.count
   end
 
   test "fails before issuing SQL when no outer transaction is open" do
-    connection = RecordingConnection.new(adapter_name: "PostgreSQL", transaction_open: false)
+    connection = Connection.new(transaction_open?: false)
 
-    assert_raises(AdmissionLock::OutsideTransaction) do
-      AdmissionLock.email!("person@example.com", connection: connection)
+    with_record_connection(connection) do
+      assert_raises(AdmissionLock::OutsideTransaction) do
+        AdmissionLock.email!("person@example.com")
+      end
     end
-    assert_empty connection.statements
   end
 
-  test "rejects blank email and unsupported adapters" do
-    postgres = RecordingConnection.new(adapter_name: "PostgreSQL", transaction_open: true)
-    mysql = RecordingConnection.new(adapter_name: "Mysql2", transaction_open: true)
+  test "rejects blank email before materializing the lock" do
+    assert_raises(ArgumentError) { AdmissionLock.email!(" \n") }
+  end
 
-    assert_raises(ArgumentError) { AdmissionLock.email!(" \n", connection: postgres) }
-    assert_raises(AdmissionLock::UnsupportedAdapter) do
-      AdmissionLock.email!("person@example.com", connection: mysql)
-    end
-    assert_empty postgres.statements
-    assert_empty mysql.statements
+  private
+
+  def with_record_connection(connection)
+    singleton = AdmissionLock::Record.singleton_class
+    original = AdmissionLock::Record.method(:connection)
+    singleton.define_method(:connection) { connection }
+    yield
+  ensure
+    singleton&.define_method(:connection, original) if original
+  end
+
+  def with_lock_update(replacement)
+    singleton = AdmissionLock.singleton_class
+    original = AdmissionLock.method(:update_lock!)
+    singleton.define_method(:update_lock!, replacement)
+    singleton.send(:private, :update_lock!)
+    yield
+  ensure
+    singleton&.define_method(:update_lock!, original) if original
+    singleton&.send(:private, :update_lock!)
   end
 end

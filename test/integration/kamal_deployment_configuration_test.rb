@@ -61,6 +61,7 @@ class KamalDeploymentConfigurationTest < ActiveSupport::TestCase
     assert_equal "postgres:16-alpine", config.dig("accessories", "db", "image")
     assert_nil config["volumes"]
     assert_not_includes config.dig("env", "secret"), "SCREENOTE_BOOTSTRAP_TOKEN"
+    assert_not_includes config.dig("env", "secret"), "DATABASE_PASSWORD"
   end
 
   test "tracked secrets template contains no values and covers first boot" do
@@ -142,16 +143,39 @@ class KamalDeploymentConfigurationTest < ActiveSupport::TestCase
       _stdout, stderr, status = Open3.capture3(
         { "SCREENOTE_TEST_TRACE" => trace },
         File.join(bin, "kamal-saas"),
-        "app", "exec", "--", "tool", "--foo"
+        "app", "exec", "--", "tool", "--config-file", "/tmp/payload.yml",
+        "--config_file=/tmp/payload.yml", "-c=/tmp/payload.yml"
       )
       assert status.success?, stderr
       assert_equal(
         [
           "app", "--config-file", File.join(root, "config/deploy.saas.yml"),
-          "exec", "--", "tool", "--foo"
+          "exec", "--", "tool", "--config-file", "/tmp/payload.yml",
+          "--config_file=/tmp/payload.yml", "-c=/tmp/payload.yml"
         ],
         File.binread(trace).split("\0")
       )
+
+      [
+        [ "deploy", "--config-file", "/tmp/other.yml" ],
+        [ "deploy", "--config_file", "/tmp/other.yml" ],
+        [ "deploy", "-c", "/tmp/other.yml" ],
+        [ "deploy", "--config-file=/tmp/other.yml" ],
+        [ "deploy", "--config_file=/tmp/other.yml" ],
+        [ "deploy", "-c=/tmp/other.yml" ]
+      ].each do |arguments|
+        FileUtils.rm_f(trace)
+        stdout, stderr, status = Open3.capture3(
+          { "SCREENOTE_TEST_TRACE" => trace },
+          File.join(bin, "kamal-saas"),
+          *arguments
+        )
+
+        assert_equal 64, status.exitstatus, arguments.inspect
+        assert_empty stdout
+        assert_includes stderr, "do not pass another config selector"
+        assert_not File.exist?(trace), arguments.inspect
+      end
     end
   end
 
@@ -165,7 +189,8 @@ class KamalDeploymentConfigurationTest < ActiveSupport::TestCase
 
     Kamal::Cli::Main.start([
       "app", "--config-file", SAAS_CONFIG.to_s,
-      "exec", "--", "tool", "--foo"
+      "exec", "--", "tool", "--config-file", "/tmp/payload.yml",
+      "--config_file=/tmp/payload.yml", "-c=/tmp/payload.yml"
     ])
 
     assert_equal SAAS_CONFIG.expand_path, captured_config

@@ -4,32 +4,57 @@ require "test_helper"
 
 class AuthorityLockTest < ActiveSupport::TestCase
   class LockableUser
-    Connection = Data.define(:adapter_name)
+    Connection = Data.define(:transaction_open?)
+
+    class Relation
+      def initialize(id, lock_order)
+        @id = id
+        @lock_order = lock_order
+      end
+
+      def update_all(*)
+        @lock_order << @id
+        1
+      end
+    end
+
+    class << self
+      attr_accessor :lock_order
+
+      def connection
+        Connection.new(transaction_open?: true)
+      end
+
+      def where(id:)
+        Relation.new(id, lock_order)
+      end
+    end
 
     attr_reader :id
 
-    def self.connection
-      @connection ||= Connection.new(adapter_name: "PostgreSQL")
-    end
-
     def initialize(id:, lock_order:, persisted: true)
       @id = id
-      @lock_order = lock_order
       @persisted = persisted
+      self.class.lock_order = lock_order
     end
 
     def persisted?
       @persisted
     end
 
-    def lock!
-      @lock_order << id
+    def reload
       self
     end
   end
 
-  class MissingSQLiteUser
-    Connection = Data.define(:adapter_name)
+  class OutsideTransactionUser < LockableUser
+    def self.connection
+      Connection.new(transaction_open?: false)
+    end
+  end
+
+  class MissingUser
+    Connection = Data.define(:transaction_open?)
     Relation = Data.define(:updated) do
       def update_all(*)
         updated
@@ -39,7 +64,7 @@ class AuthorityLockTest < ActiveSupport::TestCase
     attr_reader :id
 
     def self.connection
-      Connection.new(adapter_name: "SQLite")
+      Connection.new(transaction_open?: true)
     end
 
     def self.where(id:)
@@ -94,9 +119,17 @@ class AuthorityLockTest < ActiveSupport::TestCase
     assert_empty lock_order
   end
 
-  test "fails closed when a SQLite authority row disappears before its no-op write" do
+  test "fails before issuing SQL when no outer transaction is open" do
+    lock_order = []
+    user = OutsideTransactionUser.new(id: 10, lock_order: lock_order)
+
+    assert_raises(AuthorityLock::OutsideTransaction) { AuthorityLock.user!(user) }
+    assert_empty lock_order
+  end
+
+  test "fails closed when an authority row disappears before its no-op write" do
     assert_raises(ActiveRecord::RecordNotFound) do
-      AuthorityLock.user!(MissingSQLiteUser.new(id: -1))
+      AuthorityLock.user!(MissingUser.new(id: -1))
     end
   end
 end

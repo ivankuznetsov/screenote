@@ -30,8 +30,9 @@ way to publish captures and read the result.
    and publishes one screen or a multi-page snapshot.
 2. **Review** — teammates open the authenticated review URL, switch between
    desktop, tablet, and mobile captures, and add point or area comments.
-3. **Close the loop** — people reply and resolve threads while an agent reads
-   open annotations and available image crops through the Screenote CLI.
+3. **Close the loop** — people reply in context while an agent reads the open
+   annotations and available image crops, applies the fix, and resolves the
+   thread with a final comment through the Screenote CLI.
 
 ## What you get
 
@@ -195,10 +196,12 @@ screenote snapshot --manifest snapshot.json
 screenote annotation list --screenshot <SCREENSHOT_ID> --status open
 screenote annotation get --annotation <ANNOTATION_ID> --crop-file annotation.png
 screenote comment add --annotation <ANNOTATION_ID> --body "Fixed in abc123"
+screenote annotation resolve --annotation <ANNOTATION_ID> --comment "Fixed in abc123"
 ```
 
-Teammates resolve or reopen threads in the web review UI; agents use the CLI to
-read those thread states and add replies. The CLI emits machine-readable JSON.
+Agents use the CLI to read threads, add replies, and resolve a thread with an
+optional final comment. Reopening remains available in the web review UI; the
+CLI does not expose it yet. The CLI emits machine-readable JSON.
 For multi-page and multi-viewport uploads, use the manifest reference from the
 same tested CLI tag:
 `https://github.com/ivankuznetsov/screenote-cli/blob/<release-cli-tag>/docs/snapshot-manifest.md`.

@@ -3,10 +3,10 @@
 require "test_helper"
 
 class DatabaseRetryTest < ActiveSupport::TestCase
-  Connection = Data.define(:adapter_name, :transaction_open?)
+  Connection = Data.define(:transaction_open?)
 
-  test "retries PostgreSQL concurrency failures at most three times with injected backoff" do
-    connection = Connection.new(adapter_name: "PostgreSQL", transaction_open?: false)
+  test "retries Active Record concurrency failures at most three times with injected backoff" do
+    connection = Connection.new(transaction_open?: false)
     attempts = []
     delays = []
 
@@ -26,8 +26,8 @@ class DatabaseRetryTest < ActiveSupport::TestCase
     assert_equal [ 0.01, 0.02 ], delays
   end
 
-  test "retries each supported PostgreSQL failure class" do
-    connection = Connection.new(adapter_name: "PostgreSQL", transaction_open?: false)
+  test "retries each supported Active Record failure class" do
+    connection = Connection.new(transaction_open?: false)
 
     [ ActiveRecord::SerializationFailure, ActiveRecord::LockWaitTimeout ].each do |error_class|
       attempts = 0
@@ -44,7 +44,7 @@ class DatabaseRetryTest < ActiveSupport::TestCase
   end
 
   test "retries only busy and locked SQLite failures from the exception cause chain" do
-    connection = Connection.new(adapter_name: "SQLite", transaction_open?: false)
+    connection = Connection.new(transaction_open?: false)
 
     [ SQLite3::BusyException, SQLite3::LockedException ].each do |error_class|
       attempts = 0
@@ -61,7 +61,7 @@ class DatabaseRetryTest < ActiveSupport::TestCase
   end
 
   test "raises a stable exhausted error with the final failure and cause after three attempts" do
-    connection = Connection.new(adapter_name: "PostgreSQL", transaction_open?: false)
+    connection = Connection.new(transaction_open?: false)
     failures = 3.times.map { |index| ActiveRecord::Deadlocked.new("deadlock #{index + 1}") }
     attempts = 0
 
@@ -79,7 +79,7 @@ class DatabaseRetryTest < ActiveSupport::TestCase
   end
 
   test "does not retry integrity, generic statement, or programming errors" do
-    connection = Connection.new(adapter_name: "PostgreSQL", transaction_open?: false)
+    connection = Connection.new(transaction_open?: false)
     errors = [
       ActiveRecord::RecordNotUnique.new("duplicate"),
       ActiveRecord::StatementInvalid.new("invalid SQL"),
@@ -100,24 +100,8 @@ class DatabaseRetryTest < ActiveSupport::TestCase
     end
   end
 
-  test "unsupported adapters never classify failures as retryable" do
-    connection = Connection.new(adapter_name: "Mysql2", transaction_open?: false)
-    expected = ActiveRecord::Deadlocked.new("not supported")
-    attempts = 0
-
-    actual = assert_raises(ActiveRecord::Deadlocked) do
-      DatabaseRetry.call(connection: connection, sleeper: ->(_delay) { }) do
-        attempts += 1
-        raise expected
-      end
-    end
-
-    assert_same expected, actual
-    assert_equal 1, attempts
-  end
-
   test "SQLite failure classification remains fail closed when optional exception constants are absent" do
-    connection = Connection.new(adapter_name: "SQLite", transaction_open?: false)
+    connection = Connection.new(transaction_open?: false)
     busy_exception = SQLite3.send(:remove_const, :BusyException)
     locked_exception = SQLite3.send(:remove_const, :LockedException)
     expected = ActiveRecord::StatementInvalid.new("SQLite write failed")
@@ -138,7 +122,7 @@ class DatabaseRetryTest < ActiveSupport::TestCase
   end
 
   test "rejects calls inside an open transaction" do
-    connection = Connection.new(adapter_name: "SQLite", transaction_open?: true)
+    connection = Connection.new(transaction_open?: true)
 
     assert_raises(DatabaseRetry::OpenTransaction) do
       DatabaseRetry.call(connection: connection, sleeper: ->(_delay) { }) { :completed }
@@ -146,7 +130,7 @@ class DatabaseRetryTest < ActiveSupport::TestCase
   end
 
   test "rejects nested retry wrappers and clears its execution state" do
-    connection = Connection.new(adapter_name: "SQLite", transaction_open?: false)
+    connection = Connection.new(transaction_open?: false)
 
     assert_raises(DatabaseRetry::NestedInvocation) do
       DatabaseRetry.call(connection: connection, sleeper: ->(_delay) { }) do
@@ -159,7 +143,7 @@ class DatabaseRetryTest < ActiveSupport::TestCase
   end
 
   test "restores a pre-existing false execution-state marker" do
-    connection = Connection.new(adapter_name: "SQLite", transaction_open?: false)
+    connection = Connection.new(transaction_open?: false)
     state = ActiveSupport::IsolatedExecutionState
     state[DatabaseRetry::EXECUTION_STATE_KEY] = false
 

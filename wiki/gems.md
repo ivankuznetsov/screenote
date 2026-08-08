@@ -3,7 +3,7 @@ title: Gem Choices
 type: architecture
 source: Gemfile
 created: 2026-04-10
-updated: 2026-04-10
+updated: 2026-08-08
 tags: [gems, dependencies, rationale]
 ---
 
@@ -28,8 +28,8 @@ Source: `Gemfile`
 
 | Gem | Version | Rationale |
 |-----|---------|-----------|
-| `sqlite3` | >= 2.1 | Dev/test database (simple, zero-config) |
-| `pg` | ~> 1.1 | Production database (PostgreSQL via Kamal) |
+| `sqlite3` | >= 2.1 | Default development/test adapter and supported self-hosted runtime |
+| `pg` | ~> 1.1 | Available to the current hosted Kamal PostgreSQL topology; not an application or qualification requirement |
 
 ## Auth
 

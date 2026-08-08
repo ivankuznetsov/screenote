@@ -3,15 +3,15 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-08-06
+updated: 2026-08-08
 tags: [database, schema, models, relationships]
 ---
 
 # Data Model
 
-TLDR: Screenote has 17 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth. Installation persists the one deployment/storage/ownership identity, and authentication-link credentials are digest-only rows.
+TLDR: Screenote has 18 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth. Installation persists the one deployment/storage/ownership identity, authentication-link credentials are digest-only rows, and AdmissionLock stores only one-way email keys for adapter-neutral admission serialization.
 
-Source: `db/schema.rb` (schema version `2026_08_05_134000`)
+Source: `db/schema.rb` (schema version `2026_08_08_090000`)
 
 ## ER Diagram
 
@@ -101,6 +101,7 @@ erDiagram
 | `installations` | Singleton persisted deployment and claim identity | singleton_key, deployment_mode, state, storage_service, storage_namespace_fingerprint, bootstrap_token_digest, administrator_id, claimed_at |
 | `installation_audit_events` | Append-only installation claim/administration audit history | installation_id, actor_user_id, target_user_id, event_type, metadata, created_at |
 | `authentication_tokens` | Digest-only, purpose/subject-bound link credentials | purpose, user_id/project_invitation_id, issued_by_user_id (recovery only), generation, derivation_id, derivation_key_id, token_digest, expires_at, state, terminal_at |
+| `admission_locks` | Adapter-neutral bounded serialization stripes | slot, created_at, updated_at |
 
 ### Billing
 
@@ -134,6 +135,7 @@ erDiagram
 - `authentication_tokens.(purpose, subject, generation)` -- separate partial user/invitation indexes avoid nullable-column uniqueness gaps
 - `authentication_tokens.(purpose, subject)` -- separate partial indexes permit only one outstanding credential for each exact purpose and subject
 - `authentication_tokens.(issued_by_user_id, state)` -- partial account-recovery index preserves immutable administrator provenance and supports revocation after an administrator transfer
+- `admission_locks.slot` -- unique integer stripe; a normalized email maps deterministically to one of 256 rows without persisting the address or an address digest
 - `pages.(project_id, LOWER(name))` -- unique, case-insensitive
 - `snapshots.(project_id, taken_at)` -- powers the project-page "recent snapshots" sidebar (`Snapshot.recent` within a project scope). The id-equality `find_by(id:)` path used elsewhere is served by the PK, not this composite.
 - `snapshots.(project_id, manifest_digest)` -- partial unique identity for resumable manifest-backed captures.

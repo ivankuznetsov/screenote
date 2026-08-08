@@ -126,17 +126,10 @@ class IdentityUpgradeTest < ActiveSupport::TestCase
     end
   end
 
-  test "migration is irreversible and uses an explicit PostgreSQL transaction" do
+  test "migration is irreversible" do
     assert_raises(ActiveRecord::IrreversibleMigration) do
       capture_io { HardenUserAndInvitationIdentity.new.exec_migration(@connection, :down) }
     end
-
-    skip unless @connection.adapter_name == "PostgreSQL"
-
-    create_legacy_schema
-    insert_valid_graph
-    run_migration
-    assert @connection.column_exists?(:users, :access_status)
   end
 
   test "a fully applied migration safely re-enters when version bookkeeping was interrupted" do

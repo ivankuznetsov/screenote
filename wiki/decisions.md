@@ -3,7 +3,7 @@ title: Architectural Decisions
 type: decision
 source: git log
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-08
 tags: [decisions, adr, architecture, history]
 ---
 
@@ -24,7 +24,7 @@ Source: `git log --all --oneline` (112 commits total)
 ## ADR-002: SQLite Dev / PostgreSQL Prod
 
 **Date**: 2026-02-11 (commit `33d1709`)
-**Status**: Active
+**Status**: Superseded by ADR-017
 **Context**: Need a database strategy for development vs production.
 **Decision**: SQLite for development and test, PostgreSQL for production.
 **Rationale**: SQLite is zero-config for local dev. PostgreSQL handles production concurrency and is required for some features.
@@ -136,9 +136,17 @@ Source: `git log --all --oneline` (112 commits total)
 ## ADR-016: Digest-Only Authentication Links and Global Admission Locking
 
 **Date**: 2026-08-05
-**Status**: Accepted for U4 implementation
+**Status**: Superseded in part by ADR-017 for database locking and retry implementation
 **Context**: Invitation and Rails authentication links currently place signed bearer values in URL paths and can create users through multiple controllers. The first U4 draft also ordered invitation locks project-first, opposite the user-first authority order established by OAuth and membership removal.
 **Decision**: Persist purpose/subject-bound `AuthenticationToken` rows containing only a digest plus public derivation metadata. Reproduce 32-byte credentials through a versioned domain-separated HMAC keyring, carry them in URL fragments or equivalent Base32 manual codes, and exchange them by filtered POST into a tokenless session context. Missing historical derivation keys fail closed. All account and authority transitions lock in this order: Installation when relevant, normalized-email admission lock, users by ascending ID, projects by ascending ID, invitations by ascending ID, memberships, then tokens/credentials. PostgreSQL uses a transaction advisory lock for normalized email; production SQLite uses its immediate outer write transaction. Only outermost domain services perform bounded database retries. An invitation may create credentials for a new address, but an existing local account must authenticate through the ordinary rate-limited session flow before its matching signed-in identity can accept; the invitation endpoint never verifies an existing password.
 **Rationale**: Database or job-queue access alone cannot reveal live link credentials; routine key rotation remains operable without silently retaining removed keys; no raw credential enters a request URL, referrer, session, or job argument; invitation links cannot become reusable password oracles; and invitation acceptance cannot deadlock against suspension, ownership loss, or membership removal by acquiring the same authority rows in reverse order.
+
+## ADR-017: Active Record Database Portability Boundary
+
+**Date**: 2026-08-08
+**Status**: Active
+**Context**: The original development/production split grew into adapter-specific application locks, retry classification, migration SQL, CI lanes, and PostgreSQL 16 assertions in exact-image SaaS qualification. Those checks coupled the application contract to one hosted deployment choice even though Active Record already exposes the required database roles and concurrency errors.
+**Decision**: Keep application code, tests, required CI, migrations where adapter capabilities permit, and release qualification database-adapter-neutral through Active Record. Admission and authority serialization use durable rows and Active Record operations; retry policy consumes Active Record concurrency exceptions plus the supported SQLite cause chain without branching on adapter identity. Exact-image SaaS qualification remains mandatory on AMD64 and ARM64, but supplies primary, cache, queue, and cable as four URLs and verifies them without asserting an adapter name or server version. Runtime deployment remains edition-specific: supported self-hosting uses SQLite, while the current hosted Kamal configuration may provision PostgreSQL. Because the initial supported release has predecessor `none` and the hosted database is already current, one pre-v1 rebaseline removes PostgreSQL-only lock SQL from migrations `20260712153000`, `20260805130000`, `20260805131000`, and `20260805132000`; migration history is append-only from `v1.0.0` onward. The stopped-process credential cutover lets each migration use the transaction behavior supported by its adapter instead of wrapping the whole chain in one outer transaction. Its safety boundary is quiesced maintenance, a verified backup/restore point, migration-version-aware idempotent resume, and post-migration storage/runtime verification.
+**Rationale**: Application correctness and release evidence should survive a database-provider change without losing exact-image SaaS coverage. Separating the application boundary from deployment topology keeps PostgreSQL available to the hosted service and SQLite appropriate for self-hosting, while avoiding a false promise that an interrupted multi-migration cutover can always be rolled back atomically.
 
 See also: [[architecture]], [[schema-evolution]], [[active-areas]], [[models/screenshot-image]]
