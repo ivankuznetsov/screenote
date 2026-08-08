@@ -1,8 +1,14 @@
-# Self-hosted diagnostics
+# Internal Compose harness: diagnostics
 
-Compose uses generic `GET /ready` checks that do not contact optional external
-providers or reveal component details. Run the local operator diagnostic with
-the same complete Compose file list when readiness or a provider fails:
+> [!WARNING]
+> This page documents Screenote's internal pre-release Docker Compose
+> qualification harness. It is not a supported operator workflow for Kamal
+> deployments. Use [Deploy Screenote with Kamal](../kamal-deployment.md) and
+> the [self-hosting guide](../self-hosting.md) instead.
+
+The Compose qualification harness uses generic `GET /ready` checks that do not
+contact optional external providers or reveal component details. Its diagnostic
+fixture uses the same complete Compose file list:
 
 ```sh
 bin/self-host-diagnostics \
@@ -20,6 +26,6 @@ passed; exit `69` means a required diagnostic failed.
 
 Provider failure does not make `/ready` restart an otherwise healthy offline
 core. Use the detailed result to test the selected provider from the host while
-keeping credentials in their restricted files. The initial supported host
-contract requires UID/GID 1000 bind ownership and does not cover rootless
+keeping credentials in their restricted files. The harness host fixture
+requires UID/GID 1000 bind ownership and does not cover rootless
 Docker or user-namespace remapping.

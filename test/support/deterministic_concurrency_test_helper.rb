@@ -47,8 +47,6 @@ module DeterministicConcurrencyTestHelper
   end
 
   def run_blocked_race(entered:, release:, first:, second:)
-    assert_real_concurrency_database
-
     first_result = Queue.new
     second_result = Queue.new
     first_connection = Queue.new
@@ -97,17 +95,6 @@ module DeterministicConcurrencyTestHelper
   def assert_no_concurrency_exceptions(outcomes)
     exceptions = outcomes.grep(Exception)
     assert_empty exceptions, -> { exceptions.map(&:full_message).join("\n") }
-  end
-
-  def assert_real_concurrency_database
-    connection = ApplicationRecord.connection
-    if connection.adapter_name.match?(/SQLite/i)
-      database = ApplicationRecord.connection_db_config.database.to_s
-      assert_not_equal ":memory:", database
-      assert File.file?(database), "expected a file-backed SQLite test database at #{database}"
-    else
-      assert_match(/PostgreSQL/i, connection.adapter_name)
-    end
   end
 
   def pop_with_timeout(queue)

@@ -56,7 +56,9 @@ capabilities:
     - test/integration/offline_assets_test.rb
     - test/integration/rate_limit_fail_closed_test.rb
     - test/integration/self_hosted_readiness_test.rb
+    - test/lib/screenote/trusted_proxy_headers_test.rb
   operator_fast:
+    - test/integration/kamal_deployment_configuration_test.rb
     - test/integration/self_hosted_backup_restore_test.rb
     - test/integration/self_hosted_database_configuration_test.rb
     - test/integration/self_hosted_key_rotation_compose_test.rb
@@ -64,6 +66,7 @@ capabilities:
     - test/integration/self_hosted_load_qualification_test.rb
     - test/integration/self_hosted_operations_command_test.rb
     - test/integration/self_hosted_secret_configuration_test.rb
+    - test/lib/screenote/kamal_release_deployer_test.rb
     - test/services/screenote/self_hosted_diagnostics_test.rb
     - test/services/screenote/self_hosted_restore_verifier_test.rb
 
@@ -84,8 +87,6 @@ saas_only:
   - test/controllers/stripe_webhooks_controller_test.rb
   - test/controllers/subscriptions_controller_test.rb
   - test/integration/saas_credential_cutover_command_test.rb
-  - test/integration/saas_postgresql_contract_test.rb
-  - test/migrations/current_saas_upgrade_test.rb
   - test/models/stripe_webhook_event_test.rb
   - test/models/subscription_test.rb
   - test/services/screenote/saas_credential_cutover_test.rb

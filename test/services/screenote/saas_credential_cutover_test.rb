@@ -5,22 +5,6 @@ require "test_helper"
 module Screenote
   class SaasCredentialCutoverTest < ActiveSupport::TestCase
     class AppliedConnection
-      attr_reader :queries, :transaction_calls
-
-      def initialize(invalid_fragment: nil)
-        @invalid_fragment = invalid_fragment
-        @queries = []
-        @transaction_calls = 0
-      end
-
-      def adapter_name
-        "PostgreSQL"
-      end
-
-      def data_source_exists?(name)
-        name == "schema_migrations"
-      end
-
       def quote(value)
         "'#{value}'"
       end
@@ -33,26 +17,46 @@ module Screenote
         value.to_s
       end
 
-      def transaction
-        @transaction_calls += 1
-        yield
+      def select_value(sql)
+        "0"
+      end
+    end
+
+    class DigestBatch
+      def initialize(values)
+        @values = values
       end
 
-      def select_value(sql)
-        @queries << sql
-        return "1" if sql.include?("schema_migrations")
-        return "1" if @invalid_fragment && sql.include?(@invalid_fragment)
+      def pluck(*) = @values
+    end
 
-        "0"
+    class DigestModel
+      attr_reader :batch_size, :table_name
+
+      def initialize(table_name, batches)
+        @table_name = table_name
+        @batches = batches
+      end
+
+      def unscoped = self
+
+      def in_batches(of:)
+        @batch_size = of
+        @batches.each { |values| yield DigestBatch.new(values) }
       end
     end
 
     class RecordingMigrationContext
       attr_reader :migrate_calls
 
-      def initialize(remains_pending: false)
+      def initialize(remains_pending: false, applied_versions: [ SaasCredentialCutover::MIGRATION_VERSION.to_i ])
         @remains_pending = remains_pending
+        @applied_versions = applied_versions
         @migrate_calls = 0
+      end
+
+      def get_all_versions
+        @applied_versions
       end
 
       def migrate
@@ -94,7 +98,7 @@ module Screenote
       end
     end
 
-    test "idempotent resume verifies every migrated credential column" do
+    test "idempotent resume applies every later migration before booting the successor" do
       deployment = Struct.new(:saas?).new(true)
       connection = AppliedConnection.new
       migration_context = RecordingMigrationContext.new
@@ -111,27 +115,45 @@ module Screenote
         assert_equal 0, result.witness_count
       end
 
-      verification_queries = connection.queries.grep(/SELECT COUNT/)
-      assert_equal 5, verification_queries.size
-      assert verification_queries.all? { |query| query.include?("NOT COALESCE") }
       assert_equal 1, migration_context.migrate_calls,
         "resume must apply migrations after the credential rewrite before booting the successor"
-      assert_equal 1, connection.transaction_calls
+    end
+
+    test "stored credentials are validated in bounded table batches" do
+      model = DigestModel.new("oauth_access_tokens", [
+        [ [ "a" * 64, nil, "" ] ],
+        [ [ "b" * 64, "c" * 64, "d" * 64 ] ]
+      ])
+      columns = [
+        [ :token, false, false ],
+        [ :refresh_token, true, false ],
+        [ :previous_refresh_token, false, true ]
+      ]
+      operation = SaasCredentialCutover.new(
+        deployment: Struct.new(:saas?).new(true),
+        connection: AppliedConnection.new,
+        migration_context: RecordingMigrationContext.new,
+        digest_models: [ [ model, columns ] ]
+      )
+
+      operation.send(:verify_migrated_storage!)
+
+      assert_equal SaasCredentialCutover::DIGEST_BATCH_SIZE, model.batch_size
     end
 
     test "idempotent resume fails closed when a stored credential is malformed" do
-      deployment = Struct.new(:saas?).new(true)
-      connection = AppliedConnection.new(invalid_fragment: "oauth_access_tokens")
+      model = DigestModel.new("oauth_access_tokens", [ [ [ "malformed" ] ] ])
       operation = SaasCredentialCutover.new(
-        deployment:,
-        connection:,
-        migration_context: RecordingMigrationContext.new
+        deployment: Struct.new(:saas?).new(true),
+        connection: AppliedConnection.new,
+        migration_context: RecordingMigrationContext.new,
+        digest_models: [ [ model, [ [ :token, false, false ] ] ] ]
       )
 
-      with_environment("SCREENOTE_SAAS_CREDENTIAL_CUTOVER" => "authorized") do
-        error = assert_raises(SaasCredentialCutover::Error) { operation.call }
-        assert_includes error.message, "invalid oauth_access_tokens.token rows"
+      error = assert_raises(SaasCredentialCutover::Error) do
+        operation.send(:verify_migrated_storage!)
       end
+      assert_includes error.message, "invalid oauth_access_tokens.token rows"
     end
 
     test "resume fails closed when later migrations remain pending" do

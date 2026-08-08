@@ -3,7 +3,7 @@ title: OAuth Controllers
 type: controller
 source: app/controllers/oauth/
 created: 2026-04-10
-updated: 2026-08-06
+updated: 2026-08-08
 tags: [controller, oauth, cli, doorkeeper]
 ---
 
@@ -34,7 +34,7 @@ Source: `app/controllers/oauth/tokens_controller.rb`
 
 - Rejects authorization-code and refresh exchanges when their project membership is no longer held.
 - Code and refresh exchange use the same user -> project -> membership -> source-credential lock order and keep those locks through replacement-token creation.
-- Authority locking rejects absent and already-destroyed Active Record objects before adapter-specific row locking; PostgreSQL cannot treat `lock!`'s non-persisted no-op as valid authority.
+- Authority locking rejects absent and already-destroyed Active Record objects before materializing its durable-row lock through Active Record.
 - Doorkeeper propagates the server-owned principal fields from grant to token and through refresh rotation.
 - Access codes, access tokens, refresh tokens, previous refresh tokens, and confidential client secrets are SHA-256 digests at rest with no plaintext fallback.
 
@@ -94,7 +94,7 @@ Source: `app/controllers/oauth/device_authorizations_controller.rb`
 - The consent page shows client identity, exact user code, and requested scopes with separate Approve and Deny controls.
 - Every submitted GET or POST code consumes a shared per-user/IP verification budget before lookup; an unavailable counter fails closed with a retryable 503. Device and user codes are filtered from Rails logs.
 - Approval binds the grant either to the signed-in user's account or to one server-validated current project membership. Final polling revalidates that binding, issues one refreshable token with the same authority, and atomically consumes the grant.
-- Project approval and final exchange hold authority locks through the device-grant update or token write. PostgreSQL uses row locks; SQLite begins with a serialized no-op user write because it ignores `FOR UPDATE`.
+- Project approval and final exchange hold Active Record-backed durable-row authority locks through the device-grant update or token write, without selecting a locking strategy by adapter name.
 - Device approval uses the same 25-active-dynamic-client quota as browser authorization-code consent and leaves the device grant pending when the quota is full.
 - Polling returns RFC 8628 `authorization_pending`, `slow_down`, `access_denied`, and `expired_token`; unknown, reused, or wrong-client codes return `invalid_grant`.
 

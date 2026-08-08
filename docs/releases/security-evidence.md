@@ -14,7 +14,9 @@ The v2 manifest contains only technical release state:
 - Trivy policy/version, exact-image counts, and tightly scoped expiring waivers;
 - canonical live ruleset hashes and expected GitHub App identities;
 - protected-main CI conclusions labelled `pr_contract_only`;
-- exact qualification workflow run/attempt, artifact and record hashes, platform/CLI identities, minimum-host profile, and eight check hashes; and
+- exact qualification workflow run/attempt, artifact and record hashes,
+  platform/CLI identities, minimum-host profile, adapter-neutral SaaS boot
+  identities, and eight check hashes; and
 - public-log and release-asset hashes.
 
 Use [`evidence/public-evidence.example.json`](evidence/public-evidence.example.json) as the template. `bin/release-validate` rejects unknown fields, placeholders, malformed hashes, open incidents, unwaived Critical/High findings, expired waivers, stale checks, mismatched source or artifact identities, and prohibited secret/path content.
@@ -26,6 +28,15 @@ The exact O'Saasy license and Future Spin Ltd copyright notice are checked direc
 `artifacts.evidence_sha256` is the SHA-256 of `screenote-candidate.tar`; `sbom_sha256` identifies its canonical two-platform SBOM set; and `provenance_sha256` identifies its retained provenance input. Publication downloads the named candidate artifact from the exact successful workflow run and verifies all three before mutation.
 
 `source_contracts` records protected-main CI only. `qualification` is the only section allowed to claim the retained release bytes passed runtime qualification. Publication verifies the named workflow attempt and jobs live, downloads the one matching artifact, verifies every record byte, and re-resolves the immutable CLI tag. Well-formed hashes alone cannot authorize publication.
+
+The AMD64 and ARM64 SaaS boot records remain exact-image evidence. Each boot
+receives separate primary, cache, queue, and cable connection URLs and verifies
+the four roles through Active Record together with the SaaS installation
+identity. The retained qualification records expose only redacted role
+outcomes, and the public manifest binds their hashes: database URLs are never
+published, while adapter names and server versions are not release
+requirements. A hosted Kamal deployment may still select PostgreSQL as its
+runtime configuration.
 
 The protected `source-release` environment is the runtime human gate. Promotion checks the current run's approval through GitHub's API but does not create or publish an approval attestation.
 

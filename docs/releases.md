@@ -1,13 +1,16 @@
 # Screenote releases
 
-Screenote releases are source-available source tags plus one digest-addressed, multi-platform GHCR image built from the same protected default-branch commit. A tag is publishable only after the automated source, image, compatibility, and repository-protection checks below pass.
+Screenote releases are source-available source tags plus one digest-addressed, multi-platform GHCR image built from the same protected default-branch commit. A tag is publishable only after the automated checks and retained Kamal-specific drills below pass.
 
 The first publication is held by the technical sentinel [`docs/releases/PUBLICATION_BLOCKED.md`](releases/PUBLICATION_BLOCKED.md). Remove it only when the repository and release infrastructure are ready; the protected `source-release` environment remains the actual human authorization at promotion time.
 
 ## Release identity
 
 - Release tags use immutable `vMAJOR.MINOR.PATCH` names.
-- The OCI manifest digest is the canonical image identity. Operator instructions use `ghcr.io/ivankuznetsov/screenote@sha256:…`, never `latest`.
+- The OCI manifest digest is the canonical image identity. The self-hosted
+  `bin/kamal` wrapper reads it from the immutable `public-evidence.json` release
+  asset and mirrors that exact manifest through Kamal's loopback registry;
+  neither a moving tag nor a local rebuild is a supported release input.
 - Each server release names one exact tested public CLI tag.
 - The first release declares predecessor `none`; later releases name the one immediately supported predecessor.
 - Upgrades are sequential. Skipping releases is unsupported.
@@ -17,10 +20,18 @@ The first publication is held by the technical sentinel [`docs/releases/PUBLICAT
 1. Freeze the exact protected `main` commit.
 2. Run the GitGuardian App history check, trusted `ggshield` full-history/current-tree scans, and live incident query. Open or unknown incidents fail closed.
 3. Build AMD64 and ARM64 OCI layouts once. Verify imported config/layer digests, scan both layouts with GitGuardian and checksum-pinned Trivy, and generate platform SBOMs plus provenance input.
-4. Treat protected-main CI as source-contract evidence only. Run `.github/workflows/release-qualification.yml` against the retained candidate bytes and immutable CLI tag for native AMD64/ARM64 boots, minimum-host backup/restore and SQLite load, and HTTP/HTTPS CLI compatibility.
-5. Verify live main/tag rulesets, the GitGuardian App check source, the protected `source-release` environment, GHCR permissions, and immutable GitHub releases.
-6. Validate the technical public evidence manifest against the exact candidate and qualification artifacts.
-7. Approve the protected `source-release` environment. Promotion rechecks live incidents, verifies every remote object is absent or an exact resumable prefix, then publishes the image, tag, provenance attestation, and immutable release.
+4. Treat protected-main CI as source and Kamal-wrapper contract evidence only.
+   Run `.github/workflows/release-qualification.yml` against the retained
+   candidate bytes and immutable CLI tag for native AMD64/ARM64 boots. The
+   exact-image SaaS boots receive four role-specific database URLs and verify
+   them through Active Record without requiring an adapter name or server
+   version. The remaining checks cover minimum-host backup/restore and SQLite
+   load plus HTTP/HTTPS CLI compatibility.
+5. Retain an end-to-end Linux AMD64 deployment of the exact image through the supported `bin/kamal` wrapper, Kamal Proxy, and Thruster, including remote digest and label checks, HTTPS, client-IP spoof rejection, restart, and persistence evidence.
+6. Publish the release-matched Kamal-native backup and restore commands, then retain a restore drill covering all four SQLite roles and local or S3 screenshot storage.
+7. Verify live main/tag rulesets, the GitGuardian App check source, the protected `source-release` environment, GHCR permissions, and immutable GitHub releases.
+8. Validate the technical public evidence manifest against the exact candidate and qualification artifacts.
+9. Approve the protected `source-release` environment. Promotion rechecks live incidents, verifies every remote object is absent or an exact resumable prefix, then publishes the image, tag, provenance attestation, and immutable release.
 
 Missing, skipped, malformed, expired, or mismatched technical evidence fails closed. A partial tag, image, attestation, or release is reusable only when it exactly matches the candidate commit and retained digests.
 
@@ -53,7 +64,20 @@ See [technical release evidence](releases/security-evidence.md), the [publicatio
 - `candidate` accepts a full commit and semantic tag only when the commit is the current protected default-branch head. It runs source/history checks, builds one retained AMD64/ARM64 layout, scans the imported bytes, and uploads the candidate bundle for 30 days. It creates no public object.
 - `publish` accepts the exact successful candidate run/bundle hash and exact successful qualification run/artifact hash. One direct-parent release-metadata commit may delete the sentinel, add final technical evidence, and finalize release notes; any other path or commit shape requires a new candidate. The job verifies those bytes, the live qualification run and its eight checks, the current CLI tag, the candidate manifest, SBOMs, provenance, scanner results, and ruleset evidence before retaining a one-day promotion input.
 
-`.github/workflows/release-qualification.yml` is the separate release-only runtime gate. It uses configured native runner labels and the tracked `config/release/minimum-host-v1.json` profile from the exact qualification commit. The SQLite driver emits the `screenote-load-smoke/v2` evidence contract, including the profile identity and measured latency, queue, lock, reconciliation, integrity, and request outcomes. The workflow hashes those file bytes into its final artifact, which contains exactly eight checks: self-hosted and SaaS boot on AMD64 and ARM64, backup/restore, SQLite load, and public CLI behavior over HTTP and HTTPS. Pull-request jobs with similar names are contract checks and never substitute for qualification.
+`.github/workflows/release-qualification.yml` is the separate release-only runtime gate. It uses configured native runner labels and the tracked `config/release/minimum-host-v1.json` profile from the exact qualification commit. The SQLite driver emits the `screenote-load-smoke/v2` evidence contract, including the profile identity and measured latency, queue, lock, reconciliation, integrity, and request outcomes. The workflow hashes those file bytes into its final artifact, which contains exactly eight checks: self-hosted and SaaS boot on AMD64 and ARM64, backup/restore, SQLite load, and public CLI behavior over HTTP and HTTPS. Each SaaS boot still qualifies the exact retained image through its production entrypoint, but its primary, cache, queue, and cable connections are supplied as URLs and exercised through Active Record; qualification records no database adapter or server-version requirement. The hosted Kamal configuration may continue to select PostgreSQL without turning that runtime choice into an application, CI, or release-qualification constraint. Pull-request jobs with similar names are contract checks and never substitute for qualification.
+
+The supported Kamal Proxy/Thruster deployment drill and the Kamal-native
+backup/restore drill are still sentinel-tracked retained gates, not two of
+those eight qualification checks. Publication remains blocked until their
+evidence is automated, bound to the exact candidate, and validated by the
+promotion path.
+
+The published image includes Kamal's required `service=screenote` label. The
+repository wrapper validates the release identity and qualification fields,
+copies the parent manifest without changing its digest, and invokes Kamal with
+the release source SHA plus `--skip-push`. The ordinary build path is reserved
+for clearly identified development or custom source builds and carries no
+supported-release artifact claim.
 
 The promotion job performs no checkout and executes no repository code. It is gated by the protected `source-release` environment and verifies the current workflow run has exactly one approved review for that environment. It publishes no approval record. Scanner details stay in job-private diagnostics; public release assets contain only technical manifests and hashes.
 

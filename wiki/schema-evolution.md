@@ -3,13 +3,13 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-08
 tags: [database, migrations, schema, history]
 ---
 
 # Schema Evolution
 
-TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, headless device authorization, persisted deployment identity, and hardened admission identities.
+TLDR: The migration history spans the Rails foundation through OAuth, collaboration, annotation threading, billing hardening, multi-viewport screenshots, resumable CLI snapshots, production schema repair, headless device authorization, persisted deployment identity, and hardened admission identities. Current migrations and upgrade verification target Active Record portability rather than a fixed hosted adapter.
 
 Source: `db/migrate/`
 
@@ -116,6 +116,12 @@ Source: `db/migrate/`
 | `20260805132000_harden_user_and_invitation_identity` | Preflight identity conflicts before mutation; canonicalize email/provider values; add checked active/suspended users, durable cancelled invitations, normalized partial uniqueness, and the append-only installation audit foundation |
 | `20260805133000_create_authentication_tokens` | Create digest-only invitation/account link rows with exact purpose-subject binding, versioned derivation-key identity, monotonic generations, expiry/terminal checks, and separate NULL-safe partial uniqueness indexes |
 
+### Phase 14: Adapter-Neutral Admission Serialization (2026-08-08)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260808090000_create_admission_locks` | Create bounded durable lock stripes so matching-email admission serializes through Active Record without persisting the address or choosing a lock primitive by adapter name |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -136,18 +142,22 @@ Source: `db/migrate/`
 
 9. **Manifest identity is nullable and server-owned**: legacy and MCP rows need no backfill, while manifest-backed snapshots and entries use partial unique indexes to make retries deterministic without changing duplicate commit semantics.
 
-10. **Applied migrations are append-only**: `20260212071431_create_api_keys` was rewritten after one production database had already run its plaintext-token form, while its forward digest migration was deleted. Fresh SQLite databases looked correct, but production PostgreSQL retained the old columns. Repairs must use a new timestamp and an upgrade-path test; never rewrite an applied migration based only on fresh-schema checks. The API-key repair test runs in both SQLite and a dedicated PostgreSQL 16 CI job so adapter-specific production behavior stays covered.
+10. **Pre-v1 portability rebaseline, then append-only migrations**: rewriting `20260212071431_create_api_keys` after a production database had applied its plaintext-token form caused real schema drift; the later repair remains the warning against treating fresh-schema checks as upgrade proof. Before the first supported release, Screenote makes one bounded rebaseline because `v1.0.0` has predecessor `none` and the hosted database is already at the current schema: `20260712153000`, `20260805130000`, `20260805131000`, and `20260805132000` remove PostgreSQL-only lock SQL without changing their target schemas. Their regressions run through the configured Active Record connection in the consolidated adapter-neutral source suite. Starting with `v1.0.0`, applied migrations are append-only: every later repair uses a new timestamp and a tested supported-predecessor upgrade path.
 
 11. **Device credentials are short-lived and digest-only**: RFC 8628 device codes are stored as SHA-256 digests and consumed under a row lock during final exchange. Human codes remain lookupable but use 50 bits of entropy, an indexed 10-minute absolute expiry, fail-closed throttled verification, and scheduled cleanup for abandoned grants after 15 minutes of terminal-error retention.
 
 12. **Deployment identity is persistent, not inferred from providers**: one constrained Installation row records SaaS/self-hosted mode, the credential-free storage namespace, and bootstrap/claim state. Startup may rotate credentials but refuses to reinterpret an existing primary database under a different mode or object namespace.
 
-13. **OAuth authority is explicit and secrets are non-restorable**: grants, device grants, and tokens carry a user/project discriminator instead of treating a nullable project as implicit authority. Project deletion cascades. Existing bearer and confidential-client values are converted to SHA-256 only after old processes stop; runtime has no plaintext fallback. The migration avoids rebuilding the parent `oauth_applications` table solely for SQLite CHECK constraints because that can cascade-delete child credentials during table replacement.
+13. **OAuth authority is explicit and secrets are non-restorable**: grants, device grants, and tokens carry a user/project discriminator instead of treating a nullable project as implicit authority. Project deletion cascades. Existing bearer and confidential-client values are converted to SHA-256 only after old processes stop; runtime has no plaintext fallback. The migration avoids rebuilding the parent `oauth_applications` table solely for SQLite CHECK constraints because that can cascade-delete child credentials during table replacement. `SaasCredentialCutover` deliberately does not place the complete migration chain inside another transaction: Active Record lets each migration use the transaction behavior its adapter supports. Maintenance-mode quiescence and a verified backup/restore point provide recovery, while migration-version checks plus storage and runtime lookup verification make an interrupted run safely resumable or fail closed for restore.
 
 14. **Automation authors are durable actors, not impersonated users**: newly issued and active API keys record their issuing user, while annotations and thread events enforce exactly one user or API-key actor in both Rails and the database. Historical issuer identity cannot be reconstructed from later project ownership, so every preexisting key is revoked and retains a null issuer; its row remains available as the durable actor for existing content. A database check requires every active key to have an issuer, and restrictive actor foreign keys prevent credential deletion from erasing audit provenance. On SQLite, child foreign keys are detached before parent-table rebuilds and restored afterward, with row and API-key attribution counts verified before commit so `ON DELETE` actions cannot silently erase legacy audit links.
 
-15. **Identity hardening fails before mutation**: normalized user-email collisions, half or duplicate provider identities, and duplicate normalized pending invitations report their record IDs instead of merging people or choosing a winner. SQLite disables foreign-key actions before entering one explicit immediate transaction because adding CHECK constraints rebuilds the parent `users` table; it verifies every preexisting row ID and `PRAGMA foreign_key_check` before commit and again after restoring enforcement. PostgreSQL uses one explicit transaction, bounded lock wait, and access-exclusive identity-table locks.
+15. **Identity hardening fails before mutation**: normalized user-email collisions, half or duplicate provider identities, and duplicate normalized pending invitations report their record IDs instead of merging people or choosing a winner. The migration uses Active Record operations and verifies preservation before commit. Where SQLite must rebuild the parent `users` table to add constraints, it suspends foreign-key actions only around that capability-specific window, verifies every preexisting row ID and `PRAGMA foreign_key_check`, and restores enforcement. It no longer adds PostgreSQL-only lock SQL to the portable migration contract.
 
 16. **Authentication-link rows contain no bearer material**: each row binds one enumerated purpose to either a user or invitation, records a positive generation, random public derivation ID, a `v1.` Base64url derivation-key fingerprint, a lowercase SHA-256 digest, expiry, and one outstanding/terminal state. Separate partial indexes for nullable user and invitation subjects enforce both generation uniqueness and one outstanding row without relying on NULL equality.
+
+17. **Admission locks are bounded, opaque stripes**: each normalized email maps deterministically to one of 256 unique `admission_locks.slot` rows. `create_or_find_by!` plus a no-op Active Record update serializes matching-email admission even before a User row exists, without persisting the submitted address or a reversible address digest and without selecting adapter-specific advisory/row-lock SQL.
+
+18. **Deployment topology is separate from schema correctness**: the supported self-hosted runtime uses four SQLite roles, and the current hosted Kamal configuration may provide four PostgreSQL URLs. Application tests, required CI, migrations, and exact-image SaaS qualification exercise the configured roles through Active Record without treating either adapter name or server version as the release contract.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]

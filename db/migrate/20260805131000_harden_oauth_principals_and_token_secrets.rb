@@ -17,7 +17,6 @@ class HardenOauthPrincipalsAndTokenSecrets < ActiveRecord::Migration[8.1]
   SQL
 
   def up
-    bound_postgresql_lock_wait
     preflight_legacy_rows!
 
     add_column :oauth_access_grants, :principal_kind, :string
@@ -60,10 +59,6 @@ class HardenOauthPrincipalsAndTokenSecrets < ActiveRecord::Migration[8.1]
   end
 
   private
-
-  def bound_postgresql_lock_wait
-    execute("SET LOCAL lock_timeout = '10s'") if connection.adapter_name == "PostgreSQL"
-  end
 
   def preflight_legacy_rows!
     invalid_tokens = select_ids(<<~SQL.squish)

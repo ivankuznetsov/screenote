@@ -245,6 +245,7 @@ jobs:
           image_index = JSON.parse(File.binread(manifest_path))
           raise "OCI index must contain exactly two platform manifests" unless image_index["manifests"].is_a?(Array) && image_index["manifests"].length == 2
           expected_labels = {
+            "service" => "screenote",
             "org.opencontainers.image.source" => "https://github.com/#{ENV.fetch('GITHUB_REPOSITORY')}",
             "org.opencontainers.image.revision" => ENV.fetch("SOURCE_SHA"),
             "org.opencontainers.image.version" => ENV.fetch("RELEASE_TAG"),

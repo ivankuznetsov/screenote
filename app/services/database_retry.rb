@@ -18,7 +18,7 @@ class DatabaseRetry
   EXECUTION_STATE_KEY = :screenote_database_retry_active
   DEFAULT_BACKOFF = ->(attempt) { 0.01 * (2**(attempt - 1)) }
   DEFAULT_SLEEPER = ->(delay) { Kernel.sleep(delay) }
-  POSTGRESQL_RETRYABLE_ERRORS = [
+  RETRYABLE_ERRORS = [
     ActiveRecord::Deadlocked,
     ActiveRecord::SerializationFailure,
     ActiveRecord::LockWaitTimeout
@@ -40,7 +40,7 @@ class DatabaseRetry
           attempts += 1
           yield attempts
         rescue StandardError => error
-          raise unless retryable?(error, connection: connection)
+          raise unless retryable?(error)
           raise Exhausted.new(error, attempts: attempts) if attempts >= MAX_ATTEMPTS
 
           sleeper.call(backoff.call(attempts))
@@ -51,15 +51,9 @@ class DatabaseRetry
 
     private
 
-    def retryable?(error, connection:)
-      case connection.adapter_name
-      when /PostgreSQL/i
-        POSTGRESQL_RETRYABLE_ERRORS.any? { |error_class| error.is_a?(error_class) }
-      when /SQLite/i
+    def retryable?(error)
+      RETRYABLE_ERRORS.any? { |error_class| error.is_a?(error_class) } ||
         sqlite_retryable?(error)
-      else
-        false
-      end
     end
 
     def sqlite_retryable?(error)

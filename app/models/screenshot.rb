@@ -37,7 +37,7 @@ class Screenshot < ApplicationRecord
   # Prefers :desktop, else lowest viewport enum int. Cold path's `order(:viewport)`
   # also sorts by the enum int (desktop=0 < tablet=1 < mobile=2), and the
   # unique `(screenshot_id, viewport)` index breaks ties — same shape, same
-  # result on SQLite and Postgres.
+  # result on every supported database.
   def primary_image
     if screenshot_images.loaded?
       images = screenshot_images.to_a

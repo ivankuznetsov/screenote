@@ -21,16 +21,6 @@ module DeploymentModeHelper
     end
   end
 
-  def require_postgresql!
-    adapter = ActiveRecord::Base.connection.adapter_name
-    if ENV["SCREENOTE_REQUIRE_POSTGRESQL"] == "1"
-      assert_equal "PostgreSQL", adapter,
-        "the PostgreSQL matrix must not fall back to #{adapter}"
-    elsif adapter != "PostgreSQL"
-      skip "run with a PostgreSQL DATABASE_URL"
-    end
-  end
-
   def require_file_backed_sqlite!
     connection = ActiveRecord::Base.connection
     assert_equal "SQLite", connection.adapter_name

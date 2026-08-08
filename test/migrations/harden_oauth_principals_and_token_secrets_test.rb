@@ -122,17 +122,10 @@ class HardenOauthPrincipalsAndTokenSecretsTest < ActiveSupport::TestCase
       "index_dynamic_oauth_apps_on_registration_fingerprint"
   end
 
-  test "migration is irreversible and runs transactionally on PostgreSQL" do
+  test "migration is irreversible" do
     assert_raises(ActiveRecord::IrreversibleMigration) do
       capture_io { HardenOauthPrincipalsAndTokenSecrets.new.exec_migration(@connection, :down) }
     end
-
-    skip unless @connection.adapter_name == "PostgreSQL"
-
-    create_legacy_schema
-    insert_legacy_graph
-    run_migration
-    assert @connection.column_exists?(:oauth_access_tokens, :principal_kind)
   end
 
   private

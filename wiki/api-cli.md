@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-07-13
+updated: 2026-08-08
 tags: [cli, api, rest, agents]
 ---
 
@@ -22,7 +22,7 @@ The CLI is the portable shell contract for agents and automation. CLI-facing aut
 Go 1.26 or newer is required.
 
 ```sh
-go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
+go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@<release-cli-tag>
 ```
 
 Because the Rails repo has a top-level Ruby `vendor/` directory, local Go test/build commands should use:
@@ -42,7 +42,10 @@ Precedence:
 
 `screenote config` prints resolved non-secret config as JSON and never prints stored login secrets. `screenote config set` writes values noninteractively. Config writes enforce owner-only permissions even for a pre-existing hand-authored file. Ordinary commands never prompt or open a browser; only explicit `screenote login` starts an interactive OAuth flow.
 
-The base URL should be set explicitly. Current docs use localhost, staging/self-hosted URLs, or the canonical production host `https://screenote.ai` from `config/deploy.yml`.
+The base URL should be set explicitly. Current docs use localhost,
+staging/self-hosted URLs, or the canonical production host
+`https://screenote.ai`; public self-host configuration lives in
+`config/deploy.yml`, while the hosted service uses `config/deploy.saas.yml`.
 
 The default login uses the OAuth authorization-code flow with PKCE and a loopback redirect:
 
@@ -74,8 +77,8 @@ screenote screenshot list --project ID [--page ID] [--status pending|ready|faile
 screenote screenshot create --project ID --title TITLE [--page ID_OR_NAME] [--file PATH|-]
 screenote annotation list --project ID [--screenshot ID] [--status open|resolved] [--viewport desktop|tablet|mobile]
 screenote annotation get --project ID --annotation ID [--crop-file PATH]
-screenote comment add --project ID --annotation ID --body TEXT
 screenote annotation resolve --project ID --annotation ID [--comment TEXT]
+screenote comment add --project ID --annotation ID --body TEXT
 screenote snapshot --project ID --manifest PATH
 ```
 
@@ -83,7 +86,9 @@ User-global commands are `project list`, `project create`, `config`, `login`, an
 
 `annotation list` without `--screenshot` lists annotations across all screenshots in the resolved project. The CLI pages through screenshots and per-screenshot annotations, skips screenshots that become inaccessible during aggregation, reports the aggregate total, and applies `--limit`/`--offset` to the aggregate result.
 
-`annotation get --crop-file PATH` fully validates and writes the PNG crop atomically with owner-only permissions, returns the local path in JSON, and omits the base64 field. `annotation resolve` is idempotent: the initial response reports `resolved`, while a replay reports `already_resolved` without another audit comment.
+`annotation get --crop-file PATH` fully validates and writes the PNG crop atomically with owner-only permissions, returns the local path in JSON, and omits the base64 field. `annotation resolve --annotation ID --comment TEXT` calls the idempotent project-scoped resolution endpoint and returns its JSON response, so an agent can record the fix while closing the thread. Reopening remains web-only until the CLI exposes it.
+
+The public CLI `main` branch implements `annotation resolve`, but an untagged moving branch is not a supported artifact. The first supported Screenote release must name an exact CLI tag that contains the command before this workflow enters the supported release contract.
 
 `screenshot create` reads stdin when `--file` is omitted or set to `-`. When uploading a file, the content type is derived from the file extension; for example, `.png` maps to `image/png`. Stdin uploads fall back to `application/octet-stream` and are re-identified server-side from the bytes.
 
@@ -122,7 +127,7 @@ The CLI source is now canonical in the public `github.com/ivankuznetsov/screenot
 
 ## Workflow REST Parity
 
-The REST service exposes the missing write contracts needed by CLI workflow commands:
+The REST service exposes write contracts that current or future CLI workflows can consume:
 
 - `POST /api/v1/projects` creates a project for a user-scoped OAuth `mcp_write` token, enforces the account's plan quota under a user lock, and returns the standard project JSON with `role: owner` and HTTP `201`. API keys and project-scoped OAuth tokens cannot create projects.
 - `POST /api/v1/annotations/:annotation_id/resolve` accepts explicit OAuth project context plus an optional `comment`, or uses the API key's bound project. It creates a user- or API-key-authored resolved audit comment once and returns `already_resolved` without duplicating that comment on retries.
@@ -131,4 +136,4 @@ Project-scoped OAuth tokens are bound to the token's `project_id` throughout RES
 
 ## Deferred
 
-`annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remain future work rather than current REST contracts. Public CLI command/help wiring for project creation and annotation resolution is maintained in the public CLI and agent-plugin repositories; this service page documents the server contract they can consume.
+Public CLI wiring for `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remains future work. The exact CLI tag named by a Screenote release is authoritative for supported agent workflows.

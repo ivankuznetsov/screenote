@@ -73,13 +73,13 @@ jobs:
           SCREENOTE_COVERAGE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: script/release_test_matrix coverage
 
-  sqlite:
-    name: sqlite
+  test:
+    name: test
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     env:
       RAILS_ENV: test
-      PARALLEL_WORKERS: "1"
+      PARALLEL_WORKERS: "4"
       SCREENOTE_BOOTSTRAP_TOKEN: screenote-ci-bootstrap-token-0123456789abcdef0123456789abcdef
     steps:
       - name: Checkout code
@@ -90,61 +90,16 @@ jobs:
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
-      - name: Run SaaS SQLite suite in an independent process
-        run: script/release_test_matrix saas
-      - name: Run self-hosted SQLite suite in an independent process
-        run: script/release_test_matrix self-hosted
-      - name: Verify four-file production SQLite and all security migrations
-        run: script/release_test_matrix sqlite-production
-      - name: Verify private-media, token, and fail-closed rate-limit contracts
-        run: script/release_test_matrix security-data
-
-  postgresql:
-    name: postgresql
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    services:
-      postgres:
-        image: docker.io/library/postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+      - name: Run Rails test suite
+        run: bin/rails test
+      - name: Run self-hosted edition-only tests
         env:
-          POSTGRES_DB: screenote_app_test
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d screenote_app_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      RAILS_ENV: test
-      PARALLEL_WORKERS: "1"
-      POSTGRESQL_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_app_test
-      MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_migration_test
-      SAAS_UPGRADE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/screenote_upgrade_test
-      SCREENOTE_ALLOW_SAAS_UPGRADE_DATABASE_RESET: "1"
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Install runtime and PostgreSQL client packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips postgresql-client
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
-        with:
-          bundler-cache: true
-      - name: Create isolated migration and upgrade databases
-        env:
-          PGPASSWORD: postgres
-        run: |
-          createdb --host 127.0.0.1 --username postgres screenote_migration_test
-          createdb --host 127.0.0.1 --username postgres screenote_upgrade_test
-      - name: Run full PostgreSQL 16 and migration matrix
-        run: script/release_test_matrix postgresql
-      - name: Upgrade the production-shaped current SaaS fixture
-        run: script/release_test_matrix saas-upgrade
-      - name: Probe invariants on file-backed SQLite and PostgreSQL
-        run: script/release_test_matrix invariants
+          SCREENOTE_EDITION: self_hosted
+          SCREENOTE_REQUIRED_MODE: self_hosted
+        run: >-
+          bin/rails test
+          test/controllers/oauth/self_hosted_registrations_controller_test.rb
+          test/integration/self_hosted_full_flow_test.rb
 
   system-collaboration:
     name: system-collaboration

@@ -20,7 +20,6 @@ class RepairLegacyApiKeyTokenStorage < ActiveRecord::Migration[8.1]
   private
 
   def convert_legacy_tokens
-    lock_api_keys_for_backfill
     add_column :api_keys, :token_digest, :string unless column_exists?(:api_keys, :token_digest)
     add_column :api_keys, :token_prefix, :string unless column_exists?(:api_keys, :token_prefix)
 
@@ -44,13 +43,6 @@ class RepairLegacyApiKeyTokenStorage < ActiveRecord::Migration[8.1]
     remove_index :api_keys, :token if index_exists?(:api_keys, :token)
     remove_column :api_keys, :token
     replace_digest_index_with_unique_index
-  end
-
-  def lock_api_keys_for_backfill
-    return unless connection.adapter_name == "PostgreSQL"
-
-    connection.execute("SET LOCAL lock_timeout = '10s'")
-    connection.execute("LOCK TABLE #{connection.quote_table_name(:api_keys)} IN ACCESS EXCLUSIVE MODE")
   end
 
   def ensure_unique_digests!

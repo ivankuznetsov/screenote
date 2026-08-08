@@ -72,15 +72,6 @@ class RepairLegacyApiKeyTokenStorageTest < ActiveSupport::TestCase
     end
   end
 
-  test "runs the PostgreSQL table lock transactionally" do
-    skip unless @connection.adapter_name == "PostgreSQL"
-
-    create_legacy_schema
-    run_migration
-
-    assert_not @connection.column_exists?(:api_keys, :token)
-  end
-
   private
 
   def create_legacy_schema

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+config="$root/config/deploy.saas.yml"
+
+for argument in "$@"; do
+  case "$argument" in
+    --)
+      break
+      ;;
+    --config-file|--config_file|-c|--config-file=*|--config_file=*|-c=*)
+      printf '%s\n' "bin/kamal-saas always uses $config; do not pass another config selector." >&2
+      exit 64
+      ;;
+  esac
+done
+
+case "${1-}" in
+  "")
+    exec "$root/bin/kamal" --config-file "$config"
+    ;;
+  *)
+    command="$1"
+    shift
+    exec "$root/bin/kamal" "$command" --config-file "$config" "$@"
+    ;;
+esac

@@ -30,8 +30,9 @@ way to publish captures and read the result.
    and publishes one screen or a multi-page snapshot.
 2. **Review** — teammates open the authenticated review URL, switch between
    desktop, tablet, and mobile captures, and add point or area comments.
-3. **Close the loop** — people reply and resolve threads while an agent reads
-   open annotations and cropped regions through the CLI, REST API, or MCP.
+3. **Close the loop** — people reply in context while an agent reads the open
+   annotations and available image crops, applies the fix, and resolves the
+   thread with a final comment through the Screenote CLI.
 
 ## What you get
 
@@ -42,7 +43,8 @@ way to publish captures and read the result.
 - Private screenshots and review URLs protected by project membership
 - OAuth browser and device login for local, SSH, and headless clients
 - A JSON CLI for uploads, comments, crops, and automation
-- REST and MCP integration surfaces for agent workflows
+- A companion [Screenote agent skill](https://github.com/ivankuznetsov/agent-plugins/tree/main/plugins/screenote)
+  that teaches coding agents the CLI workflow
 - A self-hosted core with no Stripe, license key, or application-enforced
   seat, project, or screenshot-count caps
 
@@ -51,7 +53,7 @@ way to publish captures and read the result.
 | | Hosted | Self-hosted |
 | --- | --- | --- |
 | Best for | Starting immediately | Keeping Screenote inside your VPN or infrastructure |
-| Operations | Managed at [screenote.ai](https://screenote.ai) | One Linux container and one durable volume |
+| Operations | Managed at [screenote.ai](https://screenote.ai) | Kamal, one application server, and one durable volume |
 | Screenshot storage | Managed | Local by default; S3-compatible storage is optional |
 | Product caps | SaaS plan applies | No application-enforced seat, project, or screenshot-count caps |
 | Setup | Create an account | Claim the instance once, then invite teammates |
@@ -63,178 +65,110 @@ OSI-approved open-source license.
 ## Self-host Screenote
 
 > [!IMPORTANT]
-> The self-hosted edition is implemented in this repository, but the first
-> supported source release has not been published yet. There is currently no
-> supported source tag, container digest, or tested CLI tag. Until those appear on
-> [GitHub Releases](https://github.com/ivankuznetsov/screenote/releases), use
-> [screenote.ai](https://screenote.ai) or run the repository as a development
-> build—do not operate an untagged branch, a moving image tag, or a candidate
-> build as a supported release.
+> The first supported source release is still being prepared. Until a version
+> appears on [GitHub Releases](https://github.com/ivankuznetsov/screenote/releases),
+> treat deployment from this repository as a development preview.
 
-The supported first-release design is intentionally small:
+Screenote ships with a [Kamal](https://kamal-deploy.org/) starter configuration.
+It runs the Rails application, background jobs, four SQLite databases, and
+local screenshot files as one small deployment with one durable volume. Kamal
+Proxy handles HTTPS. PostgreSQL, Redis, a separate worker, and a mail server
+are not required.
 
-- one non-root Screenote container;
-- four SQLite databases and local screenshot files on one durable Docker
-  volume; and
-- optional S3-compatible screenshot storage, SMTP, social sign-in, and
-  monitoring through additive Compose files.
+You need a Linux AMD64 server reachable over SSH, a hostname pointed at it,
+Docker with Buildx on the machine from which you deploy, and Ruby/Bundler for
+this repository.
 
-There is no PostgreSQL service, Redis service, worker container, or billing
-service to provision for the default self-hosted setup.
+### 1. Fork and prepare Screenote
 
-### Initial Docker setup requirements
-
-- A Linux AMD64 host with at least 2 vCPUs, 4 GiB RAM, and 40 GiB free local
-  SSD space
-- Docker Engine with the Docker Compose plugin
-- `openssl` for generating the two initial secrets
-- A stable VPN or HTTPS URL for your team
-- Host files owned by UID/GID `1000:1000`, the supported container identity
-
-> [!WARNING]
-> The host-operations installation has not been published yet. The current
-> source-tree diagnostics, backup, and restore wrappers require `bundler/setup`,
-> and their shared code requires `sqlite3`, from the matching project bundle.
-> Ruby 3.4.10 and Bundler alone are not sufficient, and these scripts are not a
-> standalone Docker-only operator package. Before the first supported release
-> is published, its release notes must name or provide the exact
-> release-matched host-operations installation or bundle. Until then, the
-> operations linked below describe the intended release contract, not a
-> supported runnable toolkit.
-
-### 1. Check out a published release
-
-Open that release's notes and copy its exact server tag and
-`ghcr.io/ivankuznetsov/screenote@sha256:…` image reference. Then check out that
-tag—not `main`:
+Fork this repository so your non-secret deployment settings have a stable
+home. Pin the fork to an exact supported Screenote release and keep the
+application source and container build unchanged; the first release supports
+configuration-only deployment forks, not application-code modifications or
+custom images. Replace `vX.Y.Z` below with the exact tag named by the GitHub
+release. Clone that tag from the canonical repository, keep it as `upstream`,
+then point `origin` at your fork:
 
 ```sh
-RELEASE_TAG=vX.Y.Z # replace with the exact tag from GitHub Releases
-git clone --depth 1 --branch "$RELEASE_TAG" https://github.com/ivankuznetsov/screenote.git
+git clone --branch vX.Y.Z https://github.com/ivankuznetsov/screenote.git
 cd screenote
-cp .env.self-hosted.example .env
-chmod 0600 .env
+git remote rename origin upstream
+git remote add origin https://github.com/YOUR-TEAM/screenote.git
+git switch --create screenote-deploy
+bin/setup --skip-server
 ```
 
-### 2. Set deployment values and choose ingress
+For development-preview evaluation before the first release exists, clone the
+moving default branch without `--branch`; that is not a supported deployment.
 
-Edit `.env` and replace the image reference:
+### 2. Configure your server
 
-```dotenv
-SCREENOTE_IMAGE=ghcr.io/ivankuznetsov/screenote@sha256:REPLACE_WITH_RELEASE_DIGEST
-```
+Edit `config/deploy.yml`. Replace `screenote.example.com` with the server's SSH
+hostname and your public Screenote hostname, and change `ssh.user` if you do
+not connect as `root`.
 
-For HTTPS, set the public origin and trust only the immediate reverse proxy
-peer or peers:
-
-```dotenv
-SCREENOTE_BASE_URL=https://screenote.example.com
-SCREENOTE_TRUSTED_PROXIES=REPLACE_WITH_IMMEDIATE_PROXY_IP
-```
-
-Replace that proxy placeholder with only the exact IP address or narrow CIDR
-of each immediate proxy peer, comma-separated. Do not trust an entire LAN,
-VPN, cloud network, or internet-wide range for convenience. Configure that
-proxy and TLS before starting the bootstrap service, following the
-[reverse-proxy requirements](docs/self-hosting.md#reverse-proxy-and-tls).
-
-For the simpler trusted-VPN direct-HTTP alternative, explicitly keep proxy
-trust empty and accept the transport risk:
-
-```dotenv
-SCREENOTE_BASE_URL=http://screenote.internal:3005
-SCREENOTE_TRUSTED_PROXIES=
-```
-
-Keep the default `SCREENOTE_PORT=3005` unless that port is already in use.
-
-Choose local or S3-compatible screenshot storage before the first boot. The
-steps below use local storage. For S3, configure the
-[S3 overlay](docs/self-hosting.md#use-s3-compatible-screenshot-storage) now and
-include it in both the bootstrap and normal-mode commands; switching storage
-after data exists is not supported by the first release.
-
-### 3. Create the application and one-time claim secrets
-
-Run these commands as UID 1000, or use equivalent privileged commands that
-produce the exact ownership and modes shown:
+Copy the ignored secrets template:
 
 ```sh
-install -o 1000 -g 1000 -m 0700 -d secrets
-umask 077
-openssl rand -base64 48 > secrets/secret_key_base
-openssl rand -base64 48 > secrets/bootstrap_token
-chmod 0400 secrets/secret_key_base secrets/bootstrap_token
-chown 1000:1000 secrets/secret_key_base secrets/bootstrap_token
+cp .kamal/secrets.example .kamal/secrets
+chmod 0600 .kamal/secrets
 ```
 
-Keep an encrypted copy of `secret_key_base` outside the Docker host. The
-bootstrap token is temporary and should not be pasted into chat, logs, or an
-issue.
+Generate `SECRET_KEY_BASE` with `bin/rails secret`, generate the one-time
+`SCREENOTE_BOOTSTRAP_TOKEN` with `openssl rand -hex 32`, and paste each result
+into `.kamal/secrets`. Never commit that file.
 
-### 4. Put ingress in place, then start and claim
-
-For HTTPS, finish the TLS reverse proxy configuration from step 2 and restrict
-direct access to port 3005 before exposing the bootstrap service. The proxy
-must preserve the public host and forward the original scheme and client
-address. For direct HTTP, keep the origin reachable only through the trusted
-VPN and leave `SCREENOTE_TRUSTED_PROXIES` empty.
-
-With that ingress boundary in place, validate the resolved Compose
-configuration and start the bootstrap service:
+### 3. Deploy and claim the instance
 
 ```sh
-docker compose -f compose.yaml -f compose.bootstrap.yaml config
-docker compose -f compose.yaml -f compose.bootstrap.yaml up -d --wait
+bin/kamal setup
 ```
 
-Open `<your Screenote URL>/bootstrap` through the selected ingress, enter the
-bootstrap token, and create the instance administrator. After the claim
-succeeds, remove the bootstrap secret and restart in normal mode:
+That is the supported release command—there is no separate Compose path. From
+a tagged release, the repository wrapper validates the immutable GitHub
+Release `public-evidence.json`, mirrors the exact qualified Screenote image
+into Kamal's loopback registry, and asks Kamal to pull it without rebuilding.
+The cached evidence is non-secret and ignored under `.kamal/releases/`.
+
+Open `https://your-screenote-host/bootstrap`, enter the bootstrap token, and
+create the instance administrator. Then remove `SCREENOTE_BOOTSTRAP_TOKEN`
+from both `env.secret` in `config/deploy.yml` and `.kamal/secrets`, and run
+`bin/kamal deploy` once more.
+
+### 4. Invite your team
+
+Create a project, open **Members**, and invite each collaborator. Email is
+optional: without it, Screenote shows a private invitation link or manual code
+you can share through a trusted channel. To send invitations automatically,
+connect an external transactional provider such as Resend or Postmark through
+the generic SMTP settings in `config/deploy.yml`; Screenote does not run an
+SMTP server.
+
+### 5. Deploy future changes
+
+Replace `vNEXT` with the exact next supported tag from GitHub Releases, review
+the merge, and deploy it:
 
 ```sh
-docker compose -f compose.yaml -f compose.bootstrap.yaml down
-rm secrets/bootstrap_token
-docker compose -f compose.yaml up -d --wait
+git fetch upstream tag vNEXT
+git merge --no-ff vNEXT
+bin/setup --skip-server
+bin/kamal deploy
 ```
 
-> [!CAUTION]
-> Never add `--volumes` to `docker compose down`. The named volume contains the
-> four databases and, in local-storage mode, every screenshot.
+The wrapper accepts configuration-only deployment branches and verifies every
+release against the exact source tag and image digest. A checkout with no
+supported release tag reachable in its ancestry is a development preview and
+builds the working tree with a warning. If you intentionally maintain
+application-code changes, set
+`SCREENOTE_KAMAL_SOURCE_BUILD=1`; that custom image is outside the supported
+release boundary.
 
-### 5. Add your team
-
-1. Sign in with the administrator account and create a project.
-2. Open the project, choose **Members**, and invite each collaborator by email.
-3. Without SMTP, copy the private invitation link or manual code shown in the
-   Members screen and send it to that person through a trusted channel. With
-   the SMTP overlay enabled, Screenote also emails the invitation.
-
-Open registration stays disabled. Every later account joins through an
-invitation, new teammates create their password while accepting it, and every
-review URL still checks project membership. Invitations expire after seven
-days.
-
-### Production checklist
-
-- Keep the selected ingress boundary in place: HTTPS through only the
-  configured immediate proxy peers, or direct HTTP only inside the trusted
-  VPN. Continue to block proxy bypasses to port 3005.
-- If you selected S3 before first boot, keep its overlay in every lifecycle and
-  operations command; storage namespaces cannot be changed in place.
-- Configure only the providers you need: [SMTP, Google, GitHub, or
-  Honeybadger](docs/self-hosting.md#optional-providers).
-- Use only the exact host-operations installation or bundle named by the
-  release to run [diagnostics](docs/self-hosting/diagnostics.md) after startup.
-- With that same release-matched host-operations environment, set up encrypted
-  [backup and restore](docs/self-hosting/backup-and-restore.md) and complete a
-  restore drill before storing important work.
-- Follow only documented adjacent [upgrade and rollback](docs/self-hosting/upgrades.md)
-  paths and keep every deployment pinned to its release digest.
-
-The complete [self-hosting guide](docs/self-hosting.md) is the operator source
-of truth for secrets, proxies, storage, health checks, backups, restores, and
-upgrades.
+Local screenshot storage is the default. S3-compatible storage is optional and
+must be selected before the first deployment. Read the
+[Kamal deployment guide](docs/kamal-deployment.md) for email, S3, TLS,
+bootstrap cleanup, and routine operations, and the broader
+[self-hosting guide](docs/self-hosting.md) for the production boundary.
 
 ## Connect the CLI or an agent
 
@@ -262,12 +196,20 @@ screenote snapshot --manifest snapshot.json
 screenote annotation list --screenshot <SCREENSHOT_ID> --status open
 screenote annotation get --annotation <ANNOTATION_ID> --crop-file annotation.png
 screenote comment add --annotation <ANNOTATION_ID> --body "Fixed in abc123"
-screenote annotation resolve --annotation <ANNOTATION_ID> --comment "Ready for review"
+screenote annotation resolve --annotation <ANNOTATION_ID> --comment "Fixed in abc123"
 ```
 
-The CLI emits machine-readable JSON. See its
-[snapshot manifest reference](https://github.com/ivankuznetsov/screenote-cli/blob/main/docs/snapshot-manifest.md)
-for multi-page and multi-viewport uploads.
+Agents use the CLI to read threads, add replies, and resolve a thread with an
+optional final comment. Reopening remains available in the web review UI; the
+CLI does not expose it yet. The CLI emits machine-readable JSON.
+For multi-page and multi-viewport uploads, use the manifest reference from the
+same tested CLI tag:
+`https://github.com/ivankuznetsov/screenote-cli/blob/<release-cli-tag>/docs/snapshot-manifest.md`.
+For coding agents, install the
+[Screenote agent plugin](https://github.com/ivankuznetsov/agent-plugins/tree/main/plugins/screenote)
+and point its CLI at the same Screenote origin. The plugin teaches the agent
+the capture, upload, and feedback loop; the CLI remains the integration
+boundary.
 
 ## Develop Screenote
 
@@ -280,7 +222,7 @@ bin/dev
 
 # Before opening a pull request
 bin/ci
-SCREENOTE_EDITION=self_hosted PARALLEL_WORKERS=1 bin/rails test
+script/release_test_matrix self-hosted
 ```
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before making a substantial change.

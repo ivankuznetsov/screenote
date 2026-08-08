@@ -1,8 +1,14 @@
-# Self-hosted secrets and Compose modes
+# Internal Compose harness: secrets and modes
 
-Screenote reads runtime secrets from restricted files. Do not place secret
-values in `.env`, Compose environment entries, command arguments, or the image.
-The supported Compose files mount only paths below `/run/secrets`.
+> [!WARNING]
+> This page documents Screenote's internal pre-release Docker Compose
+> qualification harness. It is not a supported operator workflow for Kamal
+> deployments. Use [Deploy Screenote with Kamal](../kamal-deployment.md) and
+> the [self-hosting guide](../self-hosting.md) instead.
+
+This qualification harness reads runtime secrets from restricted files. It
+keeps secret values out of `.env`, Compose environment entries, command
+arguments, and the image, and mounts only paths below `/run/secrets`.
 
 The container runs as UID/GID `1000:1000`. Compose file-backed secrets retain
 their host ownership on common Docker Compose installations, so every source

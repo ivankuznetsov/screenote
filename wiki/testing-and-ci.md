@@ -1,9 +1,9 @@
 ---
 title: Testing and CI
 type: operations
-source: test/, bin/ci, config/ci.rb, .github/workflows/ci.yml
+source: test/, bin/ci, config/ci.rb, .github/workflows/ci.yml, .github/workflows/release-qualification.yml
 created: 2026-07-28
-updated: 2026-08-06
+updated: 2026-08-08
 tags: [testing, ci, minitest, capybara, playwright]
 ---
 
@@ -105,6 +105,15 @@ coverage mode forces one Rails worker for stable accounting. System tests are
 currently commented out as optional in `config/ci.rb`, so run the Playwright
 command above separately when browser behavior changes.
 
+The source workflow has one adapter-neutral `test` job for the Rails suite and
+the self-hosted-only smoke tests. It replaces separate SQLite and PostgreSQL
+application-test jobs and exercises the configured test database through
+Active Record. PostgreSQL remains a choice in the hosted Kamal deployment, not
+an application-test or release-qualification requirement. The integration
+portability contract scans `app/`, `db/migrate/`, and `config/database.yml` so
+PostgreSQL-specific application behavior cannot silently re-enter that
+boundary.
+
 The required-PR source-release coverage gate is narrower and stricter than the
 legacy whole-application option. `script/release_test_matrix coverage` first
 compares the working tree with the exact event comparison commit: the pull
@@ -183,4 +192,9 @@ downloads the exact retained candidate artifact by live ID, verifies its bytes
 and OCI identities, and emits one redacted artifact only after all eight
 architecture, edition, recovery, load, and public-CLI outcomes pass. Publish
 authorization downloads and compares those exact bytes through the Actions API
-instead of trusting a committed status claim. See [[self-hosting]].
+instead of trusting a committed status claim. Exact-image SaaS qualification
+has not been removed: AMD64 and ARM64 each boot the retained candidate through
+its production entrypoint with separate primary, cache, queue, and cable URLs.
+The check verifies those roles and the SaaS installation identity through
+Active Record without asserting an adapter name or server version. See
+[[self-hosting]].

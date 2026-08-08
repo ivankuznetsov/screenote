@@ -1,9 +1,14 @@
-# Self-hosted upgrades and rollback
+# Internal Compose harness: upgrades and rollback
 
-Screenote supports only sequential upgrades between adjacent published
-releases. Release notes name the immediately supported predecessor and provide
-immutable image digests. Do not skip intermediate releases, use a moving image
-tag, or run predecessor code against state touched by its successor.
+> [!WARNING]
+> This page documents Screenote's internal pre-release Docker Compose
+> qualification harness. It is not a supported operator workflow for Kamal
+> deployments. Use [Deploy Screenote with Kamal](../kamal-deployment.md) and
+> the [self-hosting guide](../self-hosting.md) instead.
+
+The qualification harness models sequential upgrades between adjacent
+published releases with immutable image digests. It must not skip intermediate
+releases or run predecessor code against state touched by its successor.
 
 ## Upgrade one adjacent release
 

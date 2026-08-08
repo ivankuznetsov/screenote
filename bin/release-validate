@@ -22,8 +22,7 @@ class ReleaseValidation
     ruby-security
     lint
     coverage
-    sqlite
-    postgresql
+    test
     system-collaboration
     public-cli
     container-local
@@ -63,6 +62,7 @@ class ReleaseValidation
     SECURITY.md
     SUPPORT.md
     docs/self-hosting.md
+    docs/kamal-deployment.md
     docs/releases.md
     docs/releases/initial-release.md
     docs/releases/security-evidence.md
@@ -77,6 +77,9 @@ class ReleaseValidation
     .github/rulesets/release-tags.json
     .github/rulesets/immutable-release-tags.json
     .github/dependabot.yml
+    .kamal/secrets.example
+    config/deploy.yml
+    config/deploy.saas.yml
   ].freeze
 
   attr_reader :errors
@@ -200,9 +203,15 @@ class ReleaseValidation
         read(relative).match?(/O'Saasy|source-available|as-is|security/i)
     end
 
-    user_docs = %w[README.md docs/self-hosting.md].filter_map { |relative| read(relative) if File.file?(path(relative)) }.join("\n")
+    user_docs = %w[README.md docs/self-hosting.md docs/kamal-deployment.md]
+      .filter_map { |relative| read(relative) if File.file?(path(relative)) }
+      .join("\n")
     error("public installation docs must not instruct operators to set RAILS_MASTER_KEY") if
       user_docs.match?(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i)
+    error("public installation docs must use Kamal rather than Docker Compose") if
+      user_docs.match?(/docker\s+compose|compose\.ya?ml/i)
+    error("public product docs must use the CLI and agent skill rather than MCP") if
+      user_docs.match?(/\bmcp\b/i)
   end
 
   def tracked_secret_surface
@@ -372,6 +381,11 @@ class ReleaseValidation
     error("qualification workflow must bind the exact candidate artifact by live ID and bytes") unless
       qualification.include?("candidate_artifact_id") && qualification.include?("artifact-ids:") &&
         qualification.include?('sha256sum --check --strict')
+    error("qualification workflow must not couple SaaS boot evidence to a database adapter") if
+      qualification.match?(/postgres|pg_isready|server_version_num|adapter_name/i)
+    saas_database_urls = %w[DATABASE_URL CACHE_DATABASE_URL QUEUE_DATABASE_URL CABLE_DATABASE_URL]
+    error("qualification workflow must boot SaaS with four URL-backed database roles") unless
+      saas_database_urls.all? { |environment_key| qualification.include?("--env #{environment_key}=") }
     REQUIRED_QUALIFICATION_CHECKS.each do |name, target|
       marker = name == "public-cli" ? "#{name}:#{target}" : "\"#{name}\", \"#{target}\""
       error("qualification workflow is missing exact check #{name}/#{target}") unless qualification.include?(marker)

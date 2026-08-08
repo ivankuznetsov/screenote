@@ -17,7 +17,6 @@ class AddApiKeyIssuersAndAnnotationActors < ActiveRecord::Migration[8.1]
   SQL
 
   def up
-    lock_actor_tables
     preflight_legacy_rows!
     actor_invariants = legacy_actor_invariants
     annotation_comments_detached = detach_annotation_comments_for_sqlite_rebuild
@@ -56,16 +55,6 @@ class AddApiKeyIssuersAndAnnotationActors < ActiveRecord::Migration[8.1]
   end
 
   private
-
-  def lock_actor_tables
-    return unless connection.adapter_name == "PostgreSQL"
-
-    connection.execute("SET LOCAL lock_timeout = '10s'")
-    tables = %i[users api_keys annotations annotation_comments]
-      .map { |table| quoted_table(table) }
-      .join(", ")
-    connection.execute("LOCK TABLE #{tables} IN ACCESS EXCLUSIVE MODE")
-  end
 
   def preflight_legacy_rows!
     problems = {

@@ -3,7 +3,7 @@ title: Interaction Surface
 type: commands
 source: app/controllers/**, github.com/ivankuznetsov/screenote-cli, config/routes.rb, bin/brakeman, bin/bundler-audit
 created: 2026-05-14
-updated: 2026-07-13
+updated: 2026-08-08
 tags: [commands, api]
 ---
 
@@ -16,8 +16,12 @@ Canonical source: the public `github.com/ivankuznetsov/screenote-cli` repository
 With Go 1.26 or newer installed, install the CLI with:
 
 ```sh
-go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest
+go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@<release-cli-tag>
 ```
+
+The first supported Screenote release and its immutable CLI tag are still
+pending. The CLI `main` branch is useful for development, but it is not a
+supported release artifact.
 
 The CLI talks to the REST API, not MCP. Public CLI authentication is OAuth-only: `screenote login` uses authorization code with PKCE, while `screenote login --device` supports SSH, tmux, containers, and other headless sessions without port forwarding. It emits JSON to stdout for successful commands and stable JSON errors to stderr. See [[api-cli]] for command examples, config precedence, and exit codes.
 
@@ -34,7 +38,11 @@ Implemented command groups:
 | `screenote snapshot` | Validate, publish, and resume a manifest-driven multi-page capture |
 | `screenote annotation list` | List screenshot annotations, or traverse project screenshots when `--screenshot` is omitted |
 | `screenote annotation get` | Get annotation details plus comments and crop data |
+| `screenote annotation resolve` | Idempotently resolve an annotation with an optional final comment |
 | `screenote comment add` | Add an annotation comment |
+
+Annotation reopening remains available in the web review UI and is not yet a
+CLI command.
 
 ## Source Files
 
