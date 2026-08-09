@@ -91,6 +91,7 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     assert_equal :self_hosted_local, config.active_storage_service
     assert_equal 64, config.storage_namespace_fingerprint.length
     assert_equal 64, config.bootstrap_token_digest.length
+    assert_equal 1, config.forwarded_client_hops
   end
 
   test "https origin drives secure transport and route defaults" do
@@ -197,6 +198,74 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
 
     assert_equal 1, config.trusted_proxies.length
     assert config.trusted_proxies.first.include?("10.1.2.3")
+  end
+
+  test "forwarded client hops bind the supported two-hop path to one proxy host" do
+    assert_equal 1, deployment(self_hosted_environment, production: true).forwarded_client_hops
+    assert_nil deployment(self_hosted_environment, production: true).forwarded_proxy_host
+    assert_equal 2, deployment(
+      self_hosted_environment(
+        "SCREENOTE_FORWARDED_CLIENT_HOPS" => "2",
+        "SCREENOTE_FORWARDED_PROXY_HOST" => "once-proxy"
+      ),
+      production: true
+    ).forwarded_client_hops
+
+    config = deployment(
+      self_hosted_environment(
+        "SCREENOTE_FORWARDED_CLIENT_HOPS" => "2",
+        "SCREENOTE_FORWARDED_PROXY_HOST" => "once-proxy"
+      ),
+      production: true
+    )
+    assert_equal "once-proxy", config.forwarded_proxy_host
+
+    [ "192.168.192.2", "2001:db8::2" ].each do |host|
+      config = deployment(
+        self_hosted_environment(
+          "SCREENOTE_FORWARDED_CLIENT_HOPS" => "2",
+          "SCREENOTE_FORWARDED_PROXY_HOST" => host
+        ),
+        production: true
+      )
+      assert_equal host, config.forwarded_proxy_host
+    end
+
+    [ "0", "-1", "3", "two" ].each do |value|
+      error = assert_raises(Screenote::Deployment::ConfigurationError) do
+        deployment(
+          self_hosted_environment("SCREENOTE_FORWARDED_CLIENT_HOPS" => value),
+          production: true
+        )
+      end
+
+      assert_equal "SCREENOTE_FORWARDED_CLIENT_HOPS must be 1 or 2", error.message
+    end
+
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(
+        self_hosted_environment("SCREENOTE_FORWARDED_CLIENT_HOPS" => "2"),
+        production: true
+      )
+    end
+    assert_equal "SCREENOTE_FORWARDED_PROXY_HOST is required for a two-hop proxy chain", error.message
+
+    invalid_hosts = [
+      "bad host", ".proxy", "proxy.", "proxy..internal", "-proxy", "proxy-",
+      "192.168.0.0/24", "192.168.192.2/32", "2001:db8::2/128", "x" * 254
+    ]
+    invalid_hosts.each do |host|
+      error = assert_raises(Screenote::Deployment::ConfigurationError) do
+        deployment(
+          self_hosted_environment(
+            "SCREENOTE_FORWARDED_CLIENT_HOPS" => "2",
+            "SCREENOTE_FORWARDED_PROXY_HOST" => host
+          ),
+          production: true
+        )
+      end
+      assert_equal "SCREENOTE_FORWARDED_PROXY_HOST must be a valid hostname or IP address", error.message
+    end
   end
 
   test "self hosted storage profile and bootstrap material fail closed" do

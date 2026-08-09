@@ -67,6 +67,33 @@ Areas where documentation is missing or incomplete. Updated from current source,
   forwarding verification, restart with volume persistence, explicit
   `tag@digest` update, local-volume backup, and restore. S3 mode also requires a
   provider-level recovery point matched to the restored SQLite state.
+- A local Linux AMD64 preview drill completed deploy, claim, browser upload,
+  restart reconciliation, exact-image replacement, four-role/local-blob
+  persistence, ONCE backup, destructive restore, and authenticated browser
+  verification through ONCE v0.3.0. Hostile HTTP forwarding probes exposed and
+  then verified the fixed named-proxy normalization: Rails retained the actual
+  socket client and canonical HTTP scheme despite supplied XFF/XFP values. A
+  negative same-network sibling probe also proved that bypassing ONCE's proxy
+  cannot promote a caller-supplied address. Reassigning the live proxy address
+  while the application stayed up verified that the bounded identity snapshot
+  refreshes without collapsing client attribution.
+  This working-tree/local-registry evidence does not satisfy the retained public
+  `tag@digest`, HTTPS, native-runner, or promotion-bound release gate.
+- ONCE v0.3.0 names the mutable `basecamp/kamal-proxy:once-01` tag. Release
+  evidence must record and verify the proxy manifest digest actually pulled by
+  the drill rather than inferring immutable proxy bytes from the ONCE version.
+  Its `<namespace>-proxy` Docker DNS name is also an internal implementation
+  detail rather than an injected application contract, so each supported ONCE
+  upgrade must requalify proxy-name resolution and the direct-sibling fallback.
+- The hosted service is currently proxied by Cloudflare. Its existing
+  Cloudflare -> Kamal Proxy -> Thruster chain attributes requests to the
+  Cloudflare edge rather than the browser, so session audit addresses and
+  IP-based rate limits can aggregate unrelated visitors. The two-hop
+  normalization preserves that pre-existing result; it does not solve it.
+  Hosted client attribution needs a separate decision: either make the origin
+  DNS-only, or authenticate/restrict Cloudflare origin traffic and qualify a
+  Cloudflare-aware three-hop identity contract. Merely forwarding another
+  caller-controlled header is not safe.
 - ONCE image replacement and `db:prepare` operate against the persistent
   SQLite volume. Supported releases must keep migrations backward-compatible
   or publish and qualify an explicit stopped-process maintenance,

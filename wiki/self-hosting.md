@@ -65,16 +65,31 @@ The same revision must continue to run `screenote.ai` with Stripe, hosted object
 
 Production starts from one immutable `Screenote::Deployment` configuration.
 The release image defaults `SCREENOTE_EDITION=self_hosted`, enables Thruster
-forwarding, and trusts only container-loopback and ONCE's private Docker proxy
-range. `SCREENOTE_BASE_URL` remains explicit, while ONCE supplies
+forwarding, and trusts only the Thruster loopback peer. The ONCE path declares
+two forwarding hops: ONCE's Kamal Proxy and Thruster. At boot it resolves the
+configured proxy hostname with a bounded lookup, then refreshes that identity
+through a short synchronized cache. A failed refresh discards the stale
+identity. Before Rails derives request identity, the boundary promotes the
+preceding address only when the final forwarded hop matches the current
+resolved proxy identity; a sibling that bypasses the proxy, or traffic handled
+during a failed refresh, is attributed to its own final address. It then
+replaces `REMOTE_ADDR`, removes every forwarded header, and applies the
+canonical scheme from `SCREENOTE_BASE_URL`. A
+caller-supplied prefix therefore cannot control session audit IPs, rate-limit
+buckets, redirects, or TLS identity, and Docker's chosen private subnet is
+irrelevant. The standard ONCE namespace uses `once-proxy`; custom qualification
+namespaces explicitly supply their `<namespace>-proxy` name. This is pinned to
+and exercised against the supported ONCE version because ONCE v0.3.0 exposes
+the name through Docker container-name DNS rather than a documented injected
+application variable. `SCREENOTE_BASE_URL` remains explicit, while ONCE supplies
 `SECRET_KEY_BASE`; the initial self-hosted bootstrap token must contain at least
 32 bytes. Malformed origins, an ONCE TLS mode that does not match the canonical
 URL scheme, or broad proxy trust fail before service. The canonical origin
 controls allowed hosts, URL generation, OmniAuth callbacks, redirects, secure
-cookies, and HTTP/HTTPS enforcement. A pre-Rails middleware removes forwarded
-client and origin headers unless the immediate peer belongs to the trusted
-proxy set, so a direct caller cannot forge a rate-limit identity or TLS
-termination.
+cookies, and HTTP/HTTPS enforcement. Failure to resolve a required two-hop
+proxy identity stops boot. Direct-container qualification declares one
+Thruster hop; additional upstream proxies are not part of the first release's
+supported topology.
 
 The current hosted Kamal configuration supplies PostgreSQL URLs for its four database roles plus Stripe, Resend, Google/GitHub OAuth, Honeybadger, hosted storage, and `SCREENOTE_SAAS_OPERATOR_EMAIL`. That is a deployment selection, not an application-level adapter requirement. Self-hosted production defaults to local private storage and no mail, social OAuth, monitoring, or billing; each optional provider must be explicitly enabled with a complete configuration. No-mail mode does not draw password-reset routes or enqueue reset credentials. S3 storage applies `SCREENOTE_S3_PREFIX` to every object key and persists a credential-free namespace fingerprint covering service, endpoint, region, bucket, prefix, and path-style behavior.
 

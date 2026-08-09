@@ -33,8 +33,9 @@ The first publication is held by the technical sentinel [`docs/releases/PUBLICAT
 5. Retain an end-to-end Linux AMD64 deployment of the exact `tag@digest` image
    through the supported ONCE stable release named in the evidence, ONCE's
    Kamal Proxy, and Thruster with Screenote automatic updates disabled,
-   including remote digest and label checks, HTTPS, client-IP spoof rejection,
-   restart, and persistence evidence.
+   including remote digest and label checks, the exact proxy manifest digest,
+   HTTPS, hostile-header and direct-sibling client-IP spoof rejection, restart,
+   and persistence evidence.
 6. Publish the release-matched ONCE backup and restore commands, then retain a
    restore drill covering all four SQLite roles and local screenshot storage;
    for S3 mode, retain matching provider recovery evidence as well.

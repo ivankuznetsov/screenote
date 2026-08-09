@@ -19,8 +19,9 @@ class KamalDeploymentConfigurationTest < ActiveSupport::TestCase
     assert_equal "saas", config.dig("env", "clear", "SCREENOTE_EDITION")
     assert_equal "https://screenote.ai", config.dig("env", "clear", "SCREENOTE_BASE_URL")
     assert_equal true, config.dig("env", "clear", "THRUSTER_FORWARD_HEADERS")
-    assert_includes config.dig("env", "clear", "SCREENOTE_TRUSTED_PROXIES"), "127.0.0.1/32"
-    assert_includes config.dig("env", "clear", "SCREENOTE_TRUSTED_PROXIES"), "::1/128"
+    assert_equal 2, config.dig("env", "clear", "SCREENOTE_FORWARDED_CLIENT_HOPS")
+    assert_equal "kamal-proxy", config.dig("env", "clear", "SCREENOTE_FORWARDED_PROXY_HOST")
+    assert_equal "127.0.0.1/32,::1/128", config.dig("env", "clear", "SCREENOTE_TRUSTED_PROXIES")
     assert_equal ".kamal/hooks/saas", config.fetch("hooks_path")
     assert_equal 900, config.fetch("deploy_timeout")
 

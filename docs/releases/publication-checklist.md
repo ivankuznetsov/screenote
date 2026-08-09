@@ -21,7 +21,8 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] The exact `tag@digest` image passed its retained Linux AMD64 deployment
   through the supported ONCE stable release named in the evidence, ONCE's
   Kamal Proxy, and Thruster with Screenote automatic updates disabled,
-  including forwarding, restart, and persistence checks.
+  including the exact proxy manifest digest, normal forwarding, hostile-header
+  and direct-sibling spoof rejection, restart, and persistence checks.
 - [ ] Published ONCE backup/restore commands recovered all four SQLite roles
   and local screenshot files with the exact image; S3 mode also recovered the
   matching external object namespace.
