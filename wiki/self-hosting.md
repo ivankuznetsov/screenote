@@ -3,7 +3,7 @@ title: Self-Hosted Distribution
 type: initiative
 source: docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md
 created: 2026-08-05
-updated: 2026-08-08
+updated: 2026-08-09
 tags: [self-hosting, kamal, docker, licensing, storage, release]
 ---
 
@@ -127,6 +127,12 @@ Default Active Storage blob, representation, disk, and direct-upload routes are 
 Both the legacy signed upload and manifest upload pass through `Snapshots::AttachImage`. It streams into a process-owned temporary file, enforces the 20 MiB declared and observed limit, verifies PNG/JPEG magic and declared/manifest identity, limits decoder concurrency, and rejects a dimension above 32,768 pixels or more than 50 million decoded pixels before attaching. The validated bytes are staged in the selected storage service before their Blob is attached, making Active Storage's later commit callback a no-op; a concurrent loser or failed database transaction removes its staged object, and the temporary file remains block-scoped.
 
 An attached pending image is durable work intent. Dimension processing is handed to Solid Queue only after the attachment's outer database transaction commits, so a worker cannot discard a replacement job while the new blob reference is still invisible. `ScreenshotImages::EnsureProcessing` treats queue insertion failure as deferred work, and `ReconcileScreenshotProcessingJob` completes missing dimension and thumbnail work idempotently inline. The container runs reconciliation after database and installation preparation; Solid Queue repeats it every five minutes. See [[models/screenshot-image]] and [[services/annotation-crop-service]].
+
+Because that startup reconciliation completes before Thruster begins serving,
+the hosted Kamal profile gives the candidate a bounded fifteen-minute deploy
+window. Kamal's 30-second default is shorter than a legitimate reconciliation
+of the hosted legacy screenshot corpus and can terminate a healthy successor
+before its readiness endpoint exists.
 
 ## Whole-Instance Operations
 
