@@ -107,7 +107,7 @@ if server_command? "$@"; then
   ./bin/rails db:prepare
   ./bin/rails runner "Installations::Prepare.call"
   ./bin/rails runner "AuthenticationLinks::KeyringPreflight.call"
-  ./bin/rails runner "ReconcileScreenshotProcessingJob.perform_now"
+  ./bin/rails runner "ReconcileScreenshotProcessingJob.enqueue_for_startup!"
 
   # Bootstrap material is needed only by the preparation process. Do not pass
   # it to the long-lived web and job process after the installation is ready.

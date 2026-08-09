@@ -18,10 +18,13 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] Imported config/layer digests match the retained layouts.
 - [ ] Exact platform images passed GitGuardian and pinned Critical/High vulnerability policy.
 - [ ] Manifest labels, platform digests, SBOM, provenance, and public-log sentinel checks passed.
-- [ ] The exact-image `bin/kamal` path passed its retained Linux AMD64
-  Kamal Proxy/Thruster deployment, forwarding, restart, and persistence drill.
-- [ ] Published Kamal-native backup/restore commands recovered all four SQLite
-  roles and the selected local or S3 screenshot namespace with the exact image.
+- [ ] The exact `tag@digest` image passed its retained Linux AMD64 deployment
+  through the supported ONCE stable release named in the evidence, ONCE's
+  Kamal Proxy, and Thruster with Screenote automatic updates disabled,
+  including forwarding, restart, and persistence checks.
+- [ ] Published ONCE backup/restore commands recovered all four SQLite roles
+  and local screenshot files with the exact image; S3 mode also recovered the
+  matching external object namespace.
 - [ ] Protected-main jobs are recorded only as `pr_contract_only` source checks.
 - [ ] Exact qualification booted the retained AMD64 and ARM64 candidate in
   self-hosted and SaaS modes; both SaaS boots exercised four URL-driven

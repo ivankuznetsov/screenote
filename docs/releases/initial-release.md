@@ -11,20 +11,26 @@ This document is a release-note template, not a published release or an authoriz
 
 ## Self-hosted operators
 
-- The supported topology is one non-root Screenote application container behind Kamal Proxy, with four SQLite roles and one durable volume.
-- Local private storage is the default. S3-compatible storage, external transactional email, Google/GitHub OAuth, and monitoring are optional Kamal settings.
+- The supported topology is one non-root Screenote application container
+  deployed by the ONCE stable release named in the release evidence behind
+  ONCE's Kamal Proxy, with four SQLite roles and one durable volume.
+- Local private storage is the default. S3-compatible storage, external
+  transactional email, and Google/GitHub OAuth are optional ONCE application
+  settings.
 - A fresh instance is claimed exactly once with a removable bootstrap secret. Later admission is project-owner invitation only.
-- The core product is unlimited and has no billing, Stripe, or license-key dependency.
-- `bin/kamal setup` validates the immutable `public-evidence.json` release asset and mirrors the canonical image manifest without rebuilding it.
-- Backup, restore, upgrade, and rollback must use the commands and immutable digest published with the final release. No predecessor exists for the initial release.
+- Operators deploy the exact `tag@digest` GHCR reference named by the release
+  with ONCE automatic application updates disabled; no fork, source checkout,
+  or local build is required.
+- Backup, restore, upgrade, and rollback must use the ONCE commands and
+  immutable digest published with the final release. No predecessor exists for
+  the initial release.
 
 ## SaaS operators
 
 - This revision retains the explicit SaaS edition with Stripe, hosted storage,
-  email, OAuth, and monitoring requirements. Its hosted Kamal configuration may
-  continue to provision PostgreSQL, while the application and release gates
-  treat the four database roles as Active Record URLs rather than a fixed
-  adapter contract.
+  email, OAuth, and monitoring requirements. Its hosted Kamal configuration
+  supplies four database-role URLs, while the application and release gates
+  use Active Record without a fixed adapter contract.
 - The bearer-secret hardening migration is a stopped-process cutover. A rolling
   deploy is prohibited: stop and prove every predecessor web/worker process is
   quiesced, execute the digest-pinned backup hook in that exact stopped window,
@@ -41,7 +47,7 @@ The release contains identity, invitation, actor-provenance, installation, authe
 
 Because this initial supported release has predecessor `none` and the hosted
 database is already current, four pre-v1 migration files were rebaselined once
-to remove PostgreSQL-only lock SQL without changing their target schemas.
+to remove adapter-specific lock SQL without changing their target schemas.
 Migration history is append-only beginning with `v1.0.0`; later repairs require
 a new timestamp and a tested supported-predecessor upgrade path.
 

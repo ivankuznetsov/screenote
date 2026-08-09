@@ -3,7 +3,7 @@
 
 # This Dockerfile is designed for production, not development. Build it locally with:
 # docker build -t screenote .
-# Deploy the self-hosted image with the Kamal starter in config/deploy.yml.
+# Or deploy the published self-hosted image with ONCE.
 
 # For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
 
@@ -32,7 +32,11 @@ ENV RAILS_ENV="production" \
     BUNDLE_DEPLOYMENT="1" \
     BUNDLE_PATH="/usr/local/bundle" \
     BUNDLE_WITHOUT="development:test" \
+    DISABLE_SSL="false" \
     MAX_REQUEST_BODY="31457280" \
+    SCREENOTE_EDITION="self_hosted" \
+    SCREENOTE_TRUSTED_PROXIES="127.0.0.1/32,::1/128,172.16.0.0/12" \
+    THRUSTER_FORWARD_HEADERS="true" \
     LD_PRELOAD="/usr/lib/libjemalloc.so.2"
 
 # Throw-away build stage to reduce size of final image
@@ -70,6 +74,7 @@ ARG SCREENOTE_IMAGE_SOURCE="https://github.com/ivankuznetsov/screenote"
 ARG SCREENOTE_IMAGE_REVISION="development"
 ARG SCREENOTE_IMAGE_VERSION="development"
 ARG SCREENOTE_IMAGE_DESCRIPTION="Screenote self-hosted visual review server"
+ENV KAMAL_VERSION="$SCREENOTE_IMAGE_REVISION"
 LABEL service="screenote" \
       org.opencontainers.image.source="$SCREENOTE_IMAGE_SOURCE" \
       org.opencontainers.image.revision="$SCREENOTE_IMAGE_REVISION" \
@@ -79,7 +84,9 @@ LABEL service="screenote" \
 
 # Run and own only the runtime files as a non-root user for security
 RUN addgroup -S -g 1000 rails && \
-    adduser -S -D -u 1000 -G rails -h /home/rails -s /bin/bash rails
+    adduser -S -D -u 1000 -G rails -h /home/rails -s /bin/bash rails && \
+    mkdir -p /storage /rails/storage && \
+    chown rails:rails /storage /rails/storage
 USER 1000:1000
 
 # Copy built artifacts: gems, application

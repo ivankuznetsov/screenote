@@ -1,17 +1,17 @@
 ---
 title: Gem Choices
 type: architecture
-source: Gemfile
+source: Gemfile, Dockerfile, config/deploy.saas.yml
 created: 2026-04-10
-updated: 2026-08-08
-tags: [gems, dependencies, rationale]
+updated: 2026-08-09
+tags: [gems, dependencies, rationale, deployment, once, kamal-saas]
 ---
 
 # Gem Choices
 
-TLDR: Screenote uses a minimal, Rails-native gem set. Key choices: rails_simple_auth for auth, Doorkeeper for OAuth 2.1, Stripe for billing, fast-mcp for MCP server, Solid Queue/Cache/Cable for infrastructure (no Redis).
+TLDR: Screenote uses a minimal, Rails-native gem set. Key choices include rails_simple_auth for auth, Doorkeeper for OAuth 2.1, Stripe for billing, and Solid Queue/Cache/Cable for infrastructure without Redis. The Kamal gem serves hosted `screenote.ai`; public self-hosting is managed externally by ONCE.
 
-Source: `Gemfile`
+Source: `Gemfile`, `Dockerfile`, `config/deploy.saas.yml`
 
 ## Core Framework
 
@@ -70,7 +70,7 @@ Source: `Gemfile`
 
 | Gem | Version | Rationale |
 |-----|---------|-----------|
-| `kamal` | - | Docker-based deployment (Kamal 2) |
+| `kamal` | - | Hosted `screenote.ai` deployment only (Kamal 2); public self-hosting uses external ONCE |
 | `thruster` | - | HTTP caching/compression proxy in front of Puma |
 | `bootsnap` | - | Boot time optimization via caching |
 

@@ -53,7 +53,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       Digest::SHA256.file(Rails.root.join("LICENSE")).hexdigest
     assert_includes Rails.root.join("LICENSE").read, "Copyright © 2026, Future Spin Ltd."
 
-    %w[README.md CONTRIBUTING.md SECURITY.md SUPPORT.md THIRD_PARTY_NOTICES.md].each do |path|
+    [ "README.md", *ReleaseValidation::SOURCE_BOUNDARY_FILES ].each do |path|
       contents = Rails.root.join(path).read
       assert_match(/source-available|O'Saasy|security|as-is/i, contents, path)
     end
@@ -64,11 +64,9 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes notices, "Alpine packages installed by `Dockerfile` with `apk`"
     assert_not_includes notices, "Debian packages installed by `Dockerfile`"
 
-    public_installation_docs = [
-      Rails.root.join("README.md"),
-      Rails.root.join("docs/self-hosting.md"),
-      Rails.root.join("docs/kamal-deployment.md")
-    ].sum("") { |path| path.read }
+    public_installation_docs = ReleaseValidation::PUBLIC_INSTALLATION_DOCS.sum("") do |path|
+      Rails.root.join(path).read
+    end
     assert_no_match(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i, public_installation_docs)
     assert_no_match(/docker\s+compose|compose\.ya?ml/i, public_installation_docs)
     assert_no_match(/\bmcp\b/i, public_installation_docs)
@@ -80,30 +78,156 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
 
   test "release validator rejects MCP wording regardless of case" do
     %w[mcp McP].each do |wording|
-      Dir.mktmpdir("screenote-public-positioning") do |root|
-        %w[
-          README.md
-          CONTRIBUTING.md
-          SECURITY.md
-          SUPPORT.md
-          THIRD_PARTY_NOTICES.md
-          docs/self-hosting.md
-          docs/kamal-deployment.md
-        ].each do |relative|
-          destination = File.join(root, relative)
-          FileUtils.mkdir_p(File.dirname(destination))
-          FileUtils.cp(Rails.root.join(relative), destination)
-        end
+      with_public_positioning_copy do |root|
         File.open(File.join(root, "README.md"), "a") do |readme|
           readme.puts("Use the #{wording} integration.")
         end
 
-        validator = ReleaseValidation.new(root: root)
-        validator.send(:public_positioning)
+        validator = validate_public_positioning(root)
 
         assert_includes validator.errors,
           "public product docs must use the CLI and agent skill rather than MCP",
           wording
+      end
+    end
+  end
+
+  test "public self hosted deployment uses ONCE with exact release images" do
+    documents = ReleaseValidation::PUBLIC_INSTALLATION_DOCS.sum("") do |path|
+      Rails.root.join(path).read
+    end
+
+    assert_includes documents, "once deploy"
+    assert_includes documents, "--auto-update=false"
+    assert_includes documents, "once update"
+
+    assert_includes documents,
+      "ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST"
+    assert_includes documents,
+      "ghcr.io/ivankuznetsov/screenote:vNEXT@sha256:REPLACE_WITH_RELEASE_DIGEST"
+
+    assert_not Rails.root.join("config/deploy.yml").exist?
+    assert_not Rails.root.join(".kamal/secrets.example").exist?
+    assert_not Rails.root.join("lib/screenote/kamal_release_deployer.rb").exist?
+    assert_includes Rails.root.join("bin/kamal").read, 'load Gem.bin_path("kamal", "kamal")'
+  end
+
+  test "release validator rejects a tag only Screenote image" do
+    with_public_positioning_copy do |root|
+      readme = File.join(root, "README.md")
+      File.write(
+        readme,
+        File.read(readme).sub(
+          /ghcr\.io\/ivankuznetsov\/screenote:vX\.Y\.Z@sha256:[A-Za-z0-9._-]+/,
+          "ghcr.io/ivankuznetsov/screenote:vX.Y.Z"
+        )
+      )
+
+      validator = validate_public_positioning(root)
+
+      assert_includes validator.errors,
+        "public installation docs must use exact vX.Y.Z@sha256 image references"
+    end
+  end
+
+  test "release validator rejects malformed Screenote image identities" do
+    cases = {
+      "malformed release tag" =>
+        "ghcr.io/ivankuznetsov/screenote:v1.bad.0@sha256:#{'a' * 64}",
+      "malformed manifest digest" =>
+        "ghcr.io/ivankuznetsov/screenote:v1.2.3@sha256:not-a-digest"
+    }
+
+    cases.each do |label, malformed_reference|
+      with_public_positioning_copy do |root|
+        readme = File.join(root, "README.md")
+        original = File.read(readme)
+        mutated = original.sub(
+          "ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST",
+          malformed_reference
+        )
+        assert_not_equal original, mutated, label
+        File.write(readme, mutated)
+
+        validator = validate_public_positioning(root)
+
+        assert_includes validator.errors,
+          "public installation docs must use exact vX.Y.Z@sha256 image references",
+          label
+      end
+    end
+  end
+
+  test "release validator accepts a real semantic tag and OCI digest" do
+    reference = "ghcr.io/ivankuznetsov/screenote:v1.2.3@sha256:#{'a' * 64}"
+    validator = ReleaseValidation.new(root: Rails.root)
+
+    assert validator.send(:valid_public_image_reference?, reference)
+  end
+
+  test "release validator rejects incomplete ONCE installation guidance" do
+    cases = {
+      "missing deploy command" => [
+        ->(contents) { contents.gsub("once deploy", "once install") },
+        "public installation docs must deploy Screenote with ONCE"
+      ],
+      "missing application update lock" => [
+        ->(contents) { contents.gsub("--auto-update=false", "") },
+        "public installation docs must disable moving image updates"
+      ],
+      "missing canonical image" => [
+        ->(contents) { contents.gsub("ghcr.io/ivankuznetsov/screenote:", "registry.invalid/screenote:") },
+        "public installation docs must name the Screenote release image"
+      ]
+    }
+
+    cases.each do |label, (mutation, expected_error)|
+      with_public_positioning_copy do |root|
+        ReleaseValidation::PUBLIC_INSTALLATION_DOCS.each do |relative|
+          document = File.join(root, relative)
+          File.write(document, mutation.call(File.read(document)))
+        end
+
+        validator = validate_public_positioning(root)
+        assert_includes validator.errors, expected_error, label
+      end
+    end
+  end
+
+  test "release validator checks each copyable ONCE command independently" do
+    exact_release =
+      "ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST"
+    exact_update =
+      "ghcr.io/ivankuznetsov/screenote:vNEXT@sha256:REPLACE_WITH_RELEASE_DIGEST"
+    cases = {
+      "missing README deploy" => [
+        ->(contents) { contents.sub("once deploy", "once install") },
+        "README.md must include a copyable ONCE deploy command"
+      ],
+      "moving README deploy" => [
+        ->(contents) { contents.sub("--auto-update=false", "--auto-update=true") },
+        "README.md ONCE deploy command must set --auto-update=false exactly once"
+      ],
+      "variable README deploy image" => [
+        ->(contents) { contents.sub(exact_release, "$SCREENOTE_IMAGE") },
+        "README.md ONCE deploy command must bind an exact Screenote image"
+      ],
+      "tag-only README update" => [
+        ->(contents) { contents.sub(exact_update, "ghcr.io/ivankuznetsov/screenote:vNEXT") },
+        "README.md ONCE image update command must bind one exact Screenote image"
+      ]
+    }
+
+    cases.each do |label, (mutation, expected_error)|
+      with_public_positioning_copy do |root|
+        readme = File.join(root, "README.md")
+        original = File.read(readme)
+        mutated = mutation.call(original)
+        assert_not_equal original, mutated, label
+        File.write(readme, mutated)
+
+        validator = validate_public_positioning(root)
+        assert_includes validator.errors, expected_error, label
       end
     end
   end
@@ -302,13 +426,13 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "publication sentinel requires the supported Kamal runtime and recovery drills" do
+  test "publication sentinel requires the supported ONCE runtime and recovery drills" do
     sentinel = Rails.root.join("docs/releases/PUBLICATION_BLOCKED.md").read
     checklist = Rails.root.join("docs/releases/publication-checklist.md").read
 
     [ sentinel, checklist ].each do |document|
-      assert_includes document, "Kamal Proxy"
-      assert_includes document, "Kamal-native backup"
+      assert_includes document, "ONCE"
+      assert_includes document, "ONCE backup"
       assert_includes document, "restart"
       assert_includes document, "persistence"
     end
@@ -1394,6 +1518,22 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
 
   def evidence
     JSON.parse(EVIDENCE_FIXTURE.read)
+  end
+
+  def with_public_positioning_copy
+    Dir.mktmpdir("screenote-public-positioning") do |root|
+      ([ "README.md", *ReleaseValidation::SOURCE_BOUNDARY_FILES,
+        *ReleaseValidation::PUBLIC_INSTALLATION_DOCS ]).uniq.each do |relative|
+        destination = File.join(root, relative)
+        FileUtils.mkdir_p(File.dirname(destination))
+        FileUtils.cp(Rails.root.join(relative), destination)
+      end
+      yield root
+    end
+  end
+
+  def validate_public_positioning(root)
+    ReleaseValidation.new(root: root).tap { |validator| validator.send(:public_positioning) }
   end
 
   def assert_rejected(label, expected_error)

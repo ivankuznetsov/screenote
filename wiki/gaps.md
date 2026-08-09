@@ -3,11 +3,16 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-08
-tags: [gaps, documentation, todo]
+updated: 2026-08-09
+tags: [gaps, documentation, todo, deployment, once, release]
 ---
 
 # Gaps
+
+TLDR: Most first-release self-hosting contracts are implemented in source. The
+remaining deployment work is live evidence: ONCE's custom-image TUI cannot
+supply Screenote's required first-boot variables, and the exact release image
+still needs a retained ONCE deploy/restart/update/backup/restore drill that records the exercised stable version.
 
 Areas where documentation is missing or incomplete. Updated from current source, recent git history, `plans/`, `todos/`, and the configured master wiki.
 
@@ -51,28 +56,30 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - [[api-cli]] now documents the Go REST CLI surface, including OAuth browser login, aggregate annotation listing, upload content-type handling, page selection, JSON output, stable usage errors, and the `annotation resolve` command implemented on the public CLI `main` branch. The first supported Screenote release still needs to pin an immutable CLI tag containing that command. `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remain deferred agent-surface work.
 
 ### Deployment
-- Kamal configuration details beyond what's in CLAUDE.md.
-- Environment variable documentation for production setup.
-- The public self-hosted install now uses Kamal and Kamal Proxy, but the older
-  host-side backup/restore wrappers, qualification harness, and deep operations
-  documents still model the pre-release Docker Compose design. Before the first
-  supported release, migrate those paths to Kamal or replace them with a
-  smaller tested Kamal-native recovery contract.
-- Normal Kamal replacement starts the candidate beside the live container,
-  while the entrypoint runs `db:prepare` against their shared SQLite volume.
-  Supported releases must keep migrations backward-compatible or publish and
-  qualify an explicit stopped-process maintenance, backup/restore, resumable
-  verification, and rollback path; the first successor release cannot publish
-  until this is proven.
-- Hosted SaaS now allows fifteen minutes for the synchronous startup image
-  reconciler, covering the measured legacy corpus while keeping failure
-  bounded. Reconciliation time still grows with unresolved image work; monitor
-  it and move bulk repair out of the serving-critical path if it approaches
-  that limit again.
+- ONCE's custom-image TUI cannot supply `SCREENOTE_BASE_URL` and the
+  one-time `SCREENOTE_BOOTSTRAP_TOKEN` before Screenote's first boot. The
+  documented first install must therefore remain a direct `once deploy` CLI
+  command with those two custom environment values. After claim, the operator
+  can remove the bootstrap value in ONCE's settings.
+- The public ONCE path and current source contracts are documented, but the
+  exact release image still needs a retained Linux AMD64 exercise through
+  the supported ONCE stable release named in the evidence: initial deploy with Screenote automatic updates disabled, proxy and
+  forwarding verification, restart with volume persistence, explicit
+  `tag@digest` update, local-volume backup, and restore. S3 mode also requires a
+  provider-level recovery point matched to the restored SQLite state.
+- ONCE image replacement and `db:prepare` operate against the persistent
+  SQLite volume. Supported releases must keep migrations backward-compatible
+  or publish and qualify an explicit stopped-process maintenance,
+  backup/restore, resumable verification, and rollback path; the first
+  successor release cannot publish until this is proven.
+- Startup screenshot reconciliation no longer blocks the serving process: the
+  entrypoint now fails unless Solid Queue accepts the job, then Puma starts and
+  the five-minute recurring schedule remains a backstop. Live qualification
+  still needs to prove that restart and recovery behave correctly under ONCE.
 - The unsafe rolling credential migration is resolved in source: ordinary deploys refuse the pending migration and `bin/saas-credential-cutover` now locks deployment, stops and proves predecessor processes quiesced, invokes a reviewed digest-pinned backup hook for that exact window, validates challenge/restore-point-bound evidence, runs migrations with their adapter-supported transaction behavior, and verifies migration versions, stored digests, and runtime lookups before starting only the successor. It does not promise all-migrations rollback from one outer transaction; an interrupted run must resume its idempotent checks under maintenance or restore the verified backup. The remaining production boundary is operational: the private real hook and four-role restore drill must be reviewed and retained for the cutover.
 
 ### Source release publication
-- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64/minimum-host qualification runners; the tracked public-CLI driver; candidate-backed HTTP/HTTPS origins; retained exact-image AMD64/ARM64 SaaS boots over four URL-driven Active Record roles; a retained end-to-end Linux AMD64 qualification of the exact-image Kamal Proxy/Thruster path; published and drilled Kamal-native backup/restore commands; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain technical gates. The SaaS checks remain exact-image qualification without an adapter/version assertion. The versioned minimum-host profile, tracked server load driver, and exact-image wrapper contracts are source-complete, but only dedicated qualification and recovery runs can satisfy their live gates. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all remaining gates are complete.
+- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64/minimum-host qualification runners; the tracked public-CLI driver; candidate-backed HTTP/HTTPS origins; retained exact-image AMD64/ARM64 SaaS boots over four URL-driven Active Record roles; a retained end-to-end Linux AMD64 deployment of the exact `tag@digest` through the supported ONCE stable release named in the evidence; retained ONCE restart, update, local-volume backup, and restore evidence; matching external S3 recovery evidence when selected; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain technical gates. The SaaS checks remain exact-image qualification without an adapter/version assertion. The versioned minimum-host profile and tracked server load driver are source-complete, but only dedicated qualification and recovery runs can satisfy their live gates. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all remaining gates are complete.
 - The initial predecessor-none release supports same-image local/S3 restore. The first successor release must add and qualify the exact adjacent local/S3 upgrade and rollback fixture and reconcile predecessor versus restore-image validation before it can publish.
 
 ## Incomplete Documentation
@@ -107,8 +114,7 @@ The following gaps from the original bootstrap have been partially or fully addr
 2. Is there a periodic job runner for `Session.cleanup_expired!`?
 3. How is the digest notification job scheduled? (Solid Queue cron? Rake task?)
 4. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
-5. The configured cross-project wiki path `/home/asterio/wikis/master/wiki` was not present during the 2026-07-08 refresh; neither were the default fallback paths `~/wikis/main/wiki/`, `../wikis/master/wiki/`, or `../wikis/main/wiki/`. `qmd search` returned no matching project-wiki results for the CLI/API refresh query. Cross-project context may be incomplete until the path is restored or config is updated.
-6. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
+5. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.
 
 See also: [[architecture]], [[active-areas]], [[plans-and-initiatives]], [[technical-debt]]
 

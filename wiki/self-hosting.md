@@ -1,15 +1,15 @@
 ---
 title: Self-Hosted Distribution
 type: initiative
-source: docs/plans/2026-08-05-001-feat-self-hosted-source-release-plan.md
+source: Dockerfile, bin/docker-entrypoint, app/jobs/reconcile_screenshot_processing_job.rb, lib/screenote/deployment.rb, docs/once-deployment.md, docs/releases/PUBLICATION_BLOCKED.md, config/deploy.saas.yml
 created: 2026-08-05
 updated: 2026-08-09
-tags: [self-hosting, kamal, docker, licensing, storage, release]
+tags: [self-hosting, once, docker, deployment, storage, release, kamal-saas]
 ---
 
 # Self-Hosted Distribution
 
-**TLDR:** Screenote implements a source-available, single-server self-hosted edition alongside `screenote.ai`. The public installation path is now Kamal plus Kamal Proxy, following the Rails-style deployment used by Fizzy; publication remains gated by the release controls below. The self-hosted runtime uses SQLite and the hosted Kamal profile may use PostgreSQL, while shared application code and release qualification stay database-adapter-neutral through Active Record.
+**TLDR:** Screenote implements a source-available, single-server self-hosted edition alongside `screenote.ai`. Public self-hosting uses ONCE's stable channel with an exact `vX.Y.Z@sha256:...` GHCR image, one application container, four SQLite databases, and one durable volume; it requires neither a fork nor a source checkout. Kamal remains an internal deployment tool for hosted `screenote.ai`. Publication is still blocked until the retained ONCE runtime and recovery drill passes.
 
 ## Distribution Model
 
@@ -28,21 +28,25 @@ admission; advanced storage, provider, backup, and upgrade details remain in
 the operator guide.
 
 Until the first release exists, the README labels deployment from the
-repository as a development preview. A supported install clones the exact tag
-named by a GitHub release into a deployment branch; cloning the moving default
-branch remains preview-only. The copyable path then edits the tracked
-`config/deploy.yml` starter, populates ignored `.kamal/secrets`, runs
-`bin/kamal setup`, claims `/bootstrap`, and uses `bin/kamal deploy` for later
-updates. Advanced settings live in `docs/kamal-deployment.md`.
+repository as a development preview. A supported install first installs ONCE
+from its official stable channel on the Linux host and then gives `once deploy`
+the complete image identity from the GitHub Release. The release evidence names
+the exact ONCE version used for qualification. Automatic application updates
+stay disabled; later releases are selected explicitly with `once update
+--image` and another exact `tag@digest` reference.
 
-The supported fork boundary is configuration-only: operators may retain
-release-pinned deployment settings in a fork, while modified application code
-or images remain outside first-release support.
+The first deployment is a direct CLI operation because Screenote must receive
+`SCREENOTE_BASE_URL` and a one-time `SCREENOTE_BOOTSTRAP_TOKEN` before its first
+boot, while ONCE's custom-image TUI path cannot supply those application
+variables at creation time. After `/bootstrap` is claimed, the operator removes
+the bootstrap variable from ONCE and retains the base URL. No repository fork,
+source checkout, public Kamal configuration, or local image build is part of
+the supported path. Advanced settings live in `docs/once-deployment.md`.
 
 ## Self-Hosted Product Boundary
 
 - The full core product is unlimited and has no Stripe, plan-limit, or license-key dependency. Core includes projects, screenshot and multi-viewport review, annotations and replies, APIs, the CLI, and CLI-backed agent workflows; selling and operating the managed `screenote.ai` service remains SaaS-only. The legacy MCP runtime remains in source but is not a supported public integration surface.
-- The supported first release is one container backed by SQLite and one persistent volume.
+- The supported first release is one container backed by SQLite and one persistent ONCE volume mounted at both `/storage` and `/rails/storage`.
 - Primary, cache, queue, and cable state use four SQLite files on that volume with WAL, full durability, bounded contention, and primary-state reconciliation for work lost from the separate queue database.
 - Local filesystem storage is the default; operator-configured S3-compatible storage is optional.
 - The instance is closed and invitation-only. Before claim, a one-time bootstrap token is the only account-creation path and atomically creates its persisted instance administrator. After claim, each project owner may admit collaborators to that project without separate instance-administrator approval.
@@ -50,7 +54,7 @@ or images remain outside first-release support.
 - The instance administrator is a singleton recovery role, not a superuser over project content. It can inspect account identity/status, suspend or restore access, revoke sessions, issue single-use expiring local recovery links, and atomically transfer itself to another active account. A local operator can run `bin/rails screenote:instance:recover_administrator` to emit only a 15-minute private recovery URL on stdout, or `bin/rails 'screenote:instance:transfer_administrator[email@example.test]'` to transfer to an existing active account. Both commands use the same locked/audited services as the UI; neither reopens bootstrap, creates an account, sends mail, or joins a project. Runtime configuration and secrets stay outside the product UI under operator control. See [[instance-administration]].
 - External transactional email through generic SMTP, social OAuth, S3, and monitoring are optional. Screenote runs no mail service; administrators can copy invitation links when email is unavailable.
 - Screenshot originals and variants are never served through default reusable Active Storage routes. Application-owned proxy routes authenticate an active project principal and recheck membership for every byte request.
-- Runtime application, bootstrap, and provider secrets live in ignored Kamal secret configuration and are passed only to the selected container environment. The bootstrap secret is removed from both the Kamal config and secret file after claim; secrets must not appear in image layers, process arguments, logs, diagnostics, or tracked configuration. `_FILE` loading remains available for the legacy qualification harness.
+- ONCE generates and retains the application secret, while bootstrap and provider values live in the application's ONCE environment. The bootstrap variable is removed after claim; secrets must not appear in image layers, logs, diagnostics, or tracked configuration. `_FILE` loading remains available for the legacy qualification harness.
 - OAuth and one-time link credentials become digest-only. Project-scoped OAuth is bound only after a user chooses a joined project on a server-owned consent/device screen. The SaaS credential conversion uses a stopped-process maintenance cutover because predecessor containers cannot read transformed rows. The operator proves quiescence and a fresh recoverable backup before migration. The cutover then lets each migration use its adapter-supported transaction behavior and verifies migration versions, stored digests, and runtime lookups; it does not promise one outer transaction across the chain. An interrupted run remains in maintenance until the version-aware, idempotent checks resume successfully or the verified backup is restored.
 
 ## SaaS Boundary
@@ -59,46 +63,45 @@ The same revision must continue to run `screenote.ai` with Stripe, hosted object
 
 ## Deployment Configuration Boundary
 
-Production now starts from one immutable `Screenote::Deployment` configuration. `SCREENOTE_EDITION` and `SCREENOTE_BASE_URL` are explicit, `SECRET_KEY_BASE` and the initial self-hosted bootstrap token require at least 32 bytes, and malformed origins or broad proxy trust fail before service. The canonical origin controls allowed hosts, URL generation, OmniAuth callbacks, redirects, secure cookies, and HTTP/HTTPS enforcement; IPv6 origins are normalized with exactly one bracket pair before ports are appended. A pre-Rails middleware removes forwarded client and origin headers unless the immediate peer belongs to `SCREENOTE_TRUSTED_PROXIES`, so a direct caller cannot forge a rate-limit identity or TLS termination.
+Production starts from one immutable `Screenote::Deployment` configuration.
+The release image defaults `SCREENOTE_EDITION=self_hosted`, enables Thruster
+forwarding, and trusts only container-loopback and ONCE's private Docker proxy
+range. `SCREENOTE_BASE_URL` remains explicit, while ONCE supplies
+`SECRET_KEY_BASE`; the initial self-hosted bootstrap token must contain at least
+32 bytes. Malformed origins, an ONCE TLS mode that does not match the canonical
+URL scheme, or broad proxy trust fail before service. The canonical origin
+controls allowed hosts, URL generation, OmniAuth callbacks, redirects, secure
+cookies, and HTTP/HTTPS enforcement. A pre-Rails middleware removes forwarded
+client and origin headers unless the immediate peer belongs to the trusted
+proxy set, so a direct caller cannot forge a rate-limit identity or TLS
+termination.
 
 The current hosted Kamal configuration supplies PostgreSQL URLs for its four database roles plus Stripe, Resend, Google/GitHub OAuth, Honeybadger, hosted storage, and `SCREENOTE_SAAS_OPERATOR_EMAIL`. That is a deployment selection, not an application-level adapter requirement. Self-hosted production defaults to local private storage and no mail, social OAuth, monitoring, or billing; each optional provider must be explicitly enabled with a complete configuration. No-mail mode does not draw password-reset routes or enqueue reset credentials. S3 storage applies `SCREENOTE_S3_PREFIX` to every object key and persists a credential-free namespace fingerprint covering service, endpoint, region, bucket, prefix, and path-style behavior.
 
-The public `config/deploy.yml` is a self-hosted Kamal starter: one application
-role, one `screenote_storage` named volume, Kamal Proxy with automatic HTTPS,
-sanitized proxy-generated forwarding headers passed through the private
-Thruster loopback hop, a cross-version asset bridge, local screenshot storage,
-and mail/OAuth/monitoring disabled by default. A
-fresh install temporarily includes `SCREENOTE_BOOTSTRAP_TOKEN`; after claim the
-operator removes it and deploys again. External SMTP providers and generic S3
-are enabled by uncommenting their environment keys and adding only their
-secrets to `.kamal/secrets`; both SMTP username and password are secret because
-providers such as Postmark use a token as the username. The starter explicitly
-targets the first release's supported Linux AMD64 host. The hosted service has a separate complete
-`config/deploy.saas.yml` and SaaS-only hooks, invoked through `bin/kamal-saas`,
-so its database selection and provider requirements cannot leak into self-hosting.
-`GET /up` remains process liveness, while `GET /ready` checks all four SQLite
-schemas, volume writability, and selected Active Storage configuration without
-calling external providers or disclosing a failing component. Kamal Proxy and
-Thruster both bound request bodies at 30 MiB.
+ONCE's stable channel is the public deployment layer. It runs the published image on port
+80, routes through its Kamal Proxy, checks `GET /up`, creates the durable
+application volume, and mounts that one volume at both `/storage` and
+`/rails/storage`. The dual mount satisfies ONCE's application contract without
+duplicating data: all four SQLite files and local Active Storage objects still
+share one recovery unit. ONCE pauses the container when taking a volume backup,
+because Screenote does not publish a pre-backup hook.
 
-The repository's `bin/kamal` wrapper is release-aware while retaining the
-standard `setup`, `deploy`, and `redeploy` commands. On a supported tag it
-loads the immutable GitHub Release `public-evidence.json`, verifies the source,
-manifest, OCI-label, qualification, and publication identities, and uses
-Docker Buildx to mirror the unchanged parent manifest into Kamal's loopback
-registry under the release source SHA. It then invokes Kamal with
-`--skip-push`; the release image carries the `service=screenote` label Kamal
-checks after its remote pull. A config-only deployment branch is accepted,
-while other tracked divergence fails closed. A checkout with no supported
-release tag reachable in its ancestry remains a warned development build, and
-`SCREENOTE_KAMAL_SOURCE_BUILD=1` is the explicit unsupported custom-image
-escape hatch. Cached public evidence lives in the
-ignored `.kamal/releases/` directory. The hosted wrapper appends its config
-option immediately after the parsed top-level command or subcommand group, and
-the SaaS deploy guard does the same after `app`. This preserves isolation even
-when a variadic command uses Thor's `--` delimiter; placing a class option
-before the top-level command only prints help and does not perform the requested
-operation.
+The public command pins `ghcr.io/ivankuznetsov/screenote` to the exact release
+tag and manifest digest and sets `--auto-update=false`. It also supplies the
+base URL and initial bootstrap token with `--env`. Generic SMTP interoperates
+with ONCE's Email settings: Screenote accepts `MAILER_FROM_ADDRESS` and enables
+SMTP when ONCE supplies `SMTP_ADDRESS`, unless an explicit
+`SCREENOTE_SMTP_ENABLED=false` disables it. Generic S3 remains a custom
+environment configuration selected before the first upload.
+
+The hosted service has a separate complete `config/deploy.saas.yml` and
+SaaS-only hooks, invoked through `bin/kamal-saas`. The repository's `bin/kamal`
+is the ordinary gem binstub and is not a public self-hosting wrapper. This keeps
+hosted database and provider requirements out of ONCE self-hosting. `GET /up`
+remains process liveness, while `GET /ready` checks all four SQLite schemas,
+volume writability, and selected Active Storage configuration without calling
+external providers or disclosing a failing component. ONCE's Kamal Proxy and
+Thruster both bound request bodies at 30 MiB.
 
 The versioned minimum-host source contract is now
 `config/release/minimum-host-v1.json`: Linux AMD64, 2 vCPUs, 4 GiB RAM, 40 GiB
@@ -118,7 +121,7 @@ shutdown grace covers both bounded cleanup operations. The qualification
 workflow hashes the profile file bytes from the exact source commit and retains
 the validated load measurements with the canonical qualification artifact.
 
-The primary database stores exactly one constrained `Installation` identity: edition, ownership state, storage service, namespace fingerprint, and—until claim—the bootstrap digest. Before any mode-specific database preparation, the supported entrypoint runs a standalone, Bundler-backed deployment preflight that makes no provider connection. SaaS refuses a mounted self-hosted primary; self-hosted startup refuses retained SaaS database-role settings and inspects an existing local primary read-only for conflicting edition, storage service, storage namespace, or unclaimed bootstrap material. Schema preparation runs only after that complete persisted identity matches, and `Installations::Prepare` repeats the check after migrations as defense in depth. Credential rotation is allowed when the persisted namespace remains the same. See [[authentication]], [[data-model]], and [[dependencies]].
+The primary database stores exactly one constrained `Installation` identity: edition, ownership state, storage service, namespace fingerprint, and—until claim—the bootstrap digest. Before any mode-specific database preparation, the supported entrypoint runs a standalone, Bundler-backed deployment preflight that makes no provider connection. SaaS refuses a mounted self-hosted primary; self-hosted startup refuses retained SaaS database-role settings and inspects an existing local primary read-only for conflicting edition, storage service, storage namespace, or unclaimed bootstrap material. Schema preparation runs only after that complete persisted identity matches, and `Installations::Prepare` repeats the check after migrations as defense in depth. Credential rotation is allowed when the persisted namespace remains the same. See [[models/authentication-token]], [[data-model]], and [[dependencies]].
 
 ## Private Media and Processing Recovery
 
@@ -126,30 +129,28 @@ Default Active Storage blob, representation, disk, and direct-upload routes are 
 
 Both the legacy signed upload and manifest upload pass through `Snapshots::AttachImage`. It streams into a process-owned temporary file, enforces the 20 MiB declared and observed limit, verifies PNG/JPEG magic and declared/manifest identity, limits decoder concurrency, and rejects a dimension above 32,768 pixels or more than 50 million decoded pixels before attaching. The validated bytes are staged in the selected storage service before their Blob is attached, making Active Storage's later commit callback a no-op; a concurrent loser or failed database transaction removes its staged object, and the temporary file remains block-scoped.
 
-An attached pending image is durable work intent. Dimension processing is handed to Solid Queue only after the attachment's outer database transaction commits, so a worker cannot discard a replacement job while the new blob reference is still invisible. `ScreenshotImages::EnsureProcessing` treats queue insertion failure as deferred work, and `ReconcileScreenshotProcessingJob` completes missing dimension and thumbnail work idempotently inline. The container runs reconciliation after database and installation preparation; Solid Queue repeats it every five minutes. See [[models/screenshot-image]] and [[services/annotation-crop-service]].
-
-Because that startup reconciliation completes before Thruster begins serving,
-the hosted Kamal profile gives the candidate a bounded fifteen-minute deploy
-window. Kamal's 30-second default is shorter than a legitimate reconciliation
-of the hosted legacy screenshot corpus and can terminate a healthy successor
-before its readiness endpoint exists.
+An attached pending image is durable work intent. Dimension processing is handed to Solid Queue only after the attachment's outer database transaction commits, so a worker cannot discard a replacement job while the new blob reference is still invisible. `ScreenshotImages::EnsureProcessing` treats queue insertion failure as deferred work, and `ReconcileScreenshotProcessingJob` completes missing dimension and thumbnail work idempotently inline. After database, installation, and authentication-key preparation, the entrypoint enqueues one reconciliation job and fails startup if Solid Queue cannot accept it. Puma and its Solid Queue plugin can therefore begin serving without synchronously walking the full image corpus; the recurring schedule repeats reconciliation every five minutes. See [[models/screenshot-image]] and [[services/annotation-crop-service]].
 
 ## Whole-Instance Operations
 
-The public Kamal guide currently states the recovery boundary rather than
-claiming a standalone backup package: operators must take a consistent,
-quiesced, encrypted backup of the `screenote_storage` volume and, in S3 mode,
-the selected bucket/prefix, then complete a restore drill. The older
-`bin/self-host-backup` and `bin/self-host-restore` implementation still models
-a Compose-based pre-release harness and is not linked from the public Kamal
-path. Each legacy operations document now carries an explicit warning that it
-is not a supported Kamal procedure. Migrating or replacing that implementation
-is tracked in [[gaps]].
+ONCE backs up local state by pausing Screenote and copying the durable volume,
+which contains all four SQLite roles and, in local-storage mode, every
+screenshot object. ONCE also retains application settings, so backup archives
+must be encrypted, access-restricted, and copied off the application host. In
+S3 mode the ONCE archive still protects the databases, but recovery of the
+external bucket and exact prefix remains the operator's and storage provider's
+responsibility. Database and object-store recovery points must match.
+
+The older `bin/self-host-backup` and `bin/self-host-restore` implementation
+remains an internal Compose-based qualification harness and is not the public
+ONCE operator path. Public operations use ONCE's backup and restore commands;
+the first supported release still requires retained evidence that those
+commands recover Screenote correctly.
 
 Only adjacent release upgrades are supported when release notes require them;
 rollback means restoring the prior complete recovery point with its matching
-application version. The exact Kamal-native backup/restore command contract
-remains an open release task.
+application version. ONCE application auto-update stays disabled so an
+operator explicitly selects every exact `tag@digest` release.
 
 ## Publication Safety
 
@@ -197,7 +198,7 @@ connections through Active Record, and verifies the SaaS installation
 identity without asserting a database adapter or server version. This
 URL-driven contract preserves both exact-image SaaS boot targets while leaving
 the hosted Kamal profile free to select PostgreSQL.
-Native image qualification also verifies the Kamal service label and the exact
+Native image qualification also verifies the image service label and the exact
 source, revision, and version labels before booting the candidate.
 The public CLI driver runs once per transport and each structured result binds
 its own canonical origin, candidate digest, CLI tag/commit, and TLS posture;
@@ -214,10 +215,14 @@ evidence.
 
 ## Scope
 
-The initial predecessor-free release remains blocked until the exact
-Kamal-native backup, restore, and runtime qualification contract is complete.
-The first successor release must also qualify its adjacent upgrade and rollback
-path. Ordinary `bin/kamal deploy` assumes backward-compatible migrations; a
+The initial predecessor-free release remains blocked until a retained Linux
+AMD64 drill deploys the exact `tag@digest` through the supported ONCE release named in the evidence, verifies
+proxy identity and forwarding, restarts with persistent state, updates to an
+exact image, and completes ONCE backup and restore for all four SQLite roles
+and local files. S3 qualification must separately recover the matching
+external namespace. The first successor release must also qualify its adjacent
+upgrade and rollback path. An ordinary ONCE image update assumes
+backward-compatible migrations; a
 release that needs a stopped-process migration must publish explicit
 maintenance, verified backup/restore, resumable verification, and rollback
 instructions; it must not claim that one outer transaction covers the whole

@@ -13,11 +13,4 @@ ENV["BUNDLE_GEMFILE"] ||= File.expand_path("../Gemfile", __dir__)
 require "rubygems"
 require "bundler/setup"
 
-require_relative "../lib/screenote/kamal_release_deployer"
-
-exit Screenote::KamalReleaseDeployer.new(
-  root: File.expand_path("..", __dir__),
-  argv: ARGV,
-  kamal_bin: Gem.bin_path("kamal", "kamal"),
-  ruby_bin: Gem.ruby
-).call
+load Gem.bin_path("kamal", "kamal")

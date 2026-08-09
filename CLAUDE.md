@@ -84,9 +84,9 @@ Development seed user: `test@screenote.app` / `password`
 
 ## Environment Variables
 
-Runtime requirements depend on the edition. `config/deploy.yml` is the public
-self-hosted Kamal starter; `config/deploy.saas.yml` is the complete hosted
-service configuration. Keep those contracts separate.
+Runtime requirements depend on the edition. Public self-hosting uses the
+release image through ONCE; `config/deploy.saas.yml` is the complete internal
+hosted-service Kamal configuration. Keep those contracts separate.
 
 ```bash
 # Common deployment identity
@@ -114,13 +114,13 @@ RABATA_BUCKET=...
 RABATA_REGION=...
 RABATA_ENDPOINT=...
 
-# Hosted SaaS PostgreSQL roles
-DATABASE_URL=postgresql://...
-CACHE_DATABASE_URL=postgresql://...
-QUEUE_DATABASE_URL=postgresql://...
-CABLE_DATABASE_URL=postgresql://...
+# Hosted SaaS database roles
+DATABASE_URL=...
+CACHE_DATABASE_URL=...
+QUEUE_DATABASE_URL=...
+CABLE_DATABASE_URL=...
 
-# Optional for self-hosting; required by the hosted SaaS configuration
+# Hosted SaaS only
 HONEYBADGER_API_KEY=...
 HONEYBADGER_JS_API_KEY=...
 ```
@@ -128,9 +128,9 @@ HONEYBADGER_JS_API_KEY=...
 Self-hosting uses four SQLite databases (primary, cache, queue, and cable) on
 the durable `/rails/storage` volume. It does not require PostgreSQL, Rabata, or
 Honeybadger. Local screenshot storage is the default; generic S3-compatible
-storage, SMTP, social OAuth, and monitoring are opt-in and must be configured
-completely when enabled. Hosted `screenote.ai` uses four PostgreSQL roles,
-Rabata object storage, and Honeybadger alongside its other required providers.
+storage, SMTP, and social OAuth are opt-in and must be configured completely
+when enabled. Hosted `screenote.ai` uses four database URLs, Rabata object
+storage, and Honeybadger alongside its other required providers.
 
 ## Rails Development Rules
 
@@ -146,10 +146,11 @@ Write code that would make DHH proud and pass code review at 37signals. Always c
 ### Stack
 - Ruby 3.4.10+
 - Rails 8.1.2+
-- SQLite (development, test, and self-hosted production); PostgreSQL (hosted SaaS production)
+- Active Record with SQLite for development, test, and self-hosted production;
+  hosted SaaS supplies its four production database URLs
 - Active Storage with local files by default for self-hosting, optional generic S3, and Rabata for hosted SaaS
-- Honeybadger is optional for self-hosting and required for hosted SaaS
-- Kamal for deployment
+- Honeybadger is required for hosted SaaS; the public ONCE deployment omits it
+- ONCE for public self-hosting; Kamal for hosted `screenote.ai`
 
 ### Pre-commit Checklist
 Run before each commit:
@@ -178,32 +179,24 @@ bin/rails test           # All tests pass
 - **Service objects** (`app/services/`) for complex operations — instance-based with class convenience methods
 - Use native Turbo logic instead of custom JavaScript wherever possible
 - Proper error handling with user-friendly messages — never show detailed errors to users
-- Report errors to the configured monitoring provider; self-hosting may run with monitoring disabled
+- Hosted errors go to Honeybadger; self-hosted operators use ONCE's application logs
 - Never store images in the database — use the configured Active Storage service (local or S3-compatible for self-hosting, Rabata for hosted SaaS)
 
-### Deployment (Kamal)
+### Deployment
 
-Use the repository wrappers so the self-hosted and SaaS configurations cannot
-be mixed:
+Public self-hosting uses ONCE with the exact `tag@digest` image named by a
+Screenote GitHub Release. Do not ask operators to fork or clone this repository,
+build a release image locally, use a moving tag, or deploy through Kamal. Keep
+ONCE automatic application updates disabled and follow
+`docs/once-deployment.md`.
+
+Kamal is only for the hosted `screenote.ai` service:
 
 ```bash
-# Public self-hosted starter
-bin/kamal setup
-bin/kamal deploy
-bin/kamal console
-bin/kamal logs
-
-# Hosted screenote.ai only
 bin/kamal-saas deploy
 bin/kamal-saas console
 bin/kamal-saas logs
 ```
-
-On a supported self-hosted tag, `bin/kamal setup`, `deploy`, and `redeploy`
-must validate the immutable public release evidence, mirror the exact qualified
-image through the loopback registry, and run Kamal with `--skip-push`. Do not
-bypass that path. `SCREENOTE_KAMAL_SOURCE_BUILD=1` is only for explicitly
-unsupported development/custom images.
 
 <!-- BEGIN LLM WIKI -->
 ## LLM Wiki

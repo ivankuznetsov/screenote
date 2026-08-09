@@ -276,6 +276,7 @@ module ScreenoteLoadDriver
         "--env", "RAILS_ENV=production",
         "--env", "RAILS_SERVE_STATIC_FILES=true",
         "--env", "RAILS_LOG_LEVEL=warn",
+        "--env", "DISABLE_SSL=true",
         "--env", "SCREENOTE_EDITION=self_hosted",
         "--env", "SCREENOTE_BASE_URL=#{@origin}",
         "--env", "SCREENOTE_STORAGE=local",

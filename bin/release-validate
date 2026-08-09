@@ -5,6 +5,7 @@ require "digest"
 require "json"
 require "open3"
 require "optparse"
+require "shellwords"
 require "time"
 require "yaml"
 
@@ -17,7 +18,14 @@ class ReleaseValidation
   PLACEHOLDER = /\b(?:pending|todo|tbd|changeme|placeholder)\b/i
   MAX_EVIDENCE_BYTES = 128 * 1024
   EXPECTED_REPOSITORY = "ivankuznetsov/screenote"
+  EXPECTED_IMAGE_REPOSITORY = "ghcr.io/#{EXPECTED_REPOSITORY}"
   EXPECTED_BASE_IMAGE = "docker.io/library/ruby:3.4.10-alpine3.24@sha256:c5a5064d190055633011c03aa800170cc36945ff3afb5f6c915329f92d6f1e00"
+  SOURCE_BOUNDARY_FILES = %w[CONTRIBUTING.md SECURITY.md SUPPORT.md THIRD_PARTY_NOTICES.md].freeze
+  PUBLIC_INSTALLATION_DOCS = %w[README.md docs/self-hosting.md docs/once-deployment.md].freeze
+  PUBLIC_ONCE_COMMAND_DOCS = %w[README.md docs/once-deployment.md].freeze
+  IMAGE_REFERENCE_PATTERN = %r{#{Regexp.escape(EXPECTED_IMAGE_REPOSITORY)}:[^\s"'`\\]+}
+  IMAGE_REFERENCE_PLACEHOLDERS = %w[vX.Y.Z vNEXT].freeze
+  IMAGE_DIGEST_PLACEHOLDER = "sha256:REPLACE_WITH_RELEASE_DIGEST"
   REQUIRED_CHECKS = %w[
     ruby-security
     lint
@@ -62,7 +70,7 @@ class ReleaseValidation
     SECURITY.md
     SUPPORT.md
     docs/self-hosting.md
-    docs/kamal-deployment.md
+    docs/once-deployment.md
     docs/releases.md
     docs/releases/initial-release.md
     docs/releases/security-evidence.md
@@ -77,8 +85,6 @@ class ReleaseValidation
     .github/rulesets/release-tags.json
     .github/rulesets/immutable-release-tags.json
     .github/dependabot.yml
-    .kamal/secrets.example
-    config/deploy.yml
     config/deploy.saas.yml
   ].freeze
 
@@ -198,20 +204,99 @@ class ReleaseValidation
     error("README.md must not install the canonical CLI from a moving @latest reference") if
       readme.match?(%r{screenote-cli/cmd/screenote@latest})
 
-    %w[CONTRIBUTING.md SECURITY.md SUPPORT.md THIRD_PARTY_NOTICES.md].each do |relative|
+    SOURCE_BOUNDARY_FILES.each do |relative|
       error("#{relative} does not identify the source-available license/support boundary") unless
         read(relative).match?(/O'Saasy|source-available|as-is|security/i)
     end
 
-    user_docs = %w[README.md docs/self-hosting.md docs/kamal-deployment.md]
-      .filter_map { |relative| read(relative) if File.file?(path(relative)) }
-      .join("\n")
+    installation_documents = PUBLIC_INSTALLATION_DOCS.to_h do |relative|
+      [ relative, read(relative) ]
+    end
+    user_docs = installation_documents.values.join("\n")
     error("public installation docs must not instruct operators to set RAILS_MASTER_KEY") if
       user_docs.match?(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i)
-    error("public installation docs must use Kamal rather than Docker Compose") if
+    error("public installation docs must use ONCE rather than Docker Compose") if
       user_docs.match?(/docker\s+compose|compose\.ya?ml/i)
     error("public product docs must use the CLI and agent skill rather than MCP") if
       user_docs.match?(/\bmcp\b/i)
+    error("public installation docs must deploy Screenote with ONCE") unless
+      user_docs.include?("once deploy")
+    error("public installation docs must disable moving image updates") unless
+      user_docs.include?("--auto-update=false")
+
+    PUBLIC_ONCE_COMMAND_DOCS.each do |relative|
+      validate_public_once_commands(relative, installation_documents.fetch(relative))
+    end
+
+    image_references = user_docs.scan(IMAGE_REFERENCE_PATTERN)
+    error("public installation docs must name the Screenote release image") if image_references.empty?
+    error("public installation docs must use exact vX.Y.Z@sha256 image references") unless
+      image_references.all? { |reference| valid_public_image_reference?(reference) }
+  end
+
+  def valid_public_image_reference?(reference)
+    prefix = "#{EXPECTED_IMAGE_REPOSITORY}:"
+    return false unless reference.start_with?(prefix)
+
+    tag, digest = reference.delete_prefix(prefix).split("@", 2)
+    if IMAGE_REFERENCE_PLACEHOLDERS.include?(tag)
+      return digest == IMAGE_DIGEST_PLACEHOLDER
+    end
+
+    tag.match?(SEMVER_TAG) && digest&.match?(OCI_DIGEST)
+  end
+
+  def validate_public_once_commands(relative, document)
+    commands = public_shell_commands(document)
+    deploy_commands = commands.select { |tokens| tokens.first(2) == %w[once deploy] }
+    error("#{relative} must include a copyable ONCE deploy command") if deploy_commands.empty?
+
+    deploy_commands.each do |tokens|
+      error("#{relative} ONCE deploy command must bind an exact Screenote image") unless
+        valid_public_image_reference?(tokens[2].to_s)
+
+      auto_update_options = tokens.grep(/\A--auto-update(?:=|\z)/)
+      error("#{relative} ONCE deploy command must set --auto-update=false exactly once") unless
+        auto_update_options == [ "--auto-update=false" ]
+    end
+
+    update_commands = commands.select { |tokens| tokens.first(2) == %w[once update] }
+    image_updates = update_commands.filter_map do |tokens|
+      image_option_values(tokens)
+    end
+    error("#{relative} must include an exact ONCE image update command") if image_updates.empty?
+    image_updates.each do |references|
+      error("#{relative} ONCE image update command must bind one exact Screenote image") unless
+        references.one? && valid_public_image_reference?(references.first)
+    end
+  end
+
+  def public_shell_commands(document)
+    document.scan(/```(?:sh|bash)\r?\n(.*?)```/m).flatten.flat_map do |block|
+      block.gsub(/\\\r?\n[ \t]*/, " ").lines.filter_map do |line|
+        command = line.strip
+        next if command.empty? || command.start_with?("#")
+
+        tokens = Shellwords.split(command)
+        tokens.shift if tokens.first == "sudo"
+        tokens if tokens.first == "once"
+      rescue ArgumentError
+        error("public installation docs contain an invalid shell command")
+        nil
+      end
+    end
+  end
+
+  def image_option_values(tokens)
+    references = []
+    tokens.each_with_index do |token, index|
+      if token == "--image"
+        references << tokens[index + 1].to_s
+      elsif token.start_with?("--image=")
+        references << token.delete_prefix("--image=")
+      end
+    end
+    references unless references.empty?
   end
 
   def tracked_secret_surface

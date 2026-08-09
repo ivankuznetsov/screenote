@@ -13,12 +13,13 @@ Remove it when all technical prerequisites are ready:
 - Its two exact-image SaaS boot checks exercise separate primary, cache, queue,
   and cable URLs through Active Record without binding qualification to a
   database adapter or server version.
-- The supported `bin/kamal` exact-image path has completed a retained Linux
-  AMD64 deployment qualification through Kamal Proxy and Thruster, including
-  manifest mirroring, remote digest/label identity, HTTPS and client-IP
-  forwarding, spoofed-forwarding rejection, restart, and volume persistence.
-- Kamal-native backup and restore commands are published and a retained drill
-  proves recovery of all four SQLite roles plus local files or the selected S3
-  namespace using the exact release image.
+- The exact `tag@digest` image has completed a retained Linux AMD64 deployment
+  through the supported ONCE stable release named in the evidence, ONCE's
+  Kamal Proxy, and Thruster with Screenote automatic updates disabled,
+  including remote digest/label identity, HTTPS and client-IP forwarding,
+  spoofed-forwarding rejection, restart, and volume persistence.
+- ONCE backup and restore commands are published and a retained drill proves
+  recovery of all four SQLite roles plus local files using the exact release
+  image; S3 mode also proves recovery of the matching external namespace.
 
 Deleting this file records technical readiness only. Promotion still requires the protected `source-release` environment approval and every exact validator must pass.

@@ -2,9 +2,9 @@
 
 > [!WARNING]
 > This page documents Screenote's internal pre-release Docker Compose
-> qualification harness. It is not a supported operator workflow for Kamal
-> deployments. Use [Deploy Screenote with Kamal](../kamal-deployment.md) and
-> the [self-hosting guide](../self-hosting.md) instead.
+> qualification harness. It is not the public ONCE operator workflow. Use
+> [Deploy Screenote with ONCE](../once-deployment.md) and the
+> [self-hosting guide](../self-hosting.md) instead.
 
 This qualification harness reads runtime secrets from restricted files. It
 keeps secret values out of `.env`, Compose environment entries, command

@@ -1,15 +1,15 @@
 ---
 title: Architectural Decisions
 type: decision
-source: git log
+source: git log, Dockerfile, bin/docker-entrypoint, app/jobs/reconcile_screenshot_processing_job.rb, lib/screenote/deployment.rb, docs/once-deployment.md, config/deploy.saas.yml
 created: 2026-04-10
-updated: 2026-08-08
-tags: [decisions, adr, architecture, history]
+updated: 2026-08-09
+tags: [decisions, adr, architecture, history, deployment, once]
 ---
 
 # Architectural Decisions
 
-TLDR: Key decisions extracted from the git history as lightweight ADRs. Screenote evolved through foundation, MCP integration, collaboration, annotation threading, Stripe hardening, and multi-viewport screenshots.
+TLDR: Key decisions extracted from history and current source as lightweight ADRs. Screenote evolved through foundation, agent integration, collaboration, annotation threading, release hardening, database portability, and a split deployment model: ONCE for public self-hosting and Kamal only for hosted `screenote.ai`.
 
 Source: `git log --all --oneline` (112 commits total)
 
@@ -148,5 +148,13 @@ Source: `git log --all --oneline` (112 commits total)
 **Context**: The original development/production split grew into adapter-specific application locks, retry classification, migration SQL, CI lanes, and PostgreSQL 16 assertions in exact-image SaaS qualification. Those checks coupled the application contract to one hosted deployment choice even though Active Record already exposes the required database roles and concurrency errors.
 **Decision**: Keep application code, tests, required CI, migrations where adapter capabilities permit, and release qualification database-adapter-neutral through Active Record. Admission and authority serialization use durable rows and Active Record operations; retry policy consumes Active Record concurrency exceptions plus the supported SQLite cause chain without branching on adapter identity. Exact-image SaaS qualification remains mandatory on AMD64 and ARM64, but supplies primary, cache, queue, and cable as four URLs and verifies them without asserting an adapter name or server version. Runtime deployment remains edition-specific: supported self-hosting uses SQLite, while the current hosted Kamal configuration may provision PostgreSQL. Because the initial supported release has predecessor `none` and the hosted database is already current, one pre-v1 rebaseline removes PostgreSQL-only lock SQL from migrations `20260712153000`, `20260805130000`, `20260805131000`, and `20260805132000`; migration history is append-only from `v1.0.0` onward. The stopped-process credential cutover lets each migration use the transaction behavior supported by its adapter instead of wrapping the whole chain in one outer transaction. Its safety boundary is quiesced maintenance, a verified backup/restore point, migration-version-aware idempotent resume, and post-migration storage/runtime verification.
 **Rationale**: Application correctness and release evidence should survive a database-provider change without losing exact-image SaaS coverage. Separating the application boundary from deployment topology keeps PostgreSQL available to the hosted service and SQLite appropriate for self-hosting, while avoiding a false promise that an interrupted multi-migration cutover can always be rolled back atomically.
+
+## ADR-018: ONCE for Public Self-Hosting, Kamal for Hosted SaaS
+
+**Date**: 2026-08-09
+**Status**: Active; supersedes the 2026-08-07 public Kamal deployment decision
+**Context**: The first public deployment design required a repository fork, an exact source checkout, a tracked self-hosted Kamal configuration, local Ruby tooling, and a custom release-aware Kamal wrapper. That made installing one qualified container substantially harder than the product topology required. ONCE can manage a custom Docker image, TLS proxying, a persistent volume, environment, updates, and backups directly on the application host.
+**Decision**: Public self-hosting deploys the exact GHCR release identity `vX.Y.Z@sha256:...` through ONCE's stable channel with Screenote application auto-update disabled. The first deploy uses the ONCE CLI, not its custom-image TUI, because Screenote must receive `SCREENOTE_BASE_URL` and a one-time `SCREENOTE_BOOTSTRAP_TOKEN` before first boot. The image defaults to `SCREENOTE_EDITION=self_hosted`, forwards authoritative proxy headers through Thruster, and trusts loopback plus ONCE's private Docker range. ONCE supplies `SECRET_KEY_BASE`, mounts its one durable volume at both `/storage` and `/rails/storage`, and interoperates with Screenote's generic SMTP configuration. Screenote enqueues startup image reconciliation before serving instead of performing the full corpus repair inline. A concurrency-discarded duplicate is accepted because an existing reconciliation already owns the work, while genuine queue errors still stop startup. ONCE pauses the container to copy local volume state during backup; an external S3 namespace remains a separate operator/provider recovery responsibility. Public self-hosting has no fork, source checkout, `config/deploy.yml`, or custom `bin/kamal` wrapper. Kamal and `config/deploy.saas.yml` remain internal to hosted `screenote.ai`.
+**Rationale**: The runtime already fits ONCE's single-container contract, so installing a digest-pinned published Screenote image is simpler and preserves the exact-artifact boundary without turning deployment configuration into an application fork. The official stable installer keeps ONCE itself current, while manual exact-image updates prevent the Screenote application from moving without release review. Release evidence records the ONCE version exercised by each qualification. Keeping hosted Kamal isolated preserves SaaS provider and database choices. The first release remains blocked until retained evidence proves ONCE deploy, restart, update, backup, and restore behavior, including separate S3 recovery where selected.
 
 See also: [[architecture]], [[schema-evolution]], [[active-areas]], [[models/screenshot-image]]

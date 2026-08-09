@@ -17,6 +17,7 @@ readonly AUDIT_ROOT="${SMOKE_ROOT}/audit"
 readonly CLAIM_LOG="${SMOKE_ROOT}/claim.log"
 readonly VERIFY_LOG="${SMOKE_ROOT}/verify.log"
 readonly COMPOSE_PROJECT_NAME="screenote-smoke-$$"
+readonly ONCE_VOLUME_NAME="screenote-once-contract-$$"
 
 if [[ -n "${SCREENOTE_SMOKE_IMAGE-}" ]]; then
   readonly IMAGE_TAG="${SCREENOTE_SMOKE_IMAGE}"
@@ -43,6 +44,7 @@ cleanup() {
     "${base_compose[@]}" logs --no-color >&2 || true
   fi
   "${base_compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker volume rm "${ONCE_VOLUME_NAME}" >/dev/null 2>&1 || true
   if [[ "${REMOVE_IMAGE}" == true ]]; then
     docker image rm "${IMAGE_TAG}" >/dev/null 2>&1 || true
   fi
@@ -71,6 +73,38 @@ if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "
   printf 'self-hosted smoke: final image does not enforce the 30 MiB request limit\n' >&2
   exit 1
 fi
+
+for expected_environment in \
+  'DISABLE_SSL=false' \
+  'SCREENOTE_EDITION=self_hosted' \
+  'SCREENOTE_TRUSTED_PROXIES=127.0.0.1/32,::1/128,172.16.0.0/12' \
+  'THRUSTER_FORWARD_HEADERS=true'; do
+  if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}" |
+    grep --fixed-strings --line-regexp --quiet "${expected_environment}"; then
+    printf 'self-hosted smoke: final image is missing ONCE environment: %s\n' \
+      "${expected_environment}" >&2
+    exit 1
+  fi
+done
+
+if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}" |
+  grep --extended-regexp --line-regexp --quiet 'KAMAL_VERSION=.+'; then
+  printf 'self-hosted smoke: final image is missing its source revision environment\n' >&2
+  exit 1
+fi
+
+if [[ "$(docker image inspect --format '{{.Config.User}}' "${IMAGE_TAG}")" != "1000:1000" ]]; then
+  printf 'self-hosted smoke: final image must run as uid and gid 1000\n' >&2
+  exit 1
+fi
+
+docker volume create "${ONCE_VOLUME_NAME}" >/dev/null
+docker run --rm \
+  --entrypoint /bin/sh \
+  --volume "${ONCE_VOLUME_NAME}:/storage" \
+  --volume "${ONCE_VOLUME_NAME}:/rails/storage" \
+  "${IMAGE_TAG}" \
+  -c 'printf once-contract > /storage/once-contract && test "$(cat /rails/storage/once-contract)" = once-contract'
 
 mkdir -m 0700 "${SECRET_ROOT}" "${AUDIT_ROOT}"
 openssl rand -base64 48 > "${SECRET_ROOT}/secret_key_base"
@@ -165,7 +199,7 @@ wait_until_processing_complete() {
         'SELECT (SELECT COUNT(*) FROM screenshot_images WHERE status = 1 AND width = 400 AND height = 300), (SELECT COUNT(*) FROM active_storage_variant_records);')" &&
       finished_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
         /rails/storage/queue.sqlite3 \
-        "SELECT COUNT(*) FROM solid_queue_jobs WHERE class_name = 'ScreenshotDimensionJob' AND finished_at IS NOT NULL;")" &&
+        "SELECT COUNT(*) FROM solid_queue_jobs WHERE class_name = 'ReconcileScreenshotProcessingJob' AND finished_at IS NOT NULL;")" &&
       failed_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
         /rails/storage/queue.sqlite3 \
         'SELECT COUNT(*) FROM solid_queue_failed_executions;')"; then
@@ -256,8 +290,8 @@ upload = Snapshots::AttachImage.call(
 )
 raise "screenshot upload did not persist" unless upload.operation == "uploaded" && image.image.attached?
 
-job = ScreenshotDimensionJob.perform_later(image, image.image.blob.id)
-raise "dimension job was not queued" unless job.successfully_enqueued?
+job = ReconcileScreenshotProcessingJob.perform_later
+raise "reconciliation job was not queued" unless job.successfully_enqueued?
 
 Rails.cache.write("screenote-container-smoke-job-id", job.job_id)
 annotation = screenshot.annotations.create!(
@@ -321,8 +355,8 @@ raise "annotation reply did not survive" unless annotation.annotation_comments.e
 
 job_id = Rails.cache.read("screenote-container-smoke-job-id")
 job = SolidQueue::Job.find_by!(active_job_id: job_id)
-raise "queued dimension job did not finish" unless job.finished_at?
-raise "queued dimension job failed" if job.failed_execution
+raise "queued reconciliation job did not finish" unless job.finished_at?
+raise "queued reconciliation job failed" if job.failed_execution
 raise "a queued smoke job failed" if SolidQueue::FailedExecution.exists?
 
 channel = "screenote-container-smoke"
