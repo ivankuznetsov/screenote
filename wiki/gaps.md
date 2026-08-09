@@ -62,11 +62,11 @@ Areas where documentation is missing or incomplete. Updated from current source,
   command with those two custom environment values. After claim, the operator
   can remove the bootstrap value in ONCE's settings.
 - The public ONCE path and current source contracts are documented, but the
-  exact release image still needs a retained Linux AMD64 exercise through
+  exact release image still needs a retained Linux exercise through
   the supported ONCE stable release named in the evidence: initial deploy with Screenote automatic updates disabled, proxy and
-  forwarding verification, restart with volume persistence, explicit
-  `tag@digest` update, local-volume backup, and restore. S3 mode also requires a
-  provider-level recovery point matched to the restored SQLite state.
+  forwarding verification, restart with volume persistence, a bare update from
+  a repointed release channel, local-volume backup, and restore. S3 mode also
+  requires a provider-level recovery point matched to the restored SQLite state.
 - A local Linux AMD64 preview drill completed deploy, claim, browser upload,
   restart reconciliation, exact-image replacement, four-role/local-blob
   persistence, ONCE backup, destructive restore, and authenticated browser
@@ -106,8 +106,12 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - The unsafe rolling credential migration is resolved in source: ordinary deploys refuse the pending migration and `bin/saas-credential-cutover` now locks deployment, stops and proves predecessor processes quiesced, invokes a reviewed digest-pinned backup hook for that exact window, validates challenge/restore-point-bound evidence, runs migrations with their adapter-supported transaction behavior, and verifies migration versions, stored digests, and runtime lookups before starting only the successor. It does not promise all-migrations rollback from one outer transaction; an interrupted run must resume its idempotent checks under maintenance or restore the verified backup. The remaining production boundary is operational: the private real hook and four-role restore drill must be reviewed and retained for the cutover.
 
 ### Source release publication
-- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64/minimum-host qualification runners; the tracked public-CLI driver; candidate-backed HTTP/HTTPS origins; retained exact-image AMD64/ARM64 SaaS boots over four URL-driven Active Record roles; a retained end-to-end Linux AMD64 deployment of the exact `tag@digest` through the supported ONCE stable release named in the evidence; retained ONCE restart, update, local-volume backup, and restore evidence; matching external S3 recovery evidence when selected; and exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence remain technical gates. The SaaS checks remain exact-image qualification without an adapter/version assertion. The versioned minimum-host profile and tracked server load driver are source-complete, but only dedicated qualification and recovery runs can satisfy their live gates. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all remaining gates are complete.
-- The initial predecessor-none release supports same-image local/S3 restore. The first successor release must add and qualify the exact adjacent local/S3 upgrade and rollback fixture and reconcile predecessor versus restore-image validation before it can publish.
+- **PUBLICATION BLOCKERS:** Live GitGuardian App/incident status; GitHub main/tag rulesets and protected release-environment configuration; an immutable public CLI tag; native AMD64/ARM64/minimum-host qualification runners; the tracked public-CLI driver; candidate-backed HTTP/HTTPS origins; retained exact-image AMD64/ARM64 SaaS boots over four URL-driven Active Record roles; a retained end-to-end Linux deployment of the exact `tag@digest` through the supported ONCE stable release named in the evidence; retained ONCE restart, update, local-volume backup, and restore evidence; matching external S3 recovery evidence when selected; exact retained multi-platform image, scan, SBOM, qualification, provenance, and release-note evidence; and verification that the public `latest` channel resolves to the newest release manifest remain technical gates. The SaaS checks remain exact-image qualification without an adapter/version assertion. The versioned minimum-host profile and tracked server load driver are source-complete, but only dedicated qualification and recovery runs can satisfy their live gates. `docs/releases/PUBLICATION_BLOCKED.md` intentionally prevents tag/image/release publication until all remaining gates are complete.
+- The initial predecessor-none release supports same-image local/S3 restore.
+  Before the first successor can publish, qualification and evidence must grow
+  a direct-to-current update and restore matrix covering every earlier
+  published release, while retaining the immediate predecessor for rollback
+  verification.
 
 ## Incomplete Documentation
 

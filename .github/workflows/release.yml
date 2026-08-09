@@ -38,7 +38,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: source-release-${{ inputs.release_tag }}
+  group: source-release-${{ inputs.operation == 'publish' && 'promotion' || inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
@@ -470,6 +470,8 @@ jobs:
     outputs:
       authorizing_sha: ${{ steps.authorization-source.outputs.authorizing_sha }}
       manifest_digest: ${{ steps.verify.outputs.manifest_digest }}
+      predecessor_image_digest: ${{ steps.verify.outputs.predecessor_image_digest }}
+      predecessor_tag: ${{ steps.verify.outputs.predecessor_tag }}
     steps:
       - name: Validate publication inputs before checkout
         env:
@@ -724,6 +726,8 @@ jobs:
           cp docs/releases/initial-release.md "$RUNNER_TEMP/verified/release-notes.md"
           cp docs/releases/evidence/public-evidence.json "$RUNNER_TEMP/verified/public-evidence.json"
           echo "manifest_digest=$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("manifest_digest")' "$RUNNER_TEMP/verified/candidate.json")" >> "$GITHUB_OUTPUT"
+          echo "predecessor_image_digest=$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("release", "predecessor_image_digest")' docs/releases/evidence/public-evidence.json)" >> "$GITHUB_OUTPUT"
+          echo "predecessor_tag=$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).dig("release", "predecessor_tag")' docs/releases/evidence/public-evidence.json)" >> "$GITHUB_OUTPUT"
 
       - name: Verify exact qualification run jobs and artifact identity live
         id: qualification
@@ -1138,6 +1142,8 @@ jobs:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
           IMAGE_REPOSITORY: ghcr.io/ivankuznetsov/screenote
           MANIFEST_DIGEST: ${{ needs.authorize.outputs.manifest_digest }}
+          PREDECESSOR_IMAGE_DIGEST: ${{ needs.authorize.outputs.predecessor_image_digest }}
+          PREDECESSOR_TAG: ${{ needs.authorize.outputs.predecessor_tag }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
@@ -1149,6 +1155,19 @@ jobs:
           error = File.binread(ENV.fetch("GITHUB_ERROR"))
           expected = "gh: Not Found (HTTP 404)\n"
           abort "GitHub response does not prove object absence" unless error == expected
+          RUBY
+          }
+
+          registry_not_found() {
+            local reference="$1"
+            local error_file="$2"
+            IMAGE_REFERENCE="$reference" REGISTRY_ERROR="$error_file" ruby <<'RUBY'
+          error = File.binread(ENV.fetch("REGISTRY_ERROR")).delete_suffix("\n")
+          reference = ENV.fetch("IMAGE_REFERENCE")
+          exact_not_found = %(Error response from registry: failed to find "#{reference}": #{reference}: not found)
+          exact_manifest_unknown = "Error response from registry: manifest unknown: manifest unknown"
+          abort "registry response does not prove manifest absence" unless
+            error == exact_not_found || error == exact_manifest_unknown
           RUBY
           }
 
@@ -1164,21 +1183,90 @@ jobs:
             abort "immutable GitHub releases are not explicitly enabled" unless valid
           RUBY
 
+          published_releases="$RUNNER_TEMP/published-releases.json"
+          gh api --paginate --slurp \
+            "/repos/$GITHUB_REPOSITORY/releases?per_page=100" >"$published_releases"
+          PUBLISHED_RELEASES_JSON="$published_releases" ruby -rjson <<'RUBY'
+            pages = JSON.parse(File.binread(ENV.fetch("PUBLISHED_RELEASES_JSON")))
+            abort "published releases response is malformed" unless
+              pages.is_a?(Array) && pages.all? { |page| page.is_a?(Array) }
+
+            pattern = /\Av(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z/
+            requested_match = pattern.match(ENV.fetch("RELEASE_TAG"))
+            abort "requested release tag is not semantic" unless requested_match
+            requested_version = requested_match.captures.map(&:to_i)
+            stable_releases = []
+
+            pages.flatten.each do |release|
+              valid_shape = release.is_a?(Hash) &&
+                [ true, false ].include?(release["draft"]) &&
+                [ true, false ].include?(release["prerelease"]) &&
+                [ true, false ].include?(release["immutable"])
+              abort "published release entry is malformed" unless valid_shape
+              next if release["draft"] || release["prerelease"]
+              abort "published stable release is not immutable" unless release["immutable"]
+
+              match = pattern.match(release["tag_name"].to_s)
+              abort "published stable release tag is not semantic" unless match
+              version = match.captures.map(&:to_i)
+              abort "a newer GitHub Release already exists" if (version <=> requested_version) == 1
+              stable_releases << [ version, release["tag_name"] ]
+            end
+
+            tags = stable_releases.map(&:last)
+            abort "published stable releases contain duplicate tags" unless tags.uniq.length == tags.length
+            prior_releases = stable_releases.reject { |_version, tag| tag == ENV.fetch("RELEASE_TAG") }
+            predecessor_tag = ENV.fetch("PREDECESSOR_TAG")
+            if predecessor_tag == "none"
+              abort "first release cannot have a published stable predecessor" unless prior_releases.empty?
+            else
+              predecessor_match = pattern.match(predecessor_tag)
+              abort "predecessor release tag is not semantic" unless predecessor_match
+              newest_prior = prior_releases.max_by(&:first)
+              abort "newest published stable release does not match the recorded predecessor" unless
+                newest_prior&.last == predecessor_tag
+            end
+          RUBY
+
+          if test "$PREDECESSOR_TAG" = none; then
+            test "$PREDECESSOR_IMAGE_DIGEST" = none
+          else
+            [[ "$PREDECESSOR_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            [[ "$PREDECESSOR_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+            test "$PREDECESSOR_TAG" != "$RELEASE_TAG"
+            test "$(oras resolve "$IMAGE_REPOSITORY:$PREDECESSOR_TAG")" = "$PREDECESSOR_IMAGE_DIGEST"
+          fi
+          latest_descriptor="$RUNNER_TEMP/latest-descriptor.json"
+          latest_error="$RUNNER_TEMP/latest-descriptor.error"
+          if oras manifest fetch --descriptor "$IMAGE_REPOSITORY:latest" >"$latest_descriptor" 2>"$latest_error"; then
+            latest_digest="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("digest")' "$latest_descriptor")"
+            if test "$latest_digest" = "$MANIFEST_DIGEST"; then
+              latest_state=candidate
+            elif test "$PREDECESSOR_IMAGE_DIGEST" != none && test "$latest_digest" = "$PREDECESSOR_IMAGE_DIGEST"; then
+              latest_state=predecessor
+            else
+              echo "::error::Current latest manifest is neither this release nor its recorded predecessor"
+              exit 1
+            fi
+          elif registry_not_found "$IMAGE_REPOSITORY:latest" "$latest_error"; then
+            if test "$PREDECESSOR_TAG" = none; then
+              latest_state=absent
+            else
+              echo "::error::Latest image is absent for a successor release"
+              exit 1
+            fi
+          else
+            echo "::error::Latest image preflight failed without a definitive absent response"
+            exit 1
+          fi
+
           remote_descriptor="$RUNNER_TEMP/remote-descriptor.json"
           remote_error="$RUNNER_TEMP/remote-descriptor.error"
           if oras manifest fetch --descriptor "$IMAGE_REPOSITORY:$RELEASE_TAG" >"$remote_descriptor" 2>"$remote_error"; then
             remote_digest="$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0])).fetch("digest")' "$remote_descriptor")"
             test "$remote_digest" = "$MANIFEST_DIGEST"
             image_state=exact
-          elif IMAGE_REFERENCE="$IMAGE_REPOSITORY:$RELEASE_TAG" REGISTRY_ERROR="$remote_error" ruby <<'RUBY'
-          error = File.binread(ENV.fetch("REGISTRY_ERROR")).delete_suffix("\n")
-          reference = ENV.fetch("IMAGE_REFERENCE")
-          exact_not_found = %(Error response from registry: failed to find "#{reference}": #{reference}: not found)
-          exact_manifest_unknown = "Error response from registry: manifest unknown: manifest unknown"
-          abort "registry response does not prove manifest absence" unless
-            error == exact_not_found || error == exact_manifest_unknown
-          RUBY
-          then
+          elif registry_not_found "$IMAGE_REPOSITORY:$RELEASE_TAG" "$remote_error"; then
             image_state=absent
           else
             echo "::error::Registry preflight failed without a definitive absent response"
@@ -1296,6 +1384,7 @@ jobs:
             echo "image_state=$image_state"
             echo "tag_state=$tag_state"
             echo "attestation_state=$attestation_state"
+            echo "latest_state=$latest_state"
             echo "release_state=$release_state"
           } >>"$GITHUB_OUTPUT"
 
@@ -1349,6 +1438,7 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$SOURCE_SHA" \
+            --latest \
             --title "Screenote $RELEASE_TAG" \
             --notes-file "$promotion/release-notes.md" \
             "$promotion/public-evidence.json" \
@@ -1356,6 +1446,55 @@ jobs:
             "$promotion/sbom-amd64.spdx.json" \
             "$promotion/sbom-arm64.spdx.json" \
             "$promotion/provenance.json"
+
+      - name: Verify the newest immutable GitHub release
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          promotion="$RUNNER_TEMP/promotion"
+          newest_release_json="$RUNNER_TEMP/newest-release.json"
+          gh api "/repos/$GITHUB_REPOSITORY/releases/latest" >"$newest_release_json"
+          PROMOTION_DIR="$promotion" RELEASE_JSON="$newest_release_json" ruby -rjson -rdigest <<'RUBY'
+          release = JSON.parse(File.binread(ENV.fetch("RELEASE_JSON")))
+          promotion = ENV.fetch("PROMOTION_DIR")
+          expected_notes = Digest::SHA256.file(File.join(promotion, "release-notes.md")).hexdigest
+          actual_notes = Digest::SHA256.hexdigest(release.fetch("body"))
+          abort "newest release notes do not match" unless actual_notes == expected_notes
+          abort "newest release identity does not match" unless
+            release["tag_name"] == ENV.fetch("RELEASE_TAG") &&
+              release["name"] == "Screenote #{ENV.fetch('RELEASE_TAG')}" &&
+              release["draft"] == false && release["prerelease"] == false &&
+              release["immutable"] == true
+
+          expected_assets = %w[
+            provenance.json
+            public-evidence.json
+            release-qualification.json
+            sbom-amd64.spdx.json
+            sbom-arm64.spdx.json
+          ].to_h do |name|
+            [name, "sha256:#{Digest::SHA256.file(File.join(promotion, name)).hexdigest}"]
+          end
+          assets = release.fetch("assets")
+          abort "newest release assets are malformed" unless
+            assets.is_a?(Array) && assets.all? { |asset| asset.is_a?(Hash) }
+          names = assets.map { |asset| asset.fetch("name") }
+          abort "newest release assets contain duplicate names" unless names.uniq.length == names.length
+          actual_assets = assets.to_h { |asset| [asset.fetch("name"), asset.fetch("digest")] }
+          abort "newest release assets do not match" unless actual_assets == expected_assets
+          RUBY
+          gh release verify "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --format json >/dev/null
+
+      - name: Point latest at the verified release manifest
+        env:
+          IMAGE_REPOSITORY: ghcr.io/ivankuznetsov/screenote
+          MANIFEST_DIGEST: ${{ needs.authorize.outputs.manifest_digest }}
+        run: |
+          set -euo pipefail
+          oras tag "$IMAGE_REPOSITORY@$MANIFEST_DIGEST" latest
+          test "$(oras resolve "$IMAGE_REPOSITORY:latest")" = "$MANIFEST_DIGEST"
 
       - name: Verify every published object
         env:
@@ -1371,6 +1510,7 @@ jobs:
           set -euo pipefail
           promotion="$RUNNER_TEMP/promotion"
           test "$(oras resolve "$IMAGE_REPOSITORY:$RELEASE_TAG")" = "$MANIFEST_DIGEST"
+          test "$(oras resolve "$IMAGE_REPOSITORY:latest")" = "$MANIFEST_DIGEST"
 
           ref_json="$RUNNER_TEMP/final-tag-ref.json"
           gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >"$ref_json"
@@ -1406,35 +1546,3 @@ jobs:
               expected_subject = [{ "name" => ENV.fetch("IMAGE_REPOSITORY"), "digest" => { algorithm => digest } }]
               abort "signed provenance subject does not match" unless statement["subject"] == expected_subject
             '
-
-          release_json="$RUNNER_TEMP/final-release.json"
-          gh api "/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" >"$release_json"
-          PROMOTION_DIR="$promotion" RELEASE_JSON="$release_json" ruby -rjson -rdigest <<'RUBY'
-          release = JSON.parse(File.binread(ENV.fetch("RELEASE_JSON")))
-          promotion = ENV.fetch("PROMOTION_DIR")
-          expected_notes = Digest::SHA256.file(File.join(promotion, "release-notes.md")).hexdigest
-          actual_notes = Digest::SHA256.hexdigest(release.fetch("body"))
-          abort "release notes do not match" unless actual_notes == expected_notes
-          abort "release identity does not match" unless
-            release["tag_name"] == ENV.fetch("RELEASE_TAG") &&
-              release["name"] == "Screenote #{ENV.fetch('RELEASE_TAG')}" &&
-              release["draft"] == false && release["prerelease"] == false &&
-              release["immutable"] == true
-
-          expected_assets = %w[
-            provenance.json
-            public-evidence.json
-            release-qualification.json
-            sbom-amd64.spdx.json
-            sbom-arm64.spdx.json
-          ].to_h do |name|
-            [name, "sha256:#{Digest::SHA256.file(File.join(promotion, name)).hexdigest}"]
-          end
-          assets = release.fetch("assets")
-          abort "release assets are malformed" unless assets.is_a?(Array) && assets.all? { |asset| asset.is_a?(Hash) }
-          names = assets.map { |asset| asset.fetch("name") }
-          abort "release assets contain duplicate names" unless names.uniq.length == names.length
-          actual_assets = assets.to_h { |asset| [asset.fetch("name"), asset.fetch("digest")] }
-          abort "release assets do not match" unless actual_assets == expected_assets
-          RUBY
-          gh release verify "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --format json >/dev/null

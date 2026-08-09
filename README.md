@@ -60,20 +60,13 @@ Screenote is **source-available and self-hostable** under the
 
 ## Self-host Screenote
 
-> [!IMPORTANT]
-> The first supported source release is still being prepared. Until a version
-> appears on [GitHub Releases](https://github.com/ivankuznetsov/screenote/releases),
-> treat deployment from this repository as a development preview.
-
 Screenote runs with [ONCE](https://github.com/basecamp/once) as one application
 container with one durable volume. The container includes the Rails app,
 background jobs, four SQLite databases, and local screenshot storage. You do
 not need PostgreSQL, Redis, a separate worker, or a mail server.
 
-Prepare a Linux AMD64 server, point a hostname at it, and open ports 80 and
-443. Then run these commands on the server. Replace the image placeholder with
-the exact `tag@digest` reference from the Screenote GitHub Release—never use
-`latest` or a tag without its digest.
+Prepare a Linux AMD64 or ARM64 server, point a hostname at it, and open ports
+80 and 443. Then run these commands on the server:
 
 ```sh
 curl https://get.once.com | ONCE_INTERACTIVE=false sh
@@ -82,7 +75,7 @@ SCREENOTE_HOST=screenote.example.com
 SCREENOTE_BOOTSTRAP_TOKEN="$(openssl rand -hex 32)"
 
 once deploy \
-  ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST \
+  ghcr.io/ivankuznetsov/screenote:latest \
   --host "$SCREENOTE_HOST" \
   --auto-update=false \
   --env "SCREENOTE_BASE_URL=https://$SCREENOTE_HOST" \
@@ -100,12 +93,10 @@ accept SMTP credentials from services such as Resend or Postmark. Local
 screenshot storage works immediately, while a private S3-compatible bucket can
 be configured before the first deployment.
 
-To update, copy the exact next `tag@digest` reference from its release notes,
-take a backup, and run:
+To update, take a backup and run:
 
 ```sh
-once update screenote.example.com \
-  --image ghcr.io/ivankuznetsov/screenote:vNEXT@sha256:REPLACE_WITH_RELEASE_DIGEST
+once update screenote.example.com
 ```
 
 Read [Deploy with ONCE](docs/once-deployment.md) for VPN-only HTTP, email, S3,

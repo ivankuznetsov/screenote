@@ -10,13 +10,15 @@ The first publication is held by the technical sentinel [`docs/releases/PUBLICAT
 ## Release identity
 
 - Release tags use immutable `vMAJOR.MINOR.PATCH` names.
-- The OCI manifest digest is the canonical image identity. Release notes give
-  operators the readable tag and digest as one exact `tag@digest` GHCR
-  reference. Neither a moving tag nor a local rebuild is a supported release
-  input.
+- The OCI manifest digest is the canonical release identity. Release notes
+  record the readable tag and digest together, and promotion points the public
+  `latest` channel at those exact bytes. Local rebuilds are not release inputs.
 - Each server release names one exact tested public CLI tag.
-- The first release declares predecessor `none`; later releases name the one immediately supported predecessor.
-- Upgrades are sequential. Skipping releases is unsupported.
+- The first release declares predecessor `none`; later release evidence records
+  the immediate predecessor used for rollback qualification.
+- Every new release must upgrade directly from every earlier published
+  Screenote release, so the public `latest` channel never requires an operator
+  to select intermediate images.
 
 ## Gate order
 
@@ -30,7 +32,7 @@ The first publication is held by the technical sentinel [`docs/releases/PUBLICAT
    them through Active Record without requiring an adapter name or server
    version. The remaining checks cover minimum-host backup/restore and SQLite
    load plus HTTP/HTTPS CLI compatibility.
-5. Retain an end-to-end Linux AMD64 deployment of the exact `tag@digest` image
+5. Retain an end-to-end Linux deployment of the exact `tag@digest` image
    through the supported ONCE stable release named in the evidence, ONCE's
    Kamal Proxy, and Thruster with Screenote automatic updates disabled,
    including remote digest and label checks, the exact proxy manifest digest,
@@ -39,9 +41,11 @@ The first publication is held by the technical sentinel [`docs/releases/PUBLICAT
 6. Publish the release-matched ONCE backup and restore commands, then retain a
    restore drill covering all four SQLite roles and local screenshot storage;
    for S3 mode, retain matching provider recovery evidence as well.
+   Successor releases repeat the update and restore drill from every earlier
+   published release.
 7. Verify live main/tag rulesets, the GitGuardian App check source, the protected `source-release` environment, GHCR permissions, and immutable GitHub releases.
 8. Validate the technical public evidence manifest against the exact candidate and qualification artifacts.
-9. Approve the protected `source-release` environment. Promotion rechecks live incidents, verifies every remote object is absent or an exact resumable prefix, then publishes the image, tag, provenance attestation, and immutable release.
+9. Approve the protected `source-release` environment. Promotion rechecks live incidents, verifies every remote object is absent or an exact resumable prefix, then publishes the image, tag, provenance attestation, and immutable release before pointing `latest` at that exact manifest.
 
 Missing, skipped, malformed, expired, or mismatched technical evidence fails closed. A partial tag, image, attestation, or release is reusable only when it exactly matches the candidate commit and retained digests.
 

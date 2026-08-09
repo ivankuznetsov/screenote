@@ -5,20 +5,14 @@ applications on one server. It gives Screenote a reverse proxy, HTTPS, a
 durable volume, logs, settings, updates, and backups without requiring a
 repository checkout or deployment fork.
 
-> [!IMPORTANT]
-> The first supported Screenote source release is still being prepared. Until
-> a version appears on
-> [GitHub Releases](https://github.com/ivankuznetsov/screenote/releases), treat
-> deployment from this repository as a development preview.
-
 This guide uses ONCE's official stable installer. Each Screenote release names
 the exact ONCE version used for release qualification. ONCE maintains its own
-application-server updates separately; `--auto-update=false` below prevents
-only the Screenote image from moving without an operator-approved update.
+application-server updates separately; `--auto-update=false` below keeps
+Screenote updates manual.
 
 ## Prepare the server
 
-The first Screenote release targets a Linux AMD64 server with at least 2 vCPUs,
+Screenote supports Linux AMD64 and ARM64 servers. Start with at least 2 vCPUs,
 4 GiB of RAM, and 40 GiB of free SSD storage. Point a hostname at the server
 and make ports 80 and 443 reachable. Run ONCE on that server:
 
@@ -33,19 +27,14 @@ If ONCE was already installed and `once version` is older than the version named
 by the Screenote release, run `sudo once self-update` and check the version
 again. Re-running the installer does not replace an existing ONCE binary.
 
-## Deploy the exact release image
-
-Open the Screenote GitHub Release and copy its complete image reference. A
-supported reference contains both the release tag and immutable manifest
-digest, in the form `vX.Y.Z@sha256:...`. Do not substitute `latest`, a tag by
-itself, an untagged branch, or a locally rebuilt image.
+## Deploy Screenote
 
 ```sh
 SCREENOTE_HOST=screenote.example.com
 SCREENOTE_BOOTSTRAP_TOKEN="$(openssl rand -hex 32)"
 
 once deploy \
-  ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST \
+  ghcr.io/ivankuznetsov/screenote:latest \
   --host "$SCREENOTE_HOST" \
   --auto-update=false \
   --env "SCREENOTE_BASE_URL=https://$SCREENOTE_HOST" \
@@ -53,8 +42,8 @@ once deploy \
 ```
 
 ONCE generates and retains the Rails `SECRET_KEY_BASE`; do not create a second
-one. Automatic application updates stay disabled so each Screenote migration
-follows its release notes and exact image digest.
+one. Automatic application updates stay disabled so you choose when Screenote
+updates.
 
 ONCE obtains HTTPS for a publicly resolvable hostname. For an HTTP-only private
 VPN deployment, add `--disable-tls` and use the matching base URL:
@@ -82,18 +71,6 @@ Create the instance administrator. Then run `once`, select Screenote, open
 **Settings → Environment**, remove `SCREENOTE_BOOTSTRAP_TOKEN`, and keep
 `SCREENOTE_BASE_URL`. The administrator claim remains in the database after
 the token is removed.
-
-You can also remove the token from the command line when those are the only two
-custom environment variables:
-
-```sh
-once update "$SCREENOTE_HOST" \
-  --env "SCREENOTE_BASE_URL=https://$SCREENOTE_HOST"
-```
-
-`once update --env` replaces the complete custom environment map. If you have
-added S3 or other custom settings, use the ONCE settings screen or repeat every
-custom variable in the command. Omitting one removes it.
 
 Create a project, open **Members**, and invite your team. Without email,
 Screenote gives the project owner a private invitation link or manual code to
@@ -162,8 +139,7 @@ For S3 mode, the ONCE archive covers the databases and settings but not the
 external bucket. Protect that bucket with provider backups or versioning and
 test recovery of the volume and matching object namespace together.
 
-Restore a backup on an isolated server first and follow the release notes for
-the image recorded by that backup:
+Restore a backup on an isolated server first:
 
 ```sh
 once restore screenote-backups/screenote-2026-08-09.tar.gz
@@ -172,21 +148,25 @@ once restore screenote-backups/screenote-2026-08-09.tar.gz
 A backup is not proven until you have restored it and verified sign-in,
 projects, screenshots, annotations, comments, and pending processing.
 
+The normal installation records the moving `latest` image name in its ONCE
+backup, so restore pulls the current Screenote release. The archive protects
+your data and settings; it does not pin a historical application version. If
+your recovery policy requires version-pinned rollback, use the immutable image
+reference published in GitHub Releases instead of the simple `latest` channel.
+
 ## Update Screenote
 
-Read every release note in sequence. Copy the next release's exact image
-reference, take a verified backup, and update the application:
+Read the release notes and take a verified backup, then update the application:
 
 ```sh
-once backup screenote.example.com screenote-backups/screenote-before-vNEXT.tar.gz
-once update screenote.example.com \
-  --image ghcr.io/ivankuznetsov/screenote:vNEXT@sha256:REPLACE_WITH_RELEASE_DIGEST
+once backup screenote.example.com screenote-backups/screenote-before-update.tar.gz
+once update screenote.example.com
 ```
 
-An image-only update preserves the existing hostname, custom environment,
-email, backup, and resource settings. Do not attach an older image to data that
-a newer release has migrated. If a release requires maintenance or an adjacent
-upgrade, its release notes are authoritative.
+The update preserves the existing hostname, custom environment, email, backup,
+and resource settings. The current release supports a direct update from every
+earlier published release. If a release requires maintenance, its release
+notes are authoritative.
 
 Run `once` for the dashboard, settings, actions, and logs. `once list` shows
 installed applications; `once stop HOST`, `once start HOST`, and

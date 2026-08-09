@@ -23,9 +23,8 @@ class ReleaseValidation
   SOURCE_BOUNDARY_FILES = %w[CONTRIBUTING.md SECURITY.md SUPPORT.md THIRD_PARTY_NOTICES.md].freeze
   PUBLIC_INSTALLATION_DOCS = %w[README.md docs/self-hosting.md docs/once-deployment.md].freeze
   PUBLIC_ONCE_COMMAND_DOCS = %w[README.md docs/once-deployment.md].freeze
+  PUBLIC_RELEASE_IMAGE = "#{EXPECTED_IMAGE_REPOSITORY}:latest"
   IMAGE_REFERENCE_PATTERN = %r{#{Regexp.escape(EXPECTED_IMAGE_REPOSITORY)}:[^\s"'`\\]+}
-  IMAGE_REFERENCE_PLACEHOLDERS = %w[vX.Y.Z vNEXT].freeze
-  IMAGE_DIGEST_PLACEHOLDER = "sha256:REPLACE_WITH_RELEASE_DIGEST"
   REQUIRED_CHECKS = %w[
     ruby-security
     lint
@@ -230,19 +229,17 @@ class ReleaseValidation
 
     image_references = user_docs.scan(IMAGE_REFERENCE_PATTERN)
     error("public installation docs must name the Screenote release image") if image_references.empty?
-    error("public installation docs must use exact vX.Y.Z@sha256 image references") unless
+    error("public installation docs contain an unsupported Screenote image reference") unless
       image_references.all? { |reference| valid_public_image_reference?(reference) }
   end
 
   def valid_public_image_reference?(reference)
+    return true if reference == PUBLIC_RELEASE_IMAGE
+
     prefix = "#{EXPECTED_IMAGE_REPOSITORY}:"
     return false unless reference.start_with?(prefix)
 
     tag, digest = reference.delete_prefix(prefix).split("@", 2)
-    if IMAGE_REFERENCE_PLACEHOLDERS.include?(tag)
-      return digest == IMAGE_DIGEST_PLACEHOLDER
-    end
-
     tag.match?(SEMVER_TAG) && digest&.match?(OCI_DIGEST)
   end
 
@@ -252,8 +249,8 @@ class ReleaseValidation
     error("#{relative} must include a copyable ONCE deploy command") if deploy_commands.empty?
 
     deploy_commands.each do |tokens|
-      error("#{relative} ONCE deploy command must bind an exact Screenote image") unless
-        valid_public_image_reference?(tokens[2].to_s)
+      error("#{relative} ONCE deploy command must use the Screenote latest release channel") unless
+        tokens[2] == PUBLIC_RELEASE_IMAGE
 
       auto_update_options = tokens.grep(/\A--auto-update(?:=|\z)/)
       error("#{relative} ONCE deploy command must set --auto-update=false exactly once") unless
@@ -261,14 +258,10 @@ class ReleaseValidation
     end
 
     update_commands = commands.select { |tokens| tokens.first(2) == %w[once update] }
-    image_updates = update_commands.filter_map do |tokens|
-      image_option_values(tokens)
+    bare_updates = update_commands.select do |tokens|
+      tokens.length == 3 && !tokens[2].to_s.start_with?("-")
     end
-    error("#{relative} must include an exact ONCE image update command") if image_updates.empty?
-    image_updates.each do |references|
-      error("#{relative} ONCE image update command must bind one exact Screenote image") unless
-        references.one? && valid_public_image_reference?(references.first)
-    end
+    error("#{relative} must include a normal bare ONCE update command") if bare_updates.empty?
   end
 
   def public_shell_commands(document)
@@ -285,18 +278,6 @@ class ReleaseValidation
         nil
       end
     end
-  end
-
-  def image_option_values(tokens)
-    references = []
-    tokens.each_with_index do |token, index|
-      if token == "--image"
-        references << tokens[index + 1].to_s
-      elsif token.start_with?("--image=")
-        references << token.delete_prefix("--image=")
-      end
-    end
-    references unless references.empty?
   end
 
   def tracked_secret_surface

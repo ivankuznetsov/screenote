@@ -18,12 +18,13 @@ This document is a release-note template, not a published release or an authoriz
   transactional email, and Google/GitHub OAuth are optional ONCE application
   settings.
 - A fresh instance is claimed exactly once with a removable bootstrap secret. Later admission is project-owner invitation only.
-- Operators deploy the exact `tag@digest` GHCR reference named by the release
-  with ONCE automatic application updates disabled; no fork, source checkout,
-  or local build is required.
-- Backup, restore, upgrade, and rollback must use the ONCE commands and
-  immutable digest published with the final release. No predecessor exists for
-  the initial release.
+- Operators deploy the GHCR `latest` release channel with ONCE automatic
+  application updates disabled, then choose updates manually with
+  `once update HOST`; no fork, source checkout, or local build is required.
+- Backup, restore, and upgrade use ONCE commands. A normal `latest` backup
+  restores data and settings onto the current release; version-pinned rollback
+  requires the immutable digest retained in release evidence. No predecessor
+  exists for the initial release.
 
 ## SaaS operators
 
