@@ -4,12 +4,6 @@ Screenote is designed to run for a team on one server. The public self-hosted
 path uses [ONCE](https://github.com/basecamp/once): no repository fork, source
 checkout, Ruby installation, or local image build is required.
 
-> [!IMPORTANT]
-> The first supported Screenote source release is still being prepared. Until
-> a version appears on
-> [GitHub Releases](https://github.com/ivankuznetsov/screenote/releases), treat
-> deployment from this repository as a development preview.
-
 Start with the copyable [ONCE deployment guide](once-deployment.md).
 
 ## Supported shape
@@ -26,24 +20,24 @@ You do not need PostgreSQL, Redis, a separate worker, a billing service, or a
 mail server. A private S3-compatible bucket and an external transactional email
 provider are optional.
 
-The first-release target is a Linux AMD64 server with at least 2 vCPUs, 4 GiB
-of RAM, and 40 GiB of free SSD storage. It is a single-instance baseline, not a
-cluster or high-availability topology. Size the disk for database growth,
-screenshots, backups, and ordinary filesystem headroom.
+Screenote supports Linux servers with 64-bit Intel/AMD (x86-64) or ARM64
+processors. Start with at least 2 vCPUs, 4 GiB of RAM, and 40 GiB of free SSD
+storage. It is a single-instance baseline, not a cluster or high-availability
+topology. Size the disk for database growth, screenshots, backups, and ordinary
+filesystem headroom.
 
 ## Release boundary
 
-Use the complete image reference from a supported GitHub Release:
+The normal ONCE installation follows Screenote's latest published release:
 
 ```text
-ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST
+ghcr.io/ivankuznetsov/screenote:latest
 ```
 
-The digest, rather than the readable tag, is the image identity. Moving tags,
-untagged source, locally rebuilt images, and images made from modified source
-do not carry the release's qualification. ONCE automatic application updates
-remain disabled so operators choose each exact Screenote version after reading
-its release notes.
+ONCE automatic application updates remain disabled, so the operator decides
+when to move to the latest release by running `once update HOST`. Each GitHub
+Release also publishes its immutable image digest for auditing, pinning, and
+version-pinned operation.
 
 The hosted `screenote.ai` service uses an internal Kamal deployment. That is
 separate from the public self-hosted workflow.
@@ -127,18 +121,21 @@ invitations, and queued image processing after the restore. Operators own the
 host, network, TLS, access controls, provider accounts, capacity, monitoring,
 backup retention, secret recovery, and tested restores.
 
+The normal `latest` installation restores data and settings onto the current
+release. It does not preserve the historical application version. Operators
+that require version-pinned rollback must use the immutable image reference
+published with each GitHub Release instead of the simple moving channel.
+
 ## Updates
 
-Use supported releases in order. Before an update:
+Before an update:
 
-1. read the new release's migration and rollback notes;
+1. read the new release's migration and recovery notes;
 2. take and verify a recoverable ONCE backup;
-3. copy the next exact `tag@digest` image reference; and
-4. run `once update HOST --image IMAGE`.
+3. run `once update HOST`.
 
-Do not skip a release that requires an adjacent upgrade, and never run an older
-image against data already migrated by newer code. An image-only ONCE update
-preserves the application's environment and other settings.
+The ONCE update preserves the application's environment and other settings. If
+a release requires special maintenance, follow its release notes.
 
 ## Connect agents
 

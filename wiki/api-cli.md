@@ -44,7 +44,7 @@ Precedence:
 
 The base URL should be set explicitly. Current docs use localhost,
 staging/self-hosted URLs, or the canonical production host
-`https://screenote.ai`. Public self-hosting deploys an exact `tag@digest` image
+`https://screenote.ai`. Public self-hosting deploys the `latest` release channel
 through ONCE and has no repository-side deployment configuration; the hosted
 service keeps its private Kamal settings in `config/deploy.saas.yml`.
 

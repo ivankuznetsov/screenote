@@ -92,19 +92,21 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "public self hosted deployment uses ONCE with exact release images" do
+  test "public self hosted deployment uses the ONCE latest channel with manual updates" do
     documents = ReleaseValidation::PUBLIC_INSTALLATION_DOCS.sum("") do |path|
       Rails.root.join(path).read
     end
 
     assert_includes documents, "once deploy"
     assert_includes documents, "--auto-update=false"
-    assert_includes documents, "once update"
-
-    assert_includes documents,
-      "ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST"
-    assert_includes documents,
-      "ghcr.io/ivankuznetsov/screenote:vNEXT@sha256:REPLACE_WITH_RELEASE_DIGEST"
+    assert_includes documents, "ghcr.io/ivankuznetsov/screenote:latest"
+    ReleaseValidation::PUBLIC_ONCE_COMMAND_DOCS.each do |path|
+      commands = ReleaseValidation.new(root: Rails.root).send(
+        :public_shell_commands,
+        Rails.root.join(path).read
+      )
+      assert commands.any? { |tokens| tokens.first(2) == %w[once update] && tokens.length == 3 }, path
+    end
 
     assert_not Rails.root.join("config/deploy.yml").exist?
     assert_not Rails.root.join(".kamal/secrets.example").exist?
@@ -112,26 +114,14 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes Rails.root.join("bin/kamal").read, 'load Gem.bin_path("kamal", "kamal")'
   end
 
-  test "release validator rejects a tag only Screenote image" do
-    with_public_positioning_copy do |root|
-      readme = File.join(root, "README.md")
-      File.write(
-        readme,
-        File.read(readme).sub(
-          /ghcr\.io\/ivankuznetsov\/screenote:vX\.Y\.Z@sha256:[A-Za-z0-9._-]+/,
-          "ghcr.io/ivankuznetsov/screenote:vX.Y.Z"
-        )
-      )
-
-      validator = validate_public_positioning(root)
-
-      assert_includes validator.errors,
-        "public installation docs must use exact vX.Y.Z@sha256 image references"
-    end
-  end
-
-  test "release validator rejects malformed Screenote image identities" do
+  test "release validator rejects unsupported Screenote image identities" do
     cases = {
+      "release placeholder" =>
+        "ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST",
+      "next placeholder" =>
+        "ghcr.io/ivankuznetsov/screenote:vNEXT@sha256:REPLACE_WITH_RELEASE_DIGEST",
+      "tag without digest" =>
+        "ghcr.io/ivankuznetsov/screenote:v1.2.3",
       "malformed release tag" =>
         "ghcr.io/ivankuznetsov/screenote:v1.bad.0@sha256:#{'a' * 64}",
       "malformed manifest digest" =>
@@ -143,7 +133,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
         readme = File.join(root, "README.md")
         original = File.read(readme)
         mutated = original.sub(
-          "ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST",
+          "ghcr.io/ivankuznetsov/screenote:latest",
           malformed_reference
         )
         assert_not_equal original, mutated, label
@@ -152,16 +142,17 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
         validator = validate_public_positioning(root)
 
         assert_includes validator.errors,
-          "public installation docs must use exact vX.Y.Z@sha256 image references",
+          "public installation docs contain an unsupported Screenote image reference",
           label
       end
     end
   end
 
-  test "release validator accepts a real semantic tag and OCI digest" do
+  test "release validator accepts latest and immutable semantic image references" do
     reference = "ghcr.io/ivankuznetsov/screenote:v1.2.3@sha256:#{'a' * 64}"
     validator = ReleaseValidation.new(root: Rails.root)
 
+    assert validator.send(:valid_public_image_reference?, ReleaseValidation::PUBLIC_RELEASE_IMAGE)
     assert validator.send(:valid_public_image_reference?, reference)
   end
 
@@ -195,10 +186,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
   end
 
   test "release validator checks each copyable ONCE command independently" do
-    exact_release =
-      "ghcr.io/ivankuznetsov/screenote:vX.Y.Z@sha256:REPLACE_WITH_RELEASE_DIGEST"
-    exact_update =
-      "ghcr.io/ivankuznetsov/screenote:vNEXT@sha256:REPLACE_WITH_RELEASE_DIGEST"
+    latest_release = "ghcr.io/ivankuznetsov/screenote:latest"
+    immutable_release = "ghcr.io/ivankuznetsov/screenote:v1.2.3@sha256:#{'a' * 64}"
     cases = {
       "missing README deploy" => [
         ->(contents) { contents.sub("once deploy", "once install") },
@@ -209,12 +198,12 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
         "README.md ONCE deploy command must set --auto-update=false exactly once"
       ],
       "variable README deploy image" => [
-        ->(contents) { contents.sub(exact_release, "$SCREENOTE_IMAGE") },
-        "README.md ONCE deploy command must bind an exact Screenote image"
+        ->(contents) { contents.sub(latest_release, "$SCREENOTE_IMAGE") },
+        "README.md ONCE deploy command must use the Screenote latest release channel"
       ],
-      "tag-only README update" => [
-        ->(contents) { contents.sub(exact_update, "ghcr.io/ivankuznetsov/screenote:vNEXT") },
-        "README.md ONCE image update command must bind one exact Screenote image"
+      "image-pinned README update without normal update" => [
+        ->(contents) { contents.sub("once update screenote.example.com", "once update screenote.example.com --image #{immutable_release}") },
+        "README.md must include a normal bare ONCE update command"
       ]
     }
 
@@ -1001,42 +990,48 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
   test "registry image preflight accepts only exact absence responses" do
     release = YAML.safe_load(Rails.root.join(".github/workflows/release.yml").read, permitted_classes: [], aliases: false)
     preflight = release.fetch("jobs").fetch("promotion").fetch("steps").find { |step| step["id"] == "preflight" }
-    classifier = preflight.fetch("run").match(
-      /IMAGE_REFERENCE="\$IMAGE_REPOSITORY:\$RELEASE_TAG" REGISTRY_ERROR="\$remote_error" ruby <<'RUBY'\n(?<ruby>.*?)^RUBY$/m
+    source = preflight.fetch("run")
+    classifier = source.match(
+      /registry_not_found\(\) \{\n  local reference="\$1"\n  local error_file="\$2"\n  IMAGE_REFERENCE="\$reference" REGISTRY_ERROR="\$error_file" ruby <<'RUBY'\n(?<ruby>.*?)^RUBY\n\}/m
     )&.named_captures&.fetch("ruby")
     assert_not_nil classifier
+    assert_equal 2, source.scan(/elif registry_not_found "\$IMAGE_REPOSITORY:(?:latest|\$RELEASE_TAG)" "\$(?:latest|remote)_error"; then/).length
 
-    reference = "ghcr.io/ivankuznetsov/screenote:v1.0.0"
-    accepted = [
-      %(Error response from registry: failed to find "#{reference}": #{reference}: not found\n),
-      "Error response from registry: manifest unknown: manifest unknown\n"
-    ]
-    accepted.each do |error|
-      _stdout, stderr, status = run_embedded_file_script(
-        classifier,
-        "REGISTRY_ERROR",
-        error,
-        "IMAGE_REFERENCE" => reference
-      )
-      assert status.success?, stderr
-    end
+    [
+      "ghcr.io/ivankuznetsov/screenote:v1.0.0",
+      "ghcr.io/ivankuznetsov/screenote:latest"
+    ].each do |reference|
+      accepted = [
+        %(Error response from registry: failed to find "#{reference}": #{reference}: not found\n),
+        "Error response from registry: manifest unknown: manifest unknown\n"
+      ]
+      accepted.each do |error|
+        _stdout, stderr, status = run_embedded_file_script(
+          classifier,
+          "REGISTRY_ERROR",
+          error,
+          "IMAGE_REFERENCE" => reference
+        )
+        assert status.success?, stderr
+      end
 
-    rejected = {
-      "bare not found" => "transport endpoint not found\n",
-      "bare 404" => "proxy returned HTTP 404 Not Found\n",
-      "unrelated code" => "Error response from registry: denied: MANIFEST_UNKNOWN\n",
-      "ambiguous trailing error" => %(Error response from registry: failed to find "#{reference}": #{reference}: not found\nauthorization failed\n),
-      "ambiguous manifest error" => "Error response from registry: manifest unknown: manifest unknown\nnetwork timeout\n",
-      "contradictory manifest detail" => "Error response from registry: manifest unknown: backend timeout\n"
-    }
-    rejected.each do |label, error|
-      _stdout, _stderr, status = run_embedded_file_script(
-        classifier,
-        "REGISTRY_ERROR",
-        error,
-        "IMAGE_REFERENCE" => reference
-      )
-      assert_not status.success?, "#{label} unexpectedly passed"
+      rejected = {
+        "bare not found" => "transport endpoint not found\n",
+        "bare 404" => "proxy returned HTTP 404 Not Found\n",
+        "unrelated code" => "Error response from registry: denied: MANIFEST_UNKNOWN\n",
+        "ambiguous trailing error" => %(Error response from registry: failed to find "#{reference}": #{reference}: not found\nauthorization failed\n),
+        "ambiguous manifest error" => "Error response from registry: manifest unknown: manifest unknown\nnetwork timeout\n",
+        "contradictory manifest detail" => "Error response from registry: manifest unknown: backend timeout\n"
+      }
+      rejected.each do |label, error|
+        _stdout, _stderr, status = run_embedded_file_script(
+          classifier,
+          "REGISTRY_ERROR",
+          error,
+          "IMAGE_REFERENCE" => reference
+        )
+        assert_not status.success?, "#{reference} #{label} unexpectedly passed"
+      end
     end
   end
 
@@ -1070,11 +1065,76 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
+  test "release preflight never lets an older release move latest backwards" do
+    release = YAML.safe_load(Rails.root.join(".github/workflows/release.yml").read, permitted_classes: [], aliases: false)
+    preflight = release.fetch("jobs").fetch("promotion").fetch("steps").find { |step| step["id"] == "preflight" }
+    source = preflight.fetch("run")
+    guard = source.match(
+      /PUBLISHED_RELEASES_JSON="\$published_releases" ruby -rjson <<'RUBY'\n(?<ruby>.*?)^RUBY$/m
+    )&.named_captures&.fetch("ruby")
+    assert_not_nil guard
+
+    run_guard = lambda do |releases, release_tag, predecessor_tag|
+      Tempfile.create([ "published-releases", ".json" ]) do |file|
+        file.write(JSON.generate([ releases ]))
+        file.flush
+        Open3.capture3(
+          {
+            "PREDECESSOR_TAG" => predecessor_tag,
+            "PUBLISHED_RELEASES_JSON" => file.path,
+            "RELEASE_TAG" => release_tag
+          },
+          RbConfig.ruby,
+          "-rjson",
+          "-e",
+          guard
+        )
+      end
+    end
+
+    current = { "tag_name" => "v1.2.3", "draft" => false, "prerelease" => false, "immutable" => true }
+    ignored = [
+      { "tag_name" => "v9.0.0", "draft" => true, "prerelease" => false, "immutable" => false },
+      { "tag_name" => "v8.0.0", "draft" => false, "prerelease" => true, "immutable" => false }
+    ]
+    _stdout, stderr, status = run_guard.call([ current, *ignored ], "v1.2.3", "none")
+    assert status.success?, stderr
+
+    predecessor = { "tag_name" => "v1.2.2", "draft" => false, "prerelease" => false, "immutable" => true }
+    _stdout, stderr, status = run_guard.call([ predecessor ], "v1.2.3", "v1.2.2")
+    assert status.success?, stderr
+    _stdout, stderr, status = run_guard.call([ current, predecessor ], "v1.2.3", "v1.2.2")
+    assert status.success?, stderr
+
+    _stdout, stderr, status = run_guard.call([ predecessor ], "v1.2.3", "v1.2.1")
+    assert_not status.success?
+    assert_includes stderr, "newest published stable release does not match the recorded predecessor"
+
+    _stdout, stderr, status = run_guard.call([ current ], "v1.2.2", "none")
+    assert_not status.success?
+    assert_includes stderr, "a newer GitHub Release already exists"
+
+    mutable = predecessor.merge("immutable" => false)
+    _stdout, stderr, status = run_guard.call([ mutable ], "v1.2.3", "v1.2.2")
+    assert_not status.success?
+    assert_includes stderr, "published stable release is not immutable"
+
+    _stdout, stderr, status = run_guard.call([ predecessor ], "v1.2.3", "none")
+    assert_not status.success?
+    assert_includes stderr, "first release cannot have a published stable predecessor"
+  end
+
   test "release workflow builds before mutation and uses checksum-pinned scanners" do
     workflow = Rails.root.join(".github/workflows/release.yml").read
     parsed = YAML.safe_load(workflow, permitted_classes: [], aliases: false)
     promotion = parsed.fetch("jobs").fetch("promotion")
+    assert_equal "source-release-${{ inputs.operation == 'publish' && 'promotion' || inputs.release_tag }}",
+      parsed.dig("concurrency", "group")
     authorize_steps = parsed.fetch("jobs").fetch("authorize").fetch("steps")
+    assert_equal "${{ steps.verify.outputs.predecessor_image_digest }}",
+      parsed.dig("jobs", "authorize", "outputs", "predecessor_image_digest")
+    assert_equal "${{ steps.verify.outputs.predecessor_tag }}",
+      parsed.dig("jobs", "authorize", "outputs", "predecessor_tag")
     steps = promotion.fetch("steps")
     approval_index = steps.index { |step| step["id"] == "current-run-approval" }
     live_index = steps.index { |step| step["id"] == "live-incidents" }
@@ -1084,6 +1144,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     tag_index = steps.index { |step| step.fetch("run", "").include?('gh api --method POST "/repos/$GITHUB_REPOSITORY/git/refs"') }
     attestation_index = steps.index { |step| step.fetch("uses", "").start_with?("actions/attest@") }
     release_index = steps.index { |step| step.fetch("run", "").include?('gh release create "$RELEASE_TAG"') }
+    newest_release_index = steps.index { |step| step["name"] == "Verify the newest immutable GitHub release" }
+    latest_image_index = steps.index { |step| step.fetch("run", "").include?('oras tag "$IMAGE_REPOSITORY@$MANIFEST_DIGEST" latest') }
     final_index = steps.index { |step| step["name"] == "Verify every published object" }
     verify_candidate_index = authorize_steps.index { |step| step["name"] == "Verify retained bytes and candidate metadata" }
     final_scan_index = authorize_steps.index { |step| step["name"] == "Scan exact authorizing release bytes" }
@@ -1111,15 +1173,21 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes live_step.fetch("run"), "ASSIGNED"
     assert_includes live_step.fetch("run"), 'provider_metadata["archived"] == false'
     assert_includes live_step.fetch("run"), 'source["deleted"] == false'
-    [ image_index, tag_index, attestation_index, release_index ].each do |mutation_index|
+    [ image_index, tag_index, attestation_index, release_index, latest_image_index ].each do |mutation_index|
       assert_operator preflight_index, :<, mutation_index
       assert_operator mutation_index, :<, final_index
     end
+    assert_operator release_index, :<, newest_release_index
+    assert_operator newest_release_index, :<, latest_image_index
     preflight_source = preflight.fetch("run")
     release_token = steps.find { |step| step["id"] == "release-token" }
     assert_equal "read", release_token.dig("with", "permission-administration")
     assert_nil preflight.dig("env", "ACTIONS_TOKEN")
     assert_nil preflight.dig("env", "EXPECTED_DEFAULT_BRANCH")
+    assert_equal "${{ needs.authorize.outputs.predecessor_image_digest }}",
+      preflight.dig("env", "PREDECESSOR_IMAGE_DIGEST")
+    assert_equal "${{ needs.authorize.outputs.predecessor_tag }}",
+      preflight.dig("env", "PREDECESSOR_TAG")
     assert_includes preflight_source, '"/repos/$GITHUB_REPOSITORY/immutable-releases"'
     assert_includes preflight_source, "X-GitHub-Api-Version: 2026-03-10"
     assert_includes preflight_source, 'status["enabled"] == true'
@@ -1128,6 +1196,19 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes preflight_source, "/git/ref/tags/"
     assert_includes preflight_source, "/attestations/sha256:"
     assert_includes preflight_source, "/releases/tags/"
+    assert_includes preflight_source, '"/repos/$GITHUB_REPOSITORY/releases?per_page=100"'
+    assert_includes preflight_source, "a newer GitHub Release already exists"
+    assert_includes preflight_source, "published stable release is not immutable"
+    assert_includes preflight_source, "newest published stable release does not match the recorded predecessor"
+    assert_includes preflight_source, 'oras resolve "$IMAGE_REPOSITORY:$PREDECESSOR_TAG"'
+    assert_includes preflight_source, 'oras manifest fetch --descriptor "$IMAGE_REPOSITORY:latest"'
+    assert_includes preflight_source, 'test "$latest_digest" = "$MANIFEST_DIGEST"'
+    assert_includes preflight_source, 'test "$latest_digest" = "$PREDECESSOR_IMAGE_DIGEST"'
+    assert_includes preflight_source, "latest_state=candidate"
+    assert_includes preflight_source, "latest_state=predecessor"
+    assert_includes preflight_source, "latest_state=absent"
+    assert_includes preflight_source, "Latest image is absent for a successor release"
+    assert_includes preflight_source, "Current latest manifest is neither this release nor its recorded predecessor"
     assert_not_includes preflight_source, "/actions/runs/"
     assert_not_includes preflight_source, "/releases/assets/"
     assert_includes preflight_source, "publication_state=\"$image_state:$tag_state:$attestation_state:$release_state\""
@@ -1139,10 +1220,29 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal "steps.preflight.outputs.tag_state == 'absent'", steps.fetch(tag_index).fetch("if")
     assert_equal "steps.preflight.outputs.attestation_state == 'absent'", steps.fetch(attestation_index).fetch("if")
     assert_equal "steps.preflight.outputs.release_state == 'absent'", steps.fetch(release_index).fetch("if")
+    assert_includes steps.fetch(release_index).fetch("run"), "--latest"
+    newest_release = steps.fetch(newest_release_index).fetch("run")
+    assert_includes newest_release, '"/repos/$GITHUB_REPOSITORY/releases/latest"'
+    assert_includes newest_release, 'release["tag_name"] == ENV.fetch("RELEASE_TAG")'
+    assert_includes newest_release, 'release["immutable"] == true'
+    assert_includes newest_release, 'gh release verify "$RELEASE_TAG"'
+    latest_image = steps.fetch(latest_image_index).fetch("run")
+    assert_includes latest_image, 'oras tag "$IMAGE_REPOSITORY@$MANIFEST_DIGEST" latest'
+    assert_includes latest_image, 'oras resolve "$IMAGE_REPOSITORY:latest"'
+    final_verification = steps.fetch(final_index).fetch("run")
+    assert_includes final_verification, 'oras resolve "$IMAGE_REPOSITORY:latest"'
+    assert_includes final_verification, "git/ref/tags/$RELEASE_TAG"
+    assert_includes final_verification, "gh attestation verify"
+    assert_not_includes final_verification, "/releases/tags/$RELEASE_TAG"
+    assert_not_includes final_verification, "release notes do not match"
+    assert_not_includes final_verification, "expected_assets"
+    assert_not_includes final_verification, 'gh release verify "$RELEASE_TAG"'
     assert_not_includes workflow, "environment-approval.json"
     assert_not_includes workflow, "historical-environment-approval"
 
     assert_operator verify_candidate_index, :<, final_scan_index
+    assert_includes authorize_steps.fetch(verify_candidate_index).fetch("run"),
+      'echo "predecessor_tag=$(ruby -rjson'
     assert_operator final_scan_index, :<, retain_verified_index
     final_scan = authorize_steps.fetch(final_scan_index)
     assert_equal "${{ secrets.GITGUARDIAN_API_KEY }}", final_scan.dig("env", "GITGUARDIAN_API_KEY")
@@ -1468,7 +1568,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       run.scan(/ruby(?:\s+[^\n]*)?\s+<<'RUBY'\n(.*?)^RUBY$/m).flatten
     end
 
-    assert_equal 15, ruby_blocks.length
+    assert_equal 16, ruby_blocks.length
     ruby_blocks.each_with_index do |source, index|
       assert_nothing_raised { RubyVM::InstructionSequence.compile(source, "release-workflow-ruby-#{index + 1}") }
     end

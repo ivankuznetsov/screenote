@@ -18,7 +18,7 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] Imported config/layer digests match the retained layouts.
 - [ ] Exact platform images passed GitGuardian and pinned Critical/High vulnerability policy.
 - [ ] Manifest labels, platform digests, SBOM, provenance, and public-log sentinel checks passed.
-- [ ] The exact `tag@digest` image passed its retained Linux AMD64 deployment
+- [ ] The exact `tag@digest` image passed its retained Linux deployment
   through the supported ONCE stable release named in the evidence, ONCE's
   Kamal Proxy, and Thruster with Screenote automatic updates disabled,
   including the exact proxy manifest digest, normal forwarding, hostile-header
@@ -26,6 +26,8 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] Published ONCE backup/restore commands recovered all four SQLite roles
   and local screenshot files with the exact image; S3 mode also recovered the
   matching external object namespace.
+- [ ] A successor candidate upgraded and restored every earlier published
+  release directly to the candidate through the moving release channel.
 - [ ] Protected-main jobs are recorded only as `pr_contract_only` source checks.
 - [ ] Exact qualification booted the retained AMD64 and ARM64 candidate in
   self-hosted and SaaS modes; both SaaS boots exercised four URL-driven
@@ -33,7 +35,8 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] Exact qualification passed same-image backup/restore and the minimum-host SQLite load profile.
 - [ ] The immutable public CLI tag passed HTTP and proxied-HTTPS checks against candidate-backed origins.
 - [ ] Qualification run/attempt, five jobs, artifact ID/archive digest, record bytes, and eight check hashes were verified live.
-- [ ] Release notes name the predecessor, image digest, CLI tag,
+- [ ] Release notes name the immediate predecessor, all supported upgrade
+  sources, image digest, CLI tag,
   data/configuration changes, irreversible migrations, maintenance procedure,
   verified backup/restore boundary, and resumable migration checks; they do
   not promise one transaction can roll back an entire migration chain.
@@ -46,3 +49,4 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] A reviewer approved the current workflow run's protected `source-release` environment.
 - [ ] Existing image/tag/attestation/release objects were absent or an exact resumable prefix.
 - [ ] The immutable release body and exact technical assets, image manifest, source tag, and provenance attestation were verified after publication.
+- [ ] The public `latest` channel resolves to the newest release's exact image manifest.

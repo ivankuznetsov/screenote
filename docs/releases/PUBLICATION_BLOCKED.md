@@ -13,7 +13,7 @@ Remove it when all technical prerequisites are ready:
 - Its two exact-image SaaS boot checks exercise separate primary, cache, queue,
   and cable URLs through Active Record without binding qualification to a
   database adapter or server version.
-- The exact `tag@digest` image has completed a retained Linux AMD64 deployment
+- The exact `tag@digest` image has completed a retained Linux deployment
   through the supported ONCE stable release named in the evidence, ONCE's
   Kamal Proxy, and Thruster with Screenote automatic updates disabled,
   including remote digest/label identity, the exact proxy manifest digest,
@@ -22,5 +22,7 @@ Remove it when all technical prerequisites are ready:
 - ONCE backup and restore commands are published and a retained drill proves
   recovery of all four SQLite roles plus local files using the exact release
   image; S3 mode also proves recovery of the matching external namespace.
+- Promotion proves that the public `latest` channel resolves to the exact
+  manifest of the newest immutable GitHub Release.
 
 Deleting this file records technical readiness only. Promotion still requires the protected `source-release` environment approval and every exact validator must pass.

@@ -184,10 +184,10 @@ bin/rails test           # All tests pass
 
 ### Deployment
 
-Public self-hosting uses ONCE with the exact `tag@digest` image named by a
-Screenote GitHub Release. Do not ask operators to fork or clone this repository,
-build a release image locally, use a moving tag, or deploy through Kamal. Keep
-ONCE automatic application updates disabled and follow
+Public self-hosting uses ONCE with the `screenote:latest` release channel. Do
+not ask operators to fork or clone this repository, build a release image
+locally, or deploy through Kamal. Keep unattended ONCE application updates
+disabled; operators update manually with `once update HOST`. Follow
 `docs/once-deployment.md`.
 
 Kamal is only for the hosted `screenote.ai` service:

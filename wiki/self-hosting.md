@@ -9,7 +9,7 @@ tags: [self-hosting, once, docker, deployment, storage, release, kamal-saas]
 
 # Self-Hosted Distribution
 
-**TLDR:** Screenote implements a source-available, single-server self-hosted edition alongside `screenote.ai`. Public self-hosting uses ONCE's stable channel with an exact `vX.Y.Z@sha256:...` GHCR image, one application container, four SQLite databases, and one durable volume; it requires neither a fork nor a source checkout. Kamal remains an internal deployment tool for hosted `screenote.ai`. Publication is still blocked until the retained ONCE runtime and recovery drill passes.
+**TLDR:** Screenote implements a source-available, single-server self-hosted edition alongside `screenote.ai`. Public self-hosting uses ONCE with the GHCR `latest` release channel, one application container, four SQLite databases, and one durable volume; it requires neither a fork nor a source checkout. Kamal remains an internal deployment tool for hosted `screenote.ai`. Publication is still blocked until the retained ONCE runtime and recovery drill passes.
 
 ## Distribution Model
 
@@ -27,13 +27,13 @@ presented as one-time instance claim, project creation, and invitation-based
 admission; advanced storage, provider, backup, and upgrade details remain in
 the operator guide.
 
-Until the first release exists, the README labels deployment from the
-repository as a development preview. A supported install first installs ONCE
-from its official stable channel on the Linux host and then gives `once deploy`
-the complete image identity from the GitHub Release. The release evidence names
-the exact ONCE version used for qualification. Automatic application updates
-stay disabled; later releases are selected explicitly with `once update
---image` and another exact `tag@digest` reference.
+Public installation docs lead directly with ONCE and the latest release image;
+they do not expose the repository's internal publication sentinel or label the
+operator path as a development preview. An install first obtains ONCE from its
+official stable channel on the Linux host and then gives `once deploy` the
+`screenote:latest` image. The release evidence names the exact ONCE version and
+image digest used for qualification. Automatic application updates stay
+disabled; the operator chooses when to advance with `once update HOST`.
 
 The first deployment is a direct CLI operation because Screenote must receive
 `SCREENOTE_BASE_URL` and a one-time `SCREENOTE_BOOTSTRAP_TOKEN` before its first
@@ -101,9 +101,9 @@ duplicating data: all four SQLite files and local Active Storage objects still
 share one recovery unit. ONCE pauses the container when taking a volume backup,
 because Screenote does not publish a pre-backup hook.
 
-The public command pins `ghcr.io/ivankuznetsov/screenote` to the exact release
-tag and manifest digest and sets `--auto-update=false`. It also supplies the
-base URL and initial bootstrap token with `--env`. Generic SMTP interoperates
+The public command follows `ghcr.io/ivankuznetsov/screenote:latest` and sets
+`--auto-update=false`, keeping updates manual. It also supplies the base URL
+and initial bootstrap token with `--env`. Generic SMTP interoperates
 with ONCE's Email settings: Screenote accepts `MAILER_FROM_ADDRESS` and enables
 SMTP when ONCE supplies `SMTP_ADDRESS`, unless an explicit
 `SCREENOTE_SMTP_ENABLED=false` disables it. Generic S3 remains a custom
@@ -156,16 +156,21 @@ S3 mode the ONCE archive still protects the databases, but recovery of the
 external bucket and exact prefix remains the operator's and storage provider's
 responsibility. Database and object-store recovery points must match.
 
+The simple public install stores the moving `latest` reference in ONCE's
+settings, and therefore in its backup. Restoring that archive pulls the current
+release rather than pinning the historical application version. A deployment
+that requires version-pinned rollback must use the immutable reference from the
+GitHub Release instead of the moving channel.
+
 The older `bin/self-host-backup` and `bin/self-host-restore` implementation
 remains an internal Compose-based qualification harness and is not the public
 ONCE operator path. Public operations use ONCE's backup and restore commands;
 the first supported release still requires retained evidence that those
 commands recover Screenote correctly.
 
-Only adjacent release upgrades are supported when release notes require them;
-rollback means restoring the prior complete recovery point with its matching
-application version. ONCE application auto-update stays disabled so an
-operator explicitly selects every exact `tag@digest` release.
+When release notes require special maintenance, operators follow them before
+updating. ONCE application auto-update stays disabled so an operator explicitly
+triggers each update.
 
 ## Publication Safety
 
@@ -231,12 +236,13 @@ evidence.
 ## Scope
 
 The initial predecessor-free release remains blocked until a retained Linux
-AMD64 drill deploys the exact `tag@digest` through the supported ONCE release named in the evidence, verifies
-proxy identity and forwarding, restarts with persistent state, updates to an
-exact image, and completes ONCE backup and restore for all four SQLite roles
+drill deploys the exact candidate through the supported ONCE release named in the evidence, verifies
+proxy identity and forwarding, restarts with persistent state, exercises the
+moving release channel, and completes ONCE backup and restore for all four SQLite roles
 and local files. S3 qualification must separately recover the matching
-external namespace. The first successor release must also qualify its adjacent
-upgrade and rollback path. An ordinary ONCE image update assumes
+external namespace. Every successor release must qualify direct update and
+restore from every earlier published release, plus its immediate
+predecessor rollback path. An ordinary ONCE image update assumes
 backward-compatible migrations; a
 release that needs a stopped-process migration must publish explicit
 maintenance, verified backup/restore, resumable verification, and rollback

@@ -10,9 +10,8 @@ The source-available self-hosted edition is provided as-is under the [O'Saasy Li
 
 Before asking for help:
 
-- confirm that ONCE is running the exact `tag@digest` image reference named by
-  a supported release;
-- follow every adjacent upgrade step from the named predecessor;
+- confirm that ONCE is running the published `screenote:latest` image;
+- read and follow the current release's migration notes;
 - read the [ONCE deployment guide](docs/once-deployment.md), the
   [self-hosting guide](docs/self-hosting.md), and release-specific notes;
 - reproduce without sharing customer content or secrets; and
@@ -23,7 +22,7 @@ Operators own their host, network, TLS termination, access controls, storage
 service, external email/provider accounts, monitoring, backups, restore drills,
 secret rotation, and capacity. The first release qualifies the documented ONCE
 single-server profile. Modified application code, dependencies, Dockerfiles or
-entrypoints, custom images, skipped upgrades, alternative database topologies,
+entrypoints, custom images, alternative database topologies,
 clustering, high availability, storage migration, and infrastructure not listed
 in the release's support matrix are outside that qualification.
 
