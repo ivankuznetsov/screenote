@@ -42,7 +42,10 @@ module ScreenoteTmp
     config.x.screenote.deployment = Screenote::Deployment.current
     config.middleware.insert_before 0,
       Screenote::TrustedProxyHeaders,
-      trusted_proxies: Screenote::Deployment.current.trusted_proxies
+      trusted_proxies: Screenote::Deployment.current.trusted_proxies,
+      forwarded_client_hops: Screenote::Deployment.current.forwarded_client_hops,
+      forwarded_proxy_host: Screenote::Deployment.current.forwarded_proxy_host,
+      canonical_scheme: Screenote::Deployment.current.protocol
     config.middleware.insert_before 0, Screenote::RateLimitFailureMiddleware
 
     # Configuration for the application, engines, and railties goes here.

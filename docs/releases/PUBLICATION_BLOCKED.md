@@ -16,8 +16,9 @@ Remove it when all technical prerequisites are ready:
 - The exact `tag@digest` image has completed a retained Linux AMD64 deployment
   through the supported ONCE stable release named in the evidence, ONCE's
   Kamal Proxy, and Thruster with Screenote automatic updates disabled,
-  including remote digest/label identity, HTTPS and client-IP forwarding,
-  spoofed-forwarding rejection, restart, and volume persistence.
+  including remote digest/label identity, the exact proxy manifest digest,
+  HTTPS and client-IP forwarding, hostile-header and direct-sibling spoof
+  rejection, restart, and volume persistence.
 - ONCE backup and restore commands are published and a retained drill proves
   recovery of all four SQLite roles plus local files using the exact release
   image; S3 mode also proves recovery of the matching external namespace.

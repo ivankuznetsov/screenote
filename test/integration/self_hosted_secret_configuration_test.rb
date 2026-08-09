@@ -399,6 +399,9 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     assert_equal [ "${SCREENOTE_PORT:-3005}:80" ], service.fetch("ports")
     assert_equal "true", service.dig("environment", "DISABLE_SSL")
     assert_equal "self_hosted", service.dig("environment", "SCREENOTE_EDITION")
+    assert_equal "1", service.dig("environment", "SCREENOTE_FORWARDED_CLIENT_HOPS")
+    assert_equal "${SCREENOTE_TRUSTED_PROXIES:-127.0.0.1/32,::1/128}",
+      service.dig("environment", "SCREENOTE_TRUSTED_PROXIES")
     assert_equal "/run/secrets/screenote_secret_key_base", service.dig("environment", "SECRET_KEY_BASE_FILE")
     assert_nil service.dig("environment", "SCREENOTE_BOOTSTRAP_TOKEN_FILE")
     assert_equal [ "screenote_secret_key_base" ], compose.fetch("secrets").keys
@@ -556,8 +559,10 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     assert_match(/SCREENOTE_EDITION="self_hosted"/, dockerfile)
     assert_match(/DISABLE_SSL="false"/, dockerfile)
     assert_match(/THRUSTER_FORWARD_HEADERS="true"/, dockerfile)
+    assert_match(/SCREENOTE_FORWARDED_CLIENT_HOPS="2"/, dockerfile)
+    assert_match(/SCREENOTE_FORWARDED_PROXY_HOST="once-proxy"/, dockerfile)
     assert_match(
-      /SCREENOTE_TRUSTED_PROXIES="127\.0\.0\.1\/32,::1\/128,172\.16\.0\.0\/12"/,
+      /SCREENOTE_TRUSTED_PROXIES="127\.0\.0\.1\/32,::1\/128"/,
       dockerfile
     )
     assert_match(

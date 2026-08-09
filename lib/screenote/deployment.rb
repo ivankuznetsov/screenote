@@ -39,7 +39,8 @@ module Screenote
       RABATA_SECRET_ACCESS_KEY
     ].freeze
 
-    attr_reader :edition, :base_url, :host, :port, :trusted_proxies,
+    attr_reader :edition, :base_url, :host, :port, :trusted_proxies, :forwarded_client_hops,
+      :forwarded_proxy_host,
       :active_storage_service, :storage_namespace_fingerprint,
       :storage_configuration, :mail_configuration,
       :social_oauth_providers, :monitoring_configuration,
@@ -73,6 +74,7 @@ module Screenote
       @host = @base_uri.host.freeze
       @port = @base_uri.port
       validate_once_ssl_compatibility! if self_hosted?
+      configure_forwarded_proxy
       @trusted_proxies = parse_trusted_proxies.freeze
 
       validate_saas_requirements! if production? && saas?
@@ -157,6 +159,8 @@ module Screenote
       @base_url = DEFAULT_BASE_URLS.fetch(:saas)
       @host = @base_uri.host
       @port = @base_uri.port
+      @forwarded_client_hops = 1
+      @forwarded_proxy_host = nil
       @trusted_proxies = [].freeze
       @active_storage_service = :local
       @storage_namespace_fingerprint = Digest::SHA256.hexdigest("local\0asset-build").freeze
@@ -253,6 +257,33 @@ module Screenote
         proxy.freeze
       rescue IPAddr::InvalidAddressError
         raise ConfigurationError, "SCREENOTE_TRUSTED_PROXIES must contain only comma-separated IP addresses or CIDRs"
+      end
+    end
+
+    def configure_forwarded_proxy
+      @forwarded_client_hops = integer_value("SCREENOTE_FORWARDED_CLIENT_HOPS", default: 1)
+      unless [ 1, 2 ].include?(@forwarded_client_hops)
+        raise ConfigurationError, "SCREENOTE_FORWARDED_CLIENT_HOPS must be 1 or 2"
+      end
+
+      @forwarded_proxy_host = value("SCREENOTE_FORWARDED_PROXY_HOST") if @forwarded_client_hops == 2
+      if @forwarded_client_hops == 2 && @forwarded_proxy_host.nil?
+        raise ConfigurationError, "SCREENOTE_FORWARDED_PROXY_HOST is required for a two-hop proxy chain"
+      end
+      if @forwarded_client_hops == 2 && !valid_proxy_host?(@forwarded_proxy_host)
+        raise ConfigurationError, "SCREENOTE_FORWARDED_PROXY_HOST must be a valid hostname or IP address"
+      end
+      @forwarded_proxy_host&.freeze
+    end
+
+    def valid_proxy_host?(host)
+      return false if host.nil? || host.bytesize > 253 || host.include?("/")
+
+      IPAddr.new(host)
+      true
+    rescue IPAddr::InvalidAddressError
+      host.split(".", -1).all? do |label|
+        label.match?(/\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\z/)
       end
     end
 

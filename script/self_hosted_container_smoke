@@ -68,8 +68,8 @@ else
   printf 'Testing prebuilt final image %s\n' "${IMAGE_TAG}"
   docker image inspect "${IMAGE_TAG}" >/dev/null
 fi
-if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}" |
-  grep --fixed-strings --line-regexp --quiet 'MAX_REQUEST_BODY=31457280'; then
+image_environment="$(docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}")"
+if ! grep --fixed-strings --line-regexp --quiet 'MAX_REQUEST_BODY=31457280' <<<"${image_environment}"; then
   printf 'self-hosted smoke: final image does not enforce the 30 MiB request limit\n' >&2
   exit 1
 fi
@@ -77,18 +77,18 @@ fi
 for expected_environment in \
   'DISABLE_SSL=false' \
   'SCREENOTE_EDITION=self_hosted' \
-  'SCREENOTE_TRUSTED_PROXIES=127.0.0.1/32,::1/128,172.16.0.0/12' \
+  'SCREENOTE_FORWARDED_CLIENT_HOPS=2' \
+  'SCREENOTE_FORWARDED_PROXY_HOST=once-proxy' \
+  'SCREENOTE_TRUSTED_PROXIES=127.0.0.1/32,::1/128' \
   'THRUSTER_FORWARD_HEADERS=true'; do
-  if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}" |
-    grep --fixed-strings --line-regexp --quiet "${expected_environment}"; then
+  if ! grep --fixed-strings --line-regexp --quiet "${expected_environment}" <<<"${image_environment}"; then
     printf 'self-hosted smoke: final image is missing ONCE environment: %s\n' \
       "${expected_environment}" >&2
     exit 1
   fi
 done
 
-if ! docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_TAG}" |
-  grep --extended-regexp --line-regexp --quiet 'KAMAL_VERSION=.+'; then
+if ! grep --extended-regexp --line-regexp --quiet 'KAMAL_VERSION=.+' <<<"${image_environment}"; then
   printf 'self-hosted smoke: final image is missing its source revision environment\n' >&2
   exit 1
 fi

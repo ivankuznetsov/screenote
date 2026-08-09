@@ -29,6 +29,9 @@ once version
 
 The installer also installs Docker on supported systems when needed. If Docker
 commands require `sudo` for your account, run every `once` command with `sudo`.
+If ONCE was already installed and `once version` is older than the version named
+by the Screenote release, run `sudo once self-update` and check the version
+again. Re-running the installer does not replace an existing ONCE binary.
 
 ## Deploy the exact release image
 
@@ -62,7 +65,9 @@ VPN deployment, add `--disable-tls` and use the matching base URL:
 ```
 
 Use HTTP only when the VPN is the trusted transport boundary. The base URL must
-be one origin with no credentials, path, query, or fragment.
+be one origin with no credentials, path, query, or fragment. The supported
+topology sends clients directly to ONCE; do not add another reverse proxy in
+front of it without separately qualifying that proxy chain.
 
 ## Claim the instance
 

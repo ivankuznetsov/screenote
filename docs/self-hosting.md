@@ -68,6 +68,17 @@ Use HTTPS for internet-facing installations. Plain HTTP is appropriate only
 when a private VPN is the accepted transport boundary; deploy with ONCE's
 `--disable-tls` option and use the matching `http://` base URL.
 
+The supported ONCE path has two internal forwarding hops: ONCE's proxy and
+Thruster. Screenote resolves the expected ONCE proxy with a bounded DNS lookup
+before accepting the preceding client address and refreshes that identity in a
+short synchronized cache. A failed refresh discards the stale identity. The
+boundary then discards any values supplied before the verified client and
+derives HTTP versus HTTPS from `SCREENOTE_BASE_URL`. Traffic that bypasses the
+proxy, or arrives while its identity cannot be refreshed, is attributed to its
+actual final hop instead of a supplied address. This keeps session auditing and
+IP rate limits distinct without accepting caller-supplied transport identity.
+Additional reverse proxies are outside the first release's qualified topology.
+
 ## Storage
 
 Local storage needs no configuration. ONCE mounts the same persistent volume
