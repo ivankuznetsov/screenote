@@ -45,8 +45,6 @@ way to publish captures and read the result.
 - A JSON CLI for uploads, comments, crops, and automation
 - A companion [Screenote agent skill](https://github.com/ivankuznetsov/agent-plugins/tree/main/plugins/screenote)
   that teaches coding agents the CLI workflow
-- A self-hosted core with no Stripe, license key, or application-enforced
-  seat, project, or screenshot-count caps
 
 ## Choose how to run it
 
@@ -55,12 +53,10 @@ way to publish captures and read the result.
 | Best for | Starting immediately | Keeping Screenote inside your VPN or infrastructure |
 | Operations | Managed at [screenote.ai](https://screenote.ai) | Kamal, one application server, and one durable volume |
 | Screenshot storage | Managed | Local by default; S3-compatible storage is optional |
-| Product caps | SaaS plan applies | No application-enforced seat, project, or screenshot-count caps |
 | Setup | Create an account | Claim the instance once, then invite teammates |
 
 Screenote is **source-available and self-hostable** under the
-[O'Saasy License Agreement](LICENSE). It is not distributed under an
-OSI-approved open-source license.
+[O'Saasy License Agreement](LICENSE).
 
 ## Self-host Screenote
 
