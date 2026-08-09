@@ -65,8 +65,9 @@ container with one durable volume. The container includes the Rails app,
 background jobs, four SQLite databases, and local screenshot storage. You do
 not need PostgreSQL, Redis, a separate worker, or a mail server.
 
-Prepare a Linux AMD64 or ARM64 server, point a hostname at it, and open ports
-80 and 443. Then run these commands on the server:
+Prepare a Linux server with a 64-bit Intel/AMD (x86-64) or ARM64 processor,
+point a hostname at it, and open ports 80 and 443. Then run these commands on
+the server:
 
 ```sh
 curl https://get.once.com | ONCE_INTERACTIVE=false sh

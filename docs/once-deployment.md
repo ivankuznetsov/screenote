@@ -12,9 +12,10 @@ Screenote updates manual.
 
 ## Prepare the server
 
-Screenote supports Linux AMD64 and ARM64 servers. Start with at least 2 vCPUs,
-4 GiB of RAM, and 40 GiB of free SSD storage. Point a hostname at the server
-and make ports 80 and 443 reachable. Run ONCE on that server:
+Screenote supports Linux servers with 64-bit Intel/AMD (x86-64) or ARM64
+processors. Start with at least 2 vCPUs, 4 GiB of RAM, and 40 GiB of free SSD
+storage. Point a hostname at the server and make ports 80 and 443 reachable.
+Run ONCE on that server:
 
 ```sh
 curl https://get.once.com | ONCE_INTERACTIVE=false sh

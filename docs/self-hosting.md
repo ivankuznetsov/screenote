@@ -20,10 +20,11 @@ You do not need PostgreSQL, Redis, a separate worker, a billing service, or a
 mail server. A private S3-compatible bucket and an external transactional email
 provider are optional.
 
-Screenote supports Linux AMD64 and ARM64 servers. Start with at least 2 vCPUs,
-4 GiB of RAM, and 40 GiB of free SSD storage. It is a single-instance baseline,
-not a cluster or high-availability topology. Size the disk for database growth,
-screenshots, backups, and ordinary filesystem headroom.
+Screenote supports Linux servers with 64-bit Intel/AMD (x86-64) or ARM64
+processors. Start with at least 2 vCPUs, 4 GiB of RAM, and 40 GiB of free SSD
+storage. It is a single-instance baseline, not a cluster or high-availability
+topology. Size the disk for database growth, screenshots, backups, and ordinary
+filesystem headroom.
 
 ## Release boundary
 
