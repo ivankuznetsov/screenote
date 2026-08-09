@@ -58,6 +58,12 @@ class KamalDeploymentConfigurationTest < ActiveSupport::TestCase
     assert_includes config.dig("env", "clear", "SCREENOTE_TRUSTED_PROXIES"), "127.0.0.1/32"
     assert_includes config.dig("env", "clear", "SCREENOTE_TRUSTED_PROXIES"), "::1/128"
     assert_equal ".kamal/hooks/saas", config.fetch("hooks_path")
+    assert_equal 900, config.fetch("deploy_timeout")
+
+    kamal = Kamal::Configuration.create_from(config_file: SAAS_CONFIG)
+    assert_equal 900, kamal.deploy_timeout
+    assert_equal "900s", kamal.proxy.deploy_options.fetch(:"deploy-timeout")
+
     assert_equal "postgres:16-alpine", config.dig("accessories", "db", "image")
     assert_nil config["volumes"]
     assert_not_includes config.dig("env", "secret"), "SCREENOTE_BOOTSTRAP_TOKEN"

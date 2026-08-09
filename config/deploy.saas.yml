@@ -63,6 +63,9 @@ aliases:
 asset_path: /rails/public/assets
 hooks_path: .kamal/hooks/saas
 
+# Startup reconciliation completes before Thruster begins serving requests.
+deploy_timeout: 900
+
 builder:
   arch: amd64
 

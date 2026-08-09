@@ -64,6 +64,11 @@ Areas where documentation is missing or incomplete. Updated from current source,
   qualify an explicit stopped-process maintenance, backup/restore, resumable
   verification, and rollback path; the first successor release cannot publish
   until this is proven.
+- Hosted SaaS now allows fifteen minutes for the synchronous startup image
+  reconciler, covering the measured legacy corpus while keeping failure
+  bounded. Reconciliation time still grows with unresolved image work; monitor
+  it and move bulk repair out of the serving-critical path if it approaches
+  that limit again.
 - The unsafe rolling credential migration is resolved in source: ordinary deploys refuse the pending migration and `bin/saas-credential-cutover` now locks deployment, stops and proves predecessor processes quiesced, invokes a reviewed digest-pinned backup hook for that exact window, validates challenge/restore-point-bound evidence, runs migrations with their adapter-supported transaction behavior, and verifies migration versions, stored digests, and runtime lookups before starting only the successor. It does not promise all-migrations rollback from one outer transaction; an interrupted run must resume its idempotent checks under maintenance or restore the verified backup. The remaining production boundary is operational: the private real hook and four-role restore drill must be reviewed and retained for the cutover.
 
 ### Source release publication
