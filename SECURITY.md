@@ -12,7 +12,11 @@ Include the affected release digest or commit, deployment mode, impact, reproduc
 
 There is no supported public source release yet. Once releases begin, only versions named in the current release support matrix receive security fixes. Self-hosted upgrades are sequential between adjacent releases and use immutable image digests. An operator must not skip documented hops or run an older image against migrated state.
 
-Modified forks, untagged commits, moving image tags, and unsupported infrastructure are outside the security-support promise, although a vulnerability that also affects a supported Screenote release is still welcome.
+Modified source or custom images, untagged commits, moving image tags, and
+unsupported infrastructure are outside the security-support promise. The
+supported self-hosted identity is the exact `tag@digest` image reference named
+by a release. A vulnerability that also affects a supported Screenote release
+is still welcome regardless of where it was found.
 
 ## Credentials and incident handling
 

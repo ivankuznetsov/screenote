@@ -7,6 +7,14 @@ class ReconcileScreenshotProcessingJob < ApplicationJob
     duration: 30.minutes,
     on_conflict: :discard
 
+  def self.enqueue_for_startup!
+    job = nil
+    perform_later { |candidate| job = candidate }
+    raise job.enqueue_error if job.enqueue_error
+
+    job
+  end
+
   def perform
     processed = 0
 

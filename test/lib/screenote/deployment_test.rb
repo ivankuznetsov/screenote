@@ -101,6 +101,47 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     assert_equal({ host: "notes.example.test", protocol: "https" }, config.url_options)
   end
 
+  test "ONCE TLS mode must match the canonical origin" do
+    mismatches = [
+      {
+        "SCREENOTE_BASE_URL" => "https://notes.example.test",
+        "DISABLE_SSL" => "true"
+      },
+      { "DISABLE_SSL" => "false" }
+    ]
+
+    mismatches.each do |override|
+      error = assert_raises(Screenote::Deployment::ConfigurationError) do
+        deployment(self_hosted_environment(override), production: true)
+      end
+
+      assert_equal(
+        "DISABLE_SSL must be true exactly when SCREENOTE_BASE_URL uses http",
+        error.message
+      )
+    end
+
+    once_https = deployment(
+      self_hosted_environment(
+        "SCREENOTE_BASE_URL" => "https://notes.example.test",
+        "DISABLE_SSL" => "false"
+      ),
+      production: true
+    )
+    once_http = deployment(self_hosted_environment("DISABLE_SSL" => "true"), production: true)
+
+    assert_equal "https", once_https.protocol
+    assert_equal "http", once_http.protocol
+  end
+
+  test "malformed ONCE SSL settings fail closed" do
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(self_hosted_environment("DISABLE_SSL" => "sometimes"), production: true)
+    end
+
+    assert_equal "DISABLE_SSL must be true or false", error.message
+  end
+
   test "canonical origin rejects credentials path query fragment and unsupported schemes" do
     invalid_origins = [
       "ftp://notes.example.test",
@@ -185,6 +226,72 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
       end
       assert_match(/requires/, error.message, key)
     end
+  end
+
+  test "ONCE SMTP variables implicitly enable self hosted mail" do
+    config = deployment(
+      self_hosted_environment(
+        "SMTP_ADDRESS" => "smtp.example.test",
+        "SMTP_PORT" => "587",
+        "SMTP_USERNAME" => "screenote",
+        "SMTP_PASSWORD" => "smtp-secret",
+        "MAILER_FROM_ADDRESS" => "screenote@example.test"
+      ),
+      production: true
+    )
+
+    assert config.mail?
+    assert_equal :smtp, config.mail_configuration.fetch(:provider)
+    assert_equal "screenote@example.test", config.mail_configuration.fetch(:from)
+  end
+
+  test "implicit SMTP selection fails closed when ONCE settings are incomplete" do
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(
+        self_hosted_environment(
+          "SMTP_ADDRESS" => "smtp.example.test",
+          "MAILER_FROM_ADDRESS" => "screenote@example.test"
+        ),
+        production: true
+      )
+    end
+
+    assert_match "Selected SMTP provider requires", error.message
+    assert_includes error.message, "SMTP_PORT"
+    assert_includes error.message, "SMTP_USERNAME"
+    assert_includes error.message, "SMTP_PASSWORD"
+  end
+
+  test "explicit false keeps self hosted SMTP disabled when ONCE settings are present" do
+    config = deployment(
+      self_hosted_environment(
+        "SCREENOTE_SMTP_ENABLED" => "false",
+        "SMTP_ADDRESS" => "smtp.example.test",
+        "SMTP_PORT" => "587",
+        "SMTP_USERNAME" => "screenote",
+        "SMTP_PASSWORD" => "smtp-secret",
+        "MAILER_FROM_ADDRESS" => "screenote@example.test"
+      ),
+      production: true
+    )
+
+    assert_not config.mail?
+  end
+
+  test "MAILER_FROM takes precedence over its ONCE alias" do
+    config = deployment(
+      self_hosted_environment(
+        "SMTP_ADDRESS" => "smtp.example.test",
+        "SMTP_PORT" => "587",
+        "SMTP_USERNAME" => "screenote",
+        "SMTP_PASSWORD" => "smtp-secret",
+        "MAILER_FROM" => "preferred@example.test",
+        "MAILER_FROM_ADDRESS" => "once@example.test"
+      ),
+      production: true
+    )
+
+    assert_equal "preferred@example.test", config.mail_configuration.fetch(:from)
   end
 
   test "complete optional providers expose only their selected capabilities" do

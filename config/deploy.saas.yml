@@ -1,5 +1,5 @@
-# Screenote's hosted-service deployment. Self-hosted installations use the
-# starter in config/deploy.yml instead.
+# Hosted screenote.ai deployment only. Self-hosted operators deploy with ONCE;
+# see docs/once-deployment.md.
 
 service: screenote
 image: screenote
@@ -63,7 +63,7 @@ aliases:
 asset_path: /rails/public/assets
 hooks_path: .kamal/hooks/saas
 
-# Startup reconciliation completes before Thruster begins serving requests.
+# Bound database preparation and startup job enqueue before Thruster serves.
 deploy_timeout: 900
 
 builder:

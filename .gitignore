@@ -39,9 +39,8 @@
 /config/credentials*.yml.enc
 /config/credentials/**/*.yml.enc
 
-# Ignore Kamal secrets and the downloaded immutable-release evidence cache.
+# Ignore hosted SaaS Kamal secrets.
 /.kamal/secrets
-/.kamal/releases/
 
 .worktrees
 .mcp.json

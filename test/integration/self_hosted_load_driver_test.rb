@@ -185,6 +185,7 @@ class SelfHostedLoadDriverTest < ActiveSupport::TestCase
     assert_equal "4294967296", option_value(start, "--memory")
     assert_equal "4294967296", option_value(start, "--memory-swap")
     assert_equal "1000:1000", option_value(start, "--user")
+    assert_includes start, "DISABLE_SSL=true"
     assert_includes commands, [ "docker", "rm", "--force", container ]
     assert_includes commands, [ "docker", "volume", "rm", "--force", volume ]
     assert runner.commands.all? { |entry| entry.dig(:options, :timeout_seconds).to_f.positive? }

@@ -1,17 +1,19 @@
 ---
 title: Architecture
 type: architecture
-source: CLAUDE.md, Gemfile, config/routes.rb, config/database.yml
+source: CLAUDE.md, Gemfile, Dockerfile, bin/docker-entrypoint, app/jobs/reconcile_screenshot_processing_job.rb, config/routes.rb, config/database.yml, config/deploy.saas.yml
 created: 2026-04-10
-updated: 2026-08-08
-tags: [architecture, overview, stack, integrations]
+updated: 2026-08-09
+tags: [architecture, overview, stack, integrations, deployment, once, kamal-saas]
 ---
 
 # Architecture
 
-TLDR: Screenote is a Rails 8.1 visual feedback tool for teams and coding agents. Users upload screenshots, annotate them with Figma-style comments, and agents retrieve annotations and image crops through the JSON CLI. Built with Hotwire (Turbo + Stimulus), no build step, and an Active Record database boundary. The supported self-hosted runtime uses SQLite; the hosted Kamal configuration currently selects PostgreSQL, but that is deployment topology rather than an application or release-qualification requirement. A legacy MCP runtime remains in source but is no longer the public integration path.
+TLDR: Screenote is a Rails 8.1 visual feedback tool for teams and coding agents. Users upload screenshots, annotate them with Figma-style comments, and agents retrieve annotations and image crops through the JSON CLI. Built with Hotwire (Turbo + Stimulus), no build step, and an Active Record database boundary. Public self-hosting runs the exact release image through ONCE as one container, four SQLite databases, and one durable volume; hosted `screenote.ai` keeps its separate Kamal topology. A legacy MCP runtime remains in source but is no longer the public integration path.
 
-Source: `CLAUDE.md`, `Gemfile`, `config/routes.rb`, `config/database.yml`
+Source: `CLAUDE.md`, `Gemfile`, `Dockerfile`, `bin/docker-entrypoint`,
+`app/jobs/reconcile_screenshot_processing_job.rb`, `config/routes.rb`,
+`config/database.yml`, `config/deploy.saas.yml`
 
 ## High-Level Architecture
 
@@ -57,8 +59,8 @@ Rails 8.1 (Puma + Thruster)
 | Payments | Stripe for hosted SaaS only |
 | Email | Optional external SMTP for self-hosting; Resend for hosted SaaS |
 | Monitoring | Optional Honeybadger for self-hosting; required for hosted SaaS |
-| Deployment | Kamal 2 |
-| HTTPS edge | Kamal Proxy; hosted DNS/CDN may also use Cloudflare |
+| Deployment | ONCE stable channel for public self-hosting; Kamal 2 for hosted `screenote.ai` |
+| HTTPS edge | ONCE's Kamal Proxy for self-hosting; hosted Kamal Proxy and DNS/CDN may also use Cloudflare |
 
 ## Core Workflows
 
@@ -81,13 +83,15 @@ User enters URL -> server captures page -> User annotates -> Agent collects
 - **ScreenshotImage variants** -- a Screenshot is a logical capture/version and one or more ScreenshotImage rows own the actual viewport-specific blobs
 - **Percentage-based coordinates** -- annotations use 0.0-100.0 percentage coordinates and are scoped to desktop/tablet/mobile viewports
 - **Database portability boundary** -- models, services, tests, CI, and release qualification express database behavior through Active Record and role-specific URLs. Deployment configuration chooses the runtime adapter; exact-image SaaS qualification does not assert an adapter name or server version.
+- **Edition-specific deployment boundary** -- the published image defaults to the self-hosted edition and is deployed by ONCE from an exact `tag@digest` reference. It serves port 80, trusts only loopback and ONCE's private proxy range, and stores all four SQLite roles plus local Active Storage data on one volume mounted at `/storage` and `/rails/storage`. Hosted SaaS deploys separately with Kamal.
+- **Non-blocking startup recovery** -- the entrypoint prepares the databases and installation, then requires Solid Queue to accept a reconciliation job before Puma starts. Processing recovery runs asynchronously and repeats every five minutes rather than delaying the listening server for the whole image corpus.
 
 ## External Integrations
 
 | Service | Edition | Purpose | Config |
 |---------|---------|---------|--------|
 | Generic S3-compatible storage | Self-hosted, optional | Screenshot storage | `SCREENOTE_S3_*` env vars |
-| External SMTP provider | Self-hosted, optional | Transactional email | `SCREENOTE_SMTP_ENABLED`, `SMTP_*` |
+| External SMTP provider | Self-hosted, optional | Transactional email | ONCE Email settings (`SMTP_*`, `MAILER_FROM_ADDRESS`); optional `SCREENOTE_SMTP_ENABLED` override |
 | Google/GitHub OAuth | Self-hosted optional; hosted required | Social sign-in | provider client ID/secret settings |
 | Honeybadger | Self-hosted optional; hosted required | Error monitoring and alerting | `HONEYBADGER_API_KEY` |
 | Stripe | Hosted SaaS | Subscription billing | `STRIPE_PRO_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` |

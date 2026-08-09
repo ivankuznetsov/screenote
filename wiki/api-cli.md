@@ -3,8 +3,8 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-08-08
-tags: [cli, api, rest, agents]
+updated: 2026-08-09
+tags: [cli, api, rest, agents, self-hosting, once]
 ---
 
 # API CLI
@@ -44,8 +44,9 @@ Precedence:
 
 The base URL should be set explicitly. Current docs use localhost,
 staging/self-hosted URLs, or the canonical production host
-`https://screenote.ai`; public self-host configuration lives in
-`config/deploy.yml`, while the hosted service uses `config/deploy.saas.yml`.
+`https://screenote.ai`. Public self-hosting deploys an exact `tag@digest` image
+through ONCE and has no repository-side deployment configuration; the hosted
+service keeps its private Kamal settings in `config/deploy.saas.yml`.
 
 The default login uses the OAuth authorization-code flow with PKCE and a loopback redirect:
 

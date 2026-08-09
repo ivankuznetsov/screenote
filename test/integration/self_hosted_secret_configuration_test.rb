@@ -117,8 +117,55 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
           "rails:db:prepare",
           "rails:runner Installations::Prepare.call",
           "rails:runner AuthenticationLinks::KeyringPreflight.call",
-          "rails:runner ReconcileScreenshotProcessingJob.perform_now",
+          "rails:runner ReconcileScreenshotProcessingJob.enqueue_for_startup!",
           "thrust:./bin/rails server bootstrap=unset"
+        ],
+        File.readlines(trace, chomp: true)
+      )
+    end
+  end
+
+  test "entrypoint refuses to serve when startup reconciliation cannot be enqueued" do
+    Dir.mktmpdir("screenote-entrypoint-enqueue-failure") do |directory|
+      trace = File.join(directory, "trace")
+      write_executable(
+        File.join(directory, "bin/screenote-deployment-preflight"),
+        "#!/usr/bin/env bash\nprintf 'preflight\\n' >> \"$SCREENOTE_TEST_TRACE\"\n"
+      )
+      write_executable(
+        File.join(directory, "bin/rails"),
+        <<~'BASH'
+          #!/usr/bin/env bash
+          printf 'rails:%s\n' "$*" >> "$SCREENOTE_TEST_TRACE"
+          [[ "$*" != "runner ReconcileScreenshotProcessingJob.enqueue_for_startup!" ]]
+        BASH
+      )
+      write_executable(
+        File.join(directory, "bin/thrust"),
+        <<~'BASH'
+          #!/usr/bin/env bash
+          printf 'thrust:%s\n' "$*" >> "$SCREENOTE_TEST_TRACE"
+        BASH
+      )
+
+      _stdout, _stderr, status = run_entrypoint(
+        {
+          "SCREENOTE_EDITION" => "saas",
+          "SCREENOTE_TEST_TRACE" => trace
+        },
+        "./bin/thrust", "./bin/rails", "server",
+        chdir: directory
+      )
+
+      assert_not status.success?
+      assert_equal(
+        [
+          "preflight",
+          "rails:runner script/saas_deploy_guard",
+          "rails:db:prepare",
+          "rails:runner Installations::Prepare.call",
+          "rails:runner AuthenticationLinks::KeyringPreflight.call",
+          "rails:runner ReconcileScreenshotProcessingJob.enqueue_for_startup!"
         ],
         File.readlines(trace, chomp: true)
       )
@@ -350,6 +397,7 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     assert_equal "unless-stopped", service.fetch("restart")
     assert_equal "30s", service.fetch("stop_grace_period")
     assert_equal [ "${SCREENOTE_PORT:-3005}:80" ], service.fetch("ports")
+    assert_equal "true", service.dig("environment", "DISABLE_SSL")
     assert_equal "self_hosted", service.dig("environment", "SCREENOTE_EDITION")
     assert_equal "/run/secrets/screenote_secret_key_base", service.dig("environment", "SECRET_KEY_BASE_FILE")
     assert_nil service.dig("environment", "SCREENOTE_BOOTSTRAP_TOKEN_FILE")
@@ -500,6 +548,31 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     dockerfile = Rails.root.join("Dockerfile").read
 
     assert_match(/MAX_REQUEST_BODY="31457280"/, dockerfile)
+  end
+
+  test "the final image defaults to the ONCE self hosted proxy contract" do
+    dockerfile = Rails.root.join("Dockerfile").read
+
+    assert_match(/SCREENOTE_EDITION="self_hosted"/, dockerfile)
+    assert_match(/DISABLE_SSL="false"/, dockerfile)
+    assert_match(/THRUSTER_FORWARD_HEADERS="true"/, dockerfile)
+    assert_match(
+      /SCREENOTE_TRUSTED_PROXIES="127\.0\.0\.1\/32,::1\/128,172\.16\.0\.0\/12"/,
+      dockerfile
+    )
+    assert_match(
+      /ARG SCREENOTE_IMAGE_REVISION="development"\n.*ENV KAMAL_VERSION="\$SCREENOTE_IMAGE_REVISION"/m,
+      dockerfile
+    )
+  end
+
+  test "the final image provides both ONCE storage mount points to uid and gid 1000" do
+    dockerfile = Rails.root.join("Dockerfile").read
+
+    assert_match(/addgroup -S -g 1000 rails/, dockerfile)
+    assert_match(/adduser -S -D -u 1000 -G rails/, dockerfile)
+    assert_match(/mkdir -p \/storage \/rails\/storage/, dockerfile)
+    assert_match(/chown rails:rails \/storage \/rails\/storage/, dockerfile)
   end
 
   private

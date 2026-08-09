@@ -72,6 +72,7 @@ module Screenote
       @base_url = origin_for(@base_uri).freeze
       @host = @base_uri.host.freeze
       @port = @base_uri.port
+      validate_once_ssl_compatibility! if self_hosted?
       @trusted_proxies = parse_trusted_proxies.freeze
 
       validate_saas_requirements! if production? && saas?
@@ -222,6 +223,16 @@ module Screenote
       raise ConfigurationError, "SECRET_KEY_BASE must contain at least 32 bytes in production"
     end
 
+    def validate_once_ssl_compatibility!
+      return unless @environment.key?("DISABLE_SSL")
+
+      disable_ssl = boolean("DISABLE_SSL", default: false)
+      return if disable_ssl == !force_ssl?
+
+      raise ConfigurationError,
+        "DISABLE_SSL must be true exactly when SCREENOTE_BASE_URL uses http"
+    end
+
     def default_port?
       default_port_for?(@base_uri)
     end
@@ -329,23 +340,38 @@ module Screenote
         return
       end
 
-      unless boolean("SCREENOTE_SMTP_ENABLED", default: false)
+      unless self_hosted_smtp_enabled?
         @mail_configuration = { provider: :disabled }.freeze
         return
       end
 
-      require_selected_provider!("SMTP", %w[SMTP_ADDRESS SMTP_PORT SMTP_USERNAME SMTP_PASSWORD MAILER_FROM])
+      mailer_from = value("MAILER_FROM") || value("MAILER_FROM_ADDRESS")
+      required = %w[SMTP_ADDRESS SMTP_PORT SMTP_USERNAME SMTP_PASSWORD]
+      missing = required.select { |key| blank?(value(key)) }
+      missing << "MAILER_FROM or MAILER_FROM_ADDRESS" if blank?(mailer_from)
+      unless missing.empty?
+        raise ConfigurationError, "Selected SMTP provider requires: #{missing.join(', ')}"
+      end
+
       @mail_configuration = compact_frozen_hash(
         provider: :smtp,
         address: value("SMTP_ADDRESS"),
         port: positive_integer("SMTP_PORT"),
         user_name: value("SMTP_USERNAME"),
         password: value("SMTP_PASSWORD"),
-        from: value("MAILER_FROM"),
+        from: mailer_from,
         domain: value("SMTP_DOMAIN") || host,
         authentication: (value("SMTP_AUTHENTICATION") || "plain").to_sym,
         enable_starttls_auto: boolean("SMTP_STARTTLS", default: true)
       )
+    end
+
+    def self_hosted_smtp_enabled?
+      if @environment.key?("SCREENOTE_SMTP_ENABLED")
+        boolean("SCREENOTE_SMTP_ENABLED", default: false)
+      else
+        !blank?(value("SMTP_ADDRESS"))
+      end
     end
 
     def configure_social_oauth
