@@ -44,10 +44,11 @@ separate from the public self-hosted workflow.
 
 ## Initial configuration and claim
 
-The native installer needs no custom environment. ONCE creates Screenote's
-durable volume and application secret, supplies the selected hostname as
-`ONCE_HOST`, and uses `DISABLE_SSL` to identify an HTTP-only deployment.
-Screenote derives its canonical origin from those values.
+Install released stock ONCE with
+`curl https://get.once.com | ONCE_INTERACTIVE=false sh`, then deploy the GHCR
+image with `--host` and a matching explicit `SCREENOTE_BASE_URL`. ONCE creates
+Screenote's durable volume and application secret. No Screenote-specific ONCE
+installer or unreleased host-injection feature is required.
 
 Open the hostname immediately after installation. The first visitor who
 completes setup becomes the instance administrator. Screenote serializes that
@@ -55,23 +56,23 @@ transition under a database lock, so concurrent submissions produce one
 winner. The claim remains in the primary database and all later account
 creation is invitation-only.
 
-The canonical origin controls links, allowed hosts, redirects, OAuth callbacks,
-and cookie security. `SCREENOTE_BASE_URL` is still available to advanced
-non-ONCE deployment tooling; when set under ONCE, it must exactly match the
-origin derived from `ONCE_HOST` and `DISABLE_SSL`. Use HTTPS for
-internet-facing installations. Plain HTTP is appropriate only when a private
-VPN is the accepted transport boundary; the advanced ONCE deployment uses
-`--disable-tls`.
+The explicit canonical origin controls links, allowed hosts, redirects, OAuth
+callbacks, HTTPS enforcement, and cookie security. It must exactly match the
+scheme and hostname selected by ONCE. Use HTTPS for internet-facing
+installations. Plain HTTP is appropriate only when a private VPN is the
+accepted transport boundary; that deployment uses both `--disable-tls` and an
+`http://` base URL.
 
 The supported ONCE path has two internal forwarding hops: ONCE's proxy and
 Thruster. Screenote resolves the expected ONCE proxy with a bounded DNS lookup
 before accepting the preceding client address and refreshes that identity in a
 short synchronized cache. A failed refresh discards the stale identity. The
 boundary then discards any values supplied before the verified client and
-derives HTTP versus HTTPS from the canonical ONCE origin. Traffic that bypasses the
-proxy, or arrives while its identity cannot be refreshed, is attributed to its
-actual final hop instead of a supplied address. This keeps session auditing and
-IP rate limits distinct without accepting caller-supplied transport identity.
+derives HTTP versus HTTPS from the explicit canonical origin. Traffic that
+bypasses the proxy, or arrives while its identity cannot be refreshed, is
+attributed to its actual final hop instead of a supplied address. This keeps
+session auditing and IP rate limits distinct without accepting caller-supplied
+transport identity.
 Additional reverse proxies are outside the first release's qualified topology.
 
 ## Storage

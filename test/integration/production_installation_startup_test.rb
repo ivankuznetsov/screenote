@@ -90,11 +90,11 @@ class ProductionInstallationStartupTest < ActiveSupport::TestCase
     end
   end
 
-  test "a fresh production primary starts without bootstrap material" do
-    Dir.mktmpdir("screenote-installation-native-once") do |directory|
+  test "a fresh stock ONCE production primary starts without bootstrap material" do
+    Dir.mktmpdir("screenote-installation-stock-once") do |directory|
       environment = self_hosted_environment
       assert_not environment.key?("SCREENOTE_BOOTSTRAP_TOKEN")
-      assert_not environment.key?("SCREENOTE_BASE_URL")
+      assert_equal "http://screenote.internal", environment.fetch("SCREENOTE_BASE_URL")
 
       payload = start_with(directory, environment)
 
@@ -133,7 +133,7 @@ class ProductionInstallationStartupTest < ActiveSupport::TestCase
   def self_hosted_environment
     {
       "SCREENOTE_EDITION" => "self_hosted",
-      "ONCE_HOST" => "screenote.internal",
+      "SCREENOTE_BASE_URL" => "http://screenote.internal",
       "DISABLE_SSL" => "true",
       "SECRET_KEY_BASE" => "a" * 64
     }

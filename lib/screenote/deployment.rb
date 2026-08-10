@@ -207,29 +207,10 @@ module Screenote
 
     def configured_base_url
       configured = value("SCREENOTE_BASE_URL")
-      once_origin = once_base_url if self_hosted?
-
-      if configured && once_origin && origin_for(parse_origin(configured)) != once_origin
-        raise ConfigurationError, "SCREENOTE_BASE_URL must match the origin selected by ONCE_HOST and DISABLE_SSL"
-      end
-
       return configured if configured
-      return once_origin if once_origin
       return default_base_url unless production?
 
       raise ConfigurationError, "SCREENOTE_BASE_URL is required in production"
-    end
-
-    def once_base_url
-      once_host = value("ONCE_HOST")
-      return if once_host.nil?
-
-      unless valid_hostname_or_ip?(once_host)
-        raise ConfigurationError, "ONCE_HOST must be one valid hostname or IP address"
-      end
-
-      scheme = boolean("DISABLE_SSL", default: false) ? "http" : "https"
-      URI::Generic.build(scheme:, host: once_host).to_s
     end
 
     def validate_application_secret!

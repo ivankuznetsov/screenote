@@ -10,10 +10,10 @@ tags: [gaps, documentation, todo, deployment, once, release]
 # Gaps
 
 TLDR: Most first-release self-hosting contracts are implemented in source. The
-native one-command route now depends on the ONCE host/TLS injection and
-Screenote catalog changes being accepted and released upstream, and the exact
-release image still needs a retained ONCE deploy/restart/update/backup/restore
-drill that records the exercised stable version.
+public route now uses released stock ONCE with an explicit canonical base URL.
+The exact release image still needs a retained ONCE
+deploy/restart/update/backup/restore drill that records the exercised stable
+version.
 
 Areas where documentation is missing or incomplete. Updated from current source, recent git history, `plans/`, `todos/`, and the configured master wiki.
 
@@ -57,18 +57,15 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - [[api-cli]] now documents the Go REST CLI surface, including OAuth browser login, aggregate annotation listing, upload content-type handling, page selection, JSON output, stable usage errors, and the `annotation resolve` command implemented on the public CLI `main` branch. The first supported Screenote release still needs to pin an immutable CLI tag containing that command. `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remain deferred agent-surface work.
 
 ### Deployment
-- The public `curl https://get.once.com/screenote | sh` route requires upstream
-  ONCE to publish both the Screenote image alias and generic `ONCE_HOST`
-  injection. The corresponding upstream change is prepared but is not yet an
-  accepted, released ONCE contract; Screenote release qualification must pin
-  the ONCE release that contains it.
-- The public ONCE path and current source contracts are documented, but the
-  exact release image still needs a retained Linux exercise through
-  the supported ONCE stable release named in the evidence: native initial
-  deploy with automatic updates enabled, proxy and forwarding verification,
-  atomic first-visitor claim, restart with volume persistence, a bare update from
-  a repointed release channel, local-volume backup, and restore. S3 mode also
-  requires a provider-level recovery point matched to the restored SQLite state.
+- The public stock-ONCE path and current source contracts are documented, but
+  the exact release image still needs a retained Linux exercise through the
+  supported released ONCE version named in the evidence. The drill must install
+  stock ONCE, deploy with an explicit host and matching `SCREENOTE_BASE_URL`,
+  retain automatic updates, verify proxy forwarding and the atomic
+  first-visitor claim, restart with volume persistence, run a bare update from
+  a repointed release channel, and complete local-volume backup and restore. S3
+  mode also requires a provider-level recovery point matched to the restored
+  SQLite state.
 - A local Linux AMD64 preview drill completed deploy, claim, browser upload,
   restart reconciliation, exact-image replacement, four-role/local-blob
   persistence, ONCE backup, destructive restore, and authenticated browser
@@ -101,11 +98,11 @@ Areas where documentation is missing or incomplete. Updated from current source,
   or publish and qualify an explicit stopped-process maintenance,
   backup/restore, resumable verification, and rollback path; the first
   successor release cannot publish until this is proven.
-- The bootstrap-token digest is transitional predecessor-compatibility state.
-  Once the supported-predecessor window no longer includes installations that
-  retain it, add and qualify a follow-up migration that drops
-  `bootstrap_token_digest` and its legacy constraint without weakening the
-  database-enforced unclaimed/claimed installation state machine.
+- The retired administrator-claim digest column is transitional
+  predecessor-compatibility state. Once the supported-predecessor window no
+  longer includes installations that retain it, add and qualify a follow-up
+  migration that drops the column and its legacy constraint without weakening
+  the database-enforced unclaimed/claimed installation state machine.
 - Startup screenshot reconciliation no longer blocks the serving process: the
   entrypoint now fails unless Solid Queue accepts the job, then Puma starts and
   the five-minute recurring schedule remains a backstop. Live qualification

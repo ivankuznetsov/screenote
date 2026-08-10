@@ -66,18 +66,26 @@ background jobs, four SQLite databases, and local screenshot storage. You do
 not need PostgreSQL, Redis, a separate worker, or a mail server.
 
 Prepare a Linux server with a 64-bit Intel/AMD (x86-64) or ARM64 processor,
-point a hostname at it, and open ports 80 and 443. Then run one command on the
-server:
+point a hostname at it, and open ports 80 and 443. Install released stock ONCE,
+then deploy Screenote with the hostname and matching canonical URL:
 
 ```sh
-curl https://get.once.com/screenote | sh
+curl https://get.once.com | ONCE_INTERACTIVE=false sh
 ```
 
-ONCE installs Docker when needed, asks for the hostname, and deploys
-`ghcr.io/ivankuznetsov/screenote:latest` with automatic updates enabled. Open
-the hostname and create the first administrator. Do this immediately after
-installation: the first person to complete setup owns the new instance.
-Afterward, Screenote is invitation-only.
+If ONCE just installed Docker for your non-root user, reconnect to the server
+once before continuing. Then deploy Screenote:
+
+```sh
+once deploy ghcr.io/ivankuznetsov/screenote:latest \
+  --host screenote.example.com \
+  --env SCREENOTE_BASE_URL=https://screenote.example.com
+```
+
+ONCE installs Docker when needed and keeps automatic updates enabled. Open the
+hostname and create the first administrator. Do this immediately after
+installation: the first person to complete setup atomically claims the new
+instance. Afterward, Screenote is invitation-only.
 
 Create a project and invite your team. Email is optional; ONCE's Email settings
 accept SMTP credentials from services such as Resend or Postmark. Local

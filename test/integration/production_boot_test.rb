@@ -69,8 +69,8 @@ class ProductionBootTest < ActiveSupport::TestCase
     }.to_json)
   RUBY
 
-  test "provider-free native ONCE production boot derives its HTTP origin" do
-    stdout, stderr, status = boot(native_once_environment)
+  test "provider-free stock ONCE production boot uses its explicit HTTP origin" do
+    stdout, stderr, status = boot(self_hosted_environment.merge("DISABLE_SSL" => "true"))
 
     assert status.success?, stderr
     payload = JSON.parse(stdout.lines.last)
@@ -93,7 +93,7 @@ class ProductionBootTest < ActiveSupport::TestCase
 
   test "HTTPS self hosted production boot enables transport security" do
     stdout, stderr, status = boot(
-      native_once_environment.merge("ONCE_HOST" => "notes.example.test", "DISABLE_SSL" => "false")
+      self_hosted_environment.merge("SCREENOTE_BASE_URL" => "https://notes.example.test")
     )
 
     assert status.success?, stderr
@@ -207,15 +207,7 @@ class ProductionBootTest < ActiveSupport::TestCase
   def self_hosted_environment
     {
       "SCREENOTE_EDITION" => "self_hosted",
-      "SCREENOTE_BASE_URL" => "http://screenote.internal:3000"
-    }
-  end
-
-  def native_once_environment
-    {
-      "SCREENOTE_EDITION" => "self_hosted",
-      "ONCE_HOST" => "screenote.internal",
-      "DISABLE_SSL" => "true"
+      "SCREENOTE_BASE_URL" => "http://screenote.internal"
     }
   end
 

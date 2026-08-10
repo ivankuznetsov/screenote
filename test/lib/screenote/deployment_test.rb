@@ -65,41 +65,18 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     assert_match "SECRET_KEY_BASE", error.message
   end
 
-  test "native ONCE configuration derives the canonical origin from its hostname and TLS mode" do
-    https = deployment(
-      native_once_environment("ONCE_HOST" => "notes.example.test", "DISABLE_SSL" => "false"),
-      production: true
-    )
-    http = deployment(
-      native_once_environment("ONCE_HOST" => "screenote.internal", "DISABLE_SSL" => "true"),
-      production: true
-    )
-
-    assert_equal "https://notes.example.test", https.base_url
-    assert_equal({ host: "notes.example.test", protocol: "https" }, https.url_options)
-    assert https.force_ssl?
-    assert_equal "http://screenote.internal", http.base_url
-    assert_not http.force_ssl?
-  end
-
-  test "native ONCE hostname must be one hostname and agree with an explicit override" do
-    [ "https://notes.example.test", "notes.example.test/path", "bad host", "notes.example.test:443" ].each do |host|
-      error = assert_raises(Screenote::Deployment::ConfigurationError) do
-        deployment(native_once_environment("ONCE_HOST" => host), production: true)
-      end
-      assert_match "ONCE_HOST", error.message
-    end
-
+  test "stock ONCE deployment requires an explicit canonical origin" do
     error = assert_raises(Screenote::Deployment::ConfigurationError) do
       deployment(
-        native_once_environment(
+        {
+          "SCREENOTE_EDITION" => "self_hosted",
           "ONCE_HOST" => "notes.example.test",
-          "SCREENOTE_BASE_URL" => "https://other.example.test"
-        ),
+          "SECRET_KEY_BASE" => "a" * 64
+        },
         production: true
       )
     end
-    assert_match "must match", error.message
+    assert_match "SCREENOTE_BASE_URL", error.message
   end
 
   test "asset compilation does not require runtime configuration" do
@@ -554,15 +531,6 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
       "SCREENOTE_EDITION" => "self_hosted",
       "SCREENOTE_BASE_URL" => "http://screenote.internal:3000",
       "SECRET_KEY_BASE" => "a" * 64
-    }.merge(overrides)
-  end
-
-  def native_once_environment(overrides = {})
-    {
-      "SCREENOTE_EDITION" => "self_hosted",
-      "SECRET_KEY_BASE" => "a" * 64,
-      "ONCE_HOST" => "screenote.example.test",
-      "DISABLE_SSL" => "false"
     }.merge(overrides)
   end
 

@@ -11,15 +11,25 @@ Prepare a Linux server with a 64-bit Intel/AMD (x86-64) or ARM64 processor. We
 recommend at least 2 vCPUs, 4 GiB of RAM, and 40 GiB of free SSD storage. Point
 your hostname at the server and allow inbound traffic on ports 80 and 443.
 
-Run this command on the server:
+Install released stock ONCE, then deploy Screenote with the hostname and its
+matching canonical URL:
 
 ```sh
-curl https://get.once.com/screenote | sh
+curl https://get.once.com | ONCE_INTERACTIVE=false sh
 ```
 
-ONCE asks for the hostname and deploys
-`ghcr.io/ivankuznetsov/screenote:latest`. It enables automatic Screenote
-updates and keeps the application data on one durable volume.
+If ONCE just installed Docker for your non-root user, reconnect to the server
+once before continuing. Then deploy Screenote:
+
+```sh
+once deploy ghcr.io/ivankuznetsov/screenote:latest \
+  --host screenote.example.com \
+  --env SCREENOTE_BASE_URL=https://screenote.example.com
+```
+
+The stock installer installs Docker when needed. `once deploy` keeps automatic
+Screenote updates enabled and stores the application data on one durable
+volume.
 
 Open the hostname as soon as installation finishes and create the first
 administrator. The first person to complete this form claims the fresh
@@ -30,18 +40,14 @@ Create a project, open **Members**, and invite your team. Without email,
 Screenote provides a private invitation link or manual code to share through a
 trusted channel.
 
-## How the hostname is configured
+## Canonical URL
 
-ONCE gives Screenote the selected hostname as `ONCE_HOST` and indicates an
-HTTP-only deployment with `DISABLE_SSL`. Screenote derives its canonical origin
-from those values, including allowed hosts, generated links, redirects, OAuth
-callbacks, and secure cookies. The normal install therefore needs neither a
-base-URL variable nor an initial setup secret.
-
-`SCREENOTE_BASE_URL` remains an advanced explicit override for non-ONCE or
-custom deployment tooling. When it is set under ONCE, it must name the same
-origin derived from `ONCE_HOST` and `DISABLE_SSL`, or Screenote refuses to
-start.
+`SCREENOTE_BASE_URL` is required and must use the same hostname and scheme as
+the ONCE deployment. Screenote uses it for allowed hosts, generated links,
+redirects, OAuth callbacks, HTTPS enforcement, and secure cookies. Keep the two
+values identical; otherwise host authorization or generated URLs will not
+match the deployed application. No administrator setup credential is required:
+the first visitor claims a fresh instance atomically.
 
 ## Add email with Resend or Postmark
 
@@ -53,23 +59,19 @@ ONCE supplies the SMTP server, port, username, password, and sender address.
 Use a sender verified by the provider. Removing the email settings returns
 Screenote to the manual invitation flow.
 
-## Advanced first deployment
+## HTTP or S3 first deployment
 
-The one-command install uses HTTPS and local screenshot storage. If the first
+The simple deployment uses HTTPS and local screenshot storage. If the first
 boot must instead use HTTP inside a trusted VPN or a private S3-compatible
-bucket, install ONCE without launching an app and deploy Screenote with those
-settings from the start:
-
-```sh
-curl https://get.once.com | ONCE_INTERACTIVE=false sh
-```
+bucket, include those settings in the initial `once deploy` command.
 
 For an HTTP-only private hostname:
 
 ```sh
 once deploy ghcr.io/ivankuznetsov/screenote:latest \
   --host screenote.internal \
-  --disable-tls
+  --disable-tls \
+  --env SCREENOTE_BASE_URL=http://screenote.internal
 ```
 
 Use HTTP only when the VPN is the trusted transport boundary. The supported
@@ -85,6 +87,7 @@ export SCREENOTE_S3_SECRET_ACCESS_KEY=replace-me
 
 once deploy ghcr.io/ivankuznetsov/screenote:latest \
   --host screenote.example.com \
+  --env SCREENOTE_BASE_URL=https://screenote.example.com \
   --env "SCREENOTE_STORAGE=s3" \
   --env "SCREENOTE_S3_ENDPOINT=https://objects.example.com" \
   --env "SCREENOTE_S3_REGION=region-name" \

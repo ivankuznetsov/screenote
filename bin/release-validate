@@ -24,10 +24,18 @@ class ReleaseValidation
   PUBLIC_INSTALLATION_DOCS = %w[README.md docs/self-hosting.md docs/once-deployment.md].freeze
   PUBLIC_ONCE_COMMAND_DOCS = %w[README.md docs/once-deployment.md].freeze
   PUBLIC_RELEASE_IMAGE = "#{EXPECTED_IMAGE_REPOSITORY}:latest"
-  PUBLIC_ONCE_INSTALLER = "curl https://get.once.com/screenote | sh"
+  PUBLIC_ONCE_INSTALLER = "curl https://get.once.com | ONCE_INTERACTIVE=false sh"
+  PUBLIC_ONCE_DEPLOY = [
+    "once", "deploy", PUBLIC_RELEASE_IMAGE,
+    "--host", "screenote.example.com",
+    "--env", "SCREENOTE_BASE_URL=https://screenote.example.com"
+  ].freeze
   RETIRED_PUBLIC_INSTALLATION_REFERENCES = %w[
     SCREENOTE_BOOTSTRAP_TOKEN
     compose.bootstrap.yaml
+    https://get.once.com/screenote
+    ONCE_HOST
+    --auto-update=false
   ].freeze
   IMAGE_REFERENCE_PATTERN = %r{#{Regexp.escape(EXPECTED_IMAGE_REPOSITORY)}:[^\s"'`\\]+}
   REQUIRED_CHECKS = %w[
@@ -226,7 +234,7 @@ class ReleaseValidation
     end
     error("public product docs must use the CLI and agent skill rather than MCP") if
       user_docs.match?(/\bmcp\b/i)
-    error("public installation docs must use Screenote's native ONCE installer") unless
+    error("public installation docs must use the released stock ONCE installer") unless
       user_docs.include?(PUBLIC_ONCE_INSTALLER)
 
     PUBLIC_ONCE_COMMAND_DOCS.each do |relative|
@@ -251,10 +259,13 @@ class ReleaseValidation
 
   def validate_public_once_commands(relative, document)
     lines = public_shell_lines(document)
-    error("#{relative} must include the exact native Screenote ONCE installer command") unless
+    error("#{relative} must include the exact stock ONCE installer command") unless
       lines.include?(PUBLIC_ONCE_INSTALLER)
 
     commands = public_shell_commands(document, lines:)
+    error("#{relative} must include the stock Screenote ONCE deploy command") unless
+      commands.include?(PUBLIC_ONCE_DEPLOY)
+
     bare_update = commands.any? do |tokens|
       tokens.first(2) == %w[once update] &&
       tokens.length == 3 && !tokens[2].to_s.start_with?("-")

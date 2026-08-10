@@ -94,11 +94,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "release validator rejects retired bootstrap installation guidance" do
-    {
-      "bootstrap token" => "SCREENOTE_BOOTSTRAP_TOKEN",
-      "bootstrap overlay" => "compose.bootstrap.yaml"
-    }.each do |label, retired_reference|
+  test "release validator rejects every retired installation reference" do
+    ReleaseValidation::RETIRED_PUBLIC_INSTALLATION_REFERENCES.each do |retired_reference|
       with_public_positioning_copy do |root|
         File.open(File.join(root, "README.md"), "a") do |readme|
           readme.puts(retired_reference)
@@ -108,22 +105,23 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
 
         assert_includes validator.errors,
           "public installation docs must not mention retired #{retired_reference}",
-          label
+          retired_reference
       end
     end
   end
 
-  test "public self hosted deployment uses the native ONCE installer and normal updates" do
+  test "public self hosted deployment uses released stock ONCE and normal updates" do
     documents = ReleaseValidation::PUBLIC_INSTALLATION_DOCS.sum("") do |path|
       Rails.root.join(path).read
     end
 
-    assert_includes documents, "curl https://get.once.com/screenote | sh"
+    assert_includes documents, ReleaseValidation::PUBLIC_ONCE_INSTALLER
     assert_includes documents, "ghcr.io/ivankuznetsov/screenote:latest"
     ReleaseValidation::PUBLIC_ONCE_COMMAND_DOCS.each do |path|
       document = Rails.root.join(path).read
-      assert_includes document, "curl https://get.once.com/screenote | sh", path
+      assert_includes document, ReleaseValidation::PUBLIC_ONCE_INSTALLER, path
       commands = ReleaseValidation.new(root: Rails.root).send(:public_shell_commands, document)
+      assert_includes commands, ReleaseValidation::PUBLIC_ONCE_DEPLOY, path
       assert commands.any? { |tokens| tokens.first(2) == %w[once update] && tokens.length == 3 }, path
     end
 
@@ -177,9 +175,9 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
 
   test "release validator rejects incomplete ONCE installation guidance" do
     cases = {
-      "missing native installer" => [
-        ->(contents) { contents.gsub("https://get.once.com/screenote", "https://get.once.com/custom") },
-        "public installation docs must use Screenote's native ONCE installer"
+      "missing stock installer" => [
+        ->(contents) { contents.gsub(ReleaseValidation::PUBLIC_ONCE_INSTALLER, "curl https://invalid.example | sh") },
+        "public installation docs must use the released stock ONCE installer"
       ],
       "missing canonical image" => [
         ->(contents) { contents.gsub("ghcr.io/ivankuznetsov/screenote:", "registry.invalid/screenote:") },
@@ -204,8 +202,16 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     immutable_release = "ghcr.io/ivankuznetsov/screenote:v1.2.3@sha256:#{'a' * 64}"
     cases = {
       "wrong README installer route" => [
-        ->(contents) { contents.sub("curl https://get.once.com/screenote | sh", "curl https://get.once.com/custom | sh") },
-        "README.md must include the exact native Screenote ONCE installer command"
+        ->(contents) { contents.sub(ReleaseValidation::PUBLIC_ONCE_INSTALLER, "curl https://invalid.example | sh") },
+        "README.md must include the exact stock ONCE installer command"
+      ],
+      "missing explicit canonical origin" => [
+        ->(contents) { contents.sub("SCREENOTE_BASE_URL=https://screenote.example.com", "SCREENOTE_BASE_URL=https://other.example.com") },
+        "README.md must include the stock Screenote ONCE deploy command"
+      ],
+      "automatic updates disabled" => [
+        ->(contents) { contents.sub("--host screenote.example.com", "--auto-update=false --host screenote.example.com") },
+        "public installation docs must not mention retired --auto-update=false"
       ],
       "image-pinned README update without normal update" => [
         ->(contents) { contents.sub("once update screenote.example.com", "once update screenote.example.com --image #{immutable_release}") },

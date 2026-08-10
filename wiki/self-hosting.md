@@ -29,20 +29,21 @@ the operator guide.
 
 Public installation docs lead directly with ONCE and the latest release image;
 they do not expose the repository's internal publication sentinel or label the
-operator path as a development preview. The primary install is exactly
-`curl https://get.once.com/screenote | sh`: ONCE installs itself and Docker when
-needed, prompts for the hostname, and deploys `screenote:latest` with native
-automatic updates enabled. The release evidence still names the exact ONCE
-version and image digest used for qualification, and `once update HOST`
-requests an immediate update.
+operator path as a development preview. Operators install released stock ONCE
+with `curl https://get.once.com | ONCE_INTERACTIVE=false sh`, then deploy
+`ghcr.io/ivankuznetsov/screenote:latest` with an explicit `--host` and matching
+`SCREENOTE_BASE_URL`. When that installer adds a non-root operator to the
+Docker group, the operator reconnects once before deployment so the current
+shell can reach Docker. Automatic updates remain enabled. Release evidence still
+names the exact ONCE version and image digest used for qualification, and bare
+`once update HOST` requests an immediate update.
 
-ONCE supplies the chosen host as `ONCE_HOST` and its HTTP-only state through
-`DISABLE_SSL`; Screenote derives the canonical origin without a custom
-first-boot base URL. The first visitor atomically claims the administrator, so
-there is no setup credential to generate, enter, retain, or remove. No
-repository fork, source checkout, public Kamal configuration, or local image
-build is part of the supported path. Advanced HTTP-only and initial S3 settings
-live in `docs/once-deployment.md`.
+Screenote takes its canonical origin from the explicit base URL. The first
+visitor atomically claims the administrator, so there is no setup credential
+to generate, enter, retain, or remove. No upstream Screenote-specific ONCE
+integration, repository fork, source checkout, public Kamal configuration, or
+local image build is part of the supported path. HTTP-only and initial S3
+examples in `docs/once-deployment.md` provide matching explicit base URLs.
 
 ## Self-Hosted Product Boundary
 
@@ -75,18 +76,16 @@ preceding address only when the final forwarded hop matches the current
 resolved proxy identity; a sibling that bypasses the proxy, or traffic handled
 during a failed refresh, is attributed to its own final address. It then
 replaces `REMOTE_ADDR`, removes every forwarded header, and applies the
-canonical scheme derived from ONCE's host and TLS settings. A
+canonical scheme from the explicit base URL. A
 caller-supplied prefix therefore cannot control session audit IPs, rate-limit
 buckets, redirects, or TLS identity, and Docker's chosen private subnet is
 irrelevant. The standard ONCE namespace uses `once-proxy`; custom qualification
 namespaces explicitly supply their `<namespace>-proxy` name. This is pinned to
 and exercised against the supported ONCE version because ONCE v0.3.0 exposes
-the name through Docker container-name DNS. ONCE supplies `ONCE_HOST`,
-`DISABLE_SSL` when applicable, and `SECRET_KEY_BASE`; Screenote derives the
-canonical origin from the first two. An explicit `SCREENOTE_BASE_URL` remains
-available to advanced deployment tooling and must match the ONCE-derived origin
-when both are present. Malformed origins, conflicting host/TLS settings, or
-broad proxy trust fail before service. The canonical origin
+the name through Docker container-name DNS. ONCE supplies `SECRET_KEY_BASE`;
+operators supply the canonical origin as `SCREENOTE_BASE_URL` in `once deploy`
+and match its scheme and hostname to the ONCE flags. Malformed origins or broad
+proxy trust fail before service. The canonical origin
 controls allowed hosts, URL generation, OmniAuth callbacks, redirects, secure
 cookies, and HTTP/HTTPS enforcement. Failure to resolve a required two-hop
 proxy identity stops boot. Direct-container qualification declares one
@@ -103,9 +102,10 @@ duplicating data: all four SQLite files and local Active Storage objects still
 share one recovery unit. ONCE pauses the container when taking a volume backup,
 because Screenote does not publish a pre-backup hook.
 
-The native public installer follows
-`ghcr.io/ivankuznetsov/screenote:latest` with automatic updates enabled. A bare
-`once update HOST` remains the immediate-update operation. Generic SMTP
+The public stock-ONCE deployment follows
+`ghcr.io/ivankuznetsov/screenote:latest` with automatic updates enabled and an
+explicit `SCREENOTE_BASE_URL`. A bare `once update HOST` remains the
+immediate-update operation. Generic SMTP
 interoperates with ONCE's Email settings: Screenote accepts
 `MAILER_FROM_ADDRESS` and enables
 SMTP when ONCE supplies `SMTP_ADDRESS`, unless an explicit
@@ -184,7 +184,7 @@ ONCE operator path. Public operations use ONCE's backup and restore commands;
 the first supported release still requires retained evidence that those
 commands recover Screenote correctly.
 
-ONCE enables application auto-update for the native install. Release notes must
+ONCE enables application auto-update for the stock deployment. Release notes must
 identify any update that needs special maintenance rather than ordinary
 automatic replacement; operators can also request the current release
 immediately with `once update HOST`.
@@ -260,7 +260,8 @@ evidence.
 ## Scope
 
 The initial predecessor-free release remains blocked until a retained Linux
-drill deploys the exact candidate through the supported ONCE release named in the evidence, verifies
+drill installs the supported released stock ONCE version named in the evidence,
+deploys the exact candidate with an explicit matching base URL, verifies
 proxy identity and forwarding, restarts with persistent state, exercises the
 moving release channel, and completes ONCE backup and restore for all four SQLite roles
 and local files. S3 qualification must separately recover the matching

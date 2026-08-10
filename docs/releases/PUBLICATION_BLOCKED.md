@@ -14,14 +14,15 @@ Remove it when all technical prerequisites are ready:
   and cable URLs through Active Record without binding qualification to a
   database adapter or server version.
 - The exact `tag@digest` image has completed a retained Linux deployment
-  through the supported ONCE stable release named in the evidence. That
-  release must provide the Screenote alias and `ONCE_HOST`/`DISABLE_SSL`
-  contract used by `curl https://get.once.com/screenote | sh`, with ONCE's
-  Kamal Proxy and Thruster, automatic application updates enabled, and a
-  tokenless first-visitor administrator claim. Retain remote digest/label
-  identity, the exact proxy manifest digest, HTTPS and client-IP forwarding,
-  hostile-header and direct-sibling spoof rejection, restart, volume
-  persistence, and a bare `once update HOST` exercise.
+  through the supported released stock ONCE version named in the evidence.
+  The drill installs ONCE with
+  `curl https://get.once.com | ONCE_INTERACTIVE=false sh`, then uses
+  `once deploy` with an explicit host and matching HTTPS
+  `SCREENOTE_BASE_URL`. Retain ONCE's Kamal Proxy and Thruster, automatic
+  application updates, the atomic first-visitor administrator claim, remote
+  digest/label identity, the exact proxy manifest digest, HTTPS and client-IP
+  forwarding, hostile-header and direct-sibling spoof rejection, restart,
+  volume persistence, and a bare `once update HOST` exercise.
 - ONCE backup and restore commands are published and a retained drill proves
   recovery of all four SQLite roles plus local files using the exact release
   image; S3 mode also proves recovery of the matching external namespace.

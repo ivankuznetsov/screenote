@@ -17,9 +17,10 @@ This document is a release-note template, not a published release or an authoriz
 - Local private storage is the default. S3-compatible storage, external
   transactional email, and Google/GitHub OAuth are optional ONCE application
   settings.
-- The native `curl https://get.once.com/screenote | sh` flow asks for a
-  hostname and derives Screenote's canonical origin from ONCE's host and TLS
-  settings; no custom first-boot environment is required.
+- Operators install released stock ONCE with
+  `curl https://get.once.com | ONCE_INTERACTIVE=false sh`, then deploy the
+  image with an explicit hostname and matching `SCREENOTE_BASE_URL`. No
+  Screenote-specific installer or administrator setup credential is required.
 - The first visitor claims the instance administrator exactly once through a
   transactional single-winner transition. Later admission is project-owner
   invitation only.
