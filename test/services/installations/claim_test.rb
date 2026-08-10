@@ -43,6 +43,13 @@ module Installations
       assert_no_match VALID_PASSWORD, result.as_json.to_json
     end
 
+    test "clears a retained legacy bootstrap digest while claiming" do
+      @installation.update!(bootstrap_token_digest: "a" * 64)
+
+      assert_equal :claimed, claim.status
+      assert_nil @installation.reload.bootstrap_token_digest
+    end
+
     test "operation inspection never exposes submitted credentials" do
       operation = Claim.new(
         email: CLAIM_EMAIL,

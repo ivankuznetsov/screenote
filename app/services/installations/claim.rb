@@ -128,9 +128,9 @@ module Installations
       attributes = {
         state: "claimed",
         administrator:,
-        claimed_at: Time.current
+        claimed_at: Time.current,
+        bootstrap_token_digest: nil
       }
-      attributes[:bootstrap_token_digest] = nil if installation.has_attribute?(:bootstrap_token_digest)
       installation.update!(attributes)
     end
 
