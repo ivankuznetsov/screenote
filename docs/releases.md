@@ -33,11 +33,14 @@ The first publication is held by the technical sentinel [`docs/releases/PUBLICAT
    version. The remaining checks cover minimum-host backup/restore and SQLite
    load plus HTTP/HTTPS CLI compatibility.
 5. Retain an end-to-end Linux deployment of the exact `tag@digest` image
-   through the supported ONCE stable release named in the evidence, ONCE's
-   Kamal Proxy, and Thruster with Screenote automatic updates disabled,
-   including remote digest and label checks, the exact proxy manifest digest,
-   HTTPS, hostile-header and direct-sibling client-IP spoof rejection, restart,
-   and persistence evidence.
+   through the supported released stock ONCE version named in the evidence.
+   Install ONCE with `curl https://get.once.com | ONCE_INTERACTIVE=false sh`,
+   then deploy the exact image with `once deploy`, an explicit `--host`, and a
+   matching `--env SCREENOTE_BASE_URL=https://...`. Exercise ONCE's Kamal Proxy
+   and Thruster with automatic application updates enabled, an atomic
+   first-visitor administrator claim, remote digest and label checks, the exact
+   proxy manifest digest, HTTPS, hostile-header and direct-sibling client-IP
+   spoof rejection, restart, volume persistence, and a bare `once update HOST`.
 6. Publish the release-matched ONCE backup and restore commands, then retain a
    restore drill covering all four SQLite roles and local screenshot storage;
    for S3 mode, retain matching provider recovery evidence as well.

@@ -5,7 +5,6 @@ umask 077
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly SELF_HOSTED_MANIFEST="${REPOSITORY_ROOT}/test/manifests/self_hosted.yml"
-readonly SYSTEM_TEST_BOOTSTRAP_TOKEN="screenote-system-test-bootstrap-token-0123456789abcdef0123456789abcdef"
 readonly COVERAGE_NOT_APPLICABLE_EXIT=3
 readonly MIGRATION_TESTS=(
   test/migrations/repair_legacy_api_key_token_storage_test.rb
@@ -14,6 +13,7 @@ readonly MIGRATION_TESTS=(
   test/migrations/identity_upgrade_test.rb
   test/migrations/create_authentication_tokens_test.rb
   test/migrations/add_account_recovery_provenance_test.rb
+  test/migrations/allow_tokenless_installation_bootstrap_test.rb
 )
 readonly CONCURRENCY_TESTS=(
   test/integration/bootstrap_concurrency_test.rb
@@ -253,10 +253,8 @@ case "${1-}" in
     clobber_precompiled_assets
     env RAILS_ENV=test CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
       SCREENOTE_EDITION=self_hosted SCREENOTE_REQUIRED_MODE=self_hosted \
-      SCREENOTE_BOOTSTRAP_TOKEN="${SYSTEM_TEST_BOOTSTRAP_TOKEN}" \
       bin/rails test "${system_unclaimed_tests[@]}"
-    env -u SCREENOTE_BOOTSTRAP_TOKEN \
-      RAILS_ENV=test CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
+    env RAILS_ENV=test CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
       SCREENOTE_EDITION=self_hosted SCREENOTE_REQUIRED_MODE=self_hosted \
       SCREENOTE_PREPARE_CLAIMED_INSTALLATION=1 \
       bin/rails test "${system_claimed_tests[@]}"

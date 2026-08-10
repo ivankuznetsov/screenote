@@ -86,7 +86,6 @@ module AccountRecoveries
       Installation.current.update_columns(
         state: "unclaimed",
         administrator_id: nil,
-        bootstrap_token_digest: "b" * 64,
         claimed_at: nil
       )
       resolver = SequenceResolver.new(

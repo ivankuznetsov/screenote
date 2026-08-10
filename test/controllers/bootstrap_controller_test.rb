@@ -7,7 +7,6 @@ require "test_helper"
 class BootstrapControllerTest < ActionDispatch::IntegrationTest
   self.use_transactional_tests = false
 
-  BOOTSTRAP_TOKEN = "bootstrap-token-#{'c' * 32}"
   VALID_PASSWORD = "correct horse battery staple"
 
   setup do
@@ -42,10 +41,8 @@ class BootstrapControllerTest < ActionDispatch::IntegrationTest
     assert_security_headers
     assert_select "h1", text: /Set up Screenote/
     assert_select "form[action='#{bootstrap_path}'][method='post']"
-    assert_select "label[for='bootstrap_token']", text: /Bootstrap token/
-    assert_select "input#bootstrap_token[name='bootstrap[token]'][type='password'][required]"
     assert_select "label[for='bootstrap_email']", text: "Email"
-    assert_select "input#bootstrap_email[name='bootstrap[email]'][type='email'][required]"
+    assert_select "input#bootstrap_email[name='bootstrap[email]'][type='email'][required][autofocus]"
     assert_select "label[for='bootstrap_password']", text: "Password"
     assert_select "input#bootstrap_password[name='bootstrap[password]'][type='password'][required]"
     assert_select "label[for='bootstrap_password_confirmation']", text: /Confirm password/
@@ -76,18 +73,21 @@ class BootstrapControllerTest < ActionDispatch::IntegrationTest
     assert_match(/session_token=/, Array(response.headers.fetch("Set-Cookie")).join("\n"))
   end
 
-  test "invalid token and invalid form render associated errors without a session" do
+  test "claim rejects a request without the browser form authenticity token" do
+    previous_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+
     assert_no_difference [ "User.count", "Session.count", "InstallationAuditEvent.count" ] do
-      post bootstrap_path, params: bootstrap_params(token: "wrong-token")
+      post bootstrap_path, params: bootstrap_params
     end
 
     assert_response :unprocessable_content
-    assert_security_headers
-    assert_select "#bootstrap_token_error[role='alert']", text: /invalid/i
-    assert_select "input#bootstrap_token[aria-invalid='true'][aria-describedby='bootstrap_token_error']"
-    assert_no_match "wrong-token", response.body
+    assert @installation.reload.unclaimed?
+  ensure
+    ActionController::Base.allow_forgery_protection = previous_forgery_protection
+  end
 
-    @rate_limit_backend.clear
+  test "invalid form renders associated errors without a session" do
     assert_no_difference [ "User.count", "Session.count", "InstallationAuditEvent.count" ] do
       post bootstrap_path, params: bootstrap_params(password: "short", password_confirmation: "different")
     end
@@ -124,8 +124,7 @@ class BootstrapControllerTest < ActionDispatch::IntegrationTest
     @installation.update!(
       state: "claimed",
       administrator:,
-      claimed_at: Time.current,
-      bootstrap_token_digest: nil
+      claimed_at: Time.current
     )
 
     get root_path
@@ -165,12 +164,12 @@ class BootstrapControllerTest < ActionDispatch::IntegrationTest
 
   test "rate limiting is bounded and fails closed when its backend is unavailable" do
     5.times do
-      post bootstrap_path, params: bootstrap_params(token: "wrong-token")
+      post bootstrap_path, params: bootstrap_params(password: "short")
       assert_response :unprocessable_content
     end
 
     assert_no_difference [ "User.count", "Session.count", "InstallationAuditEvent.count" ] do
-      post bootstrap_path, params: bootstrap_params(token: "wrong-token")
+      post bootstrap_path, params: bootstrap_params(password: "short")
     end
     assert_response :too_many_requests
     assert_equal "3600", response.headers["Retry-After"]
@@ -214,12 +213,11 @@ class BootstrapControllerTest < ActionDispatch::IntegrationTest
   private
 
   def bootstrap_params(
-    token: BOOTSTRAP_TOKEN,
     email: "controller-bootstrap@example.test",
     password: VALID_PASSWORD,
     password_confirmation: VALID_PASSWORD
   )
-    { bootstrap: { token:, email:, password:, password_confirmation: } }
+    { bootstrap: { email:, password:, password_confirmation: } }
   end
 
   def bootstrap_routes_drawn?
@@ -237,8 +235,7 @@ class BootstrapControllerTest < ActionDispatch::IntegrationTest
       {
         "SCREENOTE_EDITION" => "self_hosted",
         "SCREENOTE_BASE_URL" => "http://screenote.internal",
-        "SECRET_KEY_BASE" => "a" * 64,
-        "SCREENOTE_BOOTSTRAP_TOKEN" => BOOTSTRAP_TOKEN
+        "SECRET_KEY_BASE" => "a" * 64
       },
       production: true
     )

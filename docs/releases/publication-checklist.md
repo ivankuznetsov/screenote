@@ -19,10 +19,15 @@ This checklist summarizes the technical setup and exact-artifact checks around t
 - [ ] Exact platform images passed GitGuardian and pinned Critical/High vulnerability policy.
 - [ ] Manifest labels, platform digests, SBOM, provenance, and public-log sentinel checks passed.
 - [ ] The exact `tag@digest` image passed its retained Linux deployment
-  through the supported ONCE stable release named in the evidence, ONCE's
-  Kamal Proxy, and Thruster with Screenote automatic updates disabled,
-  including the exact proxy manifest digest, normal forwarding, hostile-header
-  and direct-sibling spoof rejection, restart, and persistence checks.
+  through the supported released stock ONCE version named in the evidence.
+  The drill installed ONCE with
+  `curl https://get.once.com | ONCE_INTERACTIVE=false sh`, then used
+  `once deploy` with an explicit host and matching HTTPS
+  `SCREENOTE_BASE_URL`, ONCE's Kamal Proxy, and Thruster while automatic
+  application updates remained enabled. Evidence includes the atomic
+  first-visitor administrator claim, exact proxy manifest digest, HTTPS,
+  normal forwarding, hostile-header and direct-sibling spoof rejection,
+  restart, volume persistence, and a bare `once update HOST`.
 - [ ] Published ONCE backup/restore commands recovered all four SQLite roles
   and local screenshot files with the exact image; S3 mode also recovered the
   matching external object namespace.

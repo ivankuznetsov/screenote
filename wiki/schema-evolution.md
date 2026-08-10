@@ -3,7 +3,7 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-08-08
+updated: 2026-08-10
 tags: [database, migrations, schema, history]
 ---
 
@@ -122,6 +122,12 @@ Source: `db/migrate/`
 |-----------|---------|
 | `20260808090000_create_admission_locks` | Create bounded durable lock stripes so matching-email admission serializes through Active Record without persisting the address or choosing a lock primitive by adapter name |
 
+### Phase 15: Native First-Visitor Installation Claim (2026-08-09)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260809120000_allow_tokenless_installation_bootstrap` | Stop requiring a bootstrap-token digest for unclaimed installations while retaining the nullable transition column for predecessor overlap; the locked first-visitor transition records exactly one administrator and clears any legacy digest |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -146,7 +152,7 @@ Source: `db/migrate/`
 
 11. **Device credentials are short-lived and digest-only**: RFC 8628 device codes are stored as SHA-256 digests and consumed under a row lock during final exchange. Human codes remain lookupable but use 50 bits of entropy, an indexed 10-minute absolute expiry, fail-closed throttled verification, and scheduled cleanup for abandoned grants after 15 minutes of terminal-error retention.
 
-12. **Deployment identity is persistent, not inferred from providers**: one constrained Installation row records SaaS/self-hosted mode, the credential-free storage namespace, and bootstrap/claim state. Startup may rotate credentials but refuses to reinterpret an existing primary database under a different mode or object namespace.
+12. **Deployment identity is persistent, not inferred from providers**: one constrained Installation row records SaaS/self-hosted mode, the credential-free storage namespace, and ownership state. A fresh self-hosted row carries no setup credential; the first visitor claims it under a row lock and records the administrator. Startup may rotate provider credentials but refuses to reinterpret an existing primary database under a different mode or object namespace.
 
 13. **OAuth authority is explicit and secrets are non-restorable**: grants, device grants, and tokens carry a user/project discriminator instead of treating a nullable project as implicit authority. Project deletion cascades. Existing bearer and confidential-client values are converted to SHA-256 only after old processes stop; runtime has no plaintext fallback. The migration avoids rebuilding the parent `oauth_applications` table solely for SQLite CHECK constraints because that can cascade-delete child credentials during table replacement. `SaasCredentialCutover` deliberately does not place the complete migration chain inside another transaction: Active Record lets each migration use the transaction behavior its adapter supports. Maintenance-mode quiescence and a verified backup/restore point provide recovery, while migration-version checks plus storage and runtime lookup verification make an interrupted run safely resumable or fail closed for restore.
 

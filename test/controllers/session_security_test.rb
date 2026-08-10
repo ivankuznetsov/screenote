@@ -33,8 +33,7 @@ class SessionSecurityTest < ActionDispatch::IntegrationTest
       {
         "SCREENOTE_EDITION" => "self_hosted",
         "SCREENOTE_BASE_URL" => base_url,
-        "SECRET_KEY_BASE" => "a" * 64,
-        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+        "SECRET_KEY_BASE" => "a" * 64
       },
       production: true
     )

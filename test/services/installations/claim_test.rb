@@ -6,7 +6,6 @@ module Installations
   class ClaimTest < ActiveSupport::TestCase
     self.use_transactional_tests = false
 
-    BOOTSTRAP_TOKEN = "bootstrap-token-#{'b' * 32}"
     CLAIM_EMAIL = "bootstrap-admin@example.test"
     VALID_PASSWORD = "correct horse battery staple"
 
@@ -32,7 +31,6 @@ module Installations
       @installation.reload
       assert @installation.claimed?
       assert_equal result.user, @installation.administrator
-      assert_nil @installation.bootstrap_token_digest
       assert @installation.claimed_at
 
       event = InstallationAuditEvent.find_by!(installation: @installation)
@@ -40,62 +38,34 @@ module Installations
       assert_equal result.user, event.actor_user
       assert_equal result.user, event.target_user
       assert_equal({ "channel" => "web" }, event.metadata)
-      assert_no_match BOOTSTRAP_TOKEN, event.attributes.to_json
       assert_no_match VALID_PASSWORD, event.attributes.to_json
-      assert_no_match BOOTSTRAP_TOKEN, result.inspect
       assert_no_match VALID_PASSWORD, result.inspect
-      assert_no_match BOOTSTRAP_TOKEN, result.as_json.to_json
       assert_no_match VALID_PASSWORD, result.as_json.to_json
+    end
+
+    test "clears a retained legacy bootstrap digest while claiming" do
+      @installation.update!(bootstrap_token_digest: "a" * 64)
+
+      assert_equal :claimed, claim.status
+      assert_nil @installation.reload.bootstrap_token_digest
     end
 
     test "operation inspection never exposes submitted credentials" do
       operation = Claim.new(
-        token: BOOTSTRAP_TOKEN,
         email: CLAIM_EMAIL,
         password: VALID_PASSWORD,
         password_confirmation: VALID_PASSWORD,
         channel: "web"
       )
 
-      assert_no_match BOOTSTRAP_TOKEN, operation.inspect
       assert_no_match VALID_PASSWORD, operation.inspect
       assert_no_match CLAIM_EMAIL, operation.inspect
       assert_equal operation.inspect, operation.to_s
-      assert_no_match BOOTSTRAP_TOKEN, operation.as_json.to_json
       assert_no_match VALID_PASSWORD, operation.as_json.to_json
       assert_no_match CLAIM_EMAIL, operation.as_json.to_json
     end
 
-    test "compares only fixed length token digests" do
-      compared_values = nil
-      original = ActiveSupport::SecurityUtils.method(:secure_compare)
-
-      with_singleton_method_stub(ActiveSupport::SecurityUtils, :secure_compare, lambda { |left, right|
-        compared_values = [ left, right ]
-        original.call(left, right)
-      }) do
-        assert_equal :claimed, claim.status
-      end
-
-      assert_equal [ Digest::SHA256.hexdigest(BOOTSTRAP_TOKEN), self_hosted_deployment.bootstrap_token_digest ],
-        compared_values
-      assert compared_values.all? { |value| value.match?(/\A[0-9a-f]{64}\z/) }
-    end
-
-    test "invalid token creates nothing and leaves the original token usable" do
-      assert_no_difference [ "User.count", "InstallationAuditEvent.count" ] do
-        result = claim(token: "not-the-token")
-
-        assert_equal :invalid_token, result.status
-        assert_nil result.user
-      end
-
-      assert @installation.reload.unclaimed?
-      assert_equal self_hosted_deployment.bootstrap_token_digest, @installation.bootstrap_token_digest
-      assert_equal :claimed, claim.status
-    end
-
-    test "invalid administrator form rolls back and leaves the token usable" do
+    test "invalid administrator form rolls back and leaves setup available" do
       assert_no_difference [ "User.count", "InstallationAuditEvent.count" ] do
         result = claim(password: "short", password_confirmation: "different")
 
@@ -105,11 +75,10 @@ module Installations
       end
 
       assert @installation.reload.unclaimed?
-      assert_equal self_hosted_deployment.bootstrap_token_digest, @installation.bootstrap_token_digest
       assert_equal :claimed, claim.status
     end
 
-    test "audit failure rolls back the user and claim and leaves the token usable" do
+    test "audit failure rolls back the user and leaves setup available" do
       invalid_event = InstallationAuditEvent.new
       invalid_event.errors.add(:metadata, "must be recorded")
 
@@ -128,11 +97,10 @@ module Installations
       end
 
       assert @installation.reload.unclaimed?
-      assert_equal self_hosted_deployment.bootstrap_token_digest, @installation.bootstrap_token_digest
       assert_equal :claimed, claim.status
     end
 
-    test "existing normalized email is rejected without consuming the token" do
+    test "existing normalized email is rejected without claiming the installation" do
       existing_user = users(:alice)
 
       assert_no_difference [ "User.count", "InstallationAuditEvent.count" ] do
@@ -143,10 +111,9 @@ module Installations
       end
 
       assert @installation.reload.unclaimed?
-      assert_equal self_hosted_deployment.bootstrap_token_digest, @installation.bootstrap_token_digest
     end
 
-    test "blank normalized email is invalid without consuming the token" do
+    test "blank normalized email is invalid without claiming the installation" do
       assert_no_difference [ "User.count", "InstallationAuditEvent.count" ] do
         result = claim(email: "  ")
 
@@ -155,7 +122,6 @@ module Installations
       end
 
       assert @installation.reload.unclaimed?
-      assert_equal self_hosted_deployment.bootstrap_token_digest, @installation.bootstrap_token_digest
     end
 
     test "constraint specific email collision maps to email taken after rollback" do
@@ -174,7 +140,6 @@ module Installations
       end
 
       assert @installation.reload.unclaimed?
-      assert_equal self_hosted_deployment.bootstrap_token_digest, @installation.bootstrap_token_digest
     end
 
     test "an unrelated uniqueness failure is unavailable rather than misreported as email taken" do
@@ -189,7 +154,6 @@ module Installations
       end
 
       assert @installation.reload.unclaimed?
-      assert_equal self_hosted_deployment.bootstrap_token_digest, @installation.bootstrap_token_digest
     end
 
     test "a repeated claim returns already claimed without returning the administrator" do
@@ -281,10 +245,9 @@ module Installations
       malformed = Installation.new(
         singleton_key: Installation::SINGLETON_KEY,
         deployment_mode: "self_hosted",
-        state: "unclaimed",
+        state: "claimed",
         storage_service: "self_hosted_local",
-        storage_namespace_fingerprint: "f" * 64,
-        bootstrap_token_digest: "malformed"
+        storage_namespace_fingerprint: "f" * 64
       )
       relation = Object.new
       relation.define_singleton_method(:find_by) { |**| malformed }
@@ -343,13 +306,12 @@ module Installations
     private
 
     def claim(
-      token: BOOTSTRAP_TOKEN,
       email: CLAIM_EMAIL,
       password: VALID_PASSWORD,
       password_confirmation: VALID_PASSWORD,
       channel: "web"
     )
-      Claim.call(token:, email:, password:, password_confirmation:, channel:)
+      Claim.call(email:, password:, password_confirmation:, channel:)
     end
 
     def self_hosted_deployment
@@ -357,8 +319,7 @@ module Installations
         {
           "SCREENOTE_EDITION" => "self_hosted",
           "SCREENOTE_BASE_URL" => "http://screenote.internal",
-          "SECRET_KEY_BASE" => "a" * 64,
-          "SCREENOTE_BOOTSTRAP_TOKEN" => BOOTSTRAP_TOKEN
+          "SECRET_KEY_BASE" => "a" * 64
         },
         production: true
       )

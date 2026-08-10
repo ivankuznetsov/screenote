@@ -9,7 +9,7 @@ require "tmpdir"
 
 class ProductionInstallationStartupTest < ActiveSupport::TestCase
   RUNTIME_KEYS = %w[
-    SCREENOTE_EDITION SCREENOTE_BASE_URL SCREENOTE_BOOTSTRAP_TOKEN SCREENOTE_TRUSTED_PROXIES
+    SCREENOTE_EDITION SCREENOTE_BASE_URL ONCE_HOST DISABLE_SSL SCREENOTE_TRUSTED_PROXIES
     SCREENOTE_FORWARDED_CLIENT_HOPS SCREENOTE_FORWARDED_PROXY_HOST
     SCREENOTE_STORAGE SCREENOTE_SMTP_ENABLED SCREENOTE_GOOGLE_OAUTH_ENABLED
     SCREENOTE_GITHUB_OAUTH_ENABLED SCREENOTE_HONEYBADGER_ENABLED
@@ -90,16 +90,17 @@ class ProductionInstallationStartupTest < ActiveSupport::TestCase
     end
   end
 
-  test "a fresh production primary stays empty without bootstrap material" do
-    Dir.mktmpdir("screenote-installation-bootstrap") do |directory|
-      payload = start_with(
-        directory,
-        self_hosted_environment.except("SCREENOTE_BOOTSTRAP_TOKEN")
-      )
+  test "a fresh stock ONCE production primary starts without bootstrap material" do
+    Dir.mktmpdir("screenote-installation-stock-once") do |directory|
+      environment = self_hosted_environment
+      assert_not environment.key?("SCREENOTE_BOOTSTRAP_TOKEN")
+      assert_equal "http://screenote.internal", environment.fetch("SCREENOTE_BASE_URL")
 
-      assert_equal "configuration_mismatch", payload.fetch("outcome")
-      assert_includes payload.fetch("error"), "bootstrap"
-      assert_equal 0, payload.fetch("count")
+      payload = start_with(directory, environment)
+
+      assert_equal "ok", payload.fetch("outcome")
+      assert_equal "self_hosted", payload.fetch("deployment_mode")
+      assert_equal 1, payload.fetch("count")
     end
   end
 
@@ -132,9 +133,9 @@ class ProductionInstallationStartupTest < ActiveSupport::TestCase
   def self_hosted_environment
     {
       "SCREENOTE_EDITION" => "self_hosted",
-      "SCREENOTE_BASE_URL" => "http://screenote.internal:3005",
-      "SECRET_KEY_BASE" => "a" * 64,
-      "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      "SCREENOTE_BASE_URL" => "http://screenote.internal",
+      "DISABLE_SSL" => "true",
+      "SECRET_KEY_BASE" => "a" * 64
     }
   end
 

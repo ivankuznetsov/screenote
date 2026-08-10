@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_08_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_09_120000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -169,7 +169,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_090000) do
     t.datetime "updated_at", null: false
     t.index ["administrator_id"], name: "index_installations_on_administrator_id", unique: true
     t.index ["singleton_key"], name: "index_installations_on_singleton_key", unique: true
-    t.check_constraint "(deployment_mode = 'saas' AND state = 'saas' AND administrator_id IS NULL AND bootstrap_token_digest IS NULL AND claimed_at IS NULL) OR (deployment_mode = 'self_hosted' AND state = 'unclaimed' AND administrator_id IS NULL AND bootstrap_token_digest IS NOT NULL AND claimed_at IS NULL) OR (deployment_mode = 'self_hosted' AND state = 'claimed' AND administrator_id IS NOT NULL AND bootstrap_token_digest IS NULL AND claimed_at IS NOT NULL)", name: "installations_valid_state"
+    t.check_constraint "(deployment_mode = 'saas' AND state = 'saas' AND administrator_id IS NULL AND bootstrap_token_digest IS NULL AND claimed_at IS NULL) OR (deployment_mode = 'self_hosted' AND state = 'unclaimed' AND administrator_id IS NULL AND claimed_at IS NULL) OR (deployment_mode = 'self_hosted' AND state = 'claimed' AND administrator_id IS NOT NULL AND bootstrap_token_digest IS NULL AND claimed_at IS NOT NULL)", name: "installations_valid_state"
     t.check_constraint "(deployment_mode = 'saas' AND storage_service = 'rabata') OR (deployment_mode = 'self_hosted' AND storage_service IN ('self_hosted_local', 'self_hosted_s3'))", name: "installations_storage_service"
     t.check_constraint "bootstrap_token_digest IS NULL OR length(bootstrap_token_digest) = 64", name: "installations_bootstrap_digest"
     t.check_constraint "deployment_mode IN ('saas', 'self_hosted')", name: "installations_deployment_mode"

@@ -61,12 +61,12 @@ class Installation < ApplicationRecord
     valid =
       case deployment_mode
       when "saas"
-        state == "saas" && administrator_id.nil? && bootstrap_token_digest.nil? && claimed_at.nil?
+        state == "saas" && administrator_id.nil? && claimed_at.nil?
       when "self_hosted"
         if state == "unclaimed"
-          administrator_id.nil? && bootstrap_token_digest.present? && claimed_at.nil?
+          administrator_id.nil? && claimed_at.nil?
         elsif state == "claimed"
-          administrator_id.present? && bootstrap_token_digest.nil? && claimed_at.present?
+          administrator_id.present? && claimed_at.present?
         else
           false
         end

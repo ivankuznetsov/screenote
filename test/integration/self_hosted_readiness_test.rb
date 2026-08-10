@@ -208,8 +208,7 @@ class SelfHostedReadinessTest < ActionDispatch::IntegrationTest
       "RAILS_LOG_TO_STDOUT" => nil,
       "SCREENOTE_EDITION" => "self_hosted",
       "SCREENOTE_BASE_URL" => "http://screenote.internal:3005",
-      "SECRET_KEY_BASE" => "a" * 64,
-      "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      "SECRET_KEY_BASE" => "a" * 64
     }
   end
 end

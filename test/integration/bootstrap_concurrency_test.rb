@@ -9,10 +9,9 @@ class BootstrapConcurrencyTest < ActiveSupport::TestCase
   include DeterministicConcurrencyTestHelper
   self.use_transactional_tests = false
 
-  BOOTSTRAP_TOKEN = "bootstrap-token-#{'d' * 32}"
-
   setup do
-    @email = "bootstrap-race-#{SecureRandom.hex(8)}@example.test"
+    suffix = SecureRandom.hex(8)
+    @emails = [ "bootstrap-race-one-#{suffix}@example.test", "bootstrap-race-two-#{suffix}@example.test" ]
     InstallationAuditEvent.delete_all
     Installation.delete_all
     Installations::Prepare.call(deployment: self_hosted_deployment)
@@ -21,15 +20,14 @@ class BootstrapConcurrencyTest < ActiveSupport::TestCase
   teardown do
     InstallationAuditEvent.delete_all
     Installation.delete_all
-    User.where(email: @email).delete_all
+    User.where(email: @emails).delete_all
   end
 
   test "two independent database connections commit exactly one claim" do
     installation = Installation.current!
-    claim = lambda do
+    claim = lambda do |email|
       Installations::Claim.call(
-        token: BOOTSTRAP_TOKEN,
-        email: @email,
+        email:,
         password: "correct horse battery staple",
         password_confirmation: "correct horse battery staple",
         channel: "concurrency_test"
@@ -44,18 +42,22 @@ class BootstrapConcurrencyTest < ActiveSupport::TestCase
         record.id == installation.id && attributes[:state] == "claimed"
       end
     ) do |entered, release|
-      run_blocked_race(entered: entered, release: release, first: claim, second: claim)
+      run_blocked_race(
+        entered:,
+        release:,
+        first: -> { claim.call(@emails.first) },
+        second: -> { claim.call(@emails.second) }
+      )
     end
 
     assert_no_concurrency_exceptions(outcomes)
     assert_equal %i[claimed already_claimed], outcomes.map(&:status)
-    assert_equal 1, User.where(email: @email).count
+    assert_equal [ @emails.first ], User.where(email: @emails).pluck(:email)
     assert_equal 1, InstallationAuditEvent.where(event_type: "installation_claimed").count
 
     installation.reload
     assert installation.claimed?
-    assert_equal @email, installation.administrator.email
-    assert_nil installation.bootstrap_token_digest
+    assert_equal @emails.first, installation.administrator.email
   end
 
   private
@@ -65,8 +67,7 @@ class BootstrapConcurrencyTest < ActiveSupport::TestCase
       {
         "SCREENOTE_EDITION" => "self_hosted",
         "SCREENOTE_BASE_URL" => "http://screenote.internal",
-        "SECRET_KEY_BASE" => "a" * 64,
-        "SCREENOTE_BOOTSTRAP_TOKEN" => BOOTSTRAP_TOKEN
+        "SECRET_KEY_BASE" => "a" * 64
       },
       production: true
     )

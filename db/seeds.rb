@@ -30,7 +30,7 @@ if Rails.env.development? && Screenote::Deployment.current.saas?
   puts "  Pro user:  test@screenote.app / password"
   puts "  Free user: free@screenote.app / password"
 elsif Rails.env.development?
-  puts "Self-hosted development starts with zero accounts; claim the installation with its bootstrap token."
+  puts "Self-hosted development starts with zero accounts; open the application to create the administrator."
 else
   puts "Seed data is development-only; no accounts were created."
 end

@@ -83,8 +83,6 @@ module Screenote
       configure_social_oauth
       configure_monitoring
       @saas_operator_email = configure_saas_operator_email
-      @bootstrap_token_digest = digest_bootstrap_token
-
       @environment = nil
       freeze
     end
@@ -141,10 +139,6 @@ module Screenote
       options.freeze
     end
 
-    def bootstrap_token_digest
-      @bootstrap_token_digest
-    end
-
     def inspect
       "#<#{self.class.name} edition=#{edition.inspect} base_url=#{base_url.inspect} " \
         "storage=#{active_storage_service.inspect} mail=#{mail?} social_oauth=#{social_oauth_providers.inspect} " \
@@ -170,7 +164,6 @@ module Screenote
       @social_oauth_configuration = {}.freeze
       @monitoring_configuration = { provider: :disabled }.freeze
       @saas_operator_email = nil
-      @bootstrap_token_digest = nil
       @environment = nil
       freeze
     end
@@ -214,7 +207,7 @@ module Screenote
 
     def configured_base_url
       configured = value("SCREENOTE_BASE_URL")
-      return configured unless configured.nil?
+      return configured if configured
       return default_base_url unless production?
 
       raise ConfigurationError, "SCREENOTE_BASE_URL is required in production"
@@ -270,13 +263,13 @@ module Screenote
       if @forwarded_client_hops == 2 && @forwarded_proxy_host.nil?
         raise ConfigurationError, "SCREENOTE_FORWARDED_PROXY_HOST is required for a two-hop proxy chain"
       end
-      if @forwarded_client_hops == 2 && !valid_proxy_host?(@forwarded_proxy_host)
+      if @forwarded_client_hops == 2 && !valid_hostname_or_ip?(@forwarded_proxy_host)
         raise ConfigurationError, "SCREENOTE_FORWARDED_PROXY_HOST must be a valid hostname or IP address"
       end
       @forwarded_proxy_host&.freeze
     end
 
-    def valid_proxy_host?(host)
+    def valid_hostname_or_ip?(host)
       return false if host.nil? || host.bytesize > 253 || host.include?("/")
 
       IPAddr.new(host)
@@ -468,19 +461,6 @@ module Screenote
       end
 
       email.freeze
-    end
-
-    def digest_bootstrap_token
-      return unless self_hosted?
-
-      token = value("SCREENOTE_BOOTSTRAP_TOKEN")
-      return if blank?(token)
-
-      if token.bytesize < 32 || token.match?(/\s/)
-        raise ConfigurationError, "SCREENOTE_BOOTSTRAP_TOKEN must contain at least 32 non-whitespace bytes"
-      end
-
-      Digest::SHA256.hexdigest(token).freeze
     end
 
     def validate_provider_endpoint!(key)

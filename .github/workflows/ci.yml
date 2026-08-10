@@ -80,7 +80,6 @@ jobs:
     env:
       RAILS_ENV: test
       PARALLEL_WORKERS: "4"
-      SCREENOTE_BOOTSTRAP_TOKEN: screenote-ci-bootstrap-token-0123456789abcdef0123456789abcdef
     steps:
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -110,7 +109,6 @@ jobs:
       CAPYBARA_RUN_SERVER: "true"
       PARALLEL_WORKERS: "1"
       SCREENOTE_EDITION: self_hosted
-      SCREENOTE_BOOTSTRAP_TOKEN: screenote-ci-bootstrap-token-0123456789abcdef0123456789abcdef
     steps:
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

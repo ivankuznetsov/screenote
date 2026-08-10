@@ -40,13 +40,12 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     assert_match "saas or self_hosted", error.message
   end
 
-  test "production requires an explicit canonical origin and strong application secret" do
+  test "production requires a canonical origin source and strong application secret" do
     error = assert_raises(Screenote::Deployment::ConfigurationError) do
       deployment(
         {
           "SCREENOTE_EDITION" => "self_hosted",
-          "SECRET_KEY_BASE" => "a" * 64,
-          "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+          "SECRET_KEY_BASE" => "a" * 64
         },
         production: true
       )
@@ -58,13 +57,26 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
         {
           "SCREENOTE_EDITION" => "self_hosted",
           "SCREENOTE_BASE_URL" => "http://screenote.internal",
-          "SECRET_KEY_BASE" => "too-short",
-          "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+          "SECRET_KEY_BASE" => "too-short"
         },
         production: true
       )
     end
     assert_match "SECRET_KEY_BASE", error.message
+  end
+
+  test "stock ONCE deployment requires an explicit canonical origin" do
+    error = assert_raises(Screenote::Deployment::ConfigurationError) do
+      deployment(
+        {
+          "SCREENOTE_EDITION" => "self_hosted",
+          "ONCE_HOST" => "notes.example.test",
+          "SECRET_KEY_BASE" => "a" * 64
+        },
+        production: true
+      )
+    end
+    assert_match "SCREENOTE_BASE_URL", error.message
   end
 
   test "asset compilation does not require runtime configuration" do
@@ -90,7 +102,6 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     assert_empty config.social_oauth_providers
     assert_equal :self_hosted_local, config.active_storage_service
     assert_equal 64, config.storage_namespace_fingerprint.length
-    assert_equal 64, config.bootstrap_token_digest.length
     assert_equal 1, config.forwarded_client_hops
   end
 
@@ -268,18 +279,11 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     end
   end
 
-  test "self hosted storage profile and bootstrap material fail closed" do
+  test "self hosted storage profile fails closed" do
     error = assert_raises(Screenote::Deployment::ConfigurationError) do
       deployment(self_hosted_environment("SCREENOTE_STORAGE" => "shared"), production: true)
     end
     assert_equal "SCREENOTE_STORAGE must be local or s3", error.message
-
-    [ "short", "b" * 31 + " " ].each do |token|
-      error = assert_raises(Screenote::Deployment::ConfigurationError) do
-        deployment(self_hosted_environment("SCREENOTE_BOOTSTRAP_TOKEN" => token), production: true)
-      end
-      assert_match(/32 non-whitespace bytes/, error.message)
-    end
   end
 
   test "optional self hosted providers reject partial selection" do
@@ -513,7 +517,6 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
 
     inspected = deployment(environment, production: true).inspect
 
-    assert_not_includes inspected, environment.fetch("SCREENOTE_BOOTSTRAP_TOKEN")
     assert_not_includes inspected, environment.fetch("SMTP_PASSWORD")
   end
 
@@ -527,8 +530,7 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     {
       "SCREENOTE_EDITION" => "self_hosted",
       "SCREENOTE_BASE_URL" => "http://screenote.internal:3000",
-      "SECRET_KEY_BASE" => "a" * 64,
-      "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      "SECRET_KEY_BASE" => "a" * 64
     }.merge(overrides)
   end
 

@@ -37,7 +37,6 @@ class BootstrapController < ApplicationController
   def create
     attributes = bootstrap_params
     result = Installations::Claim.call(
-      token: attributes[:token],
       email: attributes[:email],
       password: attributes[:password],
       password_confirmation: attributes[:password_confirmation],
@@ -50,7 +49,7 @@ class BootstrapController < ApplicationController
       redirect_to dashboard_path, notice: "Screenote is ready. Your administrator account has been created."
     when :already_claimed
       redirect_after_claim
-    when :invalid_token, :email_taken, :invalid
+    when :email_taken, :invalid
       prepare_form(email: attributes[:email], errors: result.errors)
       render :show, status: :unprocessable_content
     when :retryable_busy
@@ -92,7 +91,7 @@ class BootstrapController < ApplicationController
   def bootstrap_params
     params
       .fetch(:bootstrap, ActionController::Parameters.new)
-      .permit(:token, :email, :password, :password_confirmation)
+      .permit(:email, :password, :password_confirmation)
   end
 
   def bootstrap_ip_rate_limit_identity

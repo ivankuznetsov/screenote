@@ -1,6 +1,6 @@
 <div class="auth-card">
   <h1 class="auth-card__title">Set up Screenote</h1>
-  <p class="auth-card__subtitle">Claim this private installation and create its administrator account.</p>
+  <p class="auth-card__subtitle">Create the administrator account for this private installation.</p>
 
   <% if @errors[:base].present? %>
     <div class="flash flash--alert" role="alert" tabindex="-1">
@@ -10,28 +10,12 @@
 
   <%= form_with url: bootstrap_path, scope: :bootstrap, class: "auth-card__form" do |form| %>
     <div class="auth-card__field">
-      <%= form.label :token, "Bootstrap token", class: "auth-card__label" %>
-      <%= form.password_field :token,
-            value: nil,
-            class: "auth-card__input #{'auth-card__input--error' if @errors[:token].present?}",
-            required: true,
-            autofocus: true,
-            autocomplete: "off",
-            aria: {
-              invalid: @errors[:token].present?,
-              describedby: ("bootstrap_token_error" if @errors[:token].present?)
-            } %>
-      <% if @errors[:token].present? %>
-        <p id="bootstrap_token_error" class="auth-card__field-error" role="alert"><%= @errors[:token].first %></p>
-      <% end %>
-    </div>
-
-    <div class="auth-card__field">
       <%= form.label :email, "Email", class: "auth-card__label" %>
       <%= form.email_field :email,
             value: @email,
             class: "auth-card__input #{'auth-card__input--error' if @errors[:email].present?}",
             required: true,
+            autofocus: true,
             autocomplete: "email",
             aria: {
               invalid: @errors[:email].present?,

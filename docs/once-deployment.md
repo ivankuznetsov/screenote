@@ -1,180 +1,161 @@
 # Deploy Screenote with ONCE
 
-[ONCE](https://github.com/basecamp/once) installs and operates compatible Docker
-applications on one server. It gives Screenote a reverse proxy, HTTPS, a
-durable volume, logs, settings, updates, and backups without requiring a
-repository checkout or deployment fork.
+[ONCE](https://github.com/basecamp/once) runs Screenote on one Linux server. It
+installs Docker when needed and manages the HTTPS proxy, application container,
+durable volume, settings, updates, backups, and logs. You do not need a source
+checkout or deployment fork.
 
-This guide uses ONCE's official stable installer. Each Screenote release names
-the exact ONCE version used for release qualification. ONCE maintains its own
-application-server updates separately; `--auto-update=false` below keeps
-Screenote updates manual.
+## Install
 
-## Prepare the server
+Prepare a Linux server with a 64-bit Intel/AMD (x86-64) or ARM64 processor. We
+recommend at least 2 vCPUs, 4 GiB of RAM, and 40 GiB of free SSD storage. Point
+your hostname at the server and allow inbound traffic on ports 80 and 443.
 
-Screenote supports Linux servers with 64-bit Intel/AMD (x86-64) or ARM64
-processors. Start with at least 2 vCPUs, 4 GiB of RAM, and 40 GiB of free SSD
-storage. Point a hostname at the server and make ports 80 and 443 reachable.
-Run ONCE on that server:
+Install released stock ONCE, then deploy Screenote with the hostname and its
+matching canonical URL:
 
 ```sh
 curl https://get.once.com | ONCE_INTERACTIVE=false sh
-once version
 ```
 
-The installer also installs Docker on supported systems when needed. If Docker
-commands require `sudo` for your account, run every `once` command with `sudo`.
-If ONCE was already installed and `once version` is older than the version named
-by the Screenote release, run `sudo once self-update` and check the version
-again. Re-running the installer does not replace an existing ONCE binary.
-
-## Deploy Screenote
+If ONCE just installed Docker for your non-root user, reconnect to the server
+once before continuing. Then deploy Screenote:
 
 ```sh
-SCREENOTE_HOST=screenote.example.com
-SCREENOTE_BOOTSTRAP_TOKEN="$(openssl rand -hex 32)"
-
-once deploy \
-  ghcr.io/ivankuznetsov/screenote:latest \
-  --host "$SCREENOTE_HOST" \
-  --auto-update=false \
-  --env "SCREENOTE_BASE_URL=https://$SCREENOTE_HOST" \
-  --env "SCREENOTE_BOOTSTRAP_TOKEN=$SCREENOTE_BOOTSTRAP_TOKEN"
+once deploy ghcr.io/ivankuznetsov/screenote:latest \
+  --host screenote.example.com \
+  --env SCREENOTE_BASE_URL=https://screenote.example.com
 ```
 
-ONCE generates and retains the Rails `SECRET_KEY_BASE`; do not create a second
-one. Automatic application updates stay disabled so you choose when Screenote
-updates.
+The stock installer installs Docker when needed. `once deploy` keeps automatic
+Screenote updates enabled and stores the application data on one durable
+volume.
 
-ONCE obtains HTTPS for a publicly resolvable hostname. For an HTTP-only private
-VPN deployment, add `--disable-tls` and use the matching base URL:
-
-```sh
---disable-tls \
---env "SCREENOTE_BASE_URL=http://screenote.internal"
-```
-
-Use HTTP only when the VPN is the trusted transport boundary. The base URL must
-be one origin with no credentials, path, query, or fragment. The supported
-topology sends clients directly to ONCE; do not add another reverse proxy in
-front of it without separately qualifying that proxy chain.
-
-## Claim the instance
-
-Open `https://screenote.example.com/bootstrap`, then display and enter the
-one-time token:
-
-```sh
-printf '%s\n' "$SCREENOTE_BOOTSTRAP_TOKEN"
-```
-
-Create the instance administrator. Then run `once`, select Screenote, open
-**Settings → Environment**, remove `SCREENOTE_BOOTSTRAP_TOKEN`, and keep
-`SCREENOTE_BASE_URL`. The administrator claim remains in the database after
-the token is removed.
+Open the hostname as soon as installation finishes and create the first
+administrator. The first person to complete this form claims the fresh
+instance; a database lock makes concurrent claims single-winner. After that,
+account creation is invitation-only.
 
 Create a project, open **Members**, and invite your team. Without email,
-Screenote gives the project owner a private invitation link or manual code to
-share through a trusted channel.
+Screenote provides a private invitation link or manual code to share through a
+trusted channel.
+
+## Canonical URL
+
+`SCREENOTE_BASE_URL` is required and must use the same hostname and scheme as
+the ONCE deployment. Screenote uses it for allowed hosts, generated links,
+redirects, OAuth callbacks, HTTPS enforcement, and secure cookies. Keep the two
+values identical; otherwise host authorization or generated URLs will not
+match the deployed application. No administrator setup credential is required:
+the first visitor claims a fresh instance atomically.
 
 ## Add email with Resend or Postmark
 
-Screenote does not run an SMTP server. To send invitations automatically, run
-`once`, select Screenote, and enter a transactional provider's values under
+Screenote does not run a mail server. To send invitations automatically, run
+`once`, select Screenote, then enter a transactional provider's values under
 **Settings → Email**. Resend, Postmark, and other SMTP providers work.
 
-ONCE supplies `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
-and `MAILER_FROM_ADDRESS` to Screenote. Use a sender verified by the provider.
-Screenote enables email when that SMTP address is present and rejects an
-incomplete configuration at startup. Removing the email settings restores the
-manual invitation flow.
+ONCE supplies the SMTP server, port, username, password, and sender address.
+Use a sender verified by the provider. Removing the email settings returns
+Screenote to the manual invitation flow.
 
-## Use S3-compatible screenshot storage
+## HTTP or S3 first deployment
 
-Local storage is the default. It keeps all four SQLite databases and screenshot
-files on the ONCE volume mounted at `/storage` and `/rails/storage`.
+The simple deployment uses HTTPS and local screenshot storage. If the first
+boot must instead use HTTP inside a trusted VPN or a private S3-compatible
+bucket, include those settings in the initial `once deploy` command.
 
-To use a private S3-compatible bucket, add these custom variables to the
-initial `once deploy` command:
+For an HTTP-only private hostname:
 
 ```sh
---env "SCREENOTE_STORAGE=s3" \
---env "SCREENOTE_S3_ENDPOINT=https://objects.example.com" \
---env "SCREENOTE_S3_REGION=region-name" \
---env "SCREENOTE_S3_BUCKET=private-bucket" \
---env "SCREENOTE_S3_PREFIX=screenote-team" \
---env "SCREENOTE_S3_ACCESS_KEY_ID=$SCREENOTE_S3_ACCESS_KEY_ID" \
---env "SCREENOTE_S3_SECRET_ACCESS_KEY=$SCREENOTE_S3_SECRET_ACCESS_KEY"
+once deploy ghcr.io/ivankuznetsov/screenote:latest \
+  --host screenote.internal \
+  --disable-tls \
+  --env SCREENOTE_BASE_URL=http://screenote.internal
 ```
 
-Set the two credential variables in the shell from your secret manager before
-running the command. Add `SCREENOTE_S3_PATH_STYLE=false` only when the provider
-requires virtual-hosted-style requests; the default is path-style.
+Use HTTP only when the VPN is the trusted transport boundary. The supported
+topology sends clients directly to ONCE; an additional reverse proxy requires
+separate qualification.
 
-Choose the bucket and stable prefix before storing screenshots. Changing
-credentials for the same namespace is routine; changing the endpoint, bucket,
-or prefix after uploads exist is a data migration. The SQLite databases always
-remain on the ONCE volume.
+For S3-compatible screenshot storage, export the credentials from your secret
+manager and deploy with the complete storage namespace:
+
+```sh
+export SCREENOTE_S3_ACCESS_KEY_ID=replace-me
+export SCREENOTE_S3_SECRET_ACCESS_KEY=replace-me
+
+once deploy ghcr.io/ivankuznetsov/screenote:latest \
+  --host screenote.example.com \
+  --env SCREENOTE_BASE_URL=https://screenote.example.com \
+  --env "SCREENOTE_STORAGE=s3" \
+  --env "SCREENOTE_S3_ENDPOINT=https://objects.example.com" \
+  --env "SCREENOTE_S3_REGION=region-name" \
+  --env "SCREENOTE_S3_BUCKET=private-bucket" \
+  --env "SCREENOTE_S3_PREFIX=screenote-team" \
+  --env "SCREENOTE_S3_ACCESS_KEY_ID=$SCREENOTE_S3_ACCESS_KEY_ID" \
+  --env "SCREENOTE_S3_SECRET_ACCESS_KEY=$SCREENOTE_S3_SECRET_ACCESS_KEY"
+```
+
+Add `SCREENOTE_S3_PATH_STYLE=false` only when the provider requires
+virtual-hosted-style requests; path-style is the default. Choose the service,
+bucket, and stable prefix before the first boot. Changing credentials for the
+same namespace is routine; changing between local and S3 or changing the
+endpoint, bucket, or prefix later is a data migration. The four SQLite
+databases always remain on the ONCE volume.
 
 ## Back up and restore
 
-Create a backup before inviting a team and before every update:
+Configure automatic backups from ONCE's **Backups** settings. You can also
+create one immediately:
 
 ```sh
 mkdir -p screenote-backups
 chmod 0700 screenote-backups
-once backup screenote.example.com screenote-backups/screenote-2026-08-09.tar.gz
+once backup screenote.example.com screenote-backups/screenote-2026-08-10.tar.gz
 ```
 
-The backup contains ONCE application settings and the persistent volume. With
-local screenshot storage that covers the four SQLite databases and screenshots.
-Screenote does not currently provide an ONCE pre-backup hook, so ONCE pauses
-the container while it copies the volume to keep the backup consistent.
+ONCE pauses Screenote while copying the application settings and durable volume
+so the four SQLite databases stay consistent. With local screenshot storage,
+the archive also contains the screenshots. It contains private application
+data and retained settings, so restrict access, encrypt it at rest, and copy it
+off the server.
 
-The archive contains private application data and retained settings, including
-secrets. Store it outside the application volume, restrict access, encrypt it
-at rest, and copy it off the server. Configure automatic backups from ONCE's
-Backups settings if desired.
+With S3 storage, the ONCE archive does not contain the external bucket. Protect
+that bucket separately and recover it to the same point as the databases.
 
-For S3 mode, the ONCE archive covers the databases and settings but not the
-external bucket. Protect that bucket with provider backups or versioning and
-test recovery of the volume and matching object namespace together.
-
-Restore a backup on an isolated server first:
+Test restores on an isolated server:
 
 ```sh
-once restore screenote-backups/screenote-2026-08-09.tar.gz
+once restore screenote-backups/screenote-2026-08-10.tar.gz
 ```
 
-A backup is not proven until you have restored it and verified sign-in,
-projects, screenshots, annotations, comments, and pending processing.
+Verify sign-in, projects, screenshots, annotations, comments, invitations, and
+pending processing. A backup is not proven until its restore has been tested.
 
-The normal installation records the moving `latest` image name in its ONCE
-backup, so restore pulls the current Screenote release. The archive protects
-your data and settings; it does not pin a historical application version. If
-your recovery policy requires version-pinned rollback, use the immutable image
-reference published in GitHub Releases instead of the simple `latest` channel.
+The normal installation records the moving `latest` image name, so a restore
+pulls the current release. If your recovery policy requires a version-pinned
+rollback, use the immutable image reference published in GitHub Releases.
 
-## Update Screenote
+## Updates and operations
 
-Read the release notes and take a verified backup, then update the application:
+ONCE automatically checks for and applies Screenote updates. To apply the
+latest release immediately, take a backup and run:
 
 ```sh
-once backup screenote.example.com screenote-backups/screenote-before-update.tar.gz
 once update screenote.example.com
 ```
 
-The update preserves the existing hostname, custom environment, email, backup,
-and resource settings. The current release supports a direct update from every
-earlier published release. If a release requires maintenance, its release
-notes are authoritative.
+The update preserves the hostname, custom environment, email, backup, and
+resource settings. Release notes remain authoritative when an update requires
+special maintenance.
 
 Run `once` for the dashboard, settings, actions, and logs. `once list` shows
-installed applications; `once stop HOST`, `once start HOST`, and
-`once exec HOST COMMAND` provide the corresponding command-line operations.
-Screenote exposes `/up` for process liveness and `/ready` for its database and
-storage readiness check.
+installed applications, while `once stop HOST` and `once start HOST` control an
+application from the command line. Screenote exposes `/up` for process
+liveness and `/ready` for database and storage readiness.
 
 See the [self-hosting guide](self-hosting.md) for the production boundary,
 [SUPPORT.md](../SUPPORT.md) for support, and [SECURITY.md](../SECURITY.md) for
-private vulnerability reporting.
+private vulnerability reporting. Each Screenote release records the exact ONCE
+version and immutable image digest used for release qualification.

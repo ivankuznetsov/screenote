@@ -5,7 +5,6 @@ umask 077
 
 readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly BASE_COMPOSE="${REPOSITORY_ROOT}/compose.yaml"
-readonly BOOTSTRAP_COMPOSE="${REPOSITORY_ROOT}/compose.bootstrap.yaml"
 readonly S3_COMPOSE="${REPOSITORY_ROOT}/compose.s3.yaml"
 readonly SMTP_COMPOSE="${REPOSITORY_ROOT}/compose.smtp.yaml"
 readonly GOOGLE_OAUTH_COMPOSE="${REPOSITORY_ROOT}/compose.google-oauth.yaml"
@@ -16,6 +15,10 @@ readonly SECRET_ROOT="${SMOKE_ROOT}/secrets"
 readonly AUDIT_ROOT="${SMOKE_ROOT}/audit"
 readonly CLAIM_LOG="${SMOKE_ROOT}/claim.log"
 readonly VERIFY_LOG="${SMOKE_ROOT}/verify.log"
+readonly BOOTSTRAP_COOKIE_JAR="${SMOKE_ROOT}/bootstrap.cookies"
+readonly BOOTSTRAP_FORM="${SMOKE_ROOT}/bootstrap.html"
+readonly BOOTSTRAP_HEADERS="${SMOKE_ROOT}/bootstrap.headers"
+readonly BOOTSTRAP_RESPONSE="${SMOKE_ROOT}/bootstrap-response.html"
 readonly COMPOSE_PROJECT_NAME="screenote-smoke-$$"
 readonly ONCE_VOLUME_NAME="screenote-once-contract-$$"
 
@@ -32,11 +35,6 @@ base_compose=(
   --project-name "${COMPOSE_PROJECT_NAME}"
   --file "${BASE_COMPOSE}"
 )
-bootstrap_compose=(
-  "${base_compose[@]}"
-  --file "${BOOTSTRAP_COMPOSE}"
-)
-
 cleanup() {
   local exit_status=$?
 
@@ -53,7 +51,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command in docker grep openssl sed; do
+for command in curl docker grep openssl sed; do
   command -v "${command}" >/dev/null 2>&1 || {
     printf 'self-hosted smoke: required command is unavailable: %s\n' "${command}" >&2
     exit 1
@@ -108,7 +106,6 @@ docker run --rm \
 
 mkdir -m 0700 "${SECRET_ROOT}" "${AUDIT_ROOT}"
 openssl rand -base64 48 > "${SECRET_ROOT}/secret_key_base"
-openssl rand -base64 48 > "${SECRET_ROOT}/bootstrap_token"
 openssl rand -base64 36 > "${SECRET_ROOT}/s3_access_key_id"
 openssl rand -base64 48 > "${SECRET_ROOT}/s3_secret_access_key"
 openssl rand -base64 48 > "${SECRET_ROOT}/smtp_password"
@@ -124,7 +121,6 @@ if [[ "$(id -u)" != "1000" ]]; then
     "${IMAGE_TAG}" \
     1000:1000 \
     /screenote-secrets/secret_key_base \
-    /screenote-secrets/bootstrap_token \
     /screenote-secrets/s3_access_key_id \
     /screenote-secrets/s3_secret_access_key \
     /screenote-secrets/smtp_password \
@@ -137,7 +133,6 @@ export SCREENOTE_IMAGE="${IMAGE_TAG}"
 export SCREENOTE_BASE_URL="http://screenote.invalid"
 export SCREENOTE_PORT=0
 export SCREENOTE_SECRET_KEY_BASE_PATH="${SECRET_ROOT}/secret_key_base"
-export SCREENOTE_BOOTSTRAP_TOKEN_PATH="${SECRET_ROOT}/bootstrap_token"
 export SCREENOTE_S3_ENDPOINT="http://127.0.0.1:9000"
 export SCREENOTE_S3_REGION="local"
 export SCREENOTE_S3_BUCKET="screenote-smoke"
@@ -162,15 +157,12 @@ provider_overlays=(
   --file "${HONEYBADGER_COMPOSE}"
 )
 "${base_compose[@]}" "${provider_overlays[@]}" config >/dev/null
-"${bootstrap_compose[@]}" "${provider_overlays[@]}" config >/dev/null
 
 wait_until_healthy() {
-  local compose_command_name="$1"
-  local -n compose_command="${compose_command_name}"
   local container_id health state
 
   for _attempt in $(seq 1 180); do
-    container_id="$("${compose_command[@]}" ps --quiet screenote)"
+    container_id="$("${base_compose[@]}" ps --quiet screenote)"
     if [[ -n "${container_id}" ]]; then
       read -r state health < <(
         docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${container_id}"
@@ -189,18 +181,16 @@ wait_until_healthy() {
 }
 
 wait_until_processing_complete() {
-  local compose_command_name="$1"
-  local -n compose_command="${compose_command_name}"
   local failed_jobs finished_jobs primary_state ready_images variant_records
 
   for _attempt in $(seq 1 60); do
-    if primary_state="$("${compose_command[@]}" exec -T screenote sqlite3 \
+    if primary_state="$("${base_compose[@]}" exec -T screenote sqlite3 \
         /rails/storage/primary.sqlite3 \
         'SELECT (SELECT COUNT(*) FROM screenshot_images WHERE status = 1 AND width = 400 AND height = 300), (SELECT COUNT(*) FROM active_storage_variant_records);')" &&
-      finished_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
+      finished_jobs="$("${base_compose[@]}" exec -T screenote sqlite3 \
         /rails/storage/queue.sqlite3 \
         "SELECT COUNT(*) FROM solid_queue_jobs WHERE class_name = 'ReconcileScreenshotProcessingJob' AND finished_at IS NOT NULL;")" &&
-      failed_jobs="$("${compose_command[@]}" exec -T screenote sqlite3 \
+      failed_jobs="$("${base_compose[@]}" exec -T screenote sqlite3 \
         /rails/storage/queue.sqlite3 \
         'SELECT COUNT(*) FROM solid_queue_failed_executions;')"; then
       IFS='|' read -r ready_images variant_records <<< "${primary_state}"
@@ -227,51 +217,97 @@ assert_secret_values_absent() {
 }
 
 assert_secrets_absent() {
-  local compose_command_name="$1"
-  local -n compose_command="${compose_command_name}"
   local container_id inspect_path logs_path
 
-  container_id="$("${compose_command[@]}" ps --quiet screenote)"
+  container_id="$("${base_compose[@]}" ps --quiet screenote)"
   inspect_path="${SMOKE_ROOT}/inspect.json"
   logs_path="${SMOKE_ROOT}/container.log"
   docker inspect "${container_id}" > "${inspect_path}"
-  "${compose_command[@]}" logs --no-color > "${logs_path}"
+  "${base_compose[@]}" logs --no-color > "${logs_path}"
 
   assert_secret_values_absent "${inspect_path}" "${logs_path}"
 }
 
 printf 'Starting fresh local-storage configuration\n'
-"${bootstrap_compose[@]}" up --detach
-wait_until_healthy bootstrap_compose
-assert_secrets_absent bootstrap_compose
+"${base_compose[@]}" up --detach
+wait_until_healthy
+assert_secrets_absent
 
-printf 'Claiming the prepared instance with the web process stopped\n'
-"${bootstrap_compose[@]}" down --remove-orphans
+bootstrap_port="$("${base_compose[@]}" port screenote 80 | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | sed -n '1p')"
+if [[ -z "${bootstrap_port}" ]]; then
+  printf 'self-hosted smoke: could not determine the published Screenote port\n' >&2
+  exit 1
+fi
+bootstrap_url="http://127.0.0.1:${bootstrap_port}"
+
+printf 'Claiming the prepared instance through the browser flow\n'
+curl --fail --silent --show-error \
+  --header 'Host: screenote.invalid' \
+  --cookie-jar "${BOOTSTRAP_COOKIE_JAR}" \
+  "${bootstrap_url}/bootstrap" >"${BOOTSTRAP_FORM}"
+csrf_token="$(sed -n 's/.*name="authenticity_token" value="\([^"]*\)".*/\1/p' "${BOOTSTRAP_FORM}" | sed -n '1p')"
+if [[ -z "${csrf_token}" ]]; then
+  printf 'self-hosted smoke: bootstrap form did not include a CSRF token\n' >&2
+  exit 1
+fi
+
 set +e
-"${bootstrap_compose[@]}" run --rm --no-deps screenote ./bin/rails runner - \
+bootstrap_status="$(curl --silent --show-error \
+  --header 'Host: screenote.invalid' \
+  --cookie "${BOOTSTRAP_COOKIE_JAR}" \
+  --cookie-jar "${BOOTSTRAP_COOKIE_JAR}" \
+  --dump-header "${BOOTSTRAP_HEADERS}" \
+  --output "${BOOTSTRAP_RESPONSE}" \
+  --request POST \
+  --data-urlencode "authenticity_token=${csrf_token}" \
+  --data-urlencode 'bootstrap[email]=container-smoke@example.test' \
+  --data-urlencode 'bootstrap[password]=screenote-smoke-password-123' \
+  --data-urlencode 'bootstrap[password_confirmation]=screenote-smoke-password-123' \
+  --write-out '%{http_code}' \
+  "${bootstrap_url}/bootstrap")"
+bootstrap_curl_status=$?
+set -e
+if (( bootstrap_curl_status != 0 )) || [[ "${bootstrap_status}" != "302" ]]; then
+  printf 'self-hosted smoke: bootstrap claim expected HTTP 302, got curl=%s HTTP=%s\n' \
+    "${bootstrap_curl_status}" "${bootstrap_status}" >&2
+  sed -n '1,120p' "${BOOTSTRAP_HEADERS}" >&2 || true
+  sed -n '1,120p' "${BOOTSTRAP_RESPONSE}" >&2 || true
+  exit 1
+fi
+if ! grep --fixed-strings --quiet 'session_token' "${BOOTSTRAP_COOKIE_JAR}"; then
+  printf 'self-hosted smoke: bootstrap claim did not establish a session cookie\n' >&2
+  exit 1
+fi
+dashboard_status="$(curl --silent --show-error \
+  --header 'Host: screenote.invalid' \
+  --cookie "${BOOTSTRAP_COOKIE_JAR}" \
+  --output /dev/null \
+  --write-out '%{http_code}' \
+  "${bootstrap_url}/dashboard")"
+if [[ "${dashboard_status}" != "200" ]]; then
+  printf 'self-hosted smoke: bootstrap session expected dashboard HTTP 200, got %s\n' "${dashboard_status}" >&2
+  exit 1
+fi
+
+printf 'Creating persistent smoke fixtures with the claimed web process stopped\n'
+"${base_compose[@]}" down --remove-orphans
+set +e
+"${base_compose[@]}" run --rm --no-deps screenote ./bin/rails runner - \
   >"${CLAIM_LOG}" 2>&1 <<'RUBY'
 require "stringio"
 require "base64"
 
-raise "fresh installation created an account" unless User.count.zero?
-
-password = "screenote-smoke-password-123"
-administrator = User.create!(
-  email: "container-smoke@example.test",
-  password: password,
-  password_confirmation: password,
-  confirmed_at: Time.current
+installation = Installation.current!
+administrator = User.find_by!(email: "container-smoke@example.test")
+raise "browser claim did not persist the installation state" unless installation.claimed? &&
+  installation.administrator_id == administrator.id && installation.claimed_at.present?
+raise "browser claim did not create an audit event" unless InstallationAuditEvent.exists?(
+  installation: installation,
+  actor_user: administrator,
+  target_user: administrator,
+  event_type: "installation_claimed",
+  metadata: { "channel" => "web" }
 )
-Installation.transaction do
-  installation = Installation.current!
-  installation.lock!
-  installation.update!(
-    state: "claimed",
-    administrator: administrator,
-    bootstrap_token_digest: nil,
-    claimed_at: Time.current
-  )
-end
 Rails.cache.write("screenote-container-smoke", "persisted")
 image_data = Base64.strict_decode64(
   "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsAQMAAADXeXeBAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURf8AAP///0EdNBEAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gILFTs1piYMpQAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wMi0xMVQyMTo1OTo1MyswMDowMOul7ggAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDItMTFUMjE6NTk6NTMrMDA6MDCa+Fa0AAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTAyLTExVDIxOjU5OjUzKzAwOjAwze13awAAACZJREFUaN7twTEBAAAAwqD1T20JT6AAAAAAAAAAAAAAAAAAAICnATvEAAEnf54JAAAAAElFTkSuQmCC"
@@ -317,12 +353,11 @@ if (( claim_status != 0 )); then
   exit "${claim_status}"
 fi
 
-printf 'Replacing the claimed container without bootstrap material\n'
-rm -f -- "${SECRET_ROOT}/bootstrap_token"
+printf 'Replacing the claimed container\n'
 "${base_compose[@]}" up --detach
-wait_until_healthy base_compose
-wait_until_processing_complete base_compose
-assert_secrets_absent base_compose
+wait_until_healthy
+wait_until_processing_complete
+assert_secrets_absent
 
 printf 'Verifying persistent state with the claimed web process stopped\n'
 "${base_compose[@]}" down --remove-orphans

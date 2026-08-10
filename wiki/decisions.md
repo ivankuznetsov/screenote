@@ -3,7 +3,7 @@ title: Architectural Decisions
 type: decision
 source: git log, Dockerfile, bin/docker-entrypoint, app/jobs/reconcile_screenshot_processing_job.rb, lib/screenote/deployment.rb, docs/once-deployment.md, config/deploy.saas.yml
 created: 2026-04-10
-updated: 2026-08-09
+updated: 2026-08-10
 tags: [decisions, adr, architecture, history, deployment, once]
 ---
 
@@ -152,9 +152,17 @@ Source: `git log --all --oneline` (112 commits total)
 ## ADR-018: ONCE for Public Self-Hosting, Kamal for Hosted SaaS
 
 **Date**: 2026-08-09
-**Status**: Active; supersedes the 2026-08-07 public Kamal deployment decision
+**Status**: Superseded by ADR-019; superseded the 2026-08-07 public Kamal deployment decision
 **Context**: The first public deployment design required a repository fork, an exact source checkout, a tracked self-hosted Kamal configuration, local Ruby tooling, and a custom release-aware Kamal wrapper. That made installing one qualified container substantially harder than the product topology required. ONCE can manage a custom Docker image, TLS proxying, a persistent volume, environment, updates, and backups directly on the application host.
-**Decision**: Public self-hosting deploys the GHCR `latest` release channel through ONCE with unattended Screenote application updates disabled. Operators advance it manually with `once update HOST`; release promotion moves `latest` only after the exact candidate has passed qualification and its immutable GitHub Release exists. The first deploy uses the ONCE CLI, not its custom-image TUI, because Screenote must receive `SCREENOTE_BASE_URL` and a one-time `SCREENOTE_BOOTSTRAP_TOKEN` before first boot. The image defaults to `SCREENOTE_EDITION=self_hosted`, forwards authoritative proxy headers through Thruster, and trusts loopback plus ONCE's private Docker range. ONCE supplies `SECRET_KEY_BASE`, mounts its one durable volume at both `/storage` and `/rails/storage`, and interoperates with Screenote's generic SMTP configuration. Screenote enqueues startup image reconciliation before serving instead of performing the full corpus repair inline. A concurrency-discarded duplicate is accepted because an existing reconciliation already owns the work, while genuine queue errors still stop startup. ONCE pauses the container to copy local volume state during backup; an external S3 namespace remains a separate operator/provider recovery responsibility. Public self-hosting has no fork, source checkout, `config/deploy.yml`, or custom `bin/kamal` wrapper. Kamal and `config/deploy.saas.yml` remain internal to hosted `screenote.ai`.
-**Rationale**: The runtime already fits ONCE's single-container contract, so installing one published Screenote image is simpler than turning deployment configuration into an application fork. The official stable installer keeps ONCE itself current, while disabling automatic application updates lets operators choose the timing of a one-command Screenote update. Release qualification and evidence remain bound to the immutable digest behind the moving public channel. Keeping hosted Kamal isolated preserves SaaS provider and database choices. The first release remains blocked until retained evidence proves ONCE deploy, restart, update, backup, and restore behavior, including separate S3 recovery where selected.
+**Decision**: Public self-hosting moved from Kamal to ONCE and the GHCR release image, initially through a proposed Screenote-specific upstream installer that would provide host/TLS configuration automatically. It also established the first-visitor claim, automatic-update, persistent-volume, proxy, backup/restore, optional-provider, and hosted-Kamal boundaries retained by ADR-019.
+**Rationale**: The runtime fits ONCE's single-container contract and does not justify a repository fork or public Kamal configuration. The proposed upstream integration would have made setup short, but it was not part of a released stock ONCE contract, so ADR-019 replaces that dependency with explicit application configuration.
+
+## ADR-019: Released Stock ONCE with Explicit Canonical URL
+
+**Date**: 2026-08-10
+**Status**: Active; supersedes ADR-018's Screenote-specific installer contract
+**Context**: The simplest public flow must work with released stock ONCE. Depending on an unreleased upstream Screenote integration would block publication and make the documented install differ from software operators can actually obtain.
+**Decision (user-directed)**: Operators install released stock ONCE with `curl https://get.once.com | ONCE_INTERACTIVE=false sh`, then deploy `ghcr.io/ivankuznetsov/screenote:latest` with `--host screenote.example.com` and `--env SCREENOTE_BASE_URL=https://screenote.example.com`. HTTP-only and S3 first deployments must also provide an explicit base URL whose scheme and hostname match ONCE. No administrator setup credential or update-disable flag is part of the flow: the first visitor atomically claims the administrator, automatic application updates remain enabled, and bare `once update HOST` requests an immediate update. Public self-hosting still uses ONCE's proxy, one durable volume, generic SMTP integration, backup/restore commands, and separate external S3 recovery; Kamal remains internal to hosted `screenote.ai`.
+**Rationale**: Stock ONCE plus one explicit canonical URL is available now, keeps the operator contract auditable, and avoids coupling Screenote's release to upstream catalog or environment-injection changes. The explicit origin remains static and independent of caller-controlled request headers. Exact-image deployment, proxy, update, backup, and restore drills continue to gate publication.
 
 See also: [[architecture]], [[schema-evolution]], [[active-areas]], [[models/screenshot-image]]
