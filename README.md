@@ -65,6 +65,45 @@ container with one durable volume. The container includes the Rails app,
 background jobs, four SQLite databases, and local screenshot storage. You do
 not need PostgreSQL, Redis, a separate worker, or a mail server.
 
+### Install with your agent
+
+Copy this prompt into a coding agent that can access your server. It will ask
+for the hostname or SSH destination only when they are missing.
+
+```text
+Install Screenote for my team using the simplest supported self-hosted setup.
+
+Work on the target Linux server. If you are not already connected to it, ask me
+for the SSH destination. Ask me for the Screenote hostname if I have not given
+one; treat screenote.example.com as an example, not a real value. Run the setup
+yourself instead of asking me to copy individual commands.
+
+1. Verify the server is 64-bit x86-64 or ARM64 Linux with at least 2 vCPUs,
+   4 GiB RAM, 40 GiB free SSD storage, and ports 80 and 443 available. Confirm
+   the hostname resolves to this server. Ask before changing DNS or firewall
+   rules.
+2. Install released stock ONCE with:
+   curl https://get.once.com | ONCE_INTERACTIVE=false sh
+3. If the installer added the current non-root user to the Docker group, start
+   a fresh login session before continuing.
+4. Deploy Screenote, replacing HOST with the real hostname:
+   once deploy ghcr.io/ivankuznetsov/screenote:latest --host HOST --env SCREENOTE_BASE_URL=https://HOST
+5. Keep the default local screenshot storage and ONCE automatic updates. Do not
+   configure SMTP, S3, OAuth, or monitoring unless I ask for them.
+6. Wait until https://HOST/up and https://HOST/ready both return HTTP 200. If a
+   check fails, inspect ONCE and application logs, fix recoverable problems, and
+   retry. Stop only for a concrete external blocker that requires my action.
+7. When Screenote is healthy, give me its URL and tell me to create the first
+   administrator immediately. Do not open the setup page, create an account, or
+   complete the first-administrator claim yourself. Do not choose, request,
+   store, or print my administrator password. The first completed setup claims
+   the instance; all later accounts are invitation-only.
+8. Finish with a short summary of what changed, the health checks you ran, and
+   the next backup step. Never expose secrets in commands, logs, or the summary.
+```
+
+### Install manually
+
 Prepare a Linux server with a 64-bit Intel/AMD (x86-64) or ARM64 processor,
 point a hostname at it, and open ports 80 and 443. Install released stock ONCE,
 then deploy Screenote with the hostname and matching canonical URL:
