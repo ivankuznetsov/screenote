@@ -286,7 +286,6 @@ class OmniauthCallbacksControllerTest < ActionDispatch::IntegrationTest
       {
         "SCREENOTE_EDITION" => "self_hosted",
         "SCREENOTE_BASE_URL" => "http://screenote.internal",
-        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43,
         "SCREENOTE_GOOGLE_OAUTH_ENABLED" => "1",
         "GOOGLE_CLIENT_ID" => "google-client",
         "GOOGLE_CLIENT_SECRET" => "google-secret"

@@ -53,7 +53,7 @@ way to publish captures and read the result.
 | Best for | Starting immediately | Keeping Screenote inside your VPN or infrastructure |
 | Operations | Managed at [screenote.ai](https://screenote.ai) | [ONCE](https://github.com/basecamp/once), one application server, and one durable volume |
 | Screenshot storage | Managed | Local by default; S3-compatible storage is optional |
-| Setup | Create an account | Claim the instance once, then invite teammates |
+| Setup | Create an account | First visitor creates the administrator, then invites teammates |
 
 Screenote is **source-available and self-hostable** under the
 [O'Saasy License Agreement](LICENSE).
@@ -66,35 +66,27 @@ background jobs, four SQLite databases, and local screenshot storage. You do
 not need PostgreSQL, Redis, a separate worker, or a mail server.
 
 Prepare a Linux server with a 64-bit Intel/AMD (x86-64) or ARM64 processor,
-point a hostname at it, and open ports 80 and 443. Then run these commands on
-the server:
+point a hostname at it, and open ports 80 and 443. Then run one command on the
+server:
 
 ```sh
-curl https://get.once.com | ONCE_INTERACTIVE=false sh
-
-SCREENOTE_HOST=screenote.example.com
-SCREENOTE_BOOTSTRAP_TOKEN="$(openssl rand -hex 32)"
-
-once deploy \
-  ghcr.io/ivankuznetsov/screenote:latest \
-  --host "$SCREENOTE_HOST" \
-  --auto-update=false \
-  --env "SCREENOTE_BASE_URL=https://$SCREENOTE_HOST" \
-  --env "SCREENOTE_BOOTSTRAP_TOKEN=$SCREENOTE_BOOTSTRAP_TOKEN"
+curl https://get.once.com/screenote | sh
 ```
 
-If Docker on the server requires `sudo`, run `once` with `sudo` too. Open
-`https://screenote.example.com/bootstrap`, enter the token printed by
-`printf '%s\n' "$SCREENOTE_BOOTSTRAP_TOKEN"`, and create the administrator.
-Then open ONCE, select Screenote, and remove `SCREENOTE_BOOTSTRAP_TOKEN` under
-**Settings → Environment**. Keep `SCREENOTE_BASE_URL`.
+ONCE installs Docker when needed, asks for the hostname, and deploys
+`ghcr.io/ivankuznetsov/screenote:latest` with automatic updates enabled. Open
+the hostname and create the first administrator. Do this immediately after
+installation: the first person to complete setup owns the new instance.
+Afterward, Screenote is invitation-only.
 
 Create a project and invite your team. Email is optional; ONCE's Email settings
 accept SMTP credentials from services such as Resend or Postmark. Local
-screenshot storage works immediately, while a private S3-compatible bucket can
-be configured before the first deployment.
+screenshot storage works immediately. The operator guide includes a separate
+advanced first-deployment path for a private S3-compatible bucket or HTTP-only
+VPN hostname.
 
-To update, take a backup and run:
+ONCE applies Screenote updates automatically. To update immediately, take a
+backup and run:
 
 ```sh
 once update screenote.example.com

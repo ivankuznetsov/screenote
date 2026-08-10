@@ -24,6 +24,11 @@ class ReleaseValidation
   PUBLIC_INSTALLATION_DOCS = %w[README.md docs/self-hosting.md docs/once-deployment.md].freeze
   PUBLIC_ONCE_COMMAND_DOCS = %w[README.md docs/once-deployment.md].freeze
   PUBLIC_RELEASE_IMAGE = "#{EXPECTED_IMAGE_REPOSITORY}:latest"
+  PUBLIC_ONCE_INSTALLER = "curl https://get.once.com/screenote | sh"
+  RETIRED_PUBLIC_INSTALLATION_REFERENCES = %w[
+    SCREENOTE_BOOTSTRAP_TOKEN
+    compose.bootstrap.yaml
+  ].freeze
   IMAGE_REFERENCE_PATTERN = %r{#{Regexp.escape(EXPECTED_IMAGE_REPOSITORY)}:[^\s"'`\\]+}
   REQUIRED_CHECKS = %w[
     ruby-security
@@ -216,12 +221,13 @@ class ReleaseValidation
       user_docs.match?(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i)
     error("public installation docs must use ONCE rather than Docker Compose") if
       user_docs.match?(/docker\s+compose|compose\.ya?ml/i)
+    RETIRED_PUBLIC_INSTALLATION_REFERENCES.each do |reference|
+      error("public installation docs must not mention retired #{reference}") if user_docs.include?(reference)
+    end
     error("public product docs must use the CLI and agent skill rather than MCP") if
       user_docs.match?(/\bmcp\b/i)
-    error("public installation docs must deploy Screenote with ONCE") unless
-      user_docs.include?("once deploy")
-    error("public installation docs must disable moving image updates") unless
-      user_docs.include?("--auto-update=false")
+    error("public installation docs must use Screenote's native ONCE installer") unless
+      user_docs.include?(PUBLIC_ONCE_INSTALLER)
 
     PUBLIC_ONCE_COMMAND_DOCS.each do |relative|
       validate_public_once_commands(relative, installation_documents.fetch(relative))
@@ -244,38 +250,34 @@ class ReleaseValidation
   end
 
   def validate_public_once_commands(relative, document)
-    commands = public_shell_commands(document)
-    deploy_commands = commands.select { |tokens| tokens.first(2) == %w[once deploy] }
-    error("#{relative} must include a copyable ONCE deploy command") if deploy_commands.empty?
+    lines = public_shell_lines(document)
+    error("#{relative} must include the exact native Screenote ONCE installer command") unless
+      lines.include?(PUBLIC_ONCE_INSTALLER)
 
-    deploy_commands.each do |tokens|
-      error("#{relative} ONCE deploy command must use the Screenote latest release channel") unless
-        tokens[2] == PUBLIC_RELEASE_IMAGE
-
-      auto_update_options = tokens.grep(/\A--auto-update(?:=|\z)/)
-      error("#{relative} ONCE deploy command must set --auto-update=false exactly once") unless
-        auto_update_options == [ "--auto-update=false" ]
-    end
-
-    update_commands = commands.select { |tokens| tokens.first(2) == %w[once update] }
-    bare_updates = update_commands.select do |tokens|
+    commands = public_shell_commands(document, lines:)
+    bare_update = commands.any? do |tokens|
+      tokens.first(2) == %w[once update] &&
       tokens.length == 3 && !tokens[2].to_s.start_with?("-")
     end
-    error("#{relative} must include a normal bare ONCE update command") if bare_updates.empty?
+    error("#{relative} must include a normal bare ONCE update command") unless bare_update
   end
 
-  def public_shell_commands(document)
+  def public_shell_commands(document, lines: public_shell_lines(document))
+    lines.filter_map do |command|
+      tokens = Shellwords.split(command)
+      tokens.shift if tokens.first == "sudo"
+      tokens if tokens.first == "once"
+    rescue ArgumentError
+      error("public installation docs contain an invalid shell command")
+      nil
+    end
+  end
+
+  def public_shell_lines(document)
     document.scan(/```(?:sh|bash)\r?\n(.*?)```/m).flatten.flat_map do |block|
       block.gsub(/\\\r?\n[ \t]*/, " ").lines.filter_map do |line|
         command = line.strip
-        next if command.empty? || command.start_with?("#")
-
-        tokens = Shellwords.split(command)
-        tokens.shift if tokens.first == "sudo"
-        tokens if tokens.first == "once"
-      rescue ArgumentError
-        error("public installation docs contain an invalid shell command")
-        nil
+        command unless command.empty? || command.start_with?("#")
       end
     end
   end

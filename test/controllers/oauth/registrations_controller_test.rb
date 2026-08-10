@@ -265,8 +265,7 @@ module Oauth
       Screenote::Deployment.new(
         {
           "SCREENOTE_EDITION" => "self_hosted",
-          "SCREENOTE_BASE_URL" => "http://screenote.internal",
-          "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+          "SCREENOTE_BASE_URL" => "http://screenote.internal"
         },
         production: false
       )

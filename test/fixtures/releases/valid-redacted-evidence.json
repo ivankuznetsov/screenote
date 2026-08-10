@@ -8,7 +8,7 @@
     "predecessor_tag": "none",
     "predecessor_image_digest": "none",
     "cli_tag": "v1.0.0",
-    "notes_sha256": "53ce53b141c9844f75a9da2a33be89e0aa98cddb55d49c4956106f2f85c4e0e8"
+    "notes_sha256": "47d1ee3e6e0749b942313036f94c46b555b53139a401016f91eafae0084ab657"
   },
   "artifacts": {
     "source_sha": "1111111111111111111111111111111111111111",
@@ -146,7 +146,7 @@
     "status": "passed",
     "sentinel_matches": 0,
     "logs_sha256": "4343434343434343434343434343434343434343434343434343434343434343",
-    "release_notes_sha256": "53ce53b141c9844f75a9da2a33be89e0aa98cddb55d49c4956106f2f85c4e0e8",
+    "release_notes_sha256": "47d1ee3e6e0749b942313036f94c46b555b53139a401016f91eafae0084ab657",
     "evidence_sha256": "4545454545454545454545454545454545454545454545454545454545454545"
   }
 }

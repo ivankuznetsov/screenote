@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "digest"
-
 module Installations
   class Claim
     AUDIT_EVENT_TYPE = "installation_claimed"
@@ -41,9 +39,8 @@ module Installations
     end
 
     class << self
-      def call(token:, email:, password:, password_confirmation:, channel: "web")
+      def call(email:, password:, password_confirmation:, channel: "web")
         new(
-          token:,
           email:,
           password:,
           password_confirmation:,
@@ -52,8 +49,7 @@ module Installations
       end
     end
 
-    def initialize(token:, email:, password:, password_confirmation:, channel:)
-      @token = token.to_s
+    def initialize(email:, password:, password_confirmation:, channel:)
       @email = email
       @password = password
       @password_confirmation = password_confirmation
@@ -67,7 +63,6 @@ module Installations
           installation = Installation.lock.find_by(singleton_key: Installation::SINGLETON_KEY)
           next result(:unavailable) unless valid_self_hosted_installation?(installation)
           next result(:already_claimed) if installation.claimed?
-          next result(:invalid_token, errors: { token: "is invalid" }) unless valid_token?(installation)
 
           @normalized_email = AdmissionLock.email!(email)
           existing_users = User.where(email: normalized_email).order(:id).lock.load
@@ -112,16 +107,11 @@ module Installations
 
     private
 
-    attr_reader :channel, :email, :normalized_email, :password, :password_confirmation, :token
+    attr_reader :channel, :email, :normalized_email, :password, :password_confirmation
 
     def valid_self_hosted_installation?(installation)
       installation&.persisted? && installation.valid? && installation.self_hosted? &&
         (installation.unclaimed? || installation.claimed?)
-    end
-
-    def valid_token?(installation)
-      presented_digest = Digest::SHA256.hexdigest(token)
-      ActiveSupport::SecurityUtils.secure_compare(presented_digest, installation.bootstrap_token_digest)
     end
 
     def create_administrator!
@@ -135,12 +125,13 @@ module Installations
     end
 
     def claim_installation!(installation, administrator)
-      installation.update!(
+      attributes = {
         state: "claimed",
         administrator:,
-        claimed_at: Time.current,
-        bootstrap_token_digest: nil
-      )
+        claimed_at: Time.current
+      }
+      attributes[:bootstrap_token_digest] = nil if installation.has_attribute?(:bootstrap_token_digest)
+      installation.update!(attributes)
     end
 
     def append_audit_event!(installation, administrator)

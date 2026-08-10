@@ -29,8 +29,7 @@ class SelfHostedAdmissionTest < ApplicationSystemTestCase
 
     assert_selector "h1", text: "Set up Screenote"
     assert_selector "form[action='#{bootstrap_path}']"
-    assert_equal "bootstrap_token", page.evaluate_script("document.activeElement.id")
-    fill_in "Bootstrap token", with: ENV.fetch("SCREENOTE_BOOTSTRAP_TOKEN")
+    assert_equal "bootstrap_email", page.evaluate_script("document.activeElement.id")
     fill_in "Email", with: "u8-admin@example.test"
     fill_in "Password", with: "correct horse battery staple"
     fill_in "Confirm password", with: "correct horse battery staple"

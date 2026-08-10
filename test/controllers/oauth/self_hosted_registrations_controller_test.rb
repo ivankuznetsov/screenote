@@ -15,8 +15,7 @@ module Oauth
         {
           "SCREENOTE_EDITION" => "self_hosted",
           "SCREENOTE_BASE_URL" => "http://screenote.internal",
-          "SECRET_KEY_BASE" => "a" * 64,
-          "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+          "SECRET_KEY_BASE" => "a" * 64
         },
         production: true
       )
@@ -60,7 +59,6 @@ module Oauth
       @installation.update!(
         state: "claimed",
         administrator: users(:alice),
-        bootstrap_token_digest: nil,
         claimed_at: Time.current
       )
 

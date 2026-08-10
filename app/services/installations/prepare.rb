@@ -35,18 +35,12 @@ module Installations
     attr_reader :deployment
 
     def creation_attributes
-      if deployment.self_hosted? && deployment.bootstrap_token_digest.nil?
-        raise ConfigurationMismatch,
-          "A fresh self-hosted installation requires bootstrap material; provide SCREENOTE_BOOTSTRAP_TOKEN"
-      end
-
       {
         singleton_key: Installation::SINGLETON_KEY,
         deployment_mode: deployment.edition.to_s,
         state: deployment.saas? ? "saas" : "unclaimed",
         storage_service: deployment.active_storage_service.to_s,
-        storage_namespace_fingerprint: deployment.storage_namespace_fingerprint,
-        bootstrap_token_digest: deployment.bootstrap_token_digest
+        storage_namespace_fingerprint: deployment.storage_namespace_fingerprint
       }
     end
 
@@ -61,10 +55,6 @@ module Installations
       if installation.storage_namespace_fingerprint != deployment.storage_namespace_fingerprint
         mismatches << "storage namespace differs from the prepared installation"
       end
-      if installation.unclaimed? && installation.bootstrap_token_digest != deployment.bootstrap_token_digest
-        mismatches << "bootstrap material differs from the unclaimed installation"
-      end
-
       unless mismatches.empty?
         raise ConfigurationMismatch,
           "Refusing to start with a different persisted installation identity: #{mismatches.join('; ')}"

@@ -25,7 +25,6 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
   FILE_BACKED_SECRET_NAMES = %w[
     SECRET_KEY_BASE
     SCREENOTE_AUTHENTICATION_LINK_PRIOR_KEYS
-    SCREENOTE_BOOTSTRAP_TOKEN
     SCREENOTE_S3_ACCESS_KEY_ID
     SCREENOTE_S3_SECRET_ACCESS_KEY
     SMTP_PASSWORD
@@ -95,14 +94,13 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
         File.join(directory, "bin/thrust"),
         <<~'BASH'
           #!/usr/bin/env bash
-          printf 'thrust:%s bootstrap=%s\n' "$*" "${SCREENOTE_BOOTSTRAP_TOKEN-unset}" >> "$SCREENOTE_TEST_TRACE"
+          printf 'thrust:%s\n' "$*" >> "$SCREENOTE_TEST_TRACE"
         BASH
       )
 
       _stdout, stderr, status = run_entrypoint(
         {
           "SCREENOTE_EDITION" => "saas",
-          "SCREENOTE_BOOTSTRAP_TOKEN" => "must-not-reach-server",
           "SCREENOTE_TEST_TRACE" => trace
         },
         "./bin/thrust", "./bin/rails", "server",
@@ -118,7 +116,7 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
           "rails:runner Installations::Prepare.call",
           "rails:runner AuthenticationLinks::KeyringPreflight.call",
           "rails:runner ReconcileScreenshotProcessingJob.enqueue_for_startup!",
-          "thrust:./bin/rails server bootstrap=unset"
+          "thrust:./bin/rails server"
         ],
         File.readlines(trace, chomp: true)
       )
@@ -293,53 +291,7 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     end
   end
 
-  test "entrypoint rejects bootstrap drift before a pending migration can mutate the primary" do
-    Dir.mktmpdir("screenote-entrypoint-bootstrap-drift") do |directory|
-      storage_root = File.join(directory, "storage")
-      FileUtils.mkdir_p(storage_root)
-      persisted_environment = {
-        "SCREENOTE_EDITION" => "self_hosted",
-        "SCREENOTE_BASE_URL" => "http://screenote.internal:3005",
-        "SECRET_KEY_BASE" => "s" * 64,
-        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
-      }
-      primary_path = create_self_hosted_identity_primary(storage_root, environment: persisted_environment)
-      primary_digest = Digest::SHA256.file(primary_path).hexdigest
-      trace = File.join(directory, "trace")
-      install_actual_preflight(directory, storage_root: storage_root)
-      write_executable(
-        File.join(directory, "bin/rails"),
-        <<~'BASH'
-          #!/usr/bin/env bash
-          printf 'rails:%s\n' "$*" >> "$SCREENOTE_TEST_TRACE"
-        BASH
-      )
-
-      with_secret_file("s" * 64, mode: 0o400) do |secret_key_path|
-        with_secret_file("c" * 43, mode: 0o400) do |bootstrap_path|
-          _stdout, stderr, status = run_entrypoint(
-            {
-              "SCREENOTE_EDITION" => "self_hosted",
-              "SCREENOTE_BASE_URL" => "http://screenote.internal:3005",
-              "SCREENOTE_STORAGE_ROOT" => storage_root,
-              "SCREENOTE_TEST_TRACE" => trace,
-              "SECRET_KEY_BASE_FILE" => secret_key_path,
-              "SCREENOTE_BOOTSTRAP_TOKEN_FILE" => bootstrap_path
-            },
-            "./bin/rails", "server",
-            chdir: directory
-          )
-
-          assert_not status.success?
-          assert_includes stderr, "bootstrap material differs"
-          assert_not File.exist?(trace), "db:prepare must not run after bootstrap drift is detected"
-          assert_equal primary_digest, Digest::SHA256.file(primary_path).hexdigest
-        end
-      end
-    end
-  end
-
-  test "server process receives direct and file backed secrets without bootstrap material" do
+  test "server process receives direct and file backed secrets" do
     Dir.mktmpdir("screenote-entrypoint") do |directory|
       write_executable(
         File.join(directory, "bin/screenote-deployment-preflight"),
@@ -359,11 +311,7 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
             printf 'secret file variable retained\n' >&2
             exit 1
           }
-          [[ -z "${SCREENOTE_BOOTSTRAP_TOKEN+x}" ]] || {
-            printf 'bootstrap material retained\n' >&2
-            exit 1
-          }
-          printf 'secret=matched bootstrap=absent secret_file=absent\n' > "$SCREENOTE_TEST_TRACE"
+          printf 'secret=matched secret_file=absent\n' > "$SCREENOTE_TEST_TRACE"
         BASH
       )
 
@@ -385,7 +333,7 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     end
   end
 
-  test "claimed local Compose defines one service and volume without bootstrap material" do
+  test "local Compose defines one service and volume without setup credentials" do
     compose = compose_document(BASE_COMPOSE)
     services = compose.fetch("services")
     service = services.fetch("screenote")
@@ -417,17 +365,10 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     assert_empty direct_secret_names
   end
 
-  test "bootstrap overlay is the only Compose configuration that mounts bootstrap material" do
-    overlay = compose_document(BOOTSTRAP_COMPOSE)
-    service = overlay.dig("services", "screenote")
-
-    assert_equal [ "screenote" ], overlay.fetch("services").keys
-    assert_equal "/run/secrets/screenote_bootstrap_token",
-      service.dig("environment", "SCREENOTE_BOOTSTRAP_TOKEN_FILE")
-    assert_equal [ "screenote_bootstrap_token" ], overlay.fetch("secrets").keys
-    assert_restricted_secret service.fetch("secrets").sole,
-      source: "screenote_bootstrap_token",
-      target: "screenote_bootstrap_token"
+  test "bootstrap credential plumbing is obsolete" do
+    assert_not BOOTSTRAP_COMPOSE.exist?
+    assert_not_includes Rails.root.join("bin/docker-entrypoint").read,
+      "SCREENOTE_BOOTSTRAP_TOKEN"
   end
 
   test "S3 overlay supplies complete generic settings and file-backed credentials" do
@@ -488,7 +429,6 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
       "SCREENOTE_IMAGE" => image,
       "SCREENOTE_BASE_URL" => "http://screenote.internal:3005",
       "SCREENOTE_SECRET_KEY_BASE_PATH" => "/operator/secrets/secret_key_base",
-      "SCREENOTE_BOOTSTRAP_TOKEN_PATH" => "/operator/secrets/bootstrap_token",
       "SCREENOTE_S3_ENDPOINT" => "https://objects.example.test",
       "SCREENOTE_S3_REGION" => "local",
       "SCREENOTE_S3_BUCKET" => "screenote-private",
@@ -506,11 +446,9 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
       "SCREENOTE_HONEYBADGER_API_KEY_PATH" => "/operator/secrets/honeybadger_api_key"
     }
     modes = {
-      claimed_local: [ BASE_COMPOSE ],
-      fresh_local: [ BASE_COMPOSE, BOOTSTRAP_COMPOSE ],
-      claimed_s3: [ BASE_COMPOSE, S3_COMPOSE ],
-      fresh_s3: [ BASE_COMPOSE, BOOTSTRAP_COMPOSE, S3_COMPOSE ],
-      claimed_all_providers: [ BASE_COMPOSE, S3_COMPOSE, *OPTIONAL_PROVIDER_COMPOSE.values ]
+      fresh_or_claimed_local: [ BASE_COMPOSE ],
+      fresh_or_claimed_s3: [ BASE_COMPOSE, S3_COMPOSE ],
+      all_providers: [ BASE_COMPOSE, S3_COMPOSE, *OPTIONAL_PROVIDER_COMPOSE.values ]
     }
 
     modes.each do |mode, files|
@@ -526,9 +464,6 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
       end
     end
 
-    claimed_stdout, = compose_config(BASE_COMPOSE, environment: environment)
-    assert_not_includes claimed_stdout, "screenote_bootstrap_token"
-
     s3_stdout, = compose_config(BASE_COMPOSE, S3_COMPOSE, environment: environment)
     assert_includes s3_stdout, "SCREENOTE_S3_ACCESS_KEY_ID_FILE"
     assert_includes s3_stdout, "SCREENOTE_S3_SECRET_ACCESS_KEY_FILE"
@@ -538,7 +473,7 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
       assert_no_match(/^#{Regexp.escape(name)}=/, example)
     end
     assert_match(/^SCREENOTE_SECRET_KEY_BASE_PATH=/, example)
-    assert_match(/^SCREENOTE_BOOTSTRAP_TOKEN_PATH=/, example)
+    assert_no_match(/SCREENOTE_BOOTSTRAP_TOKEN|bootstrap_token/, example)
     assert_match(/^SCREENOTE_S3_ACCESS_KEY_ID_PATH=/, example)
     assert_match(/^SCREENOTE_S3_SECRET_ACCESS_KEY_PATH=/, example)
     assert_match(/^SCREENOTE_SMTP_PASSWORD_PATH=/, example)
@@ -584,12 +519,10 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
 
   def assert_server_receives_secret(directory:, secret:, environment:)
     trace = File.join(directory, "server-environment")
-    bootstrap_secret = "bootstrap-secret-#{'b' * 32}"
     FileUtils.rm_f(trace)
     stdout, stderr, status = run_entrypoint(
       {
         "SCREENOTE_EDITION" => "saas",
-        "SCREENOTE_BOOTSTRAP_TOKEN" => bootstrap_secret,
         "SCREENOTE_TEST_EXPECTED_SECRET" => secret,
         "SCREENOTE_TEST_TRACE" => trace
       }.merge(environment),
@@ -598,11 +531,9 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
     )
 
     assert status.success?, stderr
-    assert_equal "secret=matched bootstrap=absent secret_file=absent\n", File.binread(trace)
+    assert_equal "secret=matched secret_file=absent\n", File.binread(trace)
     assert_not_includes stdout, secret
     assert_not_includes stderr, secret
-    assert_not_includes stdout, bootstrap_secret
-    assert_not_includes stderr, bootstrap_secret
   end
 
   def run_entrypoint(environment, *command, chdir: Rails.root.to_s)
@@ -673,43 +604,6 @@ class SelfHostedSecretConfigurationTest < ActiveSupport::TestCase
       "INSERT INTO installations (singleton_key, deployment_mode) VALUES (?, ?)",
       [ "screenote", deployment_mode ]
     )
-    path
-  ensure
-    database&.close
-  end
-
-  def create_self_hosted_identity_primary(storage_root, environment:)
-    deployment = Screenote::Deployment.new(environment, production: true)
-    path = File.join(storage_root, "primary.sqlite3")
-    database = SQLite3::Database.new(path)
-    database.execute(<<~SQL)
-      CREATE TABLE installations (
-        singleton_key varchar NOT NULL,
-        deployment_mode varchar NOT NULL,
-        storage_service varchar NOT NULL,
-        storage_namespace_fingerprint varchar NOT NULL,
-        state varchar NOT NULL,
-        bootstrap_token_digest varchar
-      )
-    SQL
-    database.execute(
-      <<~SQL,
-        INSERT INTO installations (
-          singleton_key, deployment_mode, storage_service,
-          storage_namespace_fingerprint, state, bootstrap_token_digest
-        ) VALUES (?, ?, ?, ?, ?, ?)
-      SQL
-      [
-        "screenote",
-        "self_hosted",
-        deployment.active_storage_service.to_s,
-        deployment.storage_namespace_fingerprint,
-        "unclaimed",
-        deployment.bootstrap_token_digest
-      ]
-    )
-    database.execute("CREATE TABLE schema_migrations (version varchar NOT NULL PRIMARY KEY)")
-    database.execute("INSERT INTO schema_migrations (version) VALUES ('20260805110000')")
     path
   ensure
     database&.close

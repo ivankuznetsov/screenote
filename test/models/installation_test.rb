@@ -17,7 +17,7 @@ class InstallationTest < ActiveSupport::TestCase
     assert_equal "unclaimed", installation.state
     assert_equal "self_hosted_local", installation.storage_service
     assert_equal deployment.storage_namespace_fingerprint, installation.storage_namespace_fingerprint
-    assert_equal deployment.bootstrap_token_digest, installation.bootstrap_token_digest
+    assert_nil installation.bootstrap_token_digest
     assert_nil installation.administrator_id
     assert_nil installation.claimed_at
   end
@@ -28,7 +28,6 @@ class InstallationTest < ActiveSupport::TestCase
     assert_equal "saas", installation.deployment_mode
     assert_equal "saas", installation.state
     assert_equal "rabata", installation.storage_service
-    assert_nil installation.bootstrap_token_digest
     assert installation.saas?
     assert_not installation.self_hosted?
   end
@@ -58,8 +57,7 @@ class InstallationTest < ActiveSupport::TestCase
       Installation.new(valid_attributes.merge(
         deployment_mode: "self_hosted",
         state: "unclaimed",
-        storage_service: "rabata",
-        bootstrap_token_digest: "b" * 64
+        storage_service: "rabata"
       ))
     ]
 
@@ -69,63 +67,32 @@ class InstallationTest < ActiveSupport::TestCase
     end
   end
 
-  test "restart verifies identity without replacing bootstrap digest or touching the row" do
+  test "restart verifies identity without touching the row" do
     installation = Installations::Prepare.call(deployment: self_hosted_deployment)
-    original_digest = installation.bootstrap_token_digest
     original_updated_at = installation.updated_at
 
     travel 1.minute do
       restarted = Installations::Prepare.call(deployment: self_hosted_deployment)
 
       assert_equal installation.id, restarted.id
-      assert_equal original_digest, restarted.bootstrap_token_digest
       assert_equal original_updated_at, restarted.updated_at
     end
   end
 
-  test "unclaimed installation rejects missing or changed bootstrap material" do
-    installation = Installations::Prepare.call(deployment: self_hosted_deployment)
-
-    [ nil, "c" * 43 ].each do |token|
-      error = assert_raises(Installations::Prepare::ConfigurationMismatch) do
-        Installations::Prepare.call(
-          deployment: self_hosted_deployment("SCREENOTE_BOOTSTRAP_TOKEN" => token)
-        )
-      end
-
-      assert_match "bootstrap material", error.message
-      assert_equal installation.bootstrap_token_digest, installation.reload.bootstrap_token_digest
-    end
-  end
-
-  test "claimed installation may restart after bootstrap material is removed" do
+  test "claimed installation may restart without bootstrap material" do
     administrator = users(:alice)
     installation = Installations::Prepare.call(deployment: self_hosted_deployment)
     installation.update!(
       state: "claimed",
       administrator: administrator,
-      claimed_at: Time.current,
-      bootstrap_token_digest: nil
+      claimed_at: Time.current
     )
 
-    restarted = Installations::Prepare.call(
-      deployment: self_hosted_deployment("SCREENOTE_BOOTSTRAP_TOKEN" => nil)
-    )
+    restarted = Installations::Prepare.call(deployment: self_hosted_deployment)
 
     assert_equal installation.id, restarted.id
     assert_equal "claimed", restarted.state
     assert_equal administrator, restarted.administrator
-  end
-
-  test "fresh self hosted preparation requires bootstrap material" do
-    error = assert_raises(Installations::Prepare::ConfigurationMismatch) do
-      Installations::Prepare.call(
-        deployment: self_hosted_deployment("SCREENOTE_BOOTSTRAP_TOKEN" => nil)
-      )
-    end
-
-    assert_match "bootstrap", error.message
-    assert_equal 0, Installation.count
   end
 
   test "edition mismatch fails without changing the existing row" do
@@ -196,7 +163,6 @@ class InstallationTest < ActiveSupport::TestCase
           state: "claimed",
           storage_service: "self_hosted_local",
           storage_namespace_fingerprint: "a" * 64,
-          bootstrap_token_digest: "b" * 64,
           created_at: Time.current,
           updated_at: Time.current
         } ])
@@ -204,17 +170,9 @@ class InstallationTest < ActiveSupport::TestCase
     end
   end
 
-  test "database constraint rejects a malformed bootstrap digest" do
-    installation = Installations::Prepare.call(deployment: self_hosted_deployment)
-    original_digest = installation.bootstrap_token_digest
-
-    assert_raises(ActiveRecord::StatementInvalid) do
-      Installation.transaction(requires_new: true) do
-        Installation.where(id: installation.id).update_all(bootstrap_token_digest: "short")
-      end
-    end
-
-    assert_equal original_digest, installation.reload.bootstrap_token_digest
+  test "database schema keeps only the transition column for predecessor compatibility" do
+    assert Installation.column_names.include?("bootstrap_token_digest")
+    assert Installation.validators_on(:bootstrap_token_digest).any?
   end
 
   private
@@ -224,8 +182,7 @@ class InstallationTest < ActiveSupport::TestCase
       {
         "SCREENOTE_EDITION" => "self_hosted",
         "SCREENOTE_BASE_URL" => "http://screenote.internal",
-        "SECRET_KEY_BASE" => "a" * 64,
-        "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+        "SECRET_KEY_BASE" => "a" * 64
       }.merge(overrides),
       production: true
     )

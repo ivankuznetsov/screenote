@@ -58,7 +58,6 @@ docker image inspect "${IMAGE}" >/dev/null
 
 mkdir -m 0700 "${SECRET_ROOT}" "${BACKUP_PARENT}" "${RESTORE_OPERATOR}"
 openssl rand -base64 48 > "${SECRET_ROOT}/secret_key_base"
-openssl rand -base64 48 > "${SECRET_ROOT}/bootstrap_token"
 openssl rand 64 > "${AUTHENTICATION_KEY}"
 chmod 0400 "${SECRET_ROOT}"/*
 chmod 0400 "${AUTHENTICATION_KEY}"
@@ -68,7 +67,6 @@ SCREENOTE_IMAGE=${IMAGE}
 SCREENOTE_BASE_URL=http://screenote.invalid
 SCREENOTE_PORT=0
 SCREENOTE_SECRET_KEY_BASE_PATH=./secrets/secret_key_base
-SCREENOTE_BOOTSTRAP_TOKEN_PATH=./secrets/bootstrap_token
 ENV
 chmod 0600 "${CONFIGURATION}"
 
@@ -84,14 +82,12 @@ export SCREENOTE_IMAGE="${IMAGE}"
 export SCREENOTE_BASE_URL="http://screenote.invalid"
 export SCREENOTE_PORT=0
 export SCREENOTE_SECRET_KEY_BASE_PATH="${SECRET_ROOT}/secret_key_base"
-export SCREENOTE_BOOTSTRAP_TOKEN_PATH="${SECRET_ROOT}/bootstrap_token"
 
-bootstrap_compose=( "${compose[@]}" --file "${REPOSITORY_ROOT}/compose.bootstrap.yaml" )
 printf 'Starting a fresh instance for backup smoke\n'
-"${bootstrap_compose[@]}" up --detach --wait --wait-timeout 120
-"${bootstrap_compose[@]}" down --remove-orphans
+"${compose[@]}" up --detach --wait --wait-timeout 120
+"${compose[@]}" down --remove-orphans
 
-"${bootstrap_compose[@]}" run --rm --no-deps screenote ./bin/rails runner - <<'RUBY'
+"${compose[@]}" run --rm --no-deps screenote ./bin/rails runner - <<'RUBY'
 require "base64"
 require "stringio"
 
@@ -108,7 +104,6 @@ Installation.transaction do
   installation.update!(
     state: "claimed",
     administrator: administrator,
-    bootstrap_token_digest: nil,
     claimed_at: Time.current
   )
 end
@@ -142,8 +137,6 @@ annotation.annotation_comments.create!(user: administrator, body: "Backup smoke 
 Rails.cache.write("screenote-backup-smoke", "restored")
 RUBY
 
-rm "${SECRET_ROOT}/bootstrap_token"
-unset SCREENOTE_BOOTSTRAP_TOKEN_PATH
 "${compose[@]}" up --detach --wait --wait-timeout 120
 
 printf 'Creating whole-instance backup through the supported host command\n'

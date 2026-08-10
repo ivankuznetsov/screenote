@@ -7,7 +7,7 @@ require "open3"
 
 class ProductionBootTest < ActiveSupport::TestCase
   RUNTIME_KEYS = %w[
-    SCREENOTE_EDITION SCREENOTE_BASE_URL SCREENOTE_BOOTSTRAP_TOKEN SCREENOTE_TRUSTED_PROXIES
+    SCREENOTE_EDITION SCREENOTE_BASE_URL ONCE_HOST DISABLE_SSL SCREENOTE_TRUSTED_PROXIES
     SCREENOTE_FORWARDED_CLIENT_HOPS SCREENOTE_FORWARDED_PROXY_HOST
     SCREENOTE_STORAGE SCREENOTE_SMTP_ENABLED SCREENOTE_GOOGLE_OAUTH_ENABLED
     SCREENOTE_GITHUB_OAUTH_ENABLED SCREENOTE_HONEYBADGER_ENABLED
@@ -69,13 +69,13 @@ class ProductionBootTest < ActiveSupport::TestCase
     }.to_json)
   RUBY
 
-  test "provider-free self hosted production boot uses HTTP canonical configuration" do
-    stdout, stderr, status = boot(self_hosted_environment)
+  test "provider-free native ONCE production boot derives its HTTP origin" do
+    stdout, stderr, status = boot(native_once_environment)
 
     assert status.success?, stderr
     payload = JSON.parse(stdout.lines.last)
     assert_equal "self_hosted", payload.fetch("edition")
-    assert_equal "http://screenote.internal:3000", payload.fetch("base_url")
+    assert_equal "http://screenote.internal", payload.fetch("base_url")
     assert_equal "self_hosted_local", payload.fetch("storage")
     assert_equal "ActiveStorage::Service::DiskService", payload.fetch("storage_class")
     assert_equal "Screenote::RateLimitStore", payload.fetch("rate_limit_store")
@@ -83,17 +83,17 @@ class ProductionBootTest < ActiveSupport::TestCase
     assert_equal false, payload.fetch("deliveries")
     assert_empty payload.fetch("oauth_providers")
     assert_equal true, payload.fetch("oauth_request_validation")
-    assert_equal "http://screenote.internal:3000", payload.fetch("omniauth_full_host")
+    assert_equal "http://screenote.internal", payload.fetch("omniauth_full_host")
     assert_equal true, payload.fetch("dimension_job_after_commit")
     assert_equal false, payload.fetch("password_reset_route")
     assert_equal "screenote.internal", payload.dig("route_url_options", "host")
-    assert_equal 3000, payload.dig("route_url_options", "port")
+    assert_nil payload.dig("route_url_options", "port")
     assert_equal "http", payload.dig("route_url_options", "protocol")
   end
 
   test "HTTPS self hosted production boot enables transport security" do
     stdout, stderr, status = boot(
-      self_hosted_environment.merge("SCREENOTE_BASE_URL" => "https://notes.example.test")
+      native_once_environment.merge("ONCE_HOST" => "notes.example.test", "DISABLE_SSL" => "false")
     )
 
     assert status.success?, stderr
@@ -133,8 +133,7 @@ class ProductionBootTest < ActiveSupport::TestCase
 
   test "production boot rejects missing origin and weak application secret" do
     _stdout, stderr, status = boot(
-      "SCREENOTE_EDITION" => "self_hosted",
-      "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      "SCREENOTE_EDITION" => "self_hosted"
     )
     assert_not status.success?
     assert_includes stderr, "SCREENOTE_BASE_URL"
@@ -208,8 +207,15 @@ class ProductionBootTest < ActiveSupport::TestCase
   def self_hosted_environment
     {
       "SCREENOTE_EDITION" => "self_hosted",
-      "SCREENOTE_BASE_URL" => "http://screenote.internal:3000",
-      "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      "SCREENOTE_BASE_URL" => "http://screenote.internal:3000"
+    }
+  end
+
+  def native_once_environment
+    {
+      "SCREENOTE_EDITION" => "self_hosted",
+      "ONCE_HOST" => "screenote.internal",
+      "DISABLE_SSL" => "true"
     }
   end
 

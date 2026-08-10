@@ -95,7 +95,7 @@ module Screenote
       rows = database.execute(
         <<~SQL
           SELECT singleton_key, deployment_mode, storage_service,
-            storage_namespace_fingerprint, state, bootstrap_token_digest
+            storage_namespace_fingerprint, state
           FROM installations
           LIMIT 2
         SQL
@@ -108,7 +108,7 @@ module Screenote
       end
 
       _singleton_key, _deployment_mode, storage_service,
-        storage_fingerprint, state, bootstrap_digest = rows.first
+        storage_fingerprint, state = rows.first
       mismatches = []
       if storage_service != deployment.active_storage_service.to_s
         mismatches << "storage service differs from the prepared installation"
@@ -116,11 +116,7 @@ module Screenote
       if storage_fingerprint != deployment.storage_namespace_fingerprint
         mismatches << "storage namespace differs from the prepared installation"
       end
-      if state == "unclaimed"
-        if bootstrap_digest != deployment.bootstrap_token_digest
-          mismatches << "bootstrap material differs from the unclaimed installation"
-        end
-      elsif state != "claimed" || bootstrap_digest
+      unless %w[unclaimed claimed].include?(state)
         mismatches << "ownership state is invalid"
       end
 

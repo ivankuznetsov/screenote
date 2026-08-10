@@ -98,22 +98,12 @@ class ScreenoteDeploymentPreflightTest < ActiveSupport::TestCase
     )
   end
 
-  test "unclaimed bootstrap drift is rejected without mutating a pending primary" do
-    assert_identity_mismatch_without_mutation(
-      configured_environment: self_hosted_environment.merge("SCREENOTE_BOOTSTRAP_TOKEN" => "c" * 43),
-      message: /bootstrap material/
-    )
-  end
-
-  test "claimed installation ignores retired bootstrap configuration" do
+  test "claimed installation identity is accepted without setup credentials" do
     Dir.mktmpdir("screenote-deployment-preflight") do |storage_root|
       database_path = create_primary(storage_root, state: "claimed")
       before = Digest::SHA256.file(database_path).hexdigest
 
-      assert_equal :ok, preflight(
-        storage_root: storage_root,
-        environment: self_hosted_environment.except("SCREENOTE_BOOTSTRAP_TOKEN")
-      )
+      assert_equal :ok, preflight(storage_root: storage_root)
       assert_equal before, Digest::SHA256.file(database_path).hexdigest
     end
   end
@@ -177,8 +167,7 @@ class ScreenoteDeploymentPreflightTest < ActiveSupport::TestCase
           deployment_mode varchar NOT NULL,
           storage_service varchar NOT NULL,
           storage_namespace_fingerprint varchar NOT NULL,
-          state varchar NOT NULL,
-          bootstrap_token_digest varchar
+          state varchar NOT NULL
         )
       SQL
       database.close
@@ -225,24 +214,22 @@ class ScreenoteDeploymentPreflightTest < ActiveSupport::TestCase
         deployment_mode varchar NOT NULL,
         storage_service varchar NOT NULL,
         storage_namespace_fingerprint varchar NOT NULL,
-        state varchar NOT NULL,
-        bootstrap_token_digest varchar
+        state varchar NOT NULL
       )
     SQL
     database.execute(
       <<~SQL,
         INSERT INTO installations (
           singleton_key, deployment_mode, storage_service,
-          storage_namespace_fingerprint, state, bootstrap_token_digest
-        ) VALUES (?, ?, ?, ?, ?, ?)
+          storage_namespace_fingerprint, state
+        ) VALUES (?, ?, ?, ?, ?)
       SQL
       [
         "screenote",
         deployment_mode,
         deployment.active_storage_service.to_s,
         deployment.storage_namespace_fingerprint,
-        state,
-        state == "unclaimed" ? deployment.bootstrap_token_digest : nil
+        state
       ]
     )
     database.execute("CREATE TABLE schema_migrations (version varchar NOT NULL PRIMARY KEY)")
@@ -271,8 +258,7 @@ class ScreenoteDeploymentPreflightTest < ActiveSupport::TestCase
     {
       "SCREENOTE_EDITION" => "self_hosted",
       "SCREENOTE_BASE_URL" => "http://screenote.internal:3005",
-      "SECRET_KEY_BASE" => "a" * 64,
-      "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43
+      "SECRET_KEY_BASE" => "a" * 64
     }
   end
 

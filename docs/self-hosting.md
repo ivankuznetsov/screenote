@@ -34,40 +34,41 @@ The normal ONCE installation follows Screenote's latest published release:
 ghcr.io/ivankuznetsov/screenote:latest
 ```
 
-ONCE automatic application updates remain disabled, so the operator decides
-when to move to the latest release by running `once update HOST`. Each GitHub
-Release also publishes its immutable image digest for auditing, pinning, and
+ONCE enables automatic Screenote updates. Operators can apply the current
+release immediately with `once update HOST`. Each GitHub Release also
+publishes its immutable image digest for auditing, pinning, and
 version-pinned operation.
 
 The hosted `screenote.ai` service uses an internal Kamal deployment. That is
 separate from the public self-hosted workflow.
 
-## Required configuration
+## Initial configuration and claim
 
-ONCE creates Screenote's durable volume and `SECRET_KEY_BASE`. Screenote needs
-two custom variables for its first boot:
+The native installer needs no custom environment. ONCE creates Screenote's
+durable volume and application secret, supplies the selected hostname as
+`ONCE_HOST`, and uses `DISABLE_SSL` to identify an HTTP-only deployment.
+Screenote derives its canonical origin from those values.
 
-- `SCREENOTE_BASE_URL` — the complete browser origin, such as
-  `https://screenote.example.com`;
-- `SCREENOTE_BOOTSTRAP_TOKEN` — a random, one-time token used to create the
-  installation administrator.
+Open the hostname immediately after installation. The first visitor who
+completes setup becomes the instance administrator. Screenote serializes that
+transition under a database lock, so concurrent submissions produce one
+winner. The claim remains in the primary database and all later account
+creation is invitation-only.
 
-Remove the bootstrap variable from ONCE immediately after the administrator
-claim. The claim stays in the primary database and does not reopen when the
-token disappears. Registration remains invitation-only.
-
-The base URL controls links, allowed hosts, redirects, and cookie security. It
-must be one origin without credentials, a path, query parameters, or fragment.
-Use HTTPS for internet-facing installations. Plain HTTP is appropriate only
-when a private VPN is the accepted transport boundary; deploy with ONCE's
-`--disable-tls` option and use the matching `http://` base URL.
+The canonical origin controls links, allowed hosts, redirects, OAuth callbacks,
+and cookie security. `SCREENOTE_BASE_URL` is still available to advanced
+non-ONCE deployment tooling; when set under ONCE, it must exactly match the
+origin derived from `ONCE_HOST` and `DISABLE_SSL`. Use HTTPS for
+internet-facing installations. Plain HTTP is appropriate only when a private
+VPN is the accepted transport boundary; the advanced ONCE deployment uses
+`--disable-tls`.
 
 The supported ONCE path has two internal forwarding hops: ONCE's proxy and
 Thruster. Screenote resolves the expected ONCE proxy with a bounded DNS lookup
 before accepting the preceding client address and refreshes that identity in a
 short synchronized cache. A failed refresh discards the stale identity. The
 boundary then discards any values supplied before the verified client and
-derives HTTP versus HTTPS from `SCREENOTE_BASE_URL`. Traffic that bypasses the
+derives HTTP versus HTTPS from the canonical ONCE origin. Traffic that bypasses the
 proxy, or arrives while its identity cannot be refreshed, is attributed to its
 actual final hop instead of a supplied address. This keeps session auditing and
 IP rate limits distinct without accepting caller-supplied transport identity.
@@ -115,8 +116,8 @@ them outside the application volume, restrict access, encrypt them at rest,
 and copy them off the server. With S3 storage, protect the bucket separately
 and recover it to the matching database recovery point.
 
-Complete an isolated restore drill before storing important work and before
-each upgrade. Verify sign-in, projects, screenshots, annotations, comments,
+Complete an isolated restore drill before storing important work and regularly
+afterward. Verify sign-in, projects, screenshots, annotations, comments,
 invitations, and queued image processing after the restore. Operators own the
 host, network, TLS, access controls, provider accounts, capacity, monitoring,
 backup retention, secret recovery, and tested restores.
@@ -128,14 +129,10 @@ published with each GitHub Release instead of the simple moving channel.
 
 ## Updates
 
-Before an update:
-
-1. read the new release's migration and recovery notes;
-2. take and verify a recoverable ONCE backup;
-3. run `once update HOST`.
-
-The ONCE update preserves the application's environment and other settings. If
-a release requires special maintenance, follow its release notes.
+ONCE applies Screenote updates automatically. Configure automatic backups and
+read release notes for any special maintenance. To apply a release immediately,
+take a recoverable backup and run `once update HOST`. The update preserves the
+application's hostname, environment, and other settings.
 
 ## Connect agents
 
@@ -143,8 +140,8 @@ The [Screenote CLI](https://github.com/ivankuznetsov/screenote-cli) is the
 machine-readable interface for captures and feedback. The
 [Screenote agent plugin](https://github.com/ivankuznetsov/agent-plugins/tree/main/plugins/screenote)
 teaches coding agents how to use that CLI. Install the exact CLI tag named by
-the Screenote release and point it at `SCREENOTE_BASE_URL`; browser or device
-login keeps access scoped to the projects that user can reach.
+the Screenote release and point it at the instance URL; browser or device login
+keeps access scoped to the projects that user can reach.
 
 See [SUPPORT.md](../SUPPORT.md) for the support boundary and
 [SECURITY.md](../SECURITY.md) for private vulnerability reporting.

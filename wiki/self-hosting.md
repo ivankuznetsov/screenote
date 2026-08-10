@@ -3,7 +3,7 @@ title: Self-Hosted Distribution
 type: initiative
 source: Dockerfile, bin/docker-entrypoint, app/jobs/reconcile_screenshot_processing_job.rb, lib/screenote/deployment.rb, docs/once-deployment.md, docs/releases/PUBLICATION_BLOCKED.md, config/deploy.saas.yml
 created: 2026-08-05
-updated: 2026-08-09
+updated: 2026-08-10
 tags: [self-hosting, once, docker, deployment, storage, release, kamal-saas]
 ---
 
@@ -29,19 +29,20 @@ the operator guide.
 
 Public installation docs lead directly with ONCE and the latest release image;
 they do not expose the repository's internal publication sentinel or label the
-operator path as a development preview. An install first obtains ONCE from its
-official stable channel on the Linux host and then gives `once deploy` the
-`screenote:latest` image. The release evidence names the exact ONCE version and
-image digest used for qualification. Automatic application updates stay
-disabled; the operator chooses when to advance with `once update HOST`.
+operator path as a development preview. The primary install is exactly
+`curl https://get.once.com/screenote | sh`: ONCE installs itself and Docker when
+needed, prompts for the hostname, and deploys `screenote:latest` with native
+automatic updates enabled. The release evidence still names the exact ONCE
+version and image digest used for qualification, and `once update HOST`
+requests an immediate update.
 
-The first deployment is a direct CLI operation because Screenote must receive
-`SCREENOTE_BASE_URL` and a one-time `SCREENOTE_BOOTSTRAP_TOKEN` before its first
-boot, while ONCE's custom-image TUI path cannot supply those application
-variables at creation time. After `/bootstrap` is claimed, the operator removes
-the bootstrap variable from ONCE and retains the base URL. No repository fork,
-source checkout, public Kamal configuration, or local image build is part of
-the supported path. Advanced settings live in `docs/once-deployment.md`.
+ONCE supplies the chosen host as `ONCE_HOST` and its HTTP-only state through
+`DISABLE_SSL`; Screenote derives the canonical origin without a custom
+first-boot base URL. The first visitor atomically claims the administrator, so
+there is no setup credential to generate, enter, retain, or remove. No
+repository fork, source checkout, public Kamal configuration, or local image
+build is part of the supported path. Advanced HTTP-only and initial S3 settings
+live in `docs/once-deployment.md`.
 
 ## Self-Hosted Product Boundary
 
@@ -49,12 +50,12 @@ the supported path. Advanced settings live in `docs/once-deployment.md`.
 - The supported first release is one container backed by SQLite and one persistent ONCE volume mounted at both `/storage` and `/rails/storage`.
 - Primary, cache, queue, and cable state use four SQLite files on that volume with WAL, full durability, bounded contention, and primary-state reconciliation for work lost from the separate queue database.
 - Local filesystem storage is the default; operator-configured S3-compatible storage is optional.
-- The instance is closed and invitation-only. Before claim, a one-time bootstrap token is the only account-creation path and atomically creates its persisted instance administrator. After claim, each project owner may admit collaborators to that project without separate instance-administrator approval.
+- The instance is closed and invitation-only after setup. While the persisted Installation is unclaimed, the first completed setup atomically creates and records its administrator under a database lock; concurrent claim attempts have exactly one winner. After claim, each project owner may admit collaborators to that project without separate instance-administrator approval.
 - Authorization remains project-scoped: an invitation grants access only to its named project, and even the instance administrator does not receive implicit access to every project. The first release introduces no global Team entity. New local users establish durable credentials during invitation acceptance, so SMTP is not required for later sign-in.
 - The instance administrator is a singleton recovery role, not a superuser over project content. It can inspect account identity/status, suspend or restore access, revoke sessions, issue single-use expiring local recovery links, and atomically transfer itself to another active account. A local operator can run `bin/rails screenote:instance:recover_administrator` to emit only a 15-minute private recovery URL on stdout, or `bin/rails 'screenote:instance:transfer_administrator[email@example.test]'` to transfer to an existing active account. Both commands use the same locked/audited services as the UI; neither reopens bootstrap, creates an account, sends mail, or joins a project. Runtime configuration and secrets stay outside the product UI under operator control. See [[instance-administration]].
 - External transactional email through generic SMTP, social OAuth, S3, and monitoring are optional. Screenote runs no mail service; administrators can copy invitation links when email is unavailable.
 - Screenshot originals and variants are never served through default reusable Active Storage routes. Application-owned proxy routes authenticate an active project principal and recheck membership for every byte request.
-- ONCE generates and retains the application secret, while bootstrap and provider values live in the application's ONCE environment. The bootstrap variable is removed after claim; secrets must not appear in image layers, logs, diagnostics, or tracked configuration. `_FILE` loading remains available for the legacy qualification harness.
+- ONCE generates and retains the application secret, while optional provider values live in the application's ONCE environment. No administrator-claim credential exists. Provider secrets must not appear in image layers, logs, diagnostics, or tracked configuration. `_FILE` loading remains available for the legacy qualification harness.
 - OAuth and one-time link credentials become digest-only. Project-scoped OAuth is bound only after a user chooses a joined project on a server-owned consent/device screen. The SaaS credential conversion uses a stopped-process maintenance cutover because predecessor containers cannot read transformed rows. The operator proves quiescence and a fresh recoverable backup before migration. The cutover then lets each migration use its adapter-supported transaction behavior and verifies migration versions, stored digests, and runtime lookups; it does not promise one outer transaction across the chain. An interrupted run remains in maintenance until the version-aware, idempotent checks resume successfully or the verified backup is restored.
 
 ## SaaS Boundary
@@ -74,17 +75,18 @@ preceding address only when the final forwarded hop matches the current
 resolved proxy identity; a sibling that bypasses the proxy, or traffic handled
 during a failed refresh, is attributed to its own final address. It then
 replaces `REMOTE_ADDR`, removes every forwarded header, and applies the
-canonical scheme from `SCREENOTE_BASE_URL`. A
+canonical scheme derived from ONCE's host and TLS settings. A
 caller-supplied prefix therefore cannot control session audit IPs, rate-limit
 buckets, redirects, or TLS identity, and Docker's chosen private subnet is
 irrelevant. The standard ONCE namespace uses `once-proxy`; custom qualification
 namespaces explicitly supply their `<namespace>-proxy` name. This is pinned to
 and exercised against the supported ONCE version because ONCE v0.3.0 exposes
-the name through Docker container-name DNS rather than a documented injected
-application variable. `SCREENOTE_BASE_URL` remains explicit, while ONCE supplies
-`SECRET_KEY_BASE`; the initial self-hosted bootstrap token must contain at least
-32 bytes. Malformed origins, an ONCE TLS mode that does not match the canonical
-URL scheme, or broad proxy trust fail before service. The canonical origin
+the name through Docker container-name DNS. ONCE supplies `ONCE_HOST`,
+`DISABLE_SSL` when applicable, and `SECRET_KEY_BASE`; Screenote derives the
+canonical origin from the first two. An explicit `SCREENOTE_BASE_URL` remains
+available to advanced deployment tooling and must match the ONCE-derived origin
+when both are present. Malformed origins, conflicting host/TLS settings, or
+broad proxy trust fail before service. The canonical origin
 controls allowed hosts, URL generation, OmniAuth callbacks, redirects, secure
 cookies, and HTTP/HTTPS enforcement. Failure to resolve a required two-hop
 proxy identity stops boot. Direct-container qualification declares one
@@ -101,13 +103,15 @@ duplicating data: all four SQLite files and local Active Storage objects still
 share one recovery unit. ONCE pauses the container when taking a volume backup,
 because Screenote does not publish a pre-backup hook.
 
-The public command follows `ghcr.io/ivankuznetsov/screenote:latest` and sets
-`--auto-update=false`, keeping updates manual. It also supplies the base URL
-and initial bootstrap token with `--env`. Generic SMTP interoperates
-with ONCE's Email settings: Screenote accepts `MAILER_FROM_ADDRESS` and enables
+The native public installer follows
+`ghcr.io/ivankuznetsov/screenote:latest` with automatic updates enabled. A bare
+`once update HOST` remains the immediate-update operation. Generic SMTP
+interoperates with ONCE's Email settings: Screenote accepts
+`MAILER_FROM_ADDRESS` and enables
 SMTP when ONCE supplies `SMTP_ADDRESS`, unless an explicit
 `SCREENOTE_SMTP_ENABLED=false` disables it. Generic S3 remains a custom
-environment configuration selected before the first upload.
+environment configuration selected during the advanced first deployment,
+before Screenote boots and persists its storage identity.
 
 The hosted service has a separate complete `config/deploy.saas.yml` and
 SaaS-only hooks, invoked through `bin/kamal-saas`. The repository's `bin/kamal`
@@ -136,7 +140,19 @@ shutdown grace covers both bounded cleanup operations. The qualification
 workflow hashes the profile file bytes from the exact source commit and retains
 the validated load measurements with the canonical qualification artifact.
 
-The primary database stores exactly one constrained `Installation` identity: edition, ownership state, storage service, namespace fingerprint, and—until claim—the bootstrap digest. Before any mode-specific database preparation, the supported entrypoint runs a standalone, Bundler-backed deployment preflight that makes no provider connection. SaaS refuses a mounted self-hosted primary; self-hosted startup refuses retained SaaS database-role settings and inspects an existing local primary read-only for conflicting edition, storage service, storage namespace, or unclaimed bootstrap material. Schema preparation runs only after that complete persisted identity matches, and `Installations::Prepare` repeats the check after migrations as defense in depth. Credential rotation is allowed when the persisted namespace remains the same. See [[models/authentication-token]], [[data-model]], and [[dependencies]].
+The primary database stores exactly one constrained `Installation` identity:
+edition, ownership state, storage service, namespace fingerprint, and the
+administrator relationship after claim. Before any mode-specific database
+preparation, the supported entrypoint runs a standalone, Bundler-backed
+deployment preflight that makes no provider connection. SaaS refuses a mounted
+self-hosted primary; self-hosted startup refuses retained SaaS database-role
+settings and inspects an existing local primary read-only for conflicting
+edition, storage service, storage namespace, or ownership state. Schema
+preparation runs only after that persisted identity matches, and
+`Installations::Prepare` repeats the check after migrations as defense in
+depth. Provider credential rotation is allowed when the persisted storage
+namespace remains the same. See [[models/authentication-token]], [[data-model]],
+and [[dependencies]].
 
 ## Private Media and Processing Recovery
 
@@ -168,9 +184,10 @@ ONCE operator path. Public operations use ONCE's backup and restore commands;
 the first supported release still requires retained evidence that those
 commands recover Screenote correctly.
 
-When release notes require special maintenance, operators follow them before
-updating. ONCE application auto-update stays disabled so an operator explicitly
-triggers each update.
+ONCE enables application auto-update for the native install. Release notes must
+identify any update that needs special maintenance rather than ordinary
+automatic replacement; operators can also request the current release
+immediately with `once update HOST`.
 
 ## Publication Safety
 
@@ -192,7 +209,14 @@ GitGuardian duties are deliberately independent:
 - the metadata-only required workflow checks out no code and requires a matching GitHub source whose monitoring state is exactly active, whose provider archive flag is exactly false, and whose top-level deletion flag is exactly false, then follows every strict same-origin incident page and rejects Open or unknown states; because GitHub runs `pull_request_target` against the base SHA, it replaces stale results with pending on the validated PR head and test-merge SHAs before querying, then posts success or generic error with narrow status-write permission; and
 - checksum-pinned `ggshield` scans the frozen source history/current tree and the exact imported AMD64/ARM64 image manifests in trusted candidate CI using a fixed canonical instance and exact reviewed config path; Trivy and Syft likewise receive explicit trusted config paths, with an empty Trivy ignore file and suppressed-finding reporting, so repository or runner auto-configuration cannot weaken vulnerability scans or SBOM inventory.
 
-The self-hosted browser collaboration matrix supplies its own explicit test-only bootstrap token for the unclaimed-installation scenario and removes that value for the claimed-installation scenarios. The gate therefore has the same admission behavior when run directly by an operator as it does under GitHub Actions, without depending on inherited CI configuration. Instance-administration controller coverage is named in the self-hosted positive manifest rather than relying on tests that skip when the SaaS route set is booted.
+The self-hosted browser collaboration matrix exercises an unclaimed instance
+without any setup secret, including concurrent first-visitor submissions, then
+exercises the invitation-only claimed state. The gate therefore has the same
+admission behavior when run directly by an operator as it does under GitHub
+Actions, without depending on inherited CI configuration.
+Instance-administration controller coverage is named in the self-hosted
+positive manifest rather than relying on tests that skip when the SaaS route
+set is booted.
 
 Contributors run `script/release_test_matrix self-hosted` for the edition-aware
 self-hosted suite. Running the entire SaaS suite under a self-hosted boot is not

@@ -70,6 +70,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_no_match(/(?:export\s+|environment:.*|[- ]+)RAILS_MASTER_KEY\s*[:=]/i, public_installation_docs)
     assert_no_match(/docker\s+compose|compose\.ya?ml/i, public_installation_docs)
     assert_no_match(/\bmcp\b/i, public_installation_docs)
+    assert_not_includes public_installation_docs, "SCREENOTE_BOOTSTRAP_TOKEN"
+    assert_not_includes public_installation_docs, "compose.bootstrap.yaml"
     assert_not Rails.root.join("config/credentials.yml.enc").exist?
     gitignore = Rails.root.join(".gitignore").read.lines.map(&:strip)
     assert_includes gitignore, "/config/credentials*.yml.enc"
@@ -92,19 +94,36 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "public self hosted deployment uses the ONCE latest channel with manual updates" do
+  test "release validator rejects retired bootstrap installation guidance" do
+    {
+      "bootstrap token" => "SCREENOTE_BOOTSTRAP_TOKEN",
+      "bootstrap overlay" => "compose.bootstrap.yaml"
+    }.each do |label, retired_reference|
+      with_public_positioning_copy do |root|
+        File.open(File.join(root, "README.md"), "a") do |readme|
+          readme.puts(retired_reference)
+        end
+
+        validator = validate_public_positioning(root)
+
+        assert_includes validator.errors,
+          "public installation docs must not mention retired #{retired_reference}",
+          label
+      end
+    end
+  end
+
+  test "public self hosted deployment uses the native ONCE installer and normal updates" do
     documents = ReleaseValidation::PUBLIC_INSTALLATION_DOCS.sum("") do |path|
       Rails.root.join(path).read
     end
 
-    assert_includes documents, "once deploy"
-    assert_includes documents, "--auto-update=false"
+    assert_includes documents, "curl https://get.once.com/screenote | sh"
     assert_includes documents, "ghcr.io/ivankuznetsov/screenote:latest"
     ReleaseValidation::PUBLIC_ONCE_COMMAND_DOCS.each do |path|
-      commands = ReleaseValidation.new(root: Rails.root).send(
-        :public_shell_commands,
-        Rails.root.join(path).read
-      )
+      document = Rails.root.join(path).read
+      assert_includes document, "curl https://get.once.com/screenote | sh", path
+      commands = ReleaseValidation.new(root: Rails.root).send(:public_shell_commands, document)
       assert commands.any? { |tokens| tokens.first(2) == %w[once update] && tokens.length == 3 }, path
     end
 
@@ -158,13 +177,9 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
 
   test "release validator rejects incomplete ONCE installation guidance" do
     cases = {
-      "missing deploy command" => [
-        ->(contents) { contents.gsub("once deploy", "once install") },
-        "public installation docs must deploy Screenote with ONCE"
-      ],
-      "missing application update lock" => [
-        ->(contents) { contents.gsub("--auto-update=false", "") },
-        "public installation docs must disable moving image updates"
+      "missing native installer" => [
+        ->(contents) { contents.gsub("https://get.once.com/screenote", "https://get.once.com/custom") },
+        "public installation docs must use Screenote's native ONCE installer"
       ],
       "missing canonical image" => [
         ->(contents) { contents.gsub("ghcr.io/ivankuznetsov/screenote:", "registry.invalid/screenote:") },
@@ -186,20 +201,11 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
   end
 
   test "release validator checks each copyable ONCE command independently" do
-    latest_release = "ghcr.io/ivankuznetsov/screenote:latest"
     immutable_release = "ghcr.io/ivankuznetsov/screenote:v1.2.3@sha256:#{'a' * 64}"
     cases = {
-      "missing README deploy" => [
-        ->(contents) { contents.sub("once deploy", "once install") },
-        "README.md must include a copyable ONCE deploy command"
-      ],
-      "moving README deploy" => [
-        ->(contents) { contents.sub("--auto-update=false", "--auto-update=true") },
-        "README.md ONCE deploy command must set --auto-update=false exactly once"
-      ],
-      "variable README deploy image" => [
-        ->(contents) { contents.sub(latest_release, "$SCREENOTE_IMAGE") },
-        "README.md ONCE deploy command must use the Screenote latest release channel"
+      "wrong README installer route" => [
+        ->(contents) { contents.sub("curl https://get.once.com/screenote | sh", "curl https://get.once.com/custom | sh") },
+        "README.md must include the exact native Screenote ONCE installer command"
       ],
       "image-pinned README update without normal update" => [
         ->(contents) { contents.sub("once update screenote.example.com", "once update screenote.example.com --image #{immutable_release}") },
@@ -1361,6 +1367,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       "exec -T screenote /rails/bin/docker-entrypoint ./bin/rails runner -"
     assert_not_includes smoke, "--no-tty"
     assert_not_includes backup_smoke, "--no-tty"
+    assert_not_includes smoke, "bootstrap_token"
+    assert_not_includes backup_smoke, "bootstrap_token"
   end
 
   test "repository Go checks ignore the Rails vendor directory" do
@@ -1428,6 +1436,8 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_equal "4", test_job.dig("env", "PARALLEL_WORKERS")
     assert_not test_job.fetch("env").key?("SCREENOTE_EDITION")
     assert_not test_job.fetch("env").key?("SCREENOTE_REQUIRED_MODE")
+    assert_not test_job.fetch("env").key?("SCREENOTE_BOOTSTRAP_TOKEN")
+    assert_not jobs.fetch("system-collaboration").fetch("env").key?("SCREENOTE_BOOTSTRAP_TOKEN")
     assert_includes test_job.fetch("steps").map { |step| step.fetch("run", "") }, "bin/rails test"
     steps = test_job.fetch("steps")
     runtime = steps.find { |step| step.fetch("run", "").include?("libvips") }
@@ -1526,8 +1536,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       "SCREENOTE_COVERAGE_BASE_SHA=<full-ancestor-sha> script/release_test_matrix coverage"
     assert_not_includes matrix, "git merge-base HEAD origin/main"
     assert_includes matrix, "--manifest test/manifests/release_security_coverage.yml"
-    assert_includes matrix, 'SCREENOTE_BOOTSTRAP_TOKEN="${SYSTEM_TEST_BOOTSTRAP_TOKEN}"'
-    assert_includes matrix, "env -u SCREENOTE_BOOTSTRAP_TOKEN"
+    assert_not_includes matrix, "SCREENOTE_BOOTSTRAP_TOKEN"
     system_gate = matrix.match(/^  system-collaboration\).*?^    ;;$/m).to_s
     assert_not_empty system_gate
     assert_includes system_gate, "clobber_precompiled_assets"

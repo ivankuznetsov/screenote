@@ -89,8 +89,14 @@ release image through ONCE; `config/deploy.saas.yml` is the complete internal
 hosted-service Kamal configuration. Keep those contracts separate.
 
 ```bash
-# Common deployment identity
-SCREENOTE_EDITION=self_hosted # or saas
+# Native ONCE supplies these automatically for public self-hosting. The
+# supported installer is `curl https://get.once.com/screenote | sh`; it depends
+# on the upstream ONCE Screenote alias and ONCE_HOST/DISABLE_SSL contract.
+SCREENOTE_EDITION=self_hosted
+ONCE_HOST=screenote.example.com
+DISABLE_SSL=false
+
+# Advanced non-ONCE deployments may provide the canonical origin explicitly
 SCREENOTE_BASE_URL=https://screenote.example.com
 
 # Optional auth and email providers
@@ -186,8 +192,11 @@ bin/rails test           # All tests pass
 
 Public self-hosting uses ONCE with the `screenote:latest` release channel. Do
 not ask operators to fork or clone this repository, build a release image
-locally, or deploy through Kamal. Keep unattended ONCE application updates
-disabled; operators update manually with `once update HOST`. Follow
+locally, or deploy through Kamal. The supported path is exactly
+`curl https://get.once.com/screenote | sh`: ONCE supplies the host and TLS
+mode, Screenote derives its origin, and the first visitor atomically claims the
+administrator without a setup token. ONCE automatic application updates remain
+enabled; `once update HOST` requests an immediate update. Follow
 `docs/once-deployment.md`.
 
 Kamal is only for the hosted `screenote.ai` service:

@@ -3,7 +3,7 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-08-08
+updated: 2026-08-10
 tags: [database, schema, models, relationships]
 ---
 
@@ -11,7 +11,7 @@ tags: [database, schema, models, relationships]
 
 TLDR: Screenote has 18 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth. Installation persists the one deployment/storage/ownership identity, authentication-link credentials are digest-only rows, and AdmissionLock stores only one-way email keys for adapter-neutral admission serialization.
 
-Source: `db/schema.rb` (schema version `2026_08_08_090000`)
+Source: `db/schema.rb` (schema version `2026_08_09_120000`)
 
 ## ER Diagram
 
@@ -98,7 +98,7 @@ erDiagram
 |-------|---------|-------------|
 | `sessions` | Database-backed user sessions | user_id, ip_address, user_agent |
 | `api_keys` | Bearer token auth for API/MCP | name, token_digest, token_prefix, project_id, issued_by_user_id, revoked_at, last_used_at |
-| `installations` | Singleton persisted deployment and claim identity | singleton_key, deployment_mode, state, storage_service, storage_namespace_fingerprint, bootstrap_token_digest, administrator_id, claimed_at |
+| `installations` | Singleton persisted deployment and claim identity | singleton_key, deployment_mode, state, storage_service, storage_namespace_fingerprint, administrator_id, claimed_at |
 | `installation_audit_events` | Append-only installation claim/administration audit history | installation_id, actor_user_id, target_user_id, event_type, metadata, created_at |
 | `authentication_tokens` | Digest-only, purpose/subject-bound link credentials | purpose, user_id/project_invitation_id, issued_by_user_id (recovery only), generation, derivation_id, derivation_key_id, token_digest, expires_at, state, terminal_at |
 | `admission_locks` | Adapter-neutral bounded serialization stripes | slot, created_at, updated_at |
@@ -144,7 +144,7 @@ erDiagram
 - `project_memberships.(project_id, user_id)` -- unique
 - `api_keys.token_digest` -- unique
 - `api_keys.issued_by_user_id` -- immutable provenance for newly issued and active keys; null only on preserved revoked legacy actors
-- `installations.singleton_key` -- unique and constrained to `screenote`; mode, ownership state, storage service, namespace fingerprint, bootstrap digest, and administrator relationships are database-constrained
+- `installations.singleton_key` -- unique and constrained to `screenote`; mode, ownership state, storage service, namespace fingerprint, and administrator relationships are database-constrained
 - `oauth_device_grants.device_code` -- unique SHA-256 digest; the raw device credential is never stored
 - `oauth_device_grants.user_code` -- unique short-lived human verification code
 - `oauth_device_grants.expires_at` -- indexed absolute expiry used for request validation and scheduled bulk cleanup after a bounded terminal-error retention period

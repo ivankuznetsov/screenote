@@ -200,7 +200,6 @@ class SelfHostedDatabaseConfigurationTest < ActiveSupport::TestCase
       "SCREENOTE_EDITION" => "self_hosted",
       "SCREENOTE_BASE_URL" => "http://screenote.internal:3005",
       "SECRET_KEY_BASE" => "a" * 64,
-      "SCREENOTE_BOOTSTRAP_TOKEN" => "b" * 43,
       "RAILS_LOG_TO_STDOUT" => nil
     }
   end

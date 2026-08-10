@@ -25,41 +25,27 @@ canonical base URL, then create the secret directory:
 install -d -m 0700 secrets
 umask 077
 openssl rand -base64 48 > secrets/secret_key_base
-openssl rand -base64 48 > secrets/bootstrap_token
-chmod 0400 secrets/secret_key_base secrets/bootstrap_token
-chown 1000:1000 secrets/secret_key_base secrets/bootstrap_token
+chmod 0400 secrets/secret_key_base
+chown 1000:1000 secrets/secret_key_base
 ```
 
-Both generated values exceed the 256-bit minimum. Keep an operator-controlled,
+The generated value exceeds the 256-bit minimum. Keep an operator-controlled,
 encrypted copy of the application secret outside the Docker host; losing it
-invalidates encrypted application state. The bootstrap token is temporary and
-must be removed after the instance is claimed.
+invalidates encrypted application state.
 
 ## Start a fresh local-storage instance
 
-The base file is deliberately the claimed-instance configuration: it has no
-bootstrap secret declaration. Add the bootstrap overlay only for the first
-claim:
+The same base configuration serves both fresh and claimed installations:
 
 ```sh
-docker compose -f compose.yaml -f compose.bootstrap.yaml config
-docker compose -f compose.yaml -f compose.bootstrap.yaml up -d
-```
-
-After the administrator claim succeeds, replace the container without the
-bootstrap overlay. `down` preserves the named volume unless `--volumes` is
-explicitly supplied:
-
-```sh
-docker compose -f compose.yaml -f compose.bootstrap.yaml down
-rm secrets/bootstrap_token
+docker compose -f compose.yaml config
 docker compose -f compose.yaml up -d
 ```
 
-The claimed installation identity is stored in the primary SQLite database.
-Starting the base configuration after claim does not recreate or reopen
-bootstrap. An unclaimed installation still requires the same original
-bootstrap file and refuses to start without it.
+Open the instance in a browser to finish setup. The first completed setup
+creates the administrator; the claimed installation identity is then stored in
+the primary SQLite database. No temporary setup credential, overlay, or
+container replacement is required.
 
 ## Use generic S3-compatible storage
 
@@ -73,32 +59,17 @@ install -o 1000 -g 1000 -m 0400 /secure/provider/access-key-id secrets/s3_access
 install -o 1000 -g 1000 -m 0400 /secure/provider/secret-access-key secrets/s3_secret_access_key
 ```
 
-For a fresh S3-backed installation, use all three files:
+For an S3-backed installation, use the base and S3 files from the first start:
 
 ```sh
 docker compose \
   -f compose.yaml \
-  -f compose.bootstrap.yaml \
   -f compose.s3.yaml \
   config
 docker compose \
   -f compose.yaml \
-  -f compose.bootstrap.yaml \
   -f compose.s3.yaml \
   up -d
-```
-
-After claim, stop that configuration, delete the bootstrap token, and restart
-with only the base and S3 files:
-
-```sh
-docker compose \
-  -f compose.yaml \
-  -f compose.bootstrap.yaml \
-  -f compose.s3.yaml \
-  down
-rm secrets/bootstrap_token
-docker compose -f compose.yaml -f compose.s3.yaml up -d
 ```
 
 `compose.s3.yaml` requires the endpoint, region, bucket, prefix, and the two
@@ -147,11 +118,10 @@ docker compose \
   up -d
 ```
 
-Add `compose.bootstrap.yaml` to the same list only while claiming a fresh
-installation. Add `compose.s3.yaml` when using S3-compatible storage. GitHub
-sign-in uses `compose.github-oauth.yaml`. A partially configured selected
-provider fails at Compose interpolation or application boot rather than
-silently starting without it.
+Add `compose.s3.yaml` when using S3-compatible storage. GitHub sign-in uses
+`compose.github-oauth.yaml`. A partially configured selected provider fails at
+Compose interpolation or application boot rather than silently starting
+without it.
 
 ## Rotate secrets
 

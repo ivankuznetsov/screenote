@@ -374,6 +374,7 @@ class SelfHostedLoadDriverTest < ActiveSupport::TestCase
     assert_predicate path, :executable?
     assert_includes path.binread,
       '"/rails/bin/docker-entrypoint", "./bin/rails", "runner", "-"'
+    assert_not_includes path.binread, "bootstrap_token"
   end
 
   private
