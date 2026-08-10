@@ -27,6 +27,15 @@ presented as one-time instance claim, project creation, and invitation-based
 admission; advanced storage, provider, backup, and upgrade details remain in
 the operator guide.
 
+The README also provides one copyable installation prompt for coding agents.
+It keeps automation on the released stock-ONCE path, asks only for missing
+server access or hostname details, verifies DNS and both health endpoints, and
+stops at the intentional human boundary where the operator enters the first
+administrator credentials; the agent is explicitly prohibited from completing
+that claim. The prompt leaves local storage and automatic updates enabled and
+does not silently add optional providers or change DNS, firewall rules, or
+secrets.
+
 Public installation docs lead directly with ONCE and the latest release image;
 they do not expose the repository's internal publication sentinel or label the
 operator path as a development preview. Operators install released stock ONCE

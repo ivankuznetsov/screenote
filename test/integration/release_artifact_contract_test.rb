@@ -131,6 +131,37 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_includes Rails.root.join("bin/kamal").read, 'load Gem.bin_path("kamal", "kamal")'
   end
 
+  test "README offers a copyable agent installation prompt" do
+    readme = Rails.root.join("README.md").read
+    prompt_start = readme.index("### Install with your agent")
+    manual_start = readme.index("### Install manually")
+
+    assert prompt_start
+    assert manual_start
+    assert_operator prompt_start, :<, manual_start
+
+    section = readme[prompt_start...manual_start]
+    prompt = section.match(/```text\r?\n(?<body>.*?)\r?\n```/m)&.[](:body)
+
+    assert prompt
+
+    normalized_prompt = prompt.gsub(/\s+/, " ")
+    assert_includes prompt, ReleaseValidation::PUBLIC_ONCE_INSTALLER
+    assert_includes prompt,
+      "once deploy ghcr.io/ivankuznetsov/screenote:latest --host HOST --env SCREENOTE_BASE_URL=https://HOST"
+    assert_includes prompt, "https://HOST/up"
+    assert_includes prompt, "https://HOST/ready"
+    assert_includes normalized_prompt, "ask me for the SSH destination"
+    assert_includes normalized_prompt, "Ask me for the Screenote hostname"
+    assert_includes normalized_prompt, "Ask before changing DNS or firewall rules."
+    assert_includes normalized_prompt, "Keep the default local screenshot storage and ONCE automatic updates."
+    assert_includes normalized_prompt, "Do not configure SMTP, S3, OAuth, or monitoring unless I ask for them."
+    assert_includes normalized_prompt, "Do not open the setup page, create an account, or complete the first-administrator claim yourself."
+    assert_includes normalized_prompt, "Do not choose, request, store, or print my administrator password."
+    assert_includes normalized_prompt, "The first completed setup claims the instance; all later accounts are invitation-only."
+    assert_includes normalized_prompt, "Never expose secrets in commands, logs, or the summary."
+  end
+
   test "release validator rejects unsupported Screenote image identities" do
     cases = {
       "release placeholder" =>
@@ -202,7 +233,7 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     immutable_release = "ghcr.io/ivankuznetsov/screenote:v1.2.3@sha256:#{'a' * 64}"
     cases = {
       "wrong README installer route" => [
-        ->(contents) { contents.sub(ReleaseValidation::PUBLIC_ONCE_INSTALLER, "curl https://invalid.example | sh") },
+        ->(contents) { contents.gsub(ReleaseValidation::PUBLIC_ONCE_INSTALLER, "curl https://invalid.example | sh") },
         "README.md must include the exact stock ONCE installer command"
       ],
       "missing explicit canonical origin" => [
