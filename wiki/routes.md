@@ -3,7 +3,7 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-08-06
+updated: 2026-08-13
 tags: [routes, api, endpoints, auth]
 ---
 
@@ -198,6 +198,7 @@ The upload route keeps the parent screenshot URL shape, but its separate bearer 
 | GET | `/` | SaaS landing page; self-hosted bootstrap/sign-in root |
 | GET | `/dashboard` | Project index |
 | GET | `/help` | CLI install, OAuth sign-in, and command guide |
+| GET | `/install.sh` | Checksum-verifying Screenote CLI installer for macOS/Linux |
 | GET | `/terms` | Hosted Terms of Service (SaaS only) |
 | GET | `/privacy` | Hosted Privacy Policy (SaaS only) |
 

@@ -49,7 +49,7 @@ Additionally: fetch redirect injection (#143), silent catch-all error swallowing
 
 ### CLI Adoption And MCP Sunset
 
-The public CLI is the supported agent and automation surface. Its `main` branch now implements idempotent annotation resolution with an optional comment; the first supported Screenote release must pin an exact CLI tag containing that command. Remaining CLI gaps include snapshot-scoped feedback retrieval, annotation reopen, and wider distribution beyond `go install`; see [[api-cli]].
+The public CLI is the supported agent and automation surface. Tagged releases provide checksum-verified macOS/Linux AMD64 and ARM64 binaries, a hosted installer, and a Homebrew tap. Its `main` branch implements idempotent annotation resolution with an optional comment. Remaining CLI gaps include snapshot-scoped feedback retrieval and annotation reopen; see [[api-cli]].
 
 MCP remains in the server for compatibility while a separately scoped sunset task removes clients, metadata, and runtime code safely. Do not expand the MCP tool surface as part of CLI work. Historical tool coverage remains documented in [[mcp-tools]] until that migration lands.
 

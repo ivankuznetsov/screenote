@@ -51,7 +51,11 @@ class UserMailerTest < ActionMailer::TestCase
     assert email.multipart?
     assert_includes email.html_part.body.to_s, "Create a project"
     assert_includes email.html_part.body.to_s, "Install the Screenote CLI"
+    assert_includes email.html_part.body.to_s, "curl -fsSL https://screenote.ai/install.sh | sh"
     assert_includes email.text_part.body.to_s, "Publish screenshots"
+    assert_includes email.text_part.body.to_s, "curl -fsSL https://screenote.ai/install.sh | sh"
+    refute_includes email.html_part.body.to_s, "go install"
+    refute_includes email.text_part.body.to_s, "go install"
     assert_includes email.html_part.body.to_s, "background-color: #0a0a0f"
   end
 

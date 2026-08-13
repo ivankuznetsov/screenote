@@ -6,9 +6,11 @@
     <span class="guide__step-number">1</span>
     <div class="guide__step-content">
       <h2 class="guide__step-title">Install the CLI</h2>
-      <p class="guide__step-desc">With Go 1.26 or newer installed, run:</p>
-      <%= render "static_pages/help_terminal", commands: [ "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest" ] %>
-      <p class="guide__step-desc">If your shell cannot find <code>screenote</code>, add <code>$(go env GOPATH)/bin</code> to your <code>PATH</code>. The <%= link_to "CLI source and documentation", "https://github.com/ivankuznetsov/screenote-cli" %> are public.</p>
+      <p class="guide__step-desc">On macOS, Homebrew is the recommended installation:</p>
+      <%= render "static_pages/help_terminal", commands: [ "brew install ivankuznetsov/tap/screenote" ] %>
+      <p class="guide__step-desc">Or install the checksum-verified release binary on macOS or Linux:</p>
+      <%= render "static_pages/help_terminal", commands: [ "curl -fsSL https://screenote.ai/install.sh | sh" ] %>
+      <p class="guide__step-desc">No Go toolchain or manual <code>PATH</code> setup is required. The <%= link_to "CLI source, releases, and documentation", "https://github.com/ivankuznetsov/screenote-cli" %> are public.</p>
     </div>
   </div>
 
@@ -18,10 +20,12 @@
     <div class="guide__step-content">
       <h2 class="guide__step-title">Sign in</h2>
       <p class="guide__step-desc">Authorize the CLI with your Screenote account:</p>
-      <%= render "static_pages/help_terminal", commands: [ "screenote --base-url #{Screenote::Deployment.current.base_url} login" ] %>
+      <% login_command = Screenote::Deployment.current.saas? ? "screenote login" : "screenote --base-url #{Screenote::Deployment.current.base_url} login" %>
+      <% device_login_command = "#{login_command} --device" %>
+      <%= render "static_pages/help_terminal", commands: [ login_command ] %>
       <p class="guide__step-desc">A browser window opens for OAuth approval. Your credentials are saved locally with owner-only permissions.</p>
       <p class="guide__step-desc">On SSH, tmux, or another headless session, use device authorization instead:</p>
-      <%= render "static_pages/help_terminal", commands: [ "screenote --base-url #{Screenote::Deployment.current.base_url} login --device" ] %>
+      <%= render "static_pages/help_terminal", commands: [ device_login_command ] %>
       <p class="guide__step-desc">Screenote prints a one-time code and authorization link. Open the link on any device, enter the code, and return to your terminal. No callback port or SSH forwarding is required.</p>
     </div>
   </div>

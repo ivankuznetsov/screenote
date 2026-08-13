@@ -12,6 +12,12 @@ class StaticPagesController < ApplicationController
 
   def help; end
 
+  def install_cli
+    response.set_header("Cache-Control", "public, max-age=300")
+    render plain: Rails.root.join("script/install-screenote-cli").read,
+      content_type: "text/x-shellscript"
+  end
+
   def terms; end
 
   def privacy; end
