@@ -22,10 +22,12 @@ class StaticPagesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success, "Unauthenticated user should see the help page"
     assert_select "#install-cli", count: 1, message: "Help should lead with CLI installation"
-    assert_select "code", text: "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest"
-    base_url = Screenote::Deployment.current.base_url
-    assert_select "code", text: "screenote --base-url #{base_url} login"
-    assert_select "code", text: "screenote --base-url #{base_url} login --device"
+    assert_select "code", text: "brew install ivankuznetsov/tap/screenote"
+    assert_select "code", text: "curl -fsSL https://screenote.ai/install.sh | sh"
+    assert_select "code", text: "screenote login"
+    assert_select "code", text: "screenote login --device"
+    assert_no_match(/go install|Go 1\.26|\$\(go env GOPATH\)|screenote --base-url https:\/\/screenote\.ai login/, response.body)
+    assert_match(/No Go toolchain or manual <code>PATH<\/code> setup is required/, response.body)
     assert_match(/SSH, tmux, or another headless session/, response.body)
     assert_match(/prints a one-time code and authorization link/, response.body)
     assert_match(/No callback port or SSH forwarding is required/, response.body)
@@ -40,6 +42,37 @@ class StaticPagesControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/Resolve or reopen the annotation from the Screenote web review/, response.body)
     assert_match(/lists project feedback rather than filtering results by snapshot/, response.body)
     assert_no_match(/Model Context Protocol|\/plugin install|\/screenote feedback/, response.body)
+  end
+
+  test "installer is public shell source with bounded caching" do
+    get cli_installer_path
+
+    assert_response :success
+    assert_equal "text/x-shellscript", response.media_type
+    cache_control = response.headers["Cache-Control"]
+    assert_includes cache_control, "public"
+    assert_includes cache_control, "max-age=300"
+    assert_match(/screenote_\$\{version\}_\$\{os\}_\$\{arch\}\.tar\.gz/, response.body)
+    assert_match(/checksum verification failed/, response.body)
+    assert_match(/Next: screenote login/, response.body)
+  end
+
+  test "self-hosted help keeps an explicit server origin" do
+    deployment = Screenote::Deployment.new(
+      {
+        "SCREENOTE_EDITION" => "self_hosted",
+        "SCREENOTE_BASE_URL" => "https://notes.example"
+      },
+      production: false
+    )
+
+    with_current_deployment(deployment) do
+      get help_path
+
+      assert_response :success
+      assert_select "code", text: "screenote --base-url https://notes.example login"
+      assert_select "code", text: "screenote --base-url https://notes.example login --device"
+    end
   end
 
   test "unauthenticated help page shows guest nav" do
@@ -77,7 +110,7 @@ class StaticPagesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "a[href='#{help_path(anchor: "install-cli")}']", text: "Install CLI"
-    assert_select "code", text: "go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@latest"
+    assert_select "code", text: "curl -fsSL https://screenote.ai/install.sh | sh"
     assert_match(/Screenote CLI/, response.body)
     assert_no_match(/Model Context Protocol|MCP protocol|<code>\/screenote(?:\s|&lt;)/, response.body)
   end
@@ -94,5 +127,15 @@ class StaticPagesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "h2", text: /CLI, API, and AI agent access/
     assert_no_match(/Model Context Protocol/, response.body)
+  end
+
+  private
+
+  def with_current_deployment(deployment)
+    previous = Screenote::Deployment.current
+    Screenote::Deployment.instance_variable_set(:@current, deployment)
+    yield
+  ensure
+    Screenote::Deployment.instance_variable_set(:@current, previous)
   end
 end

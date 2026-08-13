@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-08-09
+updated: 2026-08-13
 tags: [cli, api, rest, agents, self-hosting, once]
 ---
 
@@ -19,10 +19,13 @@ The CLI is the portable shell contract for agents and automation. CLI-facing aut
 
 ## Install
 
-Go 1.26 or newer is required.
+End users install tagged, checksum-verified AMD64 or ARM64 release binaries on
+macOS and Linux. Go 1.26 is only required for source development.
 
 ```sh
-go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@<release-cli-tag>
+brew install ivankuznetsov/tap/screenote
+# or
+curl -fsSL https://screenote.ai/install.sh | sh
 ```
 
 Because the Rails repo has a top-level Ruby `vendor/` directory, local Go test/build commands should use:
@@ -38,27 +41,31 @@ Precedence:
 1. Flags: `--base-url`, `--project`
 2. Environment: `SCREENOTE_BASE_URL`, `SCREENOTE_PROJECT`
 3. Config: `~/.config/screenote/config.toml`
-4. OAuth credentials stored by `screenote login`
+4. Hosted default: `https://screenote.ai`
+
+OAuth credentials stored by `screenote login` are selected only after the
+server origin resolves through that precedence.
 
 `screenote config` prints resolved non-secret config as JSON and never prints stored login secrets. `screenote config set` writes values noninteractively. Config writes enforce owner-only permissions even for a pre-existing hand-authored file. Ordinary commands never prompt or open a browser; only explicit `screenote login` starts an interactive OAuth flow.
 
-The base URL should be set explicitly. Current docs use localhost,
-staging/self-hosted URLs, or the canonical production host
-`https://screenote.ai`. Public self-hosting deploys the `latest` release channel
+The CLI defaults to `https://screenote.ai`, so hosted users run `screenote
+login` without a base-URL flag. Localhost, staging, and self-hosted instances
+override the default with the existing flag, environment, or config sources.
+Public self-hosting deploys the `latest` release channel
 through ONCE and has no repository-side deployment configuration; the hosted
 service keeps its private Kamal settings in `config/deploy.saas.yml`.
 
 The default login uses the OAuth authorization-code flow with PKCE and a loopback redirect:
 
 ```sh
-screenote --base-url https://screenote.ai login
+screenote login
 screenote logout
 ```
 
 SSH, tmux, and other headless sessions can use the device-authorization flow instead:
 
 ```sh
-screenote --base-url https://screenote.ai login --device
+screenote login --device
 ```
 
 The device flow prints a one-time code and authorization link for approval on any device, then waits for authorization in the terminal. It does not bind a local callback port or require SSH port forwarding.
@@ -100,7 +107,7 @@ The public CLI `main` branch implements `annotation resolve`, but an untagged mo
 Successful commands write JSON to stdout. Errors write this shape to stderr:
 
 ```json
-{"code":"missing_base_url","error":"base URL is required; set --base-url, SCREENOTE_BASE_URL, or config base_url"}
+{"code":"missing_project","error":"project is required; set --project, SCREENOTE_PROJECT, or config project"}
 ```
 
 Cobra flag parse errors use the stable `invalid_flag` usage error. Invalid base URLs use `invalid_base_url`. Missing or expired OAuth credentials return exit code 3.

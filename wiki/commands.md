@@ -13,10 +13,10 @@ tags: [commands, api]
 
 Canonical source: the public `github.com/ivankuznetsov/screenote-cli` repository. The private `cmd/screenote` and `internal/` copy is transitional and is not the installation source.
 
-With Go 1.26 or newer installed, install the CLI with:
+Install the tagged, checksum-verified CLI release with:
 
 ```sh
-go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@<release-cli-tag>
+curl -fsSL https://screenote.ai/install.sh | sh
 ```
 
 The first supported Screenote release and its immutable CLI tag are still

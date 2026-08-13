@@ -20,7 +20,7 @@
     <div class="guide__cli-method">
       <p class="guide__cli-method-desc">On SSH, tmux, or a remote agent host, sign in with the OAuth device flow. Open the printed link on any browser and approve the one-time code:</p>
       <%= render "static_pages/help_terminal", commands: [
-        "screenote --base-url #{Screenote::Deployment.current.base_url} login --device",
+        Screenote::Deployment.current.saas? ? "screenote login --device" : "screenote --base-url #{Screenote::Deployment.current.base_url} login --device",
         "screenote config set --project <PROJECT_ID>"
       ] %>
       <p class="guide__cli-method-desc">The CLI stores the OAuth credentials locally with owner-only permissions. It does not need a callback listener or SSH port forward.</p>

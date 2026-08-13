@@ -147,10 +147,10 @@ backups, restores, and updates. The broader
 
 Each server release names one exact tested tag from the canonical
 [Screenote CLI repository](https://github.com/ivankuznetsov/screenote-cli).
-Install that tag, sign in to your Screenote origin, and select a project:
+Install a checksum-verified binary, sign in to your Screenote origin, and select a project:
 
 ```sh
-go install github.com/ivankuznetsov/screenote-cli/cmd/screenote@<release-cli-tag>
+curl -fsSL https://screenote.ai/install.sh | sh
 screenote --base-url https://screenote.example.com login
 screenote project list
 screenote config set --project <PROJECT_ID>

@@ -3,7 +3,7 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-08-06
+updated: 2026-08-13
 tags: [controller, web, ui, auth]
 ---
 
@@ -45,6 +45,17 @@ password-digest boundary before access status can affect the response.
 
 **Rescue handlers:**
 - `ActiveRecord::RecordNotFound` -> custom 404 page
+
+## StaticPagesController
+
+The public help and landing pages lead with tagged CLI binaries instead of a
+Go source install. Hosted first run is `curl -fsSL
+https://screenote.ai/install.sh | sh` followed by `screenote login`; macOS also
+shows the Homebrew tap. `GET /install.sh` returns the reviewed POSIX installer
+with a short public cache lifetime. The installer selects macOS/Linux and
+AMD64/ARM64 assets, verifies the release archive against `checksums.txt`, then
+installs `screenote`. Self-hosted help retains an explicit `--base-url` login
+command for its own canonical origin.
 
 ---
 

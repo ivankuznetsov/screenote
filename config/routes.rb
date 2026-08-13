@@ -135,6 +135,7 @@ Rails.application.routes.draw do
   end
 
   # Health check for load balancers
+  get "install.sh", to: "static_pages#install_cli", as: :cli_installer, format: false
   get "up" => "rails/health#show", as: :rails_health_check
   get "ready" => "health#readiness", as: :readiness_check
 
