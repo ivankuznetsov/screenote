@@ -28,7 +28,13 @@ module Api
       def self.annotations(project)
         Annotation.joins(screenshot: { page: :project })
           .where(projects: { id: project.id })
-          .includes(:user, :api_key, :screenshot, annotation_comments: [ :user, :api_key ])
+          .includes(
+            :user,
+            :api_key,
+            :screenshot,
+            { image_attachments: { image_attachment: :blob } },
+            annotation_comments: [ :user, :api_key, { image_attachments: { image_attachment: :blob } } ]
+          )
       end
     end
   end

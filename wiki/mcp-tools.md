@@ -3,7 +3,7 @@ title: MCP Tools
 type: architecture
 source: app/tools/**/*.rb, config/initializers/fast_mcp.rb
 created: 2026-05-14
-updated: 2026-08-05
+updated: 2026-08-29
 tags: [mcp, tools, api, agent]
 ---
 
@@ -44,7 +44,7 @@ The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and 
 | `create_screenshot_upload` | `app/tools/create_screenshot_upload_tool.rb` | Create one desktop `ScreenshotImage` and return a credential-free URL plus one-time upload bearer |
 | `create_multi_viewport_screenshot` | `app/tools/create_multi_viewport_screenshot_tool.rb` | Create one screenshot with 1-3 viewport variants and per-variant URL/bearer pairs |
 | `list_annotations` | `app/tools/list_annotations_tool.rb` | List annotations with status, screenshot, viewport, limit, and offset filters |
-| `get_annotation` | `app/tools/get_annotation_tool.rb` | Return annotation details, comments, and cropped image data |
+| `get_annotation` | `app/tools/get_annotation_tool.rb` | Return annotation details, comments, cropped image data, and attachment metadata |
 | `create_annotation` | `app/tools/create_annotation_tool.rb` | Create point or region annotation; viewport is required for multi-variant screenshots |
 | `resolve_annotation` | `app/tools/resolve_annotation_tool.rb` | Mark an annotation resolved and create audit comment |
 | `reopen_annotation` | `app/tools/reopen_annotation_tool.rb` | Reopen a resolved annotation with a reason |
@@ -53,6 +53,21 @@ The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and 
 | `invite_collaborator` | `app/tools/invite_collaborator_tool.rb` | Send a project invitation |
 | `cancel_invitation` | `app/tools/cancel_invitation_tool.rb` | Cancel a pending invitation |
 | `remove_project_member` | `app/tools/remove_project_member_tool.rb` | Remove a member from a project |
+
+## Attachment Metadata
+
+`get_annotation` keeps every key it already shipped — `screenshot_status`,
+`cropped_image_base64`, `mime_type`, and each comment's `id`, `action`,
+`body`, `author`, and `created_at` — and adds an always-present `attachments`
+array to the root annotation and to every `comments[]` item. Each entry is
+`id`, `alt_text`, `media_type`, `width`, `height`, `size`, `url`, and
+`url_expires_at`; storage keys and semantic filenames are never exposed.
+
+`url` points at `/api/media/image_attachments/:id?token=…` and expires five
+minutes after the read. Fetching it needs the agent's own bearer credential
+plus the purpose token plus live access to the project — the token by itself
+is not authority, and nothing durable is stored. MCP has no attachment write
+tool: authoring is a browser session capability.
 
 ## Multi-Viewport Semantics
 

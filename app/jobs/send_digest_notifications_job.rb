@@ -34,7 +34,15 @@ class SendDigestNotificationsJob < ApplicationJob
     AnnotationComment
       .where(action: :resolved, notified_at: nil)
       .joins(annotation: { screenshot: { page: :project } })
-      .includes(:user, annotation: [ :user, :annotation_comments, { screenshot: { page: :project } } ])
+      .includes(
+        :user,
+        annotation: [
+          :user,
+          :image_attachments,
+          { annotation_comments: :image_attachments },
+          { screenshot: [ :screenshot_images, { page: :project } ] }
+        ]
+      )
   end
 
   def mark_notified(comments)

@@ -1,0 +1,21 @@
+{
+  "comment": "Keys and nesting of the shipped MCP get_annotation response, captured before image attachments were added. New keys may appear; nothing in this file may be renamed, dropped, or nested differently.",
+  "annotation": [
+    "id",
+    "screenshot_id",
+    "viewport",
+    "type",
+    "coordinates",
+    "comment",
+    "status",
+    "author",
+    "comments_count",
+    "created_at",
+    "screenshot_status",
+    "cropped_image_base64",
+    "mime_type",
+    "comments"
+  ],
+  "coordinates": ["x_percent", "y_percent", "width_percent", "height_percent"],
+  "comments": ["id", "action", "body", "author", "created_at"]
+}

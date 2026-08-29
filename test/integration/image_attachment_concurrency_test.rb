@@ -18,14 +18,22 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     @user = users(:alice)
     @project = projects(:alice_project)
     @screenshot = screenshots(:alice_screenshot)
+    @highest_blob_id = ActiveStorage::Blob.maximum(:id).to_i
+    @highest_annotation_id = Annotation.maximum(:id).to_i
     @batch = build_batch
   end
 
   teardown do
+    # These tests deliberately race real transactions across threads, and a
+    # thread killed on timeout can leave its connection holding a write lock.
+    # Dropping the pool keeps one hung race from failing every later test in
+    # this worker.
+    ApplicationRecord.connection_pool.disconnect!
+
     ImageAttachment.delete_all
     ImageAttachmentBatch.delete_all
-    Annotation.where.not(id: Annotation.pluck(:id) & fixture_annotation_ids).delete_all
-    ActiveStorage::Blob.find_each(&:purge) if ActiveStorage::Blob.exists?
+    Annotation.where("id > ?", @highest_annotation_id).delete_all
+    ActiveStorage::Blob.where("id > ?", @highest_blob_id).find_each(&:purge)
   end
 
   test "concurrent submissions of one batch create exactly one message" do
@@ -112,11 +120,6 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     [ pop_with_timeout(first_result), pop_with_timeout(second_result) ]
   ensure
     [ first_thread, second_thread ].compact.each { |thread| thread.kill if thread.alive? }
-  end
-
-  def fixture_annotation_ids
-    @fixture_annotation_ids ||= %i[point_annotation region_annotation resolved_annotation bob_annotation]
-      .map { |name| annotations(name).id }
   end
 
   def claim_result

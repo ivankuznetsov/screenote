@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-08-13
+updated: 2026-08-29
 tags: [cli, api, rest, agents, self-hosting, once]
 ---
 
@@ -141,6 +141,26 @@ The REST service exposes write contracts that current or future CLI workflows ca
 - `POST /api/v1/annotations/:annotation_id/resolve` accepts explicit OAuth project context plus an optional `comment`, or uses the API key's bound project. It creates a user- or API-key-authored resolved audit comment once and returns `already_resolved` without duplicating that comment on retries.
 
 Project-scoped OAuth tokens are bound to the token's `project_id` throughout REST authorization: project listing returns only that bound member project, and passing a different project id cannot widen the token even when its user belongs to both projects. Deleting the bound project also deletes its scoped grants and access tokens instead of converting those bearer credentials into user-scoped access.
+
+## Image Attachments On Detail Reads
+
+`GET /api/v1/annotations/:id` — the payload behind `screenote annotation get` —
+adds an always-present `attachments` array to the root annotation and to every
+`comments[]` item. Nothing already shipped was renamed, dropped, or nested
+differently. Go's `screenote.Annotation` and `screenote.Comment` carry the new
+`Attachment` struct; `annotation get` still passes the raw service JSON
+through, so an older binary keeps working against a newer service.
+
+Each entry is `id`, `alt_text`, `media_type`, `width`, `height`, `size`, `url`,
+and `url_expires_at`. `url` is minted per read against
+`/api/media/image_attachments/:id?token=…` and is valid for five minutes;
+fetching it requires the caller's own bearer credential in addition to the
+token, and the service rechecks live project access before streaming. Store
+the metadata, not the URL. List reads stay metadata-light and carry no
+attachments.
+
+The CLI cannot author attachments. Uploading an image is a browser session
+capability; agents read what people attached and reply with text.
 
 ## Deferred
 

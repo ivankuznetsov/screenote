@@ -143,6 +143,21 @@ The following gaps from the original bootstrap have been partially or fully addr
 - ~~Where do MCP tool classes live?~~ Confirmed: `app/tools/` with `ApplicationTool` base class.
 - Plans and todos now documented in [[plans-and-initiatives]], [[technical-debt]], and [[roadmap]].
 
+## Image attachments
+
+- Attachment delivery is proven against the Disk service in tests. A run with
+  the production Rabata S3 service configured — showing the application streams
+  the bytes itself, never returns a provider location, and that an expired
+  purpose token fails — is still outstanding before release.
+- The clamped Annotorious overlay minimizes overlap with the selected region
+  but cannot guarantee zero overlap on a small screenshot: once a thumbnail row
+  is present the form can be taller than a 300px-tall image. The rail is
+  verified to stay a single compact row inside the image; a smaller attached
+  state or an out-of-canvas composer would be needed for a hard guarantee.
+- Screen-reader announcements are exercised through the `role="status"` live
+  region in browser tests but have not been smoke-tested with a real screen
+  reader.
+
 ## Questions to Resolve
 
 1. What is the intended long-term removal plan for the legacy `Screenshot#image`, `width`, `height`, and `status` path after `ScreenshotImage` stabilizes?

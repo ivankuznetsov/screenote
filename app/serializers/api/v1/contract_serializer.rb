@@ -100,20 +100,28 @@ module Api
           annotation.as_api_json
         end
 
-        def annotation_detail(annotation, cropped_base64:)
+        # Detail reads are the only place attachment metadata appears, and
+        # `attachments` is always present — an empty array where a message has
+        # none. Existing keys keep their names, nesting, and order so shipped
+        # MCP and CLI consumers are unaffected.
+        def annotation_detail(annotation, cropped_base64:, url_options: {})
           comments = annotation.annotation_comments.sort_by(&:created_at).map do |comment|
-            annotation_comment(comment, annotation: annotation, include_annotation_id: false)
+            annotation_comment(
+              comment, annotation: annotation, include_annotation_id: false, url_options: url_options
+            )
           end
 
           annotation(annotation).merge(
             screenshot_status: annotation.screenshot.status,
             cropped_image_base64: cropped_base64,
             mime_type: "image/png",
+            attachments: image_attachments(annotation, url_options: url_options),
             comments: comments
           )
         end
 
-        def annotation_comment(comment, annotation: comment.annotation, include_annotation_id: true)
+        def annotation_comment(comment, annotation: comment.annotation, include_annotation_id: true,
+          url_options: nil)
           payload = {
             id: comment.id,
             action: comment.action,
@@ -122,10 +130,32 @@ module Api
             created_at: comment.created_at.iso8601
           }
           payload[:annotation_id] = annotation.id if include_annotation_id
+          payload[:attachments] = image_attachments(comment, url_options: url_options) if url_options
           payload
         end
 
+        # URLs are minted at serialization time and never stored. Each one
+        # carries a five-minute purpose token that must still be presented
+        # alongside a bearer principal with live access to the project.
+        def image_attachments(parent, url_options: {})
+          expires_at = ImageAttachment::MEDIA_TOKEN_EXPIRY.from_now
+
+          parent.image_attachments.map do |attachment|
+            attachment.as_contract_json(
+              url: image_attachment_media_url(attachment, url_options),
+              url_expires_at: expires_at
+            )
+          end
+        end
+
         private
+
+        def image_attachment_media_url(attachment, url_options)
+          routes.api_image_attachment_media_url(
+            attachment,
+            (url_options || {}).merge(token: attachment.generate_token_for(ImageAttachment::MEDIA_TOKEN_PURPOSE))
+          )
+        end
 
         def screenshot_image(image)
           return nil unless image

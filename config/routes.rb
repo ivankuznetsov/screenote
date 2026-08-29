@@ -114,6 +114,7 @@ Rails.application.routes.draw do
 
   namespace :api do
     put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
+    get "media/image_attachments/:id", to: "image_attachment_media#show", as: :image_attachment_media
     namespace :v1 do
       resources :projects, only: [ :index, :create ] do
         resources :pages, only: [ :index ]

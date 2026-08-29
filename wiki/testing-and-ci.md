@@ -28,6 +28,11 @@ Image-processing tests require libvips. The helper `require_vips!` skips those
 tests explicitly when the system dependency is absent instead of hiding a
 processing failure.
 
+Stale parallel test databases cause misleading `SQLite3::BusyException`
+failures spread across unrelated tests. If a run reports many lock errors in
+fixture loading, remove `storage/test.sqlite3*` and re-run
+`bin/rails db:test:prepare` before investigating the code.
+
 Every CI job that boots Rails must install libvips before `ruby/setup-ruby`
 hands control to the test command. The application loads the Vips initializer
 at boot even when a focused contract does not transform an image; a focused
@@ -104,6 +109,14 @@ security scans, Rails tests, seed validation, and any configured Go tests. Set
 coverage mode forces one Rails worker for stable accounting. System tests are
 currently commented out as optional in `config/ci.rb`, so run the Playwright
 command above separately when browser behavior changes.
+
+One adapter-specific workflow sits outside that boundary. `concurrency-qualification.yml`
+re-runs the image attachment model, service, request, job, and interleaving
+suites against a PostgreSQL server database so real row locks exercise lock
+ordering, atomic claim, aggregate races, and the cleanup/remove/submit races
+that SQLite can only assert by outcome. It is a separate workflow precisely so
+`ci.yml` stays free of adapter-specific content and the portability contract
+keeps passing.
 
 The source workflow has one adapter-neutral `test` job for the Rails suite and
 the self-hosted-only smoke tests. It replaces separate SQLite and PostgreSQL

@@ -29,21 +29,12 @@ class GetAnnotationTool < ApplicationTool
         nil
       end
 
-      comments = annotation.annotation_comments.includes(:user, :api_key).order(:created_at).map do |ac|
-        {
-          id: ac.id,
-          action: ac.action,
-          body: ac.body,
-          author: ac.user&.email || ac.api_key&.name || "Unknown",
-          created_at: ac.created_at.iso8601
-        }
-      end
-
-      serialize_annotation(annotation).merge(
-        screenshot_status: screenshot.status,
-        cropped_image_base64: cropped_base64,
-        mime_type: "image/png",
-        comments: comments
+      # REST is canonical for the attachment object, but the shipped MCP
+      # envelope keeps every key it already had, in the same place.
+      Api::V1::ContractSerializer.annotation_detail(
+        annotation,
+        cropped_base64: cropped_base64,
+        url_options: Screenote::Deployment.current.url_options
       ).to_json
     end
   end

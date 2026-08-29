@@ -3,15 +3,15 @@ title: screenote Wiki
 type: index
 source: wiki/**/*.md
 created: 2026-05-14
-updated: 2026-08-06
+updated: 2026-08-29
 tags: [index, wiki]
 ---
 
 
 **TLDR**: Catalog of the LLM-maintained wiki for `screenote`.
 
-Page count: 44
-Updated: 2026-08-06
+Page count: 46
+Updated: 2026-08-29
 
 ## Core Architecture
 
@@ -48,6 +48,8 @@ Updated: 2026-08-06
 - [[models/screenshot-image]] — Per-viewport image variants.
 - [[models/annotation]] — Viewport-scoped visual feedback.
 - [[models/annotation-comment]] — Threaded comments and resolution audit log.
+- [[models/image-attachment]] — Images posted with a native browser message.
+- [[models/image-attachment-batch]] — Server-owned composer draft container and submission key.
 - [[models/api-key]] — Project-scoped bearer tokens.
 - [[models/project-membership]] — Project membership roles.
 - [[models/project-invitation]] — Email invitations.

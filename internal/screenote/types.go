@@ -60,21 +60,36 @@ type Coordinates struct {
 	HeightPercent *float64 `json:"height_percent"`
 }
 
+// Attachment is one image posted with a native browser message. URL is minted
+// per read and expires; it is never durable, so callers must fetch it while
+// UrlExpiresAt is still in the future and always with their bearer credential.
+type Attachment struct {
+	ID           int     `json:"id"`
+	AltText      *string `json:"alt_text"`
+	MediaType    string  `json:"media_type"`
+	Width        int     `json:"width"`
+	Height       int     `json:"height"`
+	Size         int64   `json:"size"`
+	URL          string  `json:"url"`
+	URLExpiresAt string  `json:"url_expires_at"`
+}
+
 type Annotation struct {
-	ID                 int         `json:"id"`
-	ScreenshotID       int         `json:"screenshot_id"`
-	Viewport           string      `json:"viewport"`
-	Type               string      `json:"type"`
-	Coordinates        Coordinates `json:"coordinates"`
-	Comment            string      `json:"comment"`
-	Status             string      `json:"status"`
-	Author             string      `json:"author"`
-	CommentsCount      int         `json:"comments_count"`
-	CreatedAt          string      `json:"created_at"`
-	ScreenshotStatus   string      `json:"screenshot_status,omitempty"`
-	CroppedImageBase64 *string     `json:"cropped_image_base64,omitempty"`
-	MIMEType           string      `json:"mime_type,omitempty"`
-	Comments           []Comment   `json:"comments,omitempty"`
+	ID                 int          `json:"id"`
+	ScreenshotID       int          `json:"screenshot_id"`
+	Viewport           string       `json:"viewport"`
+	Type               string       `json:"type"`
+	Coordinates        Coordinates  `json:"coordinates"`
+	Comment            string       `json:"comment"`
+	Status             string       `json:"status"`
+	Author             string       `json:"author"`
+	CommentsCount      int          `json:"comments_count"`
+	CreatedAt          string       `json:"created_at"`
+	ScreenshotStatus   string       `json:"screenshot_status,omitempty"`
+	CroppedImageBase64 *string      `json:"cropped_image_base64,omitempty"`
+	MIMEType           string       `json:"mime_type,omitempty"`
+	Attachments        []Attachment `json:"attachments,omitempty"`
+	Comments           []Comment    `json:"comments,omitempty"`
 }
 
 type AnnotationsResponse struct {
@@ -83,10 +98,11 @@ type AnnotationsResponse struct {
 }
 
 type Comment struct {
-	ID           int    `json:"id"`
-	AnnotationID int    `json:"annotation_id,omitempty"`
-	Action       string `json:"action"`
-	Body         string `json:"body"`
-	Author       string `json:"author"`
-	CreatedAt    string `json:"created_at"`
+	ID           int          `json:"id"`
+	AnnotationID int          `json:"annotation_id,omitempty"`
+	Action       string       `json:"action"`
+	Body         string       `json:"body"`
+	Author       string       `json:"author"`
+	CreatedAt    string       `json:"created_at"`
+	Attachments  []Attachment `json:"attachments,omitempty"`
 }

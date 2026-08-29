@@ -3,7 +3,7 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-08-13
+updated: 2026-08-29
 tags: [routes, api, endpoints, auth]
 ---
 
@@ -84,7 +84,7 @@ rendering a second workspace.
 
 | Method | Path | Action | Auth |
 |--------|------|--------|------|
-| POST | `/screenshots/:screenshot_id/annotations` | create | Member |
+| POST | `/screenshots/:screenshot_id/annotations` | create (accepts one `image_attachment_batch_id`) | Member |
 | PATCH | `/screenshots/:screenshot_id/annotations/:id` | update | Member |
 | DELETE | `/screenshots/:screenshot_id/annotations/:id` | destroy | Member |
 
@@ -92,7 +92,36 @@ rendering a second workspace.
 
 | Method | Path | Action | Auth |
 |--------|------|--------|------|
-| POST | `/screenshots/:screenshot_id/annotations/:annotation_id/annotation_comments` | create | Member |
+| POST | `/screenshots/:screenshot_id/annotations/:annotation_id/annotation_comments` | create reply or reopen (accepts one `image_attachment_batch_id`) | Member |
+
+### Image attachment drafts (browser session only)
+
+| Method | Path | Action | Auth |
+|--------|------|--------|------|
+| POST | `/image-attachment-drafts/batches` | Open a draft batch for one mounted composer | Session member of `project_id` |
+| GET | `/image-attachment-drafts/batches/:public_id` | Resume a draft batch | Session uploader of the batch |
+| POST | `/image-attachment-drafts/batches/:batch_public_id/attachments` | Stream one image into the batch | Session uploader of the batch |
+| PATCH | `/image-attachment-drafts/batches/:batch_public_id/attachments/:id` | Edit optional alt text while still a draft | Session uploader of the batch |
+| DELETE | `/image-attachment-drafts/batches/:batch_public_id/attachments/:id` | Idempotent removal | Session uploader of the batch |
+
+Forgery protection stays on: the composer sends `X-CSRF-Token` with every
+multipart and JSON request. A foreign or unknown batch answers `404`, never
+`403`, so sequential attachment IDs and guessed batch IDs confirm nothing.
+Attaching an image is a session-only capability — REST, the public CLI, and
+MCP read attachments but cannot author them.
+
+### Attachment media
+
+| Method | Path | Action | Auth |
+|--------|------|--------|------|
+| GET | `/media/image_attachments/:id/:variant` | Stream a draft preview or a submitted image | Session: draft uploader inside a live batch, or current project member |
+| GET | `/api/media/image_attachments/:id?token=…` | Stream a submitted image for an agent | Bearer principal **and** unexpired five-minute purpose token **and** live project access |
+
+Variants are limited to `original`, `download`, `attachment_thumb_1x`, and
+`attachment_thumb_2x`. Both routes stream from the application with
+`private, no-store` and `nosniff` and never redirect to the storage provider.
+A GET never invokes libvips: an unwarmed variant is unavailable until the
+post-claim warming job produces it.
 
 ### API Keys (nested under projects)
 
@@ -159,7 +188,7 @@ SaaS only; this hosted analytics authority is unrelated to self-hosted instance 
 | PUT | `/api/v1/projects/:project_id/screenshot_images/:id` | Stream content-bound bytes into a prepared viewport image | API key or OAuth `mcp_write` |
 | POST | `/api/v1/screenshots` | Direct multipart screenshot upload | API key or OAuth `mcp_write` |
 | GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
-| GET | `/api/v1/annotations/:id` | Get annotation details, comments, and best-effort crop data | API key or OAuth `mcp_read` |
+| GET | `/api/v1/annotations/:id` | Get annotation details, comments, best-effort crop data, and attachment metadata | API key or OAuth `mcp_read` |
 | POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored or OAuth-user-authored annotation comment | API key or OAuth `mcp_write` |
 | POST | `/api/v1/annotations/:annotation_id/resolve` | Idempotently resolve an annotation and create its audit comment | API key or OAuth `mcp_write` |
 
