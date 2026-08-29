@@ -36,6 +36,17 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     ActiveStorage::Blob.where("id > ?", @highest_blob_id).find_each(&:purge)
   end
 
+  # The qualification workflow exists to run this file against real row locks.
+  # Asserting the adapter is what stops that job from silently passing on the
+  # SQLite behavior it was added to cover for.
+  test "the qualification job runs against the server database it claims to" do
+    unless ENV["SCREENOTE_SERVER_DATABASE_QUALIFICATION"] == "1"
+      skip "server database qualification is opt-in"
+    end
+
+    assert_equal "PostgreSQL", ApplicationRecord.connection.adapter_name
+  end
+
   test "concurrent submissions of one batch create exactly one message" do
     ingest_image(batch: @batch)
 
@@ -100,6 +111,35 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     assert_equal claimed.parent.id, attachment.reload.annotation_id
   end
 
+  test "a cleanup pass overlapping a submission cannot take bytes away from the message" do
+    attachment = ingest_image(batch: @batch)
+    @batch.update_columns(last_activity_at: 30.hours.ago, expires_at: 1.minute.ago)
+    job = ImageAttachmentDraftCleanupJob.new
+    listed_at = Time.current
+
+    assert_includes job.send(:candidate_ids, listed_at, 10), @batch.id
+
+    # The pass has already listed this draft as expired. Before it reaches the
+    # candidate, the composer resumes the draft and posts it.
+    outcomes = with_one_shot_instance_method_barrier(
+      ImageAttachment, :update_columns, predicate: ->(record, *_args) { record.is_a?(ImageAttachment) }
+    ) do |entered, release|
+      run_blocked_race(
+        entered: entered,
+        release: release,
+        first: -> { revive_and_claim },
+        second: -> { job.send(:reclaim, @batch.id, listed_at) }
+      )
+    end
+
+    assert_no_concurrency_exceptions(outcomes)
+    claimed = outcomes.grep(ImageAttachments::ClaimBatch::Result).sole
+    assert_includes outcomes, false
+    assert_predicate @batch.reload, :state_claimed?
+    assert_equal claimed.parent.id, attachment.reload.annotation_id
+    assert attachment.image.attached?
+  end
+
   private
 
   # SQLite cannot block a reader on another transaction's write, so a race that
@@ -128,6 +168,11 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
         user: @user, x_percent: 10, y_percent: 10, comment: "Look here", viewport: :desktop
       )
     end
+  end
+
+  def revive_and_claim
+    ImageAttachmentBatch.find(@batch.id).touch_activity!
+    claim_result
   end
 
   def safe_ingest(bytes, client_key)

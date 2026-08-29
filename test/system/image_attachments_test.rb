@@ -31,6 +31,18 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
   VIEWER_NEXT = '[data-testid="attachment-viewer-next"]'
   SECOND_IMAGE_PATH = Rails.root.join("test/fixtures/files/test_image.png").to_s
 
+  # Drag and clipboard payloads have to be synthesized inside the page, and a
+  # canvas is the only PNG a page script can produce without a file picker.
+  IMAGE_FILE_HELPER = <<~JS
+    async function screenoteTestImageFile(name) {
+      const canvas = document.createElement("canvas")
+      canvas.width = 8
+      canvas.height = 8
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"))
+      return new File([blob], name, { type: "image/png" })
+    }
+  JS
+
   setup do
     login_as_test_user
     create_screenshot_for_annotation
@@ -84,25 +96,38 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
   test "pasting an image into the composer attaches it and pasted text stays text" do
     open_root_composer
 
-    with_playwright_page do |pw_page|
+    prevented = with_playwright_page do |pw_page|
       pw_page.locator(ATTACH_BUTTON).wait_for(state: "visible", timeout: 10_000)
       pw_page.evaluate(<<~JS)
         (async () => {
-          const response = await fetch("/assets/screenote-paste-probe.png").catch(() => null)
-          const canvas = document.createElement("canvas")
-          canvas.width = 8
-          canvas.height = 8
-          const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"))
-          const file = new File([blob], "pasted.png", { type: "image/png" })
+          #{IMAGE_FILE_HELPER}
+          const file = await screenoteTestImageFile("pasted.png")
           const transfer = new DataTransfer()
           transfer.items.add(file)
           transfer.setData("text/plain", "pasted words")
           const form = document.querySelector("#annotation-form")
-          form.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }))
+          const event = new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true })
+
+          // dispatchEvent returns false only when a listener cancelled the
+          // event, which is what would swallow the text half of the paste.
+          return !form.dispatchEvent(event)
         })()
       JS
     end
 
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+    assert_equal false, prevented, "a mixed paste must leave the browser's own text insertion alone"
+  end
+
+  test "dropping an image on the composer attaches it and dropping on the canvas does not" do
+    open_root_composer
+
+    # The screenshot keeps its Annotorious drag behavior: the composer only
+    # claims drops that land on the form itself.
+    drop_image_on("[data-testid='screenshot-image']")
+    assert_no_selector ATTACHMENT_ITEM, wait: 3
+
+    drop_image_on("#annotation-form")
     assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
   end
 
@@ -180,16 +205,36 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_selector "#{THUMBNAIL}[data-alt='Attached image']", wait: 15
   end
 
-  test "the viewer opens, navigates with the keyboard, and restores focus" do
-    post_annotation_with_attachment("Look at this")
+  test "the viewer opens on two images, navigates with the keyboard, and restores focus" do
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+    attach_file_to_composer(SECOND_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 2, wait: 15
 
-    find(THUMBNAIL, match: :first).click
+    fill_annotation_comment("Look at both")
+    submit_annotation
+    wait_for_turbo
+
+    assert_annotation_visible("Look at both")
+    assert_selector "#{GALLERY} #{THUMBNAIL}", count: 2, wait: 15
+    first_url, second_url = all(THUMBNAIL).first(2).map { |trigger| trigger["data-original-url"] }
+    assert_not_equal first_url, second_url
+
+    all(THUMBNAIL).first.click
     assert_selector "#{VIEWER}[open]", wait: 10
-    assert_selector VIEWER_IMAGE, wait: 10
-    assert_no_selector "#{VIEWER_NEXT}:not([hidden])"
+    assert_selector "#{VIEWER_NEXT}:not([hidden])"
+    assert_viewer_shows first_url
+    assert_equal "attachment-viewer-image", focused_testid, "the dialog must open focus onto its content"
 
-    find(VIEWER_CLOSE).click
+    press_key("ArrowRight")
+    assert_viewer_shows second_url
+    press_key("ArrowLeft")
+    assert_viewer_shows first_url
+
+    press_key("Escape")
     assert_no_selector "#{VIEWER}[open]", wait: 10
+    assert_equal "attachment-thumbnail", focused_testid, "closing must restore focus to the trigger"
   end
 
   test "the gallery renders at a narrow width" do
@@ -227,6 +272,36 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
   def attach_file_to_composer(path, within: nil)
     scope = within || page
     scope.find(FILE_INPUT, visible: :all, match: :first).set(path)
+  end
+
+  # Files can only be synthesized in the page, so drag payloads are built there
+  # and dispatched at the exact element under test.
+  def drop_image_on(selector)
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        (async () => {
+          #{IMAGE_FILE_HELPER}
+          const file = await screenoteTestImageFile("dropped.png")
+          const transfer = new DataTransfer()
+          transfer.items.add(file)
+          document.querySelector("#{selector}").dispatchEvent(
+            new DragEvent("drop", { dataTransfer: transfer, bubbles: true, cancelable: true })
+          )
+        })()
+      JS
+    end
+  end
+
+  def press_key(key)
+    with_playwright_page { |pw_page| pw_page.keyboard.press(key) }
+  end
+
+  def focused_testid
+    with_playwright_page { |pw_page| pw_page.evaluate("document.activeElement?.dataset?.testid") }
+  end
+
+  def assert_viewer_shows(url)
+    assert_selector "#{VIEWER_IMAGE}[src='#{url}']", wait: 10
   end
 
   def post_annotation_with_attachment(comment)

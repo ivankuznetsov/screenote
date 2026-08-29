@@ -21,6 +21,9 @@ jobs:
     env:
       RAILS_ENV: test
       PARALLEL_WORKERS: "1"
+      # Fails the run if this job ever lands on SQLite instead of the server
+      # database whose locks it exists to exercise.
+      SCREENOTE_SERVER_DATABASE_QUALIFICATION: "1"
       DATABASE_URL: postgresql://screenote@localhost:5432/screenote_test
     services:
       database:

@@ -63,6 +63,27 @@ module ImageAttachmentDrafts
       assert_equal "draft_storage_exhausted", response.parsed_body.dig("error", "code")
     end
 
+    test "expired but unreclaimed batches still count toward the open cap" do
+      ImageAttachmentBatch::MAX_OPEN_PER_USER.times do
+        build_batch(user: @user, project: @project)
+          .update_columns(last_activity_at: 30.hours.ago, expires_at: 6.hours.ago)
+      end
+
+      post image_attachment_draft_batches_path, params: { project_id: @project.id }, as: :json
+
+      assert_response :unprocessable_entity
+      assert_equal "too_many_open_batches", response.parsed_body.dig("error", "code")
+    end
+
+    test "opening a draft requires a CSRF token" do
+      with_forgery_protection do
+        post image_attachment_draft_batches_path, params: { project_id: @project.id }, as: :json
+
+        assert_response :unprocessable_entity
+      end
+      assert_equal 0, @user.image_attachment_batches.count
+    end
+
     test "resumes an existing batch" do
       batch = build_batch(user: @user, project: @project)
 
