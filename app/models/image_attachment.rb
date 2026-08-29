@@ -20,6 +20,9 @@ class ImageAttachment < ApplicationRecord
   ALT_TEXT_FALLBACK = "Attached image"
   THUMBNAIL_VARIANT_NAMES = %i[attachment_thumb_1x attachment_thumb_2x].freeze
   MEDIA_VARIANT_NAMES = (THUMBNAIL_VARIANT_NAMES + %i[original download]).freeze
+  # Rendering must never query for or process a variant. Preload this and read
+  # the loaded records; anything else is treated as not yet warmed.
+  RENDER_PRELOAD = { image_attachment: { blob: :variant_records } }.freeze
   MEDIA_TOKEN_PURPOSE = :image_attachment_media
   MEDIA_TOKEN_EXPIRY = 5.minutes
   # Every attachment read is authorized live. The purpose token only bounds how
@@ -88,6 +91,21 @@ class ImageAttachment < ApplicationRecord
     return false unless image.attached?
 
     THUMBNAIL_VARIANT_NAMES.all? { |name| thumbnail_variant_ready?(name) }
+  end
+
+  # Render-time check that only consults preloaded variant records. An
+  # unwarmed gallery item shows a stable placeholder rather than a URL whose
+  # fetch would process the image inside a request.
+  def thumbnails_renderable?
+    return false unless image.attached?
+
+    records = image.blob.association(:variant_records)
+    return false unless records.loaded?
+
+    THUMBNAIL_VARIANT_NAMES.all? do |name|
+      digest = image.variant(name).variation.digest
+      records.target.any? { |record| record.variation_digest == digest }
+    end
   end
 
   def as_contract_json(url: nil, url_expires_at: nil)

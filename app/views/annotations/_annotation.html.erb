@@ -28,6 +28,8 @@
     <div class="annotation-item__comment" data-testid="annotation-comment"><%= annotation.comment %></div>
   <% end %>
 
+  <%= render "image_attachments/gallery", attachments: annotation.image_attachments %>
+
   <% if annotation.annotation_comments.any? %>
     <div class="annotation-thread">
       <% annotation.annotation_comments.each do |ac| %>
@@ -47,6 +49,7 @@
             <span class="annotation-thread__time"><%= time_ago_in_words(ac.created_at) %> ago</span>
           </div>
           <div class="annotation-thread__body"><%= ac.body %></div>
+          <%= render "image_attachments/gallery", attachments: ac.image_attachments %>
         </div>
       <% end %>
     </div>
@@ -103,6 +106,7 @@
             required: true,
             rows: 4,
             data: { annotation_controls_target: "replyField", testid: "reply-textarea" } %>
+        <%= render "image_attachments/composer", project: project, layout: "stack" %>
         <div class="annotation-thread__form-actions">
           <%= f.submit "Reply", class: "btn btn--small btn--primary", data: { testid: "reply-button" } %>
         </div>
@@ -125,6 +129,7 @@
               placeholder: "Explain why you're unresolving this...",
               rows: 4,
               data: { annotation_controls_target: "reopenField" } %>
+          <%= render "image_attachments/composer", project: project, layout: "stack" %>
           <div class="annotation-thread__form-actions">
             <%= f.submit "Unresolve", class: "btn btn--small btn--warning", data: { testid: "submit-unresolve-button" } %>
           </div>

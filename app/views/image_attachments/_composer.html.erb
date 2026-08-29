@@ -1,0 +1,73 @@
+<%# Shared composer attachment surface.
+    layout: "rail" for the clamped Annotorious overlay (compact horizontal row
+    that never covers the selected region) or "stack" for the sticky sidebar
+    (full-width rows beneath the textarea). %>
+<%# The overlay sits over the screenshot canvas, the sidebar on a light panel.
+    Both contexts are explicit so the shared component never inherits a theme. %>
+<div class="image-attachment-composer image-attachment-composer--<%= layout %> image-attachment-context--<%= layout == "rail" ? "dark" : "light" %>"
+     data-controller="image-attachment-composer"
+     data-image-attachment-composer-project-id-value="<%= project.id %>"
+     data-image-attachment-composer-batches-url-value="<%= image_attachment_draft_batches_path %>"
+     data-image-attachment-composer-max-files-value="<%= ImageAttachment::MAX_FILES %>"
+     data-image-attachment-composer-max-file-size-value="<%= ImageAttachment::MAX_FILE_SIZE %>"
+     data-image-attachment-composer-max-total-size-value="<%= ImageAttachment::MAX_TOTAL_BYTES %>"
+     data-image-attachment-composer-accepted-types-value="<%= ImageAttachment::ALLOWED_CONTENT_TYPES.to_json %>"
+     data-testid="image-attachment-composer">
+  <div class="image-attachment-composer__toolbar">
+    <button type="button"
+            class="btn btn--small btn--secondary image-attachment-composer__attach"
+            data-action="image-attachment-composer#openPicker"
+            data-testid="attach-image-button">Attach image</button>
+    <span class="image-attachment-composer__hint">PNG, JPEG, or WebP. Up to <%= ImageAttachment::MAX_FILES %>, <%= ImageAttachment::MAX_FILE_SIZE / 1.megabyte %>MB each.</span>
+  </div>
+
+  <input type="file"
+         class="image-attachment-composer__file-input"
+         multiple
+         accept="<%= ImageAttachment::ALLOWED_CONTENT_TYPES.join(",") %>"
+         aria-label="Attach images"
+         data-image-attachment-composer-target="fileInput"
+         data-action="change->image-attachment-composer#pickFiles">
+
+  <ul class="image-attachment-composer__items"
+      data-image-attachment-composer-target="items"
+      data-testid="attachment-items"></ul>
+
+  <p class="image-attachment-composer__errors"
+     data-image-attachment-composer-target="errors"
+     data-testid="composer-errors"
+     hidden></p>
+
+  <p class="image-attachment-composer__status"
+     role="status"
+     aria-live="polite"
+     data-image-attachment-composer-target="status"
+     data-testid="attachment-status"></p>
+
+  <template data-image-attachment-composer-target="itemTemplate">
+    <li class="image-attachment-item" data-testid="attachment-item">
+      <span class="image-attachment-item__preview">
+        <img class="image-attachment-item__thumb" alt="" data-attachment-thumb hidden>
+        <span class="image-attachment-item__placeholder" data-attachment-placeholder aria-hidden="true"></span>
+      </span>
+      <span class="image-attachment-item__body">
+        <span class="image-attachment-item__state" data-attachment-state data-testid="attachment-state"></span>
+        <progress class="image-attachment-item__progress" max="100" value="0" data-attachment-progress></progress>
+        <label class="image-attachment-item__alt">
+          <span class="image-attachment-item__alt-label">Describe this image (optional)</span>
+          <input type="text"
+                 class="image-attachment-item__alt-input"
+                 maxlength="<%= ImageAttachment::MAX_ALT_TEXT %>"
+                 data-attachment-alt
+                 data-testid="attachment-alt-input">
+        </label>
+      </span>
+      <span class="image-attachment-item__actions">
+        <button type="button" class="btn btn--small btn--secondary"
+                data-attachment-retry data-testid="attachment-retry" hidden>Retry</button>
+        <button type="button" class="btn btn--small btn--danger"
+                data-attachment-remove data-testid="attachment-remove">Remove</button>
+      </span>
+    </li>
+  </template>
+</div>

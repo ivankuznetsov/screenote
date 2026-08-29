@@ -1488,6 +1488,7 @@ body.review-fullscreen-open {
 
 .annotation-form__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.375rem;
 }
 
@@ -2591,5 +2592,331 @@ body.review-fullscreen-open {
 
   .recovery-reveal__actions .btn {
     width: 100%;
+  }
+}
+
+/* Image attachments
+   The composer, gallery, and viewer are one component used in two very
+   different places: the clamped Annotorious overlay and the sticky sidebar.
+   Colors come from component-scoped custom properties so the same markup reads
+   correctly on a light panel or over a dark canvas without a global theme. */
+.image-attachment-composer,
+.image-attachment-gallery,
+.image-attachment-viewer {
+  --attachment-surface: var(--color-bg);
+  --attachment-surface-muted: var(--color-bg-secondary);
+  --attachment-text: var(--color-text);
+  --attachment-text-muted: var(--color-text-secondary);
+  --attachment-border: var(--color-border);
+  --attachment-danger: var(--color-danger);
+}
+
+.image-attachment-context--light {
+  --attachment-surface: #ffffff;
+  --attachment-surface-muted: #f9fafb;
+  --attachment-text: #1f2937;
+  --attachment-text-muted: #6b7280;
+  --attachment-border: #d1d5db;
+  --attachment-danger: #dc2626;
+}
+
+.image-attachment-context--dark {
+  --attachment-surface: #14161c;
+  --attachment-surface-muted: #1d2029;
+  --attachment-text: #e8e8ed;
+  --attachment-text-muted: #9aa0b0;
+  --attachment-border: #333846;
+  --attachment-danger: #f87171;
+}
+
+@media (prefers-color-scheme: dark) {
+  .image-attachment-viewer {
+    --attachment-surface: #14161c;
+    --attachment-surface-muted: #1d2029;
+    --attachment-text: #e8e8ed;
+    --attachment-text-muted: #9aa0b0;
+    --attachment-border: #333846;
+  }
+}
+
+.image-attachment-composer {
+  color: var(--attachment-text);
+  margin-top: 0.5rem;
+}
+
+/* The rail dissolves into the overlay's action row. An empty composer is then
+   exactly one button wide and adds no height to the clamped form. */
+.image-attachment-composer--rail {
+  display: contents;
+}
+
+.image-attachment-composer--rail .image-attachment-composer__hint {
+  display: none;
+}
+
+.image-attachment-composer__items:empty,
+.image-attachment-composer__status:empty {
+  display: none;
+  margin: 0;
+}
+
+.image-attachment-composer--dropping {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: 2px;
+}
+
+.image-attachment-composer__toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.image-attachment-composer__hint {
+  color: var(--attachment-text-muted);
+  font-size: 0.75rem;
+}
+
+.image-attachment-composer__file-input {
+  height: 0;
+  opacity: 0;
+  position: absolute;
+  width: 0;
+}
+
+.image-attachment-composer__items {
+  display: flex;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+/* Overlay variant: a compact horizontal rail that never grows tall enough to
+   cover the region the person just selected. */
+.image-attachment-composer--rail .image-attachment-composer__items {
+  flex-basis: 100%;
+  flex-direction: row;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.image-attachment-composer--rail .image-attachment-composer__errors,
+.image-attachment-composer--rail .image-attachment-composer__status {
+  flex-basis: 100%;
+}
+
+/* One short row per image so the overlay grows by a single band, not a column
+   of stacked cards. */
+.image-attachment-composer--rail .image-attachment-item {
+  flex: 0 0 auto;
+  max-width: 12rem;
+}
+
+.image-attachment-composer--rail .image-attachment-item__preview {
+  height: 2.25rem;
+  width: 2.25rem;
+}
+
+.image-attachment-composer--rail .image-attachment-item__alt-input {
+  width: 6rem;
+}
+
+.image-attachment-composer--rail .image-attachment-item__alt-label {
+  display: none;
+}
+
+/* Sidebar variant: full-width stacked rows under the textarea. */
+.image-attachment-composer--stack .image-attachment-composer__items {
+  flex-direction: column;
+}
+
+.image-attachment-composer__errors {
+  color: var(--attachment-danger);
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+}
+
+.image-attachment-composer__status {
+  color: var(--attachment-text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.image-attachment-item {
+  align-items: center;
+  background: var(--attachment-surface-muted);
+  border: 1px solid var(--attachment-border);
+  border-radius: var(--radius);
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.375rem;
+}
+
+.image-attachment-item[data-state="failed"] {
+  border-color: var(--attachment-danger);
+}
+
+.image-attachment-item__preview {
+  flex: 0 0 auto;
+  height: 3rem;
+  width: 3rem;
+}
+
+.image-attachment-item__thumb,
+.image-attachment-item__placeholder {
+  border-radius: 4px;
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.image-attachment-item__placeholder {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--attachment-border),
+    var(--attachment-border) 4px,
+    var(--attachment-surface) 4px,
+    var(--attachment-surface) 8px
+  );
+}
+
+.image-attachment-item__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.image-attachment-item__state {
+  color: var(--attachment-text-muted);
+  font-size: 0.75rem;
+}
+
+.image-attachment-item__progress {
+  height: 0.25rem;
+  width: 100%;
+}
+
+.image-attachment-item__alt-label {
+  color: var(--attachment-text-muted);
+  display: block;
+  font-size: 0.6875rem;
+}
+
+.image-attachment-item__alt-input {
+  background: var(--attachment-surface);
+  border: 1px solid var(--attachment-border);
+  border-radius: 4px;
+  color: var(--attachment-text);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.375rem;
+  width: 100%;
+}
+
+.image-attachment-item__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+
+.image-attachment-gallery {
+  margin-top: 0.5rem;
+}
+
+.image-attachment-gallery__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.image-attachment-gallery__trigger {
+  background: none;
+  border: 1px solid var(--attachment-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: block;
+  height: 4.5rem;
+  overflow: hidden;
+  padding: 0;
+  width: 4.5rem;
+}
+
+.image-attachment-gallery__image {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+/* Shown while the post-claim warming job has not produced a variant yet. The
+   layout never shifts when the real thumbnail arrives. */
+.image-attachment-gallery__placeholder {
+  align-items: center;
+  background: var(--attachment-surface-muted);
+  color: var(--attachment-text-muted);
+  display: flex;
+  font-size: 0.625rem;
+  height: 100%;
+  justify-content: center;
+  padding: 0.25rem;
+  text-align: center;
+  width: 100%;
+}
+
+.image-attachment-gallery__placeholder-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.image-attachment-viewer {
+  background: var(--attachment-surface);
+  border: 1px solid var(--attachment-border);
+  border-radius: var(--radius);
+  color: var(--attachment-text);
+  max-height: 90dvh;
+  max-width: 90vw;
+  padding: 1rem;
+}
+
+.image-attachment-viewer::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.image-attachment-viewer__frame {
+  display: flex;
+  justify-content: center;
+  max-height: 70dvh;
+  overflow: auto;
+}
+
+.image-attachment-viewer__image {
+  max-width: 100%;
+  transform-origin: center center;
+}
+
+.image-attachment-viewer__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .image-attachment-composer--rail .image-attachment-item {
+    max-width: 9rem;
+  }
+
+  .image-attachment-gallery__trigger {
+    height: 3.5rem;
+    width: 3.5rem;
   }
 }

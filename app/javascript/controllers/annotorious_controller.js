@@ -499,6 +499,13 @@ export default class extends Controller {
     this.imageWrapperResizeObserver.observe(this.imageTarget.parentElement)
   }
 
+  // The overlay form changes height whenever the composer gains or loses an
+  // attachment row. Re-running the placement keeps the rail off the region the
+  // person just selected.
+  repositionForm() {
+    this.requestAnnotationFormPosition()
+  }
+
   requestAnnotationFormPosition() {
     if (!this.hasFormTarget || !this.pendingCoords || this.annotationFormPositionFrame != null) return
 
