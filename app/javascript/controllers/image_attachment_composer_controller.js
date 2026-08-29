@@ -13,7 +13,8 @@ export default class extends Controller {
     maxFiles: Number,
     maxFileSize: Number,
     maxTotalSize: Number,
-    acceptedTypes: Array
+    acceptedTypes: Array,
+    unsupportedTypeMessage: String
   }
 
   // A hung upload must not block the post forever, and 20MB has to fit over a
@@ -86,7 +87,10 @@ export default class extends Controller {
     this.form.removeEventListener("drop", this.onDrop)
     this.form.removeEventListener("paste", this.onPaste)
     this.form.removeEventListener("annotorious:form-cancelled", this.onCancelled)
-    this.items.forEach(item => item.request?.abort())
+    this.items.forEach(item => {
+      item.request?.abort()
+      this.releasePreview(item)
+    })
     clearTimeout(this.resumeTimer)
     this.connectionToken += 1
     // A disconnect is only a client going away. Committed drafts stay on the
@@ -128,11 +132,11 @@ export default class extends Controller {
 
     const images = this.imageFilesFrom(event.dataTransfer)
     if (images.length === 0) {
-      this.showError("Attachments must be PNG, JPEG, or WebP images.")
+      this.showError(this.unsupportedTypeMessage)
       return
     }
     if (images.length < Array.from(event.dataTransfer?.files || []).length) {
-      this.showError("Some files were skipped. Attachments must be PNG, JPEG, or WebP images.")
+      this.showError(`Some files were skipped. ${this.unsupportedTypeMessage}`)
     }
 
     this.enqueue(images)
@@ -142,11 +146,11 @@ export default class extends Controller {
     const images = this.imageFilesFrom(event.clipboardData)
     const files = Array.from(event.clipboardData?.files || [])
     if (images.length === 0) {
-      if (files.length > 0) this.showError("Attachments must be PNG, JPEG, or WebP images.")
+      if (files.length > 0) this.showError(this.unsupportedTypeMessage)
       return
     }
     if (images.length < files.length) {
-      this.showError("Some files were skipped. Attachments must be PNG, JPEG, or WebP images.")
+      this.showError(`Some files were skipped. ${this.unsupportedTypeMessage}`)
     }
 
     // Mixed clipboard content keeps its text: only the image half is consumed
@@ -173,10 +177,16 @@ export default class extends Controller {
       this.showError("Wait for the message to finish posting.")
       return
     }
+    // Resume rebuilds the rail from the server on every poll tick, so a file
+    // added mid-settle would be dropped from `this.items` and orphaned.
+    if (this.resuming) {
+      this.showError("Wait for the interrupted upload to finish settling.")
+      return
+    }
 
     const images = files.filter(file => this.acceptedTypesValue.includes(file.type))
     if (images.length < files.length) {
-      this.showError("Attachments must be PNG, JPEG, or WebP images.")
+      this.showError(this.unsupportedTypeMessage)
     }
     if (images.length === 0) return
 
@@ -224,13 +234,19 @@ export default class extends Controller {
 
   createItem(file) {
     const clientKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    // The picked bytes are already in memory, so the rail thumbnail is painted
+    // from them. Asking the server for the original would pull the whole
+    // upload — up to 50MB per message — back through the app, uncached, only
+    // to draw a thumbnail, and drafts are never allowed to warm a variant.
+    const objectUrl = URL.createObjectURL(file)
     return this.appendItem({
       clientKey,
       file,
       size: file.size,
       state: "uploading",
       serverId: null,
-      previewUrl: null,
+      objectUrl,
+      previewUrl: objectUrl,
       savedAltText: "",
       failure: null
     })
@@ -243,6 +259,9 @@ export default class extends Controller {
       size: row.size || 0,
       state: row.state,
       serverId: row.id,
+      // A resumed row has no local File, so its preview is the protected
+      // server path.
+      objectUrl: null,
       previewUrl: row.preview_url,
       savedAltText: row.alt_text || "",
       failure: row.failure
@@ -285,6 +304,7 @@ export default class extends Controller {
       if (!this.connectedFor(connectionToken)) return
       if (!response.ok) throw new Error(payload.error?.message || "The upload session could not be restored.")
 
+      this.items.forEach(item => this.releasePreview(item))
       this.items.clear()
       this.itemsTarget.replaceChildren()
       for (const row of payload.attachments || []) this.restoreItem(row)
@@ -359,7 +379,7 @@ export default class extends Controller {
 
       item.serverId = payload.attachment.id
       item.state = payload.attachment.state
-      item.previewUrl = payload.attachment.preview_url
+      if (!item.objectUrl) item.previewUrl = payload.attachment.preview_url
       item.failure = payload.attachment.failure
       this.renderItem(item)
       this.notifyLayoutChanged()
@@ -374,6 +394,13 @@ export default class extends Controller {
         this.refreshSubmitState()
       }
     }
+  }
+
+  releasePreview(item) {
+    if (!item.objectUrl) return
+
+    URL.revokeObjectURL(item.objectUrl)
+    item.objectUrl = null
   }
 
   superseded(item, attempt) {
@@ -455,6 +482,12 @@ export default class extends Controller {
       this.showError("Wait for the message to finish posting.")
       return
     }
+    // The next resume tick would rebuild this row from the server anyway, so a
+    // removal accepted mid-settle could leave an untracked ghost behind.
+    if (this.resuming) {
+      this.showError("Wait for the interrupted upload to finish settling.")
+      return
+    }
 
     item.removed = true
     item.request?.abort()
@@ -471,6 +504,7 @@ export default class extends Controller {
 
       item.element.remove()
       this.items.delete(item.clientKey)
+      this.releasePreview(item)
       this.announce("Image removed.")
       this.refreshSubmitState()
       this.notifyLayoutChanged()
@@ -741,7 +775,8 @@ export default class extends Controller {
     })
     this.items.forEach(item => {
       item.altInput.disabled = this.submitting || this.resuming || item.state !== "ready"
-      item.element.querySelector("[data-attachment-remove]").disabled = this.submitting || item.state === "removing"
+      item.element.querySelector("[data-attachment-remove]").disabled =
+        this.submitting || this.resuming || item.state === "removing"
       item.element.querySelector("[data-attachment-retry]").disabled = this.submitting
     })
   }
@@ -774,6 +809,12 @@ export default class extends Controller {
 
     this.errorsTarget.textContent = ""
     this.errorsTarget.hidden = true
+  }
+
+  // The server owns this copy: it is handed down from the same constant the
+  // upload endpoint raises with, so the two can never drift.
+  get unsupportedTypeMessage() {
+    return this.unsupportedTypeMessageValue || "That file type cannot be attached."
   }
 
   get csrfToken() {

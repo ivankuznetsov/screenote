@@ -278,6 +278,49 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_selector "#{THREAD_ENTRY} #{GALLERY} #{THUMBNAIL}", count: 1, wait: 15
   end
 
+  # Plan Unit 3 requires batch isolation across composers that are mounted at
+  # the same time: a reply composer open while the root overlay is open must
+  # take its own batch and keep its own images.
+  test "a root composer and a reply composer mounted together stay isolated" do
+    create_annotation("Needs a screenshot")
+
+    # A second draw has to land clear of the pin the first annotation left, or
+    # Annotorious selects that shape instead of starting a new one.
+    open_root_composer(x_offset: 180, y_offset: 140)
+    root_form = find("#annotation-form")
+    attach_file_to_composer(SECOND_IMAGE_PATH, within: root_form)
+    within root_form do
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+    end
+
+    within find(ANNOTATION_ITEM, text: "Needs a screenshot") do
+      find(REPLY_TOGGLE).click
+      find(REPLY_TEXTAREA).set("Here is the crop")
+      attach_file_to_composer(TEST_IMAGE_PATH)
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+    end
+
+    batch_ids = with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        Array.from(document.querySelectorAll("input[name='image_attachment_batch_id']"))
+          .map(field => field.value)
+          .filter(value => value)
+      JS
+    end
+
+    assert_equal 2, batch_ids.size, "each mounted composer must own a batch"
+    assert_equal batch_ids.uniq, batch_ids, "mounted composers must not share one batch"
+
+    # Each composer still shows exactly the one image it was given.
+    within find(ANNOTATION_ITEM, text: "Needs a screenshot") do
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1
+      find(REPLY_BUTTON).click
+    end
+    wait_for_turbo
+
+    assert_selector "#{THREAD_ENTRY} #{GALLERY} #{THUMBNAIL}", count: 1, wait: 15
+  end
+
   test "unresolving carries its own attachments" do
     create_annotation("Fix the header")
     resolve_annotation("Fix the header")
@@ -382,8 +425,8 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
 
   private
 
-  def open_root_composer
-    click_on_image_to_annotate
+  def open_root_composer(x_offset: 0, y_offset: 0)
+    click_on_image_to_annotate(x_offset: x_offset, y_offset: y_offset)
     assert_annotation_form_visible
     assert_selector ATTACH_BUTTON, wait: 10
   end

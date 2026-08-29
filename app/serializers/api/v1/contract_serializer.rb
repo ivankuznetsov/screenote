@@ -130,7 +130,11 @@ module Api
             created_at: comment.created_at.iso8601
           }
           payload[:annotation_id] = annotation.id if include_annotation_id
-          payload[:attachments] = image_attachments(comment, url_options: url_options) if url_options
+          # Every comment carries the key. Write endpoints serialize without a
+          # URL context, and a comment they just created can never have
+          # attachments, so they emit the canonical empty array rather than
+          # omitting it and giving the same shape two forms.
+          payload[:attachments] = url_options ? image_attachments(comment, url_options: url_options) : []
           payload
         end
 

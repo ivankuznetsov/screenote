@@ -80,7 +80,7 @@ class GetAnnotationToolTest < ActiveSupport::TestCase
     batch = build_batch(user: @user, project: @project)
     attachment = ingest_image(batch: batch)
     attachment.update!(alt_text: alt_text) if alt_text
-    ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project) { parent }
+    ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project, parent_type: parent.class) { parent }
     attachment.reload
   end
 end

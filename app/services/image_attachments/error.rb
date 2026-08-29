@@ -34,6 +34,7 @@ module ImageAttachments
       "image_pixels_too_large" => "Image pixel count exceeds #{ImageAttachment::MAX_PIXELS}.",
       "attachments_not_ready" => "Wait for every image to finish uploading.",
       "attachment_removed" => "That image was removed.",
+      "alt_text_too_long" => "A description can be at most #{ImageAttachment::MAX_ALT_TEXT} characters.",
       "too_many_open_batches" => "You have too many unfinished uploads. Finish or discard one first.",
       "draft_storage_exhausted" => "You have too many unfinished uploads. Finish or discard one first.",
       "decoder_busy" => "The image processor is busy. Retry this upload.",

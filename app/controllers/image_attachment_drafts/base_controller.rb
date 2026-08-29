@@ -9,6 +9,11 @@ module ImageAttachmentDrafts
     RATE_LIMIT = 120
     RATE_LIMIT_WINDOW = 1.hour
     DRAFT_RATE_LIMIT_STORE = Screenote::RateLimitStore.new(store: -> { cache_store })
+    # One account budget and one address budget for the whole draft surface.
+    # Without an explicit scope Rails keys each limit by controller path, which
+    # would give batches and attachments a separate allowance apiece and double
+    # what an account can actually spend.
+    RATE_LIMIT_SCOPE = "image_attachment_drafts"
 
     # Authentication is inherited from ApplicationController and runs first, so
     # the account bucket is always keyed by a real signed-in identity rather
@@ -16,11 +21,13 @@ module ImageAttachmentDrafts
     rate_limit to: RATE_LIMIT, within: RATE_LIMIT_WINDOW,
       by: -> { "user:#{Current.user.id}" },
       with: -> { render_error("Too many upload requests. Try again later.", code: "rate_limited", status: :too_many_requests) },
-      store: DRAFT_RATE_LIMIT_STORE
+      store: DRAFT_RATE_LIMIT_STORE,
+      scope: RATE_LIMIT_SCOPE
     rate_limit to: RATE_LIMIT, within: RATE_LIMIT_WINDOW,
       by: -> { "ip:#{request.remote_ip}" },
       with: -> { render_error("Too many upload requests. Try again later.", code: "rate_limited", status: :too_many_requests) },
-      store: DRAFT_RATE_LIMIT_STORE
+      store: DRAFT_RATE_LIMIT_STORE,
+      scope: RATE_LIMIT_SCOPE
 
     rescue_from ImageAttachments::Error, with: :render_service_error
     rescue_from Screenote::RateLimitStore::Unavailable, with: :render_rate_limiter_unavailable

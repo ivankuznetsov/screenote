@@ -74,6 +74,28 @@ module Api
         assert_not response.body.include?("service_name")
       end
 
+      # The comment object has one shape across every endpoint that returns it.
+      # A write endpoint mints no media URLs and its comment can never carry
+      # attachments, so it answers the canonical empty array rather than
+      # omitting the key.
+      test "write endpoints return a comment with an empty attachments array" do
+        post api_v1_annotation_comments_path(@annotation),
+          params: { body: "Taking a look", project_id: @project.id },
+          headers: bearer_headers
+
+        assert_response :created
+        assert_equal [], response.parsed_body.dig("comment", "attachments")
+      end
+
+      test "resolution endpoints return a comment with an empty attachments array" do
+        post api_v1_annotation_resolve_path(@annotation),
+          params: { project_id: @project.id },
+          headers: bearer_headers
+
+        assert_response :success
+        assert_equal [], response.parsed_body.dig("comment", "attachments")
+      end
+
       test "the list read stays metadata light" do
         attach_to(@annotation)
 
@@ -84,15 +106,22 @@ module Api
         assert(response.parsed_body.fetch("annotations").none? { |item| item.key?("attachments") })
       end
 
-      test "detail reads load attachment media in a bounded number of queries" do
-        3.times { attach_to(@annotation) }
+      # A fixed ceiling would pass an N+1 that only shows up at scale, so the
+      # budget is measured against itself: adding attachments to the root and
+      # to a comment must not add a single query.
+      test "detail reads do not scale queries with attachment count" do
+        attach_to(@annotation)
         comment = @annotation.annotation_comments.create!(user: @user, body: "Reply")
-        2.times { attach_to(comment) }
-
+        attach_to(comment)
         get_detail
-        queries = count_queries { get_detail }
+        baseline = capture_app_queries { get_detail }.size
 
-        assert_operator queries, :<=, 30, "detail reads must not scale queries with attachment count"
+        2.times { attach_to(@annotation) }
+        2.times { attach_to(comment) }
+        get_detail
+
+        assert_equal baseline, capture_app_queries { get_detail }.size,
+          "detail reads must not scale queries with attachment count"
       end
 
       private
@@ -105,22 +134,11 @@ module Api
         { "Authorization" => "Bearer #{ALICE_TOKEN}" }
       end
 
-      def count_queries
-        count = 0
-        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
-          count += 1 unless payload[:name].in?([ "SCHEMA", "TRANSACTION" ])
-        end
-        yield
-        count
-      ensure
-        ActiveSupport::Notifications.unsubscribe(subscriber)
-      end
-
       def attach_to(parent, alt_text: nil)
         batch = build_batch(user: @user, project: @project)
         attachment = ingest_image(batch: batch)
         attachment.update!(alt_text: alt_text) if alt_text
-        ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project) { parent }
+        ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project, parent_type: parent.class) { parent }
         attachment.reload
       end
     end

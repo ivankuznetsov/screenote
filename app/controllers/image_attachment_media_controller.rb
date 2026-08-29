@@ -8,10 +8,14 @@ class ImageAttachmentMediaController < ApplicationController
 
   ALLOWED_VARIANTS = ImageAttachment::MEDIA_VARIANT_NAMES.to_h { |name| [ name.to_s, name ] }.freeze
   DISPOSITIONS = { "download" => :attachment }.freeze
+  # A download is the same bytes as the original, only with an attachment
+  # disposition, so neither needs a variant.
+  RAW_VARIANTS = %w[original download].freeze
 
   def show
     attachment = authorized_attachment
-    blob = media_blob(attachment, params[:variant])
+    blob = resolve_variant_blob(attachment.image, params[:variant],
+      allowed: ALLOWED_VARIANTS, raw: RAW_VARIANTS)
     raise ActiveRecord::RecordNotFound unless blob
 
     stream_blob(blob, disposition: DISPOSITIONS.fetch(params[:variant], :inline))
@@ -40,16 +44,5 @@ class ImageAttachmentMediaController < ApplicationController
     else
       attachment.parent.present? && Current.user.projects.exists?(id: attachment.project_id)
     end
-  end
-
-  def media_blob(attachment, variant_name)
-    return attachment.image.blob if %w[original download].include?(variant_name)
-
-    variant_key = ALLOWED_VARIANTS[variant_name]
-    return unless variant_key
-
-    # An authenticated GET never invokes libvips. A variant the post-claim
-    # warming job has not produced yet simply is not available.
-    attachment.image.variant(variant_key).image&.blob
   end
 end

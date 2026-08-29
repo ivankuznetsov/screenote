@@ -113,6 +113,29 @@ module ImageAttachments
       assert_equal ImageAttachment::MAX_FILES, @batch.image_attachments.count
     end
 
+    # Removal leaves a tombstone that keeps the client key reserved, but the
+    # composer no longer shows that row. Counting it against the ceiling would
+    # wedge the batch after the first replacement.
+    test "accepts a replacement after a removal at the file ceiling" do
+      ImageAttachment::MAX_FILES.times { |index| ingest_image(batch: @batch, client_key: "file-#{index}") }
+      RemoveAttachment.call(batch: @batch, client_key: "file-0")
+
+      replacement = ingest_image(batch: @batch, client_key: "replacement")
+
+      assert_predicate replacement, :state_ready?
+      assert_equal ImageAttachment::MAX_FILES, @batch.image_attachments.active_drafts.count
+    end
+
+    test "still rejects a sixth active file after a removal" do
+      ImageAttachment::MAX_FILES.times { |index| ingest_image(batch: @batch, client_key: "file-#{index}") }
+      RemoveAttachment.call(batch: @batch, client_key: "file-0")
+      ingest_image(batch: @batch, client_key: "replacement")
+
+      error = assert_raises(ImageAttachments::Error) { ingest_image(batch: @batch, client_key: "one-too-many") }
+
+      assert_equal "too_many_files", error.code
+    end
+
     test "rejects a batch over the total byte budget" do
       ingest_image(batch: @batch, client_key: "first")
 

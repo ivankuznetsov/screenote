@@ -10,7 +10,8 @@ class AnnotationsController < ApplicationController
     return respond_invalid_viewport unless submitted_viewport_valid?
 
     batch = submission_batch(@project)
-    result = ImageAttachments::ClaimBatch.call(batch: batch, user: Current.user, project: @project) do
+    result = ImageAttachments::ClaimBatch.call(batch: batch, user: Current.user, project: @project,
+      parent_type: Annotation) do
       build_annotation!
     end
 

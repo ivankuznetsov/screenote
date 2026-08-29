@@ -241,6 +241,39 @@ class ImageAttachmentSubmissionTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  # A batch belongs to exactly one composer. Replaying its public ID against
+  # the other endpoint is an ordinary rejection, not a parent of the wrong
+  # class handed to a responder that cannot describe it.
+  test "a reply batch replayed against the annotation endpoint is refused" do
+    ingest_image(batch: @batch)
+    post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+      params: { annotation_comment: { body: "See the crop" }, image_attachment_batch_id: @batch.public_id },
+      as: :json
+    assert_response :created
+
+    assert_no_difference -> { Annotation.count } do
+      post_annotation
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "batch_not_owned", response.parsed_body.dig("error", "code")
+  end
+
+  test "a root batch replayed against the reply endpoint is refused" do
+    ingest_image(batch: @batch)
+    post_annotation
+    assert_response :created
+
+    assert_no_difference -> { AnnotationComment.count } do
+      post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+        params: { annotation_comment: { body: "See the crop" }, image_attachment_batch_id: @batch.public_id },
+        as: :json
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "batch_not_owned", response.parsed_body.dig("error", "code")
+  end
+
   test "deleting the message removes its attachments and their bytes" do
     attachment = ingest_image(batch: @batch)
     post_annotation

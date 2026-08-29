@@ -35,7 +35,9 @@ module ImageAttachments
     test "binds attachments to a reply comment" do
       ingest_image(batch: @batch)
 
-      result = claim { annotations(:point_annotation).annotation_comments.create!(user: @user, body: "Reply") }
+      result = claim(parent_type: AnnotationComment) do
+        annotations(:point_annotation).annotation_comments.create!(user: @user, body: "Reply")
+      end
 
       attachment = result.parent.image_attachments.sole
       assert_equal result.parent.id, attachment.annotation_comment_id
@@ -80,7 +82,8 @@ module ImageAttachments
       ingest_image(batch: @batch)
 
       error = assert_raises(ImageAttachments::Error) do
-        ImageAttachments::ClaimBatch.call(batch: @batch, user: users(:bob), project: @project) { build_annotation }
+        ImageAttachments::ClaimBatch.call(batch: @batch, user: users(:bob), project: @project,
+          parent_type: Annotation) { build_annotation }
       end
 
       assert_equal "batch_not_owned", error.code
@@ -116,7 +119,8 @@ module ImageAttachments
     end
 
     test "a nil batch still builds the message and claims nothing" do
-      result = ImageAttachments::ClaimBatch.call(batch: nil, user: @user, project: @project) { build_annotation }
+      result = ImageAttachments::ClaimBatch.call(batch: nil, user: @user, project: @project,
+        parent_type: Annotation) { build_annotation }
 
       assert_empty result.attachments
       assert_not result.replayed?
@@ -131,8 +135,10 @@ module ImageAttachments
 
     private
 
-    def claim(&block)
-      ImageAttachments::ClaimBatch.call(batch: @batch, user: @user, project: @project, &block)
+    def claim(parent_type: Annotation, &block)
+      ImageAttachments::ClaimBatch.call(
+        batch: @batch, user: @user, project: @project, parent_type: parent_type, &block
+      )
     end
 
     def build_annotation

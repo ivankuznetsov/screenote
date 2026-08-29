@@ -12,6 +12,10 @@
      data-image-attachment-composer-max-file-size-value="<%= ImageAttachment::MAX_FILE_SIZE %>"
      data-image-attachment-composer-max-total-size-value="<%= ImageAttachment::MAX_TOTAL_BYTES %>"
      data-image-attachment-composer-accepted-types-value="<%= ImageAttachment::ALLOWED_CONTENT_TYPES.to_json %>"
+     <%# The rejection copy comes from the same constant the server raises with,
+         so the client and the API can never describe the accepted set
+         differently. %>
+     data-image-attachment-composer-unsupported-type-message-value="<%= ImageAttachments::Error::UNSUPPORTED_MEDIA_TYPE %>"
      data-testid="image-attachment-composer">
   <div class="image-attachment-composer__toolbar">
     <button type="button"

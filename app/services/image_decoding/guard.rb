@@ -26,10 +26,18 @@ module ImageDecoding
       def synchronize(key: nil, timeout: WAIT_SECONDS, &block)
         return acquire_global(timeout, &block) if key.nil?
 
-        acquire_key(key, timeout) { acquire_global(timeout, &block) }
+        # One deadline spans both stages. Passing the full timeout to each
+        # would let a keyed wait and a global wait stack, so a composer could
+        # block for twice the budget before it is told the decoder is busy.
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+        acquire_key(key, timeout) { acquire_global(remaining(deadline), &block) }
       end
 
       private
+
+      def remaining(deadline)
+        [ deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC), 0 ].max
+      end
 
       def acquire_global(timeout)
         acquired = SEMAPHORE.try_acquire(1, timeout)

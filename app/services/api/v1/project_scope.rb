@@ -32,12 +32,13 @@ module Api
           .includes(:user, :api_key, :screenshot, annotation_comments: [ :user, :api_key ])
       end
 
-      # Detail reads mint a URL per attachment, so they preload the blobs the
-      # root annotation and every comment are about to serialize.
+      # Detail reads serialize an attachment row per annotation and per
+      # comment, so they preload those rows. The contract payload is plain
+      # columns plus a signed record token, so no blob is ever touched.
       def self.annotation_details(project)
         annotations(project).includes(
-          { image_attachments: { image_attachment: :blob } },
-          annotation_comments: { image_attachments: { image_attachment: :blob } }
+          :image_attachments,
+          annotation_comments: :image_attachments
         )
       end
     end

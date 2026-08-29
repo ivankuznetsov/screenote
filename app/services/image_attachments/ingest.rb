@@ -110,7 +110,9 @@ module ImageAttachments
     def stream_to!(tempfile)
       total = 0
 
-      while (chunk = io.read(CHUNK_SIZE)).present?
+      # IO#read(n) answers nil at EOF; a chunk of whitespace bytes is real
+      # data, so only nil may end the loop.
+      while (chunk = io.read(CHUNK_SIZE))
         total += chunk.bytesize
         invalid!("file_too_large") if total > ImageAttachment::MAX_FILE_SIZE
         tempfile.write(chunk)
@@ -202,8 +204,11 @@ module ImageAttachments
           height: height,
           byte_size: byte_size
         )
-        attached = true
       end
+      # Only a committed transaction owns the blob. Setting this inside the
+      # block would skip the purge when COMMIT itself raises and the row rolls
+      # back to `uploading`, stranding staged bytes nothing reconciles.
+      attached = true
 
       batch.touch_activity!
       attachment
@@ -250,8 +255,12 @@ module ImageAttachments
       raise Error.new(code: "attachment_removed", status: :not_found)
     end
 
+    # Counts the same rows the reservation side counts: a removal tombstone is
+    # no longer part of the composer, so remove-then-replace must not be
+    # rejected here after the replacement has already been decoded.
     def ensure_slot_available!(attachment)
-      return if batch.image_attachments.where.not(id: attachment.id).count < ImageAttachment::MAX_FILES
+      others = batch.image_attachments.active_drafts.where.not(id: attachment.id).count
+      return if others < ImageAttachment::MAX_FILES
 
       invalid!("too_many_files")
     end

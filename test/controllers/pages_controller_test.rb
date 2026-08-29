@@ -254,6 +254,50 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_select "form"
   end
 
+  # The workspace renders every annotation, every reply, and every attached
+  # image on one page, so an N+1 there is paid once per attachment. The budget
+  # is measured against itself rather than against a fixed ceiling.
+  test "the workspace does not scale queries with attachment count" do
+    require_vips!
+    sign_in(@user)
+    screenshot = screenshots(:alice_screenshot)
+    annotation = annotations(:point_annotation)
+    comment = annotation.annotation_comments.create!(user: @user, body: "Reply")
+    attach_to(annotation)
+    attach_to(comment)
+
+    get page_path(screenshot.page_id, version_id: screenshot.id)
+    baseline = capture_app_queries { get page_path(screenshot.page_id, version_id: screenshot.id) }
+
+    2.times { attach_to(annotation) }
+    2.times { attach_to(comment) }
+    get page_path(screenshot.page_id, version_id: screenshot.id)
+    queries = capture_app_queries { get page_path(screenshot.page_id, version_id: screenshot.id) }
+
+    assert_response :success
+    assert_equal baseline.size, queries.size,
+      "the workspace must not scale queries with attachment count"
+    # One bulk variant-record load for the root attachments and one for the
+    # comment attachments, no matter how many rows each holds.
+    assert_equal 2, queries.grep(/active_storage_variant_records/i).size
+  end
+
+  # The composer branches on the server's machine codes, so its rejection copy
+  # has to be the server's too rather than a second literal that can drift.
+  test "the composer takes its unsupported-type copy from the server" do
+    sign_in(@user)
+    screenshot = screenshots(:alice_screenshot)
+
+    get page_path(screenshot.page_id, version_id: screenshot.id)
+
+    assert_response :success
+    assert_select "[data-image-attachment-composer-unsupported-type-message-value=?]",
+      ImageAttachments::Error::UNSUPPORTED_MEDIA_TYPE
+    controller_source = Rails.root.join("app/javascript/controllers/image_attachment_composer_controller.js").read
+    assert_not controller_source.include?(ImageAttachments::Error::UNSUPPORTED_MEDIA_TYPE),
+      "the composer must not carry its own copy of the accepted-types message"
+  end
+
   # Update
   test "update with valid params" do
     sign_in(@user)
@@ -285,5 +329,16 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
       delete page_path(pages(:bob_page))
     end
     assert_response :not_found
+  end
+
+  private
+
+  def attach_to(parent)
+    batch = build_batch(user: @user, project: @project)
+    attachment = ingest_image(batch: batch)
+    ImageAttachments::ClaimBatch.call(
+      batch: batch, user: @user, project: @project, parent_type: parent.class
+    ) { parent }
+    attachment.reload
   end
 end

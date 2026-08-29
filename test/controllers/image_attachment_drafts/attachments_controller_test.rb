@@ -68,6 +68,35 @@ module ImageAttachmentDrafts
       assert_equal "The disabled save button", response.parsed_body.dig("attachment", "alt_text")
     end
 
+    # The browser caps the field with maxlength, but the endpoint still has to
+    # answer a machine code rather than let the model validation escape as a
+    # 500.
+    test "alt text longer than the ceiling answers a machine code" do
+      post_upload("shot.png")
+      id = response.parsed_body.dig("attachment", "id")
+
+      patch image_attachment_draft_batch_attachment_path(@batch.public_id, id),
+        params: { image_attachment: { alt_text: "a" * (ImageAttachment::MAX_ALT_TEXT + 1) } }, as: :json
+
+      assert_response :unprocessable_entity
+      assert_equal "alt_text_too_long", response.parsed_body.dig("error", "code")
+      assert_nil ImageAttachment.find(id).alt_text
+    end
+
+    # Removal nulls the description, so a PATCH that lands after it must not
+    # repopulate a row the composer already discarded.
+    test "alt text on a removed draft is a private not-found" do
+      post_upload("shot.png")
+      id = response.parsed_body.dig("attachment", "id")
+      delete image_attachment_draft_batch_attachment_path(@batch.public_id, id), as: :json
+
+      patch image_attachment_draft_batch_attachment_path(@batch.public_id, id),
+        params: { image_attachment: { alt_text: "Ghost" } }, as: :json
+
+      assert_response :not_found
+      assert_nil ImageAttachment.find(id).alt_text
+    end
+
     test "removal is idempotent" do
       post_upload("shot.png")
       id = response.parsed_body.dig("attachment", "id")

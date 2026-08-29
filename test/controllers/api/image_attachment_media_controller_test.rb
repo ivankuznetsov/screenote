@@ -129,7 +129,7 @@ module Api
     def attach_to(parent)
       batch = build_batch(user: @user, project: @project)
       attachment = ingest_image(batch: batch)
-      ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project) { parent }
+      ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project, parent_type: parent.class) { parent }
       attachment.reload
     end
   end

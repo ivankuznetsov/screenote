@@ -20,10 +20,11 @@ module ImageAttachments
       end
     end
 
-    def initialize(batch:, user:, project:)
+    def initialize(batch:, user:, project:, parent_type:)
       @batch = batch
       @user = user
       @project = project
+      @parent_type = parent_type
     end
 
     def call(&parent_builder)
@@ -37,7 +38,7 @@ module ImageAttachments
 
     private
 
-    attr_reader :batch, :user, :project
+    attr_reader :batch, :user, :project, :parent_type
 
     def claim(&parent_builder)
       ImageAttachment.transaction do
@@ -52,24 +53,21 @@ module ImageAttachments
         validate_attachments!(attachments)
 
         parent = parent_builder.call
+        raise ArgumentError, "#{parent.class} cannot own image attachments" unless parent.is_a?(parent_type)
+
         bind!(parent, attachments)
         Result.new(parent: parent, attachments: attachments, replayed: false)
       end
     end
 
+    # A batch is claimed by exactly one composer. Replaying its public ID
+    # against the other endpoint is an ordinary rejection, not a parent of the
+    # wrong class handed back to a caller that cannot use it.
     def replay
-      Result.new(
-        parent: batch.claimed_parent,
-        attachments: claimed_attachments.to_a,
-        replayed: true
-      )
-    end
-
-    def claimed_attachments
       parent = batch.claimed_parent
-      return ImageAttachment.none unless parent
+      invalid!("batch_not_owned") unless parent.is_a?(parent_type)
 
-      parent.image_attachments.ordered
+      Result.new(parent: parent, attachments: parent.image_attachments.ordered.to_a, replayed: true)
     end
 
     def locked_attachments

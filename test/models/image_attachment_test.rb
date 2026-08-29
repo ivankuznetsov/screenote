@@ -128,7 +128,8 @@ class ImageAttachmentTest < ActiveSupport::TestCase
     require_vips!
     annotation = annotations(:point_annotation)
     attachment = ingest_image(batch: @batch)
-    ImageAttachments::ClaimBatch.call(batch: @batch, user: users(:alice), project: projects(:alice_project)) do
+    ImageAttachments::ClaimBatch.call(batch: @batch, user: users(:alice), project: projects(:alice_project),
+      parent_type: Annotation) do
       annotation
     end
     blob = attachment.reload.image.blob
@@ -144,7 +145,8 @@ class ImageAttachmentTest < ActiveSupport::TestCase
     projects(:alice_project).project_memberships.find_or_create_by!(user: users(:bob)) { |m| m.role = :member }
     batch = build_batch(user: users(:bob))
     ingest_image(batch: batch)
-    ImageAttachments::ClaimBatch.call(batch: batch, user: users(:bob), project: projects(:alice_project)) do
+    ImageAttachments::ClaimBatch.call(batch: batch, user: users(:bob), project: projects(:alice_project),
+      parent_type: AnnotationComment) do
       annotations(:point_annotation).annotation_comments.create!(user: users(:bob), body: "See this")
     end
 

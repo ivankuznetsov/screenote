@@ -10,7 +10,8 @@ class AnnotationCommentsController < ApplicationController
     return respond_invalid_reopen if reopen_action? && !@annotation.resolved?
 
     batch = submission_batch(@project)
-    ImageAttachments::ClaimBatch.call(batch: batch, user: Current.user, project: @project) do
+    ImageAttachments::ClaimBatch.call(batch: batch, user: Current.user, project: @project,
+      parent_type: AnnotationComment) do
       reopen_action? ? reopen_annotation! : add_comment!
     end
 

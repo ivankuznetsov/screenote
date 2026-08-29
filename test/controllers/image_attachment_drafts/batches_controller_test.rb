@@ -132,7 +132,7 @@ module ImageAttachmentDrafts
     test "discarding is idempotent and never touches a claimed batch" do
       batch = build_batch(user: @user, project: @project)
       attachment = ingest_image(batch: batch)
-      ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project) do
+      ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project, parent_type: Annotation) do
         annotations(:point_annotation)
       end
 

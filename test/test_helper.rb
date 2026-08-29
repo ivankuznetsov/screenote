@@ -9,6 +9,7 @@ require_relative "support/deployment_mode_helper"
 require_relative "support/image_attachment_test_helper"
 require_relative "support/oauth_test_helper"
 require_relative "support/principal_action_contract"
+require_relative "support/query_budget_helper"
 require_relative "support/snapshot_manifest_contract_helper"
 
 module ActiveSupport
@@ -28,6 +29,7 @@ module ActiveSupport
     include DeploymentModeHelper
     include SnapshotManifestContractHelper
     include ImageAttachmentTestHelper
+    include QueryBudgetHelper
   end
 end
 

@@ -25,13 +25,21 @@ module ImageAttachments
       ImageAttachment.transaction do
         batch.lock!
         attachment = batch.image_attachments.lock.find_by(id: attachment_id)
-        raise ActiveRecord::RecordNotFound unless attachment
+        # A removal tombstone is a row the composer has already discarded, and
+        # removal nulls its metadata. Answering not-found keeps the description
+        # write on the same removal contract every other draft call follows.
+        raise ActiveRecord::RecordNotFound if attachment.nil? || attachment.removal_tombstone?
 
         attachment.update!(alt_text: alt_text)
       end
 
       batch.touch_activity! if batch.usable?
       attachment
+    rescue ActiveRecord::RecordInvalid
+      # Over-length descriptions are ordinary client input, so they answer with
+      # the same machine code envelope as every other draft failure rather than
+      # escaping as a 500.
+      raise Error.new(code: "alt_text_too_long")
     end
 
     private

@@ -98,7 +98,7 @@ class ImageAttachmentOrphanReconciliationJobTest < ActiveSupport::TestCase
   def submitted_attachment
     batch = build_batch
     ingest_image(batch: batch)
-    result = ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project) do
+    result = ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project, parent_type: Annotation) do
       screenshots(:alice_screenshot).annotations.create!(
         user: @user, x_percent: 1, y_percent: 1, comment: "Posted"
       )

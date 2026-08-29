@@ -15,6 +15,20 @@ module BlobStreaming
 
   private
 
+  # Shared variant resolution for every protected media route. An
+  # authenticated GET never invokes libvips: a variant the warming job has not
+  # produced yet simply is not available, and `raw` names the variants that are
+  # served straight from the original blob.
+  def resolve_variant_blob(attached, variant_name, allowed:, raw: %w[original])
+    return nil unless attached.attached?
+    return attached.blob if raw.include?(variant_name)
+
+    variant_key = allowed[variant_name]
+    return nil unless variant_key
+
+    attached.variant(variant_key).image&.blob
+  end
+
   def stream_blob(blob, disposition: :inline)
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"

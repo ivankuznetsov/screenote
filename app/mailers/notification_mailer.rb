@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class NotificationMailer < ApplicationMailer
+  # The digest call to action is the same workspace deep link the app renders,
+  # so it validates its viewport through the same shared helper.
+  include PageWorkspaceNavigation
+
   def resolution_digest(recipient, comments)
     @recipient = recipient
     @grouped = prepare_grouped_comments(comments)
@@ -64,8 +68,7 @@ class NotificationMailer < ApplicationMailer
 
   def annotation_workspace_url(annotation)
     screenshot = annotation.screenshot
-    options = { version_id: screenshot.id }
-    options[:viewport] = annotation.viewport if screenshot.available_viewports.include?(annotation.viewport.to_s)
+    options = page_workspace_options(screenshot, viewport: annotation.viewport)
 
     "#{routes.page_url(screenshot.page_id, **options, **Screenote::Deployment.current.url_options)}" \
       "##{ActionView::RecordIdentifier.dom_id(annotation)}"

@@ -36,12 +36,26 @@ module Screenote
         schedule(environment: environment).keys.map(&:to_s)
       end
 
+      # The schedule ships with the image and cannot change without a redeploy,
+      # so it is read once per environment rather than on every health probe.
       def schedule(environment: Rails.env)
+        key = environment.to_s
+        cache = (@schedules ||= {})
+        cache.fetch(key) { cache[key] = load_schedule(key) }
+      end
+
+      def reset_schedule_cache!
+        @schedules = {}
+      end
+
+      private
+
+      def load_schedule(environment)
         path = Rails.root.join(CONFIGURATION_PATH)
         return {} unless path.exist?
 
         loaded = YAML.safe_load(ERB.new(path.read).result, aliases: true) || {}
-        loaded.fetch(environment.to_s, nil) || {}
+        loaded.fetch(environment, nil) || {}
       end
     end
   end

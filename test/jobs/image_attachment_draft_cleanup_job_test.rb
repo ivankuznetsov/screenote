@@ -35,7 +35,7 @@ class ImageAttachmentDraftCleanupJobTest < ActiveSupport::TestCase
   test "never takes bytes away from a posted message" do
     batch = build_batch
     attachment = ingest_image(batch: batch)
-    ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project) do
+    ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project, parent_type: Annotation) do
       screenshots(:alice_screenshot).annotations.create!(
         user: @user, x_percent: 1, y_percent: 1, comment: "Posted"
       )

@@ -137,7 +137,7 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     assert_empty ActiveStorage::Blob.where("id > ?", @highest_blob_id)
 
     result = ImageAttachments::ClaimBatch.call(
-      batch: ImageAttachmentBatch.find(@batch.id), user: @user, project: @project
+      batch: ImageAttachmentBatch.find(@batch.id), user: @user, project: @project, parent_type: Annotation
     ) do
       @screenshot.annotations.create!(
         user: @user, x_percent: 5, y_percent: 5, comment: "Nothing attached", viewport: :desktop
@@ -259,7 +259,8 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
   end
 
   def claim_result
-    ImageAttachments::ClaimBatch.call(batch: ImageAttachmentBatch.find(@batch.id), user: @user, project: @project) do
+    ImageAttachments::ClaimBatch.call(batch: ImageAttachmentBatch.find(@batch.id), user: @user, project: @project,
+      parent_type: Annotation) do
       @screenshot.annotations.create!(
         user: @user, x_percent: 10, y_percent: 10, comment: "Look here", viewport: :desktop
       )

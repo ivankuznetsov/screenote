@@ -141,7 +141,11 @@ class ImageAttachmentMediaControllerTest < ActionDispatch::IntegrationTest
   test "a variant outside the media contract is never resolved" do
     attachment = submitted_attachment
 
-    assert_nil ImageAttachmentMediaController.new.send(:media_blob, attachment, "page_card_1x")
+    assert_nil ImageAttachmentMediaController.new.send(
+      :resolve_variant_blob, attachment.image, "page_card_1x",
+      allowed: ImageAttachmentMediaController::ALLOWED_VARIANTS,
+      raw: ImageAttachmentMediaController::RAW_VARIANTS
+    )
   end
 
   test "an unknown attachment ID is a private not-found" do
@@ -165,7 +169,7 @@ class ImageAttachmentMediaControllerTest < ActionDispatch::IntegrationTest
 
   def submitted_attachment
     ingest_image(batch: @batch)
-    ImageAttachments::ClaimBatch.call(batch: @batch, user: @user, project: @project) do
+    ImageAttachments::ClaimBatch.call(batch: @batch, user: @user, project: @project, parent_type: Annotation) do
       screenshots(:alice_screenshot).annotations.create!(
         user: @user, x_percent: 1, y_percent: 1, comment: "Posted"
       )
