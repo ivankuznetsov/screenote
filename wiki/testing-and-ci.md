@@ -116,7 +116,9 @@ suites against a PostgreSQL server database so real row locks exercise lock
 ordering, atomic claim, aggregate races, and the cleanup/remove/submit races
 that SQLite can only assert by outcome. It is a separate workflow precisely so
 `ci.yml` stays free of adapter-specific content and the portability contract
-keeps passing.
+keeps passing. The ephemeral, runner-local PostgreSQL service uses trust
+authentication and a credential-free loopback URL, so the workflow does not
+carry a reusable test password in its published source.
 
 The source workflow has one adapter-neutral `test` job for the Rails suite and
 the self-hosted-only smoke tests. It replaces separate SQLite and PostgreSQL

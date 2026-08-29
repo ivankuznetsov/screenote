@@ -21,14 +21,14 @@ jobs:
     env:
       RAILS_ENV: test
       PARALLEL_WORKERS: "1"
-      DATABASE_URL: postgresql://screenote:screenote@localhost:5432/screenote_test
+      DATABASE_URL: postgresql://screenote@localhost:5432/screenote_test
     services:
       database:
         image: postgres:17
         env:
           POSTGRES_USER: screenote
-          POSTGRES_PASSWORD: screenote
           POSTGRES_DB: screenote_test
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
