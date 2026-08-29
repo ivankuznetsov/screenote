@@ -183,7 +183,87 @@ module ImageAttachmentDrafts
       assert_empty @batch.image_attachments
     end
 
+    test "an upload with no file is an actionable client error" do
+      post image_attachment_draft_batch_attachments_path(@batch.public_id),
+        params: { client_key: "one" }, headers: { "ACCEPT" => "application/json" }
+
+      assert_response :unprocessable_entity
+      assert_equal "missing_file", response.parsed_body.dig("error", "code")
+      assert_empty @batch.image_attachments
+    end
+
+    # Guessed draft IDs must not tell an attacker which ones exist, so an
+    # unknown draft answers exactly like somebody else's.
+    test "an unknown draft is a private not-found" do
+      post image_attachment_draft_batch_attachments_path("not-a-real-batch"),
+        params: { client_key: "one", file: uploaded("shot.png", image_bytes) },
+        headers: { "ACCEPT" => "application/json" }
+
+      assert_response :not_found
+      assert_equal "not_found", response.parsed_body.dig("error", "code")
+    end
+
+    test "an exhausted per-user upload budget is refused before any bytes are read" do
+      with_rate_limit_backend(SaturatedRateLimitBackend.new(matching: "user:")) do
+        post_upload("shot.png")
+      end
+
+      assert_response :too_many_requests
+      assert_equal "rate_limited", response.parsed_body.dig("error", "code")
+      assert_empty @batch.image_attachments
+    end
+
+    # The address bucket is independent of the account bucket: one host cannot
+    # spend everybody else's budget by signing in as somebody new.
+    test "an exhausted per-address upload budget is refused on its own" do
+      with_rate_limit_backend(SaturatedRateLimitBackend.new(matching: "ip:")) do
+        post_upload("shot.png")
+      end
+
+      assert_response :too_many_requests
+      assert_equal "rate_limited", response.parsed_body.dig("error", "code")
+      assert_empty @batch.image_attachments
+    end
+
+    test "an unavailable limiter backend fails closed instead of admitting the upload" do
+      with_rate_limit_backend(UnavailableRateLimitBackend.new) do
+        post_upload("shot.png")
+      end
+
+      assert_response :service_unavailable
+      body = response.parsed_body
+      assert_equal "rate_limiter_unavailable", body.dig("error", "code")
+      assert body.dig("error", "retryable")
+      assert_empty @batch.image_attachments
+    end
+
     private
+
+    # Rails builds one cache key per limiter, so a double that saturates only
+    # the identity it is asked about proves each bucket is enforced separately.
+    class SaturatedRateLimitBackend
+      def initialize(matching:)
+        @matching = matching
+      end
+
+      def increment(key, _amount = 1, **)
+        key.to_s.include?(@matching) ? BaseController::RATE_LIMIT + 1 : 1
+      end
+    end
+
+    class UnavailableRateLimitBackend
+      def increment(*, **)
+        raise IOError, "backend unavailable"
+      end
+    end
+
+    def with_rate_limit_backend(backend)
+      original = BaseController.cache_store
+      BaseController.cache_store = backend
+      yield
+    ensure
+      BaseController.cache_store = original
+    end
 
     def post_upload(name, client_key: "one")
       post image_attachment_draft_batch_attachments_path(@batch.public_id),

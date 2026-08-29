@@ -189,6 +189,51 @@ class ImageAttachmentSubmissionTest < ActionDispatch::IntegrationTest
     assert_empty Annotation.find(response.parsed_body["annotation_id"]).image_attachments
   end
 
+  # A rejected post always answers with composer state, even when the person
+  # attached nothing: the still-mounted composer reads the same shape either
+  # way instead of branching on whether a draft exists.
+  test "a rejected post without a draft still answers with empty composer state" do
+    post screenshot_annotations_path(@screenshot),
+      params: { annotation: { x_percent: 10, y_percent: 10, comment: "Look here", viewport: "mobile" } },
+      as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "invalid_viewport", response.parsed_body.dig("error", "code")
+    assert_nil response.parsed_body.dig("form", "image_attachment_batch_id")
+    assert_empty response.parsed_body.dig("form", "ready_attachment_ids")
+  end
+
+  # The non-JavaScript fallback has no composer to restore, so an attachment
+  # failure has to land back on the workspace with the reason instead of
+  # rendering a JSON body the browser would download.
+  test "the HTML fallback returns an attachment failure to the workspace" do
+    foreign = build_batch(user: users(:bob), project: projects(:bob_project))
+
+    post screenshot_annotations_path(@screenshot),
+      params: {
+        annotation: { x_percent: 10, y_percent: 10, comment: "Look here" },
+        image_attachment_batch_id: foreign.public_id
+      }
+
+    assert_redirected_to page_path(@screenshot.page_id, version_id: @screenshot.id)
+    assert_equal 0, Annotation.where(comment: "Look here").count
+  end
+
+  test "the HTML reply fallback returns an attachment failure to the annotation" do
+    foreign = build_batch(user: users(:bob), project: projects(:bob_project))
+
+    post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+      params: {
+        annotation_comment: { body: "See the crop" },
+        image_attachment_batch_id: foreign.public_id
+      }
+
+    assert_redirected_to page_path(
+      @screenshot.page_id, version_id: @screenshot.id, viewport: @annotation.viewport
+    )
+    assert_equal 0, @annotation.annotation_comments.where(body: "See the crop").count
+  end
+
   test "the HTML fallback keeps redirecting" do
     post screenshot_annotations_path(@screenshot),
       params: { annotation: { x_percent: 10, y_percent: 10, comment: "Look here" } }

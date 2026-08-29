@@ -10,7 +10,7 @@ module DeterministicConcurrencyTestHelper
 
   def with_one_shot_instance_method_barrier(model, method_name, predicate:)
     original = model.instance_method(method_name)
-    own_method = model.instance_method(method_name) if model.instance_methods(false).include?(method_name)
+    own_method = model.instance_method(method_name) if own_method?(model, method_name)
     visibility = method_visibility(model, method_name)
     mutex = Mutex.new
     armed = true
@@ -103,6 +103,16 @@ module DeterministicConcurrencyTestHelper
 
   def join_with_timeout(thread)
     Timeout.timeout(THREAD_TIMEOUT) { thread.join }
+  end
+
+  # `instance_methods(false)` lists only public and protected methods, so asking
+  # it about a private method reports the class as not owning one and the
+  # restore below deletes the real implementation instead of the barrier.
+  def own_method?(model, method_name)
+    owned = model.instance_methods(false) +
+      model.protected_instance_methods(false) +
+      model.private_instance_methods(false)
+    owned.include?(method_name)
   end
 
   def method_visibility(model, method_name)

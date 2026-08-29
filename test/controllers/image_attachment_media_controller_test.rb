@@ -113,6 +113,37 @@ class ImageAttachmentMediaControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "a row that has not finished uploading has no bytes to serve" do
+    pending = @batch.image_attachments.create!(user: @user, project: @project, client_key: "pending")
+
+    get image_attachment_media_path(pending, :original)
+
+    assert_response :not_found
+  end
+
+  # The draft rule is "the uploader, while the batch is still live". A row whose
+  # batch is gone has no live batch to be read against, so it is unreadable
+  # rather than readable by default.
+  test "a draft whose batch row is gone is unreadable" do
+    attachment = ingest_image(batch: @batch)
+    ImageAttachment.connection.disable_referential_integrity do
+      ImageAttachmentBatch.where(id: @batch.id).delete_all
+    end
+
+    get image_attachment_media_path(attachment, :original)
+
+    assert_response :not_found
+  end
+
+  # The route constraint and the served variant list are declared separately,
+  # so the controller refuses a name it does not own rather than handing it to
+  # Active Storage.
+  test "a variant outside the media contract is never resolved" do
+    attachment = submitted_attachment
+
+    assert_nil ImageAttachmentMediaController.new.send(:media_blob, attachment, "page_card_1x")
+  end
+
   test "an unknown attachment ID is a private not-found" do
     get image_attachment_media_path(999_999, :original)
 

@@ -76,6 +76,25 @@ module Api
       assert_response :not_found
     end
 
+    test "a write-only OAuth principal cannot read the bytes" do
+      write_only = create_oauth_token(
+        application: create_oauth_application, user: @user, scopes: AuthenticatedPrincipal::WRITE_SCOPE
+      )
+
+      get media_path, headers: { "Authorization" => "Bearer #{write_only.token}" }
+
+      assert_response :forbidden
+      assert_equal "insufficient_scope", response.parsed_body["code"]
+    end
+
+    test "an attachment whose bytes are gone is refused" do
+      @attachment.image.purge
+
+      get media_path, headers: bearer_headers
+
+      assert_response :not_found
+    end
+
     test "an attachment whose message was deleted is refused" do
       ImageAttachment.connection.disable_referential_integrity do
         Annotation.where(id: @annotation.id).delete_all

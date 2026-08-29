@@ -10,8 +10,11 @@ module ImageAttachmentDrafts
     RATE_LIMIT_WINDOW = 1.hour
     DRAFT_RATE_LIMIT_STORE = Screenote::RateLimitStore.new(store: -> { cache_store })
 
+    # Authentication is inherited from ApplicationController and runs first, so
+    # the account bucket is always keyed by a real signed-in identity rather
+    # than by a shared anonymous one.
     rate_limit to: RATE_LIMIT, within: RATE_LIMIT_WINDOW,
-      by: -> { "user:#{Current.user&.id}" },
+      by: -> { "user:#{Current.user.id}" },
       with: -> { render_error("Too many upload requests. Try again later.", code: "rate_limited", status: :too_many_requests) },
       store: DRAFT_RATE_LIMIT_STORE
     rate_limit to: RATE_LIMIT, within: RATE_LIMIT_WINDOW,

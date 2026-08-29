@@ -122,7 +122,7 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
         record.is_a?(ActiveStorage::Blob)
       }
     ) do |entered, release|
-      run_barriered_race(
+      run_settled_race(
         entered: entered,
         release: release,
         first: -> { safe_ingest(bytes, "removed-mid-upload") },
@@ -221,6 +221,27 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
   # resolves through an aggregate recheck is asserted by outcome rather than by
   # observed blocking. PostgreSQL runs the same interleaving with real row
   # locks in the concurrency qualification workflow.
+  # An upload parked before its commit transaction holds no row lock, so the
+  # racing operation can be run all the way to completion before the upload is
+  # released. Waiting for it is what makes "the removal already happened" the
+  # interleaving under test rather than one the faster adapter wins by luck.
+  def run_settled_race(entered:, release:, first:, second:)
+    first_result = Queue.new
+    second_result = Queue.new
+    first_thread = concurrency_thread(first_result, Queue.new, first)
+    pop_with_timeout(entered)
+
+    second_thread = concurrency_thread(second_result, Queue.new, second)
+    join_with_timeout(second_thread)
+    release << true
+    join_with_timeout(first_thread)
+
+    [ pop_with_timeout(first_result), pop_with_timeout(second_result) ]
+  ensure
+    release << true if release
+    [ first_thread, second_thread ].compact.each { |thread| thread.kill if thread.alive? }
+  end
+
   def run_barriered_race(entered:, release:, first:, second:)
     first_result = Queue.new
     second_result = Queue.new
