@@ -183,16 +183,52 @@ module ImageAttachments
       end
     end
 
-    private
+    test "replaying a finished client key returns the same row and keeps its blob" do
+      attachment = ingest_image(batch: @batch, client_key: "lost-response")
+      blob_id = attachment.image.blob.id
+      blobs = ActiveStorage::Blob.count
 
-    def stub_const(owner, name, value)
-      original = owner.const_get(name)
-      owner.send(:remove_const, name)
-      owner.const_set(name, value)
-      yield
-    ensure
-      owner.send(:remove_const, name)
-      owner.const_set(name, original)
+      replayed = ingest_image(batch: @batch, client_key: "lost-response")
+
+      assert_equal attachment.id, replayed.id
+      assert_predicate replayed, :state_ready?
+      assert_equal blob_id, replayed.reload.image.blob.id
+      assert_equal 1, @batch.image_attachments.count
+      assert_equal blobs, ActiveStorage::Blob.count
+    end
+
+    test "the outstanding draft byte ceiling is rechecked when an upload commits" do
+      parked = build_batch(user: @batch.user, project: @batch.project)
+      parked.image_attachments.create!(
+        user: @batch.user, project: @batch.project, client_key: "parked", state: :ready,
+        media_type: "image/png", width: 1, height: 1, byte_size: 4.kilobytes
+      )
+
+      stub_const(ImageAttachmentBatch, :MAX_OUTSTANDING_DRAFT_BYTES, 4.kilobytes) do
+        error = assert_raises(ImageAttachments::Error) { ingest_image(batch: @batch) }
+
+        assert_equal "draft_storage_exhausted", error.code
+      end
+
+      assert_predicate @batch.image_attachments.sole, :state_failed?
+      assert_not @batch.image_attachments.sole.image.attached?
+    end
+
+    test "an unexpected IO failure still answers with a machine code" do
+      failing_io = Object.new
+      def failing_io.read(*)
+        raise IOError, "the upload socket went away"
+      end
+
+      error = assert_raises(ImageAttachments::Error) do
+        ImageAttachments::Ingest.call(
+          batch: @batch, io: failing_io, client_key: "broken", declared_content_type: "image/png"
+        )
+      end
+
+      assert_equal "upload_failed", error.code
+      assert_equal :internal_server_error, error.status
+      assert_equal "upload_failed", @batch.image_attachments.sole.failure_code
     end
   end
 end

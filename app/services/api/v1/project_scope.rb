@@ -25,16 +25,20 @@ module Api
         project.screenshots.includes(:page, :annotations, :screenshot_images).order(created_at: :desc)
       end
 
+      # List reads never serialize attachments, so they stay metadata-light.
       def self.annotations(project)
         Annotation.joins(screenshot: { page: :project })
           .where(projects: { id: project.id })
-          .includes(
-            :user,
-            :api_key,
-            :screenshot,
-            { image_attachments: { image_attachment: :blob } },
-            annotation_comments: [ :user, :api_key, { image_attachments: { image_attachment: :blob } } ]
-          )
+          .includes(:user, :api_key, :screenshot, annotation_comments: [ :user, :api_key ])
+      end
+
+      # Detail reads mint a URL per attachment, so they preload the blobs the
+      # root annotation and every comment are about to serialize.
+      def self.annotation_details(project)
+        annotations(project).includes(
+          { image_attachments: { image_attachment: :blob } },
+          annotation_comments: { image_attachments: { image_attachment: :blob } }
+        )
       end
     end
   end

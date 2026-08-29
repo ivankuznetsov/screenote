@@ -75,26 +75,18 @@ module ImageAttachments
     end
 
     def validate_ownership!
-      invalid!("This upload session expired. Reload the page and try again.", code: "batch_unusable") unless
-        batch.usable?
+      invalid!("batch_unusable") unless batch.usable?
       return if batch.user_id == user.id && batch.project_id == project.id
 
-      invalid!("These attachments belong to a different composer.", code: "batch_not_owned")
+      invalid!("batch_not_owned")
     end
 
     def validate_attachments!(attachments)
-      if attachments.any? { |attachment| !attachment.state_ready? }
-        invalid!("Wait for every image to finish uploading.", code: "attachments_not_ready")
-      end
-      if attachments.size > ImageAttachment::MAX_FILES
-        invalid!("You can attach up to #{ImageAttachment::MAX_FILES} images.", code: "too_many_files")
-      end
+      invalid!("attachments_not_ready") if attachments.any? { |attachment| !attachment.state_ready? }
+      invalid!("too_many_files") if attachments.size > ImageAttachment::MAX_FILES
       return if attachments.sum { |attachment| attachment.byte_size.to_i } <= ImageAttachment::MAX_TOTAL_BYTES
 
-      invalid!(
-        "Attachments for one message can total at most #{ImageAttachment::MAX_TOTAL_BYTES / 1.megabyte}MB.",
-        code: "batch_too_large"
-      )
+      invalid!("batch_too_large")
     end
 
     def bind!(parent, attachments)
@@ -128,8 +120,8 @@ module ImageAttachments
       end
     end
 
-    def invalid!(message, code:)
-      raise Error.new(message, code: code)
+    def invalid!(code)
+      raise Error.new(code: code)
     end
   end
 end

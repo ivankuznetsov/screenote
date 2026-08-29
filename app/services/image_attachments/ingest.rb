@@ -34,6 +34,9 @@ module ImageAttachments
     def call
       validate_request!
       attachment = reserve_slot!
+      # A retry that lost only its response finds its slot already finished.
+      # Replaying it must not reopen the row or replace the stored blob.
+      return Result.new(attachment: attachment) if attachment.state_ready?
 
       begin
         Tempfile.create([ "screenote-attachment-#{Process.pid}-", ".image" ], Rails.root.join("tmp")) do |tempfile|
@@ -49,9 +52,13 @@ module ImageAttachments
       rescue Error => error
         record_failure(attachment, error)
         raise
-      rescue StandardError
-        record_failure(attachment, Error.new("Upload failed", code: "upload_failed"))
-        raise
+      rescue StandardError => error
+        # Storage and IO failures still answer the composer with the shared
+        # machine code and actionable text; the cause goes to monitoring.
+        Screenote::Monitoring.notify(error, context: { image_attachment_batch_id: batch.id })
+        failure = Error.new(code: "upload_failed", status: :internal_server_error)
+        record_failure(attachment, failure)
+        raise failure
       end
     end
 
@@ -60,17 +67,16 @@ module ImageAttachments
     attr_reader :batch, :io, :client_key, :declared_content_type, :declared_length, :filename
 
     def validate_request!
-      invalid!("This upload session expired. Reload the page and try again.", code: "batch_unusable") unless
-        batch.usable?
-      invalid!("Upload is missing its client key", code: "missing_client_key") if client_key.blank?
-      invalid!("Upload client key is too long", code: "invalid_client_key") if client_key.length > 64
+      invalid!("batch_unusable") unless batch.usable?
+      invalid!("missing_client_key") if client_key.blank?
+      invalid!("invalid_client_key") if client_key.length > 64
 
       if declared_content_type.present? && !declared_content_type.in?(ImageAttachment::ALLOWED_CONTENT_TYPES)
-        invalid!("Attachments must be PNG, JPEG, or WebP images.", code: "invalid_content_type")
+        invalid!("invalid_content_type")
       end
       return if declared_length.nil? || declared_length <= ImageAttachment::MAX_FILE_SIZE
 
-      invalid!(too_large_message, code: "file_too_large")
+      invalid!("file_too_large")
     end
 
     # Reserving the slot up front means a client that dies mid-stream still
@@ -82,14 +88,13 @@ module ImageAttachments
         existing = batch.image_attachments.find_by(client_key: client_key)
 
         if existing
-          # Retry reuses the client idempotency key and therefore its slot.
-          existing.update!(state: :uploading, failure_code: nil)
+          # Retry reuses the client idempotency key and therefore its slot. A
+          # slot that already finished is returned exactly as it stands.
+          existing.update!(state: :uploading, failure_code: nil) unless existing.state_ready?
           next existing
         end
 
-        if batch.image_attachments.count >= ImageAttachment::MAX_FILES
-          invalid!("You can attach up to #{ImageAttachment::MAX_FILES} images.", code: "too_many_files")
-        end
+        invalid!("too_many_files") if batch.image_attachments.count >= ImageAttachment::MAX_FILES
 
         batch.image_attachments.create!(
           user_id: batch.user_id,
@@ -105,10 +110,10 @@ module ImageAttachments
 
       while (chunk = io.read(CHUNK_SIZE)).present?
         total += chunk.bytesize
-        invalid!(too_large_message, code: "file_too_large") if total > ImageAttachment::MAX_FILE_SIZE
+        invalid!("file_too_large") if total > ImageAttachment::MAX_FILE_SIZE
         tempfile.write(chunk)
       end
-      invalid!("The upload was empty.", code: "empty_file") if total.zero?
+      invalid!("empty_file") if total.zero?
 
       tempfile.flush
       total
@@ -117,24 +122,21 @@ module ImageAttachments
     def detect_media_type!(tempfile)
       tempfile.rewind
       detected = Marcel::MimeType.for(tempfile)
-      unless detected.in?(ImageAttachment::ALLOWED_CONTENT_TYPES)
-        invalid!("Attachments must be PNG, JPEG, or WebP images.", code: "invalid_image")
-      end
+      invalid!("invalid_image", Error::UNSUPPORTED_MEDIA_TYPE) unless
+        detected.in?(ImageAttachment::ALLOWED_CONTENT_TYPES)
       detected
     end
 
     # A declaration is optional, but where the browser supplies one it must
     # agree with the bytes and with the filename extension.
     def validate_declared_identity!(media_type)
-      if declared_content_type.present? && declared_content_type != media_type
-        invalid!("The file contents do not match its declared type.", code: "content_type_mismatch")
-      end
+      invalid!("content_type_mismatch") if declared_content_type.present? && declared_content_type != media_type
 
       extension = File.extname(filename.to_s).delete_prefix(".").downcase
       return if extension.blank?
       return if ImageAttachment::ALLOWED_EXTENSIONS.fetch(media_type, []).include?(extension)
 
-      invalid!("The file contents do not match its extension.", code: "extension_mismatch")
+      invalid!("extension_mismatch")
     end
 
     def decode!(tempfile)
@@ -151,22 +153,18 @@ module ImageAttachments
         [ width, height ]
       end
     rescue ImageDecoding::Guard::Busy
-      raise Error.new(
-        "The image processor is busy. Retry this upload.",
-        code: "decoder_busy",
-        status: :service_unavailable
-      )
+      raise Error.new(code: "decoder_busy", status: :service_unavailable)
     rescue Vips::Error
-      invalid!("That image could not be read.", code: "invalid_image")
+      invalid!("invalid_image")
     end
 
     def validate_dimensions!(width, height)
       if width > ImageAttachment::MAX_DIMENSION || height > ImageAttachment::MAX_DIMENSION
-        invalid!("Image dimensions exceed #{ImageAttachment::MAX_DIMENSION}px.", code: "image_dimensions_too_large")
+        invalid!("image_dimensions_too_large")
       end
       return if width * height <= ImageAttachment::MAX_PIXELS
 
-      invalid!("Image pixel count exceeds #{ImageAttachment::MAX_PIXELS}.", code: "image_pixels_too_large")
+      invalid!("image_pixels_too_large")
     end
 
     def commit!(attachment, tempfile, media_type:, byte_size:, width:, height:)
@@ -177,6 +175,7 @@ module ImageAttachments
         ensure_usable!
         ensure_slot_available!(attachment)
         ensure_total_within_limit!(attachment, byte_size)
+        ensure_outstanding_drafts_within_limit!(attachment, byte_size)
 
         attachment.image.attach(blob)
         attachment.update!(
@@ -225,23 +224,30 @@ module ImageAttachments
     def ensure_usable!
       return if batch.reload.usable?
 
-      invalid!("This upload session expired. Reload the page and try again.", code: "batch_unusable")
+      invalid!("batch_unusable")
     end
 
     def ensure_slot_available!(attachment)
       return if batch.image_attachments.where.not(id: attachment.id).count < ImageAttachment::MAX_FILES
 
-      invalid!("You can attach up to #{ImageAttachment::MAX_FILES} images.", code: "too_many_files")
+      invalid!("too_many_files")
     end
 
     def ensure_total_within_limit!(attachment, byte_size)
       others = batch.total_byte_size(excluding: attachment.id)
       return if others + byte_size <= ImageAttachment::MAX_TOTAL_BYTES
 
-      invalid!(
-        "Attachments for one message can total at most #{ImageAttachment::MAX_TOTAL_BYTES / 1.megabyte}MB.",
-        code: "batch_too_large"
-      )
+      invalid!("batch_too_large")
+    end
+
+    # The per-account outstanding cap is enforced again here, not only when a
+    # batch is opened: six empty batches must not be fillable past the ceiling
+    # that keeps a stopped cleanup supervisor from parking unbounded bytes.
+    def ensure_outstanding_drafts_within_limit!(attachment, byte_size)
+      others = ImageAttachmentBatch.outstanding_draft_bytes(batch.user_id, excluding: attachment.id)
+      return if others + byte_size <= ImageAttachmentBatch::MAX_OUTSTANDING_DRAFT_BYTES
+
+      invalid!("draft_storage_exhausted")
     end
 
     def record_failure(attachment, error)
@@ -259,11 +265,7 @@ module ImageAttachments
       nil
     end
 
-    def too_large_message
-      "Each image must be #{ImageAttachment::MAX_FILE_SIZE / 1.megabyte}MB or smaller."
-    end
-
-    def invalid!(message, code:)
+    def invalid!(code, message = nil)
       raise Error.new(message, code: code)
     end
   end

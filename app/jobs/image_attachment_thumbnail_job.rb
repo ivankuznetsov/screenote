@@ -2,7 +2,8 @@
 
 # Warms the delivery variants for a submitted attachment. Nothing enqueues this
 # for a draft, and an authenticated GET never invokes it: an unwarmed variant
-# stays unavailable until this job or reconciliation produces it.
+# stays unavailable until a run of this job produces it. Orphan reconciliation
+# only purges parentless rows; it never rewarms variants.
 class ImageAttachmentThumbnailJob < ApplicationJob
   ThumbnailProcessingError = Class.new(StandardError)
 

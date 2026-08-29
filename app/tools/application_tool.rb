@@ -81,6 +81,10 @@ class ApplicationTool < FastMcp::Tool
     Api::V1::ProjectScope.annotations(project)
   end
 
+  def project_annotation_details(project)
+    Api::V1::ProjectScope.annotation_details(project)
+  end
+
   def serialize_annotation(annotation)
     Api::V1::ContractSerializer.annotation(annotation)
   end

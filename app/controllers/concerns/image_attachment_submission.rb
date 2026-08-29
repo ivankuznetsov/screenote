@@ -22,7 +22,7 @@ module ImageAttachmentSubmission
 
     batch = ImageAttachmentBatch.find_by(public_id: public_id.to_s)
     unless batch && batch.user_id == Current.user.id && batch.project_id == project.id
-      raise ImageAttachments::Error.new("These attachments belong to a different composer.", code: "batch_not_owned")
+      raise ImageAttachments::Error.new(code: "batch_not_owned")
     end
 
     batch

@@ -5,19 +5,6 @@ module ImageAttachments
   # state, immutable metadata, and a protected preview path — never a storage
   # key, a provider URL, or the uploader's original filename.
   class DraftPresenter
-    FAILURE_MESSAGES = {
-      "invalid_image" => "That image could not be read.",
-      "invalid_content_type" => "Attachments must be PNG, JPEG, or WebP images.",
-      "content_type_mismatch" => "The file contents do not match its declared type.",
-      "extension_mismatch" => "The file contents do not match its extension.",
-      "file_too_large" => "Each image must be 20MB or smaller.",
-      "batch_too_large" => "Attachments for one message can total at most 50MB.",
-      "too_many_files" => "You can attach up to 5 images.",
-      "empty_file" => "The upload was empty.",
-      "decoder_busy" => "The image processor is busy. Retry this upload.",
-      "upload_failed" => "The upload did not finish. Retry it."
-    }.freeze
-
     class << self
       def batch(batch)
         {
@@ -62,11 +49,9 @@ module ImageAttachments
         return nil unless attachment.state_failed?
 
         code = attachment.failure_code.presence || "upload_failed"
-        {
-          code: code,
-          message: FAILURE_MESSAGES.fetch(code, FAILURE_MESSAGES.fetch("upload_failed")),
-          retryable: true
-        }
+        # The copy comes from the same table the raise used, so a replayed
+        # failure reads exactly like the response the composer already saw.
+        { code: code, message: Error.message_for(code), retryable: true }
       end
 
       def routes

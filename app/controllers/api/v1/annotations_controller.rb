@@ -29,7 +29,7 @@ module Api
         project = require_current_project!(params[:project_id])
         return unless project
 
-        annotation = project_annotations(project).find(params[:id])
+        annotation = annotation_details(project).find(params[:id])
         cropped_base64 = begin
           annotation.crop
         rescue => e
@@ -50,6 +50,10 @@ module Api
 
       def project_annotations(project)
         Api::V1::ProjectScope.annotations(project)
+      end
+
+      def annotation_details(project)
+        Api::V1::ProjectScope.annotation_details(project)
       end
 
       def serialize(annotation)

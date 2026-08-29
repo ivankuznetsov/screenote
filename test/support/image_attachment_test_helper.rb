@@ -15,6 +15,26 @@ module ImageAttachmentTestHelper
     end
   end
 
+  # Limits are constants so that nothing can widen them at runtime; tests that
+  # need a narrower ceiling swap it back afterwards.
+  def stub_const(owner, name, value)
+    original = owner.const_get(name)
+    owner.send(:remove_const, name)
+    owner.const_set(name, value)
+    yield
+  ensure
+    owner.send(:remove_const, name)
+    owner.const_set(name, original)
+  end
+
+  def with_forgery_protection
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    yield
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
+
   def build_batch(user: users(:alice), project: projects(:alice_project))
     ImageAttachmentBatch.create!(user: user, project: project)
   end

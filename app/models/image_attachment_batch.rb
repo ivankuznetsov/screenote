@@ -33,6 +33,34 @@ class ImageAttachmentBatch < ApplicationRecord
     SecureRandom.urlsafe_base64(24)
   end
 
+  # Opening a draft is the one place the per-account ceilings are applied, so
+  # they hold no matter which composer asked for the batch.
+  def self.open_for!(user:, project:)
+    enforce_outstanding_caps!(user)
+    create!(user: user, project: project)
+  end
+
+  # Expired-but-unreclaimed batches still hold their rows and their blobs, so
+  # they keep counting: these caps have to survive a stopped cleanup supervisor.
+  def self.outstanding_for(user_id)
+    outstanding.where(user_id: user_id)
+  end
+
+  def self.outstanding_draft_bytes(user_id, excluding: nil)
+    scope = ImageAttachment.where(image_attachment_batch: outstanding_for(user_id))
+    scope = scope.where.not(id: excluding) if excluding
+    scope.sum(:byte_size)
+  end
+
+  def self.enforce_outstanding_caps!(user)
+    if outstanding_for(user.id).count >= MAX_OPEN_PER_USER
+      raise ImageAttachments::Error.new(code: "too_many_open_batches")
+    end
+    return if outstanding_draft_bytes(user.id) < MAX_OUTSTANDING_DRAFT_BYTES
+
+    raise ImageAttachments::Error.new(code: "draft_storage_exhausted")
+  end
+
   def to_param
     public_id
   end

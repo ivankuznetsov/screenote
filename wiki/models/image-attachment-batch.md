@@ -44,6 +44,12 @@ retries, not a per-message limit. `MAX_OUTSTANDING_DRAFT_BYTES` is a
 scheduler-independent backstop so a stopped cleanup supervisor cannot let one
 account park unbounded bytes.
 
+Both caps live on the model. `ImageAttachmentBatch.open_for!` applies them to
+every draft that is opened, and `ImageAttachments::Ingest` rechecks the byte
+ceiling inside the commit lock so batches opened under the cap cannot be filled
+past it afterwards. Expired batches that cleanup has not yet reclaimed still
+hold their rows and blobs, so they keep counting toward both caps.
+
 ## Claim
 
 `ImageAttachments::ClaimBatch` locks the batch, then its attachment rows by ID,
@@ -51,6 +57,16 @@ revalidates ownership, expiry, the 5-file and 50 MB limits, creates the message
 inside the same transaction, moves each row onto exactly one parent FK, and
 records the claimed parent. Replaying the same public ID returns the message
 that was already created instead of posting twice.
+
+## Drafts
+
+`ImageAttachments::Ingest` reserves the row for a `client_key` before it reads
+a byte, so a retry reuses that slot. A key whose upload already finished is
+returned exactly as it stands: replaying a lost 201 never reopens the row or
+replaces its blob. `ImageAttachments::WriteAltText` and
+`ImageAttachments::RemoveAttachment` both take the batch lock first, so a
+description or a removal racing a claim resolves as not-found rather than
+touching submitted metadata.
 
 ## Cleanup
 
