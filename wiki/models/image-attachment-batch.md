@@ -58,7 +58,14 @@ their rows and blobs, so they keep counting toward both caps.
 revalidates ownership, expiry, the 5-file and 50 MB limits, creates the message
 inside the same transaction, moves each row onto exactly one parent FK, and
 records the claimed parent. Replaying the same public ID returns the message
-that was already created instead of posting twice.
+that was already created instead of posting twice. The caller declares the
+parent class it can accept, so a batch claimed by the root composer replayed
+against the reply endpoint — or the reverse — is refused with `batch_not_owned`
+rather than handed back a parent the responder cannot describe.
+
+The 5-file limit counts active drafts on both sides. A removal tombstone is not
+an active draft, so removing an image and attaching a replacement stays inside
+the ceiling.
 
 ## Drafts
 
@@ -81,7 +88,11 @@ cannot make the scheduler-independent cap optimistic.
 Decoding is serialized per batch as well as globally: `ImageDecoding::Guard`
 takes a per-key slot before a global one, so one batch's overlapping uploads
 cannot occupy every decoder slot and answer screenshot work with
-`decoder_busy`.
+`decoder_busy`. Both stages share one deadline, so a caller waits the guard's
+timeout once rather than twice.
+
+An alt-text write longer than `MAX_ALT_TEXT` answers the `alt_text_too_long`
+machine code, and a write aimed at a removal tombstone answers not-found.
 
 ## Discard
 
