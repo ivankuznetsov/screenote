@@ -58,11 +58,24 @@ class ImageAttachmentTest < ActiveSupport::TestCase
   end
 
   test "submitted metadata and alt text are immutable" do
-    attachment = submitted_attachment
+    changes = {
+      alt_text: "changed",
+      media_type: "image/webp",
+      width: 99,
+      height: 99,
+      byte_size: 999,
+      state: :failed,
+      annotation_id: annotations(:region_annotation).id,
+      annotation_comment_id: annotation_comments(:resolved_comment).id
+    }
 
-    attachment.alt_text = "changed"
-    assert_not attachment.valid?
-    assert_includes attachment.errors[:alt_text], "cannot change after submission"
+    changes.each do |attribute, value|
+      attachment = submitted_attachment
+      attachment.public_send("#{attribute}=", value)
+
+      assert_not attachment.valid?, "#{attribute} must not be writable after submission"
+      assert_includes attachment.errors[attribute], "cannot change after submission"
+    end
   end
 
   test "uploader and project are immutable" do
