@@ -3,7 +3,7 @@ title: LLM Wiki Maintenance
 type: operations
 source: .llm-wiki/config.json, .llm-wiki/refresh-wiki.sh, .llm-wiki/post-commit-refresh.sh, .llm-wiki/compile-log.sh, AGENTS.md, CLAUDE.md
 created: 2026-07-08
-updated: 2026-07-08
+updated: 2026-08-29
 tags: [wiki, llm-wiki, maintenance, automation]
 ---
 
@@ -17,10 +17,12 @@ TLDR: The project wiki is maintained by bounded Codex refresh scripts. Agents re
 
 - `headless_agent: "codex"` for unattended refreshes.
 - `context_agents`: `claude`, `codex`, and `pi`.
-- `main_wiki_path: /home/asterio/wikis/master/wiki`.
+- `main_wiki_path: /home/asterio/Dev/hive/wiki`.
 - `created_by: hive`.
 
-As of the 2026-07-08 refresh, `/home/asterio/wikis/master/wiki` and the default main wiki paths checked by the refresh prompt were not present on this machine. Record cross-project uncertainty in [[gaps]] when that path is unavailable.
+The configured path is the live Hive repository wiki and matches the
+`hive-wiki` QMD collection. Record cross-project uncertainty in [[gaps]] if
+that path later becomes unavailable.
 
 ## Manual Refresh
 
