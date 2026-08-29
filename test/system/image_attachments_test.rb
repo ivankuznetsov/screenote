@@ -22,6 +22,7 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
   ATTACHMENT_ITEM = '[data-testid="attachment-item"]'
   ATTACHMENT_STATE = '[data-testid="attachment-state"]'
   ATTACHMENT_REMOVE = '[data-testid="attachment-remove"]'
+  ATTACHMENT_RETRY = '[data-testid="attachment-retry"]'
   ATTACHMENT_ALT = '[data-testid="attachment-alt-input"]'
   COMPOSER_ERRORS = '[data-testid="composer-errors"]'
   GALLERY = '[data-testid="image-attachment-gallery"]'
@@ -189,13 +190,60 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
 
   test "an unreadable file reports a specific error and can be removed" do
     open_root_composer
-    attach_file_to_composer(Rails.root.join("test/fixtures/files/test_invalid.gif").to_s)
+    attach_file_to_composer(Rails.root.join("test/fixtures/files/test_invalid.png").to_s)
 
     assert_selector "#{ATTACHMENT_ITEM}[data-state=failed]", wait: 15
     assert_selector ATTACHMENT_STATE, text: /PNG, JPEG, or WebP|could not be read/, wait: 10
+    assert_no_selector ATTACHMENT_RETRY, visible: :visible
 
     find(ATTACHMENT_REMOVE).click
     assert_no_selector ATTACHMENT_ITEM, wait: 10
+  end
+
+  test "a failed remove stays visible and can be retried safely" do
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+
+    with_playwright_page do |pw_page|
+      pw_page.route("**/attachments/discard", ->(route, _request) { route.abort })
+    end
+    find(ATTACHMENT_REMOVE).click
+
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=failed]", wait: 10
+    assert_selector ATTACHMENT_STATE, text: /could not be removed/i
+
+    with_playwright_page { |pw_page| pw_page.unroute("**/attachments/discard") }
+    find(ATTACHMENT_REMOVE).click
+    assert_no_selector ATTACHMENT_ITEM, wait: 10
+  end
+
+  test "a Stimulus reconnect restores one ready preview without duplicate listeners" do
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        (async () => {
+          const composer = document.querySelector('#annotation-form #{COMPOSER}')
+          const parent = composer.parentElement
+          const next = composer.nextSibling
+          composer.remove()
+          await new Promise(resolve => setTimeout(resolve, 50))
+          parent.insertBefore(composer, next)
+        })()
+      JS
+    end
+
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+    attach_file_to_composer(SECOND_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 2, wait: 15
+
+    fill_annotation_comment("Restored once")
+    submit_annotation
+    wait_for_turbo
+    assert_selector "#{GALLERY} #{THUMBNAIL}", count: 2, wait: 15
   end
 
   test "an invalid post keeps the composer, the body, and the ready image" do
@@ -261,6 +309,19 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     wait_for_turbo
 
     assert_selector "#{THUMBNAIL}[data-alt='Attached image']", wait: 15
+  end
+
+  test "saving while the alt field is focused waits for its final description" do
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+
+    fill_annotation_comment("Described image")
+    find(ATTACHMENT_ALT).set("A dialog showing the failed save")
+    submit_annotation
+    wait_for_turbo
+
+    assert_selector "#{THUMBNAIL}[data-alt='A dialog showing the failed save']", wait: 15
   end
 
   test "the viewer opens on two images, navigates with the keyboard, and restores focus" do

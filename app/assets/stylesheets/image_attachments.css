@@ -32,6 +32,13 @@
   --attachment-danger: #f87171;
 }
 
+/* Button and flex rules in the application stylesheet must never override the
+   semantic hidden state used by retry/progress/viewer controls. */
+.image-attachment-composer [hidden],
+.image-attachment-viewer [hidden] {
+  display: none !important;
+}
+
 @media (prefers-color-scheme: dark) {
   .image-attachment-viewer {
     --attachment-surface: #14161c;

@@ -24,14 +24,18 @@ export default class extends Controller {
   // itself — carries the same kind of ceiling. A hung claim must not leave the
   // composer frozen with its submit button disabled.
   static REQUEST_TIMEOUT = 60000
+  static RESUME_POLL_INTERVAL = 500
+  static RESUME_POLL_LIMIT = 20
 
   connect() {
+    this.connectionToken = (this.connectionToken || 0) + 1
+    const connectionToken = this.connectionToken
     this.disconnected = false
     this.items = new Map()
-    this.batchId = null
-    this.batchUrls = null
     this.pendingBatchRequest = null
     this.submitting = false
+    this.resuming = false
+    this.resumeFailed = false
     this.form = this.element.closest("form")
     if (!this.form) return
 
@@ -51,10 +55,23 @@ export default class extends Controller {
     this.form.addEventListener("paste", this.onPaste)
     this.form.addEventListener("annotorious:form-cancelled", this.onCancelled)
 
-    this.batchField = document.createElement("input")
-    this.batchField.type = "hidden"
-    this.batchField.name = "image_attachment_batch_id"
-    this.form.appendChild(this.batchField)
+    this.batchField = this.form.querySelector("[data-image-attachment-batch-field]") ||
+      this.form.querySelector('input[name="image_attachment_batch_id"]')
+    if (!this.batchField) {
+      this.batchField = document.createElement("input")
+      this.batchField.type = "hidden"
+      this.batchField.name = "image_attachment_batch_id"
+      this.batchField.dataset.imageAttachmentBatchField = "true"
+      this.form.appendChild(this.batchField)
+    }
+
+    this.batchId = this.batchField.value || null
+    this.batchUrls = this.batchId ? this.urlsForBatch(this.batchId) : null
+    this.itemsTarget.replaceChildren()
+    if (this.batchId) {
+      this.resuming = true
+      this.resumeBatch(connectionToken)
+    }
 
     this.refreshSubmitState()
   }
@@ -69,9 +86,9 @@ export default class extends Controller {
     this.form.removeEventListener("drop", this.onDrop)
     this.form.removeEventListener("paste", this.onPaste)
     this.form.removeEventListener("annotorious:form-cancelled", this.onCancelled)
-    this.batchField?.remove()
     this.items.forEach(item => item.request?.abort())
-    this.items.clear()
+    clearTimeout(this.resumeTimer)
+    this.connectionToken += 1
     // A disconnect is only a client going away. Committed drafts stay on the
     // server until their 24 hour expiry.
     this.form = null
@@ -114,13 +131,23 @@ export default class extends Controller {
       this.showError("Attachments must be PNG, JPEG, or WebP images.")
       return
     }
+    if (images.length < Array.from(event.dataTransfer?.files || []).length) {
+      this.showError("Some files were skipped. Attachments must be PNG, JPEG, or WebP images.")
+    }
 
     this.enqueue(images)
   }
 
   onPaste(event) {
     const images = this.imageFilesFrom(event.clipboardData)
-    if (images.length === 0) return
+    const files = Array.from(event.clipboardData?.files || [])
+    if (images.length === 0) {
+      if (files.length > 0) this.showError("Attachments must be PNG, JPEG, or WebP images.")
+      return
+    }
+    if (images.length < files.length) {
+      this.showError("Some files were skipped. Attachments must be PNG, JPEG, or WebP images.")
+    }
 
     // Mixed clipboard content keeps its text: only the image half is consumed
     // here, so the browser still inserts whatever text came with it.
@@ -147,14 +174,20 @@ export default class extends Controller {
       return
     }
 
+    const images = files.filter(file => this.acceptedTypesValue.includes(file.type))
+    if (images.length < files.length) {
+      this.showError("Attachments must be PNG, JPEG, or WebP images.")
+    }
+    if (images.length === 0) return
+
     const room = this.maxFilesValue - this.items.size
     if (room <= 0) {
       this.showError(`You can attach up to ${this.maxFilesValue} images.`)
       return
     }
 
-    const accepted = files.slice(0, room)
-    if (accepted.length < files.length) {
+    const accepted = images.slice(0, room)
+    if (accepted.length < images.length) {
       this.showError(`You can attach up to ${this.maxFilesValue} images.`)
     }
 
@@ -186,27 +219,49 @@ export default class extends Controller {
   }
 
   totalBytes() {
-    return Array.from(this.items.values()).reduce((sum, item) => sum + (item.file?.size || 0), 0)
+    return Array.from(this.items.values()).reduce((sum, item) => sum + (item.size || 0), 0)
   }
 
   createItem(file) {
     const clientKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-    const element = this.itemTemplateTarget.content.firstElementChild.cloneNode(true)
-    const item = {
+    return this.appendItem({
       clientKey,
       file,
-      element,
+      size: file.size,
       state: "uploading",
       serverId: null,
       previewUrl: null,
+      savedAltText: "",
+      failure: null
+    })
+  }
+
+  restoreItem(row) {
+    return this.appendItem({
+      clientKey: row.client_key,
+      file: null,
+      size: row.size || 0,
+      state: row.state,
+      serverId: row.id,
+      previewUrl: row.preview_url,
+      savedAltText: row.alt_text || "",
+      failure: row.failure
+    })
+  }
+
+  appendItem(attributes) {
+    const element = this.itemTemplateTarget.content.firstElementChild.cloneNode(true)
+    const item = {
+      ...attributes,
+      element,
       request: null,
       removed: false,
       altInput: element.querySelector("[data-attachment-alt]"),
-      savedAltText: "",
-      altRequest: null
+      altRequest: null,
+      removalFailed: false
     }
 
-    element.dataset.clientKey = clientKey
+    element.dataset.clientKey = item.clientKey
     element.querySelector("[data-attachment-remove]").addEventListener("click", () => this.remove(item))
     element.querySelector("[data-attachment-retry]").addEventListener("click", () => this.upload(item))
     item.altInput.addEventListener("change", event => {
@@ -214,7 +269,8 @@ export default class extends Controller {
     })
 
     this.itemsTarget.appendChild(element)
-    this.items.set(clientKey, item)
+    item.altInput.value = item.savedAltText
+    this.items.set(item.clientKey, item)
     this.renderItem(item)
     this.refreshSubmitState()
     this.notifyLayoutChanged()
@@ -222,8 +278,52 @@ export default class extends Controller {
     return item
   }
 
+  async resumeBatch(connectionToken, attempt = 0) {
+    try {
+      const response = await this.request(this.batchUrls.batchUrl)
+      const payload = await response.json().catch(() => ({}))
+      if (!this.connectedFor(connectionToken)) return
+      if (!response.ok) throw new Error(payload.error?.message || "The upload session could not be restored.")
+
+      this.items.clear()
+      this.itemsTarget.replaceChildren()
+      for (const row of payload.attachments || []) this.restoreItem(row)
+
+      const pending = Array.from(this.items.values()).some(item => item.state === "uploading")
+      if (pending && attempt < this.constructor.RESUME_POLL_LIMIT) {
+        this.resumeTimer = setTimeout(
+          () => this.resumeBatch(connectionToken, attempt + 1),
+          this.constructor.RESUME_POLL_INTERVAL
+        )
+        return
+      }
+
+      this.resuming = false
+      this.resumeFailed = pending
+      if (pending) this.showError("An interrupted upload is still settling. Reload and try again.")
+      this.items.forEach(item => this.renderItem(item))
+      this.refreshSubmitState()
+      this.notifyLayoutChanged()
+    } catch (error) {
+      if (!this.connectedFor(connectionToken)) return
+
+      this.resuming = false
+      this.resumeFailed = true
+      this.showError(error.message || "The upload session could not be restored.")
+      this.refreshSubmitState()
+    }
+  }
+
+  connectedFor(connectionToken) {
+    return !this.disconnected && this.connectionToken === connectionToken
+  }
+
   async upload(item) {
     if (this.disconnected) return
+    if (this.submitting) {
+      this.showError("Wait for the message to finish posting.")
+      return
+    }
 
     // Retrying supersedes whatever is still in flight for this row: the older
     // attempt is aborted, and its rejection is then ignored so it cannot
@@ -244,7 +344,7 @@ export default class extends Controller {
     } catch (error) {
       if (this.superseded(item, attempt)) return
 
-      this.failItem(item, error.message)
+      this.failItem(item, error.message, error.retryable !== false)
       return
     }
     if (this.superseded(item, attempt)) return
@@ -255,14 +355,7 @@ export default class extends Controller {
 
     try {
       const payload = await this.uploadWithProgress(`${batch.attachmentsUrl}`, body, item)
-      if (this.superseded(item, attempt)) {
-        // Remove reserves nothing: the server row this attempt created may not
-        // have existed when Remove looked for it. A superseded success from a
-        // removed item therefore discards its own row rather than leaving a
-        // ready draft the claim would silently attach.
-        if (item.removed) this.discardServerAttachment(payload.attachment.id)
-        return
-      }
+      if (this.superseded(item, attempt)) return
 
       item.serverId = payload.attachment.id
       item.state = payload.attachment.state
@@ -274,7 +367,7 @@ export default class extends Controller {
     } catch (error) {
       if (this.superseded(item, attempt)) return
 
-      this.failItem(item, error.message)
+      this.failItem(item, error.message, error.retryable !== false)
     } finally {
       if (item.attempt === attempt) {
         item.request = null
@@ -312,12 +405,15 @@ export default class extends Controller {
         if (request.status >= 200 && request.status < 300) {
           resolve(payload)
         } else {
-          reject(new Error(payload.error?.message || "The upload did not finish. Retry it."))
+          reject(this.requestError(
+            payload.error?.message || "The upload did not finish. Retry it.",
+            typeof payload.error?.retryable === "boolean" ? payload.error.retryable : request.status >= 500
+          ))
         }
       })
-      request.addEventListener("error", () => reject(new Error("The upload did not finish. Retry it.")))
-      request.addEventListener("timeout", () => reject(new Error("The upload timed out. Retry it.")))
-      request.addEventListener("abort", () => reject(new Error("Upload cancelled.")))
+      request.addEventListener("error", () => reject(this.requestError("The upload did not finish. Retry it.")))
+      request.addEventListener("timeout", () => reject(this.requestError("The upload timed out. Retry it.")))
+      request.addEventListener("abort", () => reject(this.requestError("Upload cancelled.")))
       request.send(body)
     })
   }
@@ -339,62 +435,68 @@ export default class extends Controller {
       method: "POST",
       body: JSON.stringify({ project_id: this.projectIdValue })
     })
-    const payload = await response.json()
-    if (!response.ok) throw new Error(payload.error?.message || "Uploads are unavailable right now.")
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw this.requestError(
+        payload.error?.message || "Uploads are unavailable right now.",
+        typeof payload.error?.retryable === "boolean" ? payload.error.retryable : response.status >= 500
+      )
+    }
 
     this.batchId = payload.batch_id
     this.batchField.value = payload.batch_id
-    this.batchUrls = {
-      batchUrl: `${this.batchesUrlValue}/${payload.batch_id}`,
-      attachmentsUrl: `${this.batchesUrlValue}/${payload.batch_id}/attachments`
-    }
+    this.batchUrls = this.urlsForBatch(payload.batch_id)
 
     return this.batchUrls
   }
 
   async remove(item) {
+    if (this.submitting) {
+      this.showError("Wait for the message to finish posting.")
+      return
+    }
+
     item.removed = true
     item.request?.abort()
     item.attempt = (item.attempt || 0) + 1
-
-    const serverId = item.serverId || await this.resolveServerId(item)
-    if (serverId) await this.discardServerAttachment(serverId)
-
-    item.element.remove()
-    this.items.delete(item.clientKey)
-    this.announce("Image removed.")
+    item.state = "removing"
+    item.failure = null
+    item.removalFailed = false
+    this.renderItem(item)
     this.refreshSubmitState()
-    this.notifyLayoutChanged()
-  }
-
-  // Removal is idempotent server side, and a commit racing it is rejected
-  // under the batch lock, so a lost response must not strand the row here.
-  async discardServerAttachment(serverId) {
-    if (!serverId || !this.batchUrls) return
 
     try {
-      await this.request(`${this.batchUrls.attachmentsUrl}/${serverId}`, { method: "DELETE" })
+      await this.ensureBatch()
+      await this.discardServerAttachment(item)
+
+      item.element.remove()
+      this.items.delete(item.clientKey)
+      this.announce("Image removed.")
+      this.refreshSubmitState()
+      this.notifyLayoutChanged()
     } catch {
-      // Nothing to recover: the row is already gone from the composer.
+      item.removed = false
+      item.removalFailed = true
+      item.state = "failed"
+      item.failure = { message: "The image could not be removed. Try Remove again.", retryable: false }
+      this.renderItem(item)
+      this.showError(item.failure.message)
+      this.refreshSubmitState()
     }
   }
 
-  // The server reserves a row before it reads a byte, so an upload that failed
-  // or never answered still holds a slot the composer never learned the ID of.
-  // Resolving it by client key is what lets Remove free that slot instead of
-  // leaving the batch permanently unready.
-  async resolveServerId(item) {
-    if (!this.batchUrls) return null
+  // The client key exists before the numeric row ID. DELETE reserves it as a
+  // tombstone, so it is safe whether the upload is pending, ready, failed, or
+  // has not created its row yet. The item stays visible if delivery fails; a
+  // silent local removal could otherwise let a ghost row reach claim.
+  async discardServerAttachment(item) {
+    if (!this.batchUrls) throw new Error("The upload session is unavailable.")
 
-    try {
-      const response = await this.request(this.batchUrls.batchUrl)
-      if (!response.ok) return null
-
-      const payload = await response.json()
-      return payload.attachments?.find(row => row.client_key === item.clientKey)?.id || null
-    } catch {
-      return null
-    }
+    const response = await this.request(`${this.batchUrls.attachmentsUrl}/discard`, {
+      method: "DELETE",
+      body: JSON.stringify({ client_key: item.clientKey })
+    })
+    if (!response.ok) throw new Error("The image could not be removed.")
   }
 
   // The typed description is part of the message, so a write is a tracked
@@ -402,9 +504,14 @@ export default class extends Controller {
   // bare `fetch` would otherwise report as success.
   saveAltText(item, value) {
     if (!item.serverId || !this.batchUrls) return Promise.resolve(true)
-    if (value === item.savedAltText) return item.altRequest || Promise.resolve(true)
+    if (value === item.savedAltText && !item.altRequest) return Promise.resolve(true)
 
-    const write = (async () => {
+    // Chain writes per item. A blur PATCH for value A must not finish after the
+    // submit-time flush for value B and overwrite B on the server.
+    const prior = item.altRequest || Promise.resolve(true)
+    const write = prior.catch(() => false).then(async () => {
+      if (value === item.savedAltText) return true
+
       try {
         const response = await this.request(`${this.batchUrls.attachmentsUrl}/${item.serverId}`, {
           method: "PATCH",
@@ -415,13 +522,16 @@ export default class extends Controller {
         item.savedAltText = value
         return true
       } catch {
-        this.showError("The description could not be saved. Try again.")
+        if (!item.removed) this.showError("The description could not be saved. Try again.")
         return false
       }
-    })()
+    })
 
-    item.altRequest = write
-    return write
+    const tracked = write.finally(() => {
+      if (item.altRequest === tracked) item.altRequest = null
+    })
+    item.altRequest = tracked
+    return tracked
   }
 
   // Saving without leaving the description field never fires `change`, and a
@@ -471,6 +581,7 @@ export default class extends Controller {
       if (response.ok) {
         this.batchId = null
         this.batchUrls = null
+        if (this.batchField) this.batchField.value = ""
         this.navigateAfterSubmit(payload.redirect_url, frame)
         return
       }
@@ -525,6 +636,7 @@ export default class extends Controller {
     const batchId = payload.form?.image_attachment_batch_id
     if (batchId) {
       this.batchId = batchId
+      this.batchUrls ||= this.urlsForBatch(batchId)
       if (this.batchField) this.batchField.value = batchId
     }
 
@@ -560,9 +672,22 @@ export default class extends Controller {
     }).finally(() => clearTimeout(timer))
   }
 
-  failItem(item, message) {
+  urlsForBatch(batchId) {
+    return {
+      batchUrl: `${this.batchesUrlValue}/${batchId}`,
+      attachmentsUrl: `${this.batchesUrlValue}/${batchId}/attachments`
+    }
+  }
+
+  requestError(message, retryable = true) {
+    const error = new Error(message)
+    error.retryable = retryable
+    return error
+  }
+
+  failItem(item, message, retryable = true) {
     item.state = "failed"
-    item.failure = { message }
+    item.failure = { message, retryable }
     this.renderItem(item)
     this.announce(`${this.itemLabel(item)} failed. ${message}`)
     this.refreshSubmitState()
@@ -581,13 +706,15 @@ export default class extends Controller {
     element.classList.toggle("image-attachment-item--failed", item.state === "failed")
     progress.value = item.progress || 0
     progress.hidden = item.state !== "uploading"
-    retry.hidden = item.state !== "failed"
-    alt.disabled = item.state !== "ready"
+    retry.hidden = item.state !== "failed" || !item.file || item.failure?.retryable !== true || item.removalFailed
+    alt.disabled = this.resuming || item.state !== "ready"
 
     if (item.state === "uploading") {
       state.textContent = `Uploading ${item.progress || 0}%`
     } else if (item.state === "failed") {
       state.textContent = item.failure?.message || "Upload failed."
+    } else if (item.state === "removing") {
+      state.textContent = "Removing…"
     } else {
       state.textContent = "Ready"
     }
@@ -603,13 +730,19 @@ export default class extends Controller {
   }
 
   readyToSubmit() {
-    return Array.from(this.items.values()).every(item => item.state === "ready")
+    return !this.resuming && !this.resumeFailed &&
+      Array.from(this.items.values()).every(item => item.state === "ready")
   }
 
   refreshSubmitState() {
     const blocked = this.submitting || !this.readyToSubmit()
     this.form?.querySelectorAll("input[type=submit], button[type=submit]").forEach(button => {
       button.disabled = blocked
+    })
+    this.items.forEach(item => {
+      item.altInput.disabled = this.submitting || this.resuming || item.state !== "ready"
+      item.element.querySelector("[data-attachment-remove]").disabled = this.submitting || item.state === "removing"
+      item.element.querySelector("[data-attachment-retry]").disabled = this.submitting
     })
   }
 

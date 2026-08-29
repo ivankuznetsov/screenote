@@ -9,7 +9,7 @@ module ImageAttachments
   # replayed from a stored row can never drift apart, and so every limit in the
   # text is derived from the constant the server actually enforces.
   class Error < StandardError
-    RETRYABLE_CODES = %w[decoder_busy storage_unavailable].freeze
+    RETRYABLE_CODES = %w[decoder_busy storage_unavailable upload_failed].freeze
 
     # Byte-sniffing rejects exactly the set the declared type check rejects, so
     # both report it with the same words.
