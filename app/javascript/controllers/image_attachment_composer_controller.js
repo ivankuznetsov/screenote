@@ -16,7 +16,12 @@ export default class extends Controller {
     acceptedTypes: Array
   }
 
+  // A hung upload must not block the post forever, and 20MB has to fit over a
+  // slow connection, so the ceiling is generous rather than tight.
+  static UPLOAD_TIMEOUT = 180000
+
   connect() {
+    this.disconnected = false
     this.items = new Map()
     this.batchId = null
     this.batchUrls = null
@@ -48,6 +53,7 @@ export default class extends Controller {
   }
 
   disconnect() {
+    this.disconnected = true
     if (!this.form) return
 
     this.form.removeEventListener("submit", this.onSubmit)
@@ -112,6 +118,13 @@ export default class extends Controller {
 
   async enqueue(files) {
     if (files.length === 0) return
+    // A file added while the post is in flight would reach the server after
+    // the claim and leave the batch unready, so the composer is frozen until
+    // the submission settles.
+    if (this.submitting) {
+      this.showError("Wait for the message to finish posting.")
+      return
+    }
 
     const room = this.maxFilesValue - this.items.size
     if (room <= 0) {
@@ -124,15 +137,30 @@ export default class extends Controller {
       this.showError(`You can attach up to ${this.maxFilesValue} images.`)
     }
 
+    let total = this.totalBytes()
     for (const file of accepted) {
       if (file.size > this.maxFileSizeValue) {
         this.showError(`Each image must be ${Math.round(this.maxFileSizeValue / 1048576)}MB or smaller.`)
         continue
       }
 
+      // The server enforces the same per-message total on commit; refusing the
+      // file here means nothing is uploaded only to be rejected afterwards.
+      if (total + file.size > this.maxTotalSizeValue) {
+        this.showError(
+          `Attachments for one message can total at most ${Math.round(this.maxTotalSizeValue / 1048576)}MB.`
+        )
+        break
+      }
+
+      total += file.size
       const item = this.createItem(file)
       await this.upload(item)
     }
+  }
+
+  totalBytes() {
+    return Array.from(this.items.values()).reduce((sum, item) => sum + (item.file?.size || 0), 0)
   }
 
   createItem(file) {
@@ -165,6 +193,15 @@ export default class extends Controller {
   }
 
   async upload(item) {
+    if (this.disconnected) return
+
+    // Retrying supersedes whatever is still in flight for this row: the older
+    // attempt is aborted, and its rejection is then ignored so it cannot
+    // overwrite the state the new attempt is about to write.
+    item.request?.abort()
+    const attempt = (item.attempt || 0) + 1
+    item.attempt = attempt
+
     item.state = "uploading"
     item.failure = null
     item.progress = 0
@@ -175,9 +212,12 @@ export default class extends Controller {
     try {
       batch = await this.ensureBatch()
     } catch (error) {
+      if (this.superseded(item, attempt)) return
+
       this.failItem(item, error.message)
       return
     }
+    if (this.superseded(item, attempt)) return
 
     const body = new FormData()
     body.append("client_key", item.clientKey)
@@ -185,6 +225,8 @@ export default class extends Controller {
 
     try {
       const payload = await this.uploadWithProgress(`${batch.attachmentsUrl}`, body, item)
+      if (this.superseded(item, attempt)) return
+
       item.serverId = payload.attachment.id
       item.state = payload.attachment.state
       item.previewUrl = payload.attachment.preview_url
@@ -193,11 +235,19 @@ export default class extends Controller {
       this.notifyLayoutChanged()
       this.announce(`${this.itemLabel(item)} uploaded.`)
     } catch (error) {
+      if (this.superseded(item, attempt)) return
+
       this.failItem(item, error.message)
     } finally {
-      item.request = null
-      this.refreshSubmitState()
+      if (item.attempt === attempt) {
+        item.request = null
+        this.refreshSubmitState()
+      }
     }
+  }
+
+  superseded(item, attempt) {
+    return this.disconnected || item.attempt !== attempt
   }
 
   uploadWithProgress(url, body, item) {
@@ -205,6 +255,7 @@ export default class extends Controller {
       const request = new XMLHttpRequest()
       item.request = request
       request.open("POST", url)
+      request.timeout = this.constructor.UPLOAD_TIMEOUT
       request.setRequestHeader("Accept", "application/json")
       request.setRequestHeader("X-CSRF-Token", this.csrfToken)
       request.upload.addEventListener("progress", event => {
@@ -228,6 +279,7 @@ export default class extends Controller {
         }
       })
       request.addEventListener("error", () => reject(new Error("The upload did not finish. Retry it.")))
+      request.addEventListener("timeout", () => reject(new Error("The upload timed out. Retry it.")))
       request.addEventListener("abort", () => reject(new Error("Upload cancelled.")))
       request.send(body)
     })
@@ -235,6 +287,7 @@ export default class extends Controller {
 
   async ensureBatch() {
     if (this.batchUrls) return this.batchUrls
+    if (this.disconnected) throw new Error("Uploads are unavailable right now.")
 
     this.pendingBatchRequest ||= this.requestBatch()
     try {
@@ -264,10 +317,12 @@ export default class extends Controller {
 
   async remove(item) {
     item.request?.abort()
+    item.attempt = (item.attempt || 0) + 1
 
-    if (item.serverId && this.batchUrls) {
+    const serverId = item.serverId || await this.resolveServerId(item)
+    if (serverId && this.batchUrls) {
       try {
-        await this.request(`${this.batchUrls.attachmentsUrl}/${item.serverId}`, { method: "DELETE" })
+        await this.request(`${this.batchUrls.attachmentsUrl}/${serverId}`, { method: "DELETE" })
       } catch {
         // Removal is idempotent server side; a lost response must not strand
         // the row in the composer.
@@ -279,6 +334,24 @@ export default class extends Controller {
     this.announce("Image removed.")
     this.refreshSubmitState()
     this.notifyLayoutChanged()
+  }
+
+  // The server reserves a row before it reads a byte, so an upload that failed
+  // or never answered still holds a slot the composer never learned the ID of.
+  // Resolving it by client key is what lets Remove free that slot instead of
+  // leaving the batch permanently unready.
+  async resolveServerId(item) {
+    if (!this.batchUrls) return null
+
+    try {
+      const response = await this.request(this.batchUrls.batchUrl)
+      if (!response.ok) return null
+
+      const payload = await response.json()
+      return payload.attachments?.find(row => row.client_key === item.clientKey)?.id || null
+    } catch {
+      return null
+    }
   }
 
   async saveAltText(item, value) {
@@ -308,6 +381,9 @@ export default class extends Controller {
 
     const body = new FormData(this.form)
     if (this.batchId) body.set("image_attachment_batch_id", this.batchId)
+    // Cancelling the overlay mid-post tears the form out from under us, so the
+    // navigation target is captured while it is still attached.
+    const frame = this.form.closest("turbo-frame")
 
     try {
       const response = await fetch(this.form.action, {
@@ -321,7 +397,7 @@ export default class extends Controller {
       if (response.ok) {
         this.batchId = null
         this.batchUrls = null
-        this.navigateAfterSubmit(payload.redirect_url)
+        this.navigateAfterSubmit(payload.redirect_url, frame)
         return
       }
 
@@ -338,9 +414,7 @@ export default class extends Controller {
   // the workspace Turbo frame, so reloading that frame is what a plain Turbo
   // form submission used to do — and it leaves review state such as fullscreen
   // mode untouched.
-  navigateAfterSubmit(url) {
-    const frame = this.form.closest("turbo-frame")
-
+  navigateAfterSubmit(url, frame) {
     if (frame && url) {
       frame.src = url
       frame.reload()
@@ -356,7 +430,7 @@ export default class extends Controller {
     const batchId = payload.form?.image_attachment_batch_id
     if (batchId) {
       this.batchId = batchId
-      this.batchField.value = batchId
+      if (this.batchField) this.batchField.value = batchId
     }
 
     const readyIds = payload.form?.ready_attachment_ids || []
@@ -401,6 +475,7 @@ export default class extends Controller {
     const alt = element.querySelector("[data-attachment-alt]")
 
     element.dataset.state = item.state
+    element.classList.toggle("image-attachment-item--failed", item.state === "failed")
     progress.value = item.progress || 0
     progress.hidden = item.state !== "uploading"
     retry.hidden = item.state !== "failed"

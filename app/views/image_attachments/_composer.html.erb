@@ -18,7 +18,7 @@
             class="btn btn--small btn--secondary image-attachment-composer__attach"
             data-action="image-attachment-composer#openPicker"
             data-testid="attach-image-button">Attach image</button>
-    <span class="image-attachment-composer__hint">PNG, JPEG, or WebP. Up to <%= ImageAttachment::MAX_FILES %>, <%= ImageAttachment::MAX_FILE_SIZE / 1.megabyte %>MB each.</span>
+    <span class="image-attachment-composer__hint">PNG, JPEG, or WebP. Up to <%= ImageAttachment::MAX_FILES %>, <%= ImageAttachment::MAX_FILE_SIZE / 1.megabyte %>MB each, <%= ImageAttachment::MAX_TOTAL_BYTES / 1.megabyte %>MB per message.</span>
   </div>
 
   <input type="file"

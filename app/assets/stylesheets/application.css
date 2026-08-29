@@ -2753,7 +2753,7 @@ body.review-fullscreen-open {
   padding: 0.375rem;
 }
 
-.image-attachment-item[data-state="failed"] {
+.image-attachment-item--failed {
   border-color: var(--attachment-danger);
 }
 

@@ -38,8 +38,11 @@
             data-image-attachment-viewer-target="dialog"
             data-testid="attachment-viewer">
       <div class="image-attachment-viewer__frame">
+        <%# The dialog opens focus onto its content, so the image itself has to
+            be programmatically focusable. %>
         <img class="image-attachment-viewer__image"
              alt=""
+             tabindex="-1"
              data-image-attachment-viewer-target="image"
              data-testid="attachment-viewer-image">
       </div>
