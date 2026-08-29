@@ -76,7 +76,9 @@ purges rows whose message no longer resolves after a delete that bypassed the
 callbacks, and it re-enqueues `ImageAttachmentThumbnailJob` for submitted rows
 whose variants were never produced, so a claim whose `perform_later` was lost
 does not leave a posted gallery on its placeholder until the process restarts.
-Re-enqueueing is idempotent and generation aware: the job is keyed on the
-attachment together with the exact blob it was asked to warm. Deleting a user whose submitted attachments live on
-another member's message is rejected with a domain error rather than orphaning
-the uploader identity.
+The reconciliation query selects only rows missing one of the two named
+variant digests and is capped before preloading them. Re-enqueueing is
+idempotent and generation aware: the job is keyed on the attachment together
+with the exact blob it was asked to warm. Deleting a user whose submitted
+attachments live on another member's message is rejected with a domain error
+rather than orphaning the uploader identity.

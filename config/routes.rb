@@ -11,7 +11,9 @@ Rails.application.routes.draw do
 
   scope module: :image_attachment_drafts, path: "image-attachment-drafts", as: :image_attachment_draft do
     resources :batches, only: %i[create show destroy], param: :public_id do
-      resources :attachments, only: %i[create update destroy]
+      resources :attachments, only: %i[create update destroy] do
+        delete :discard, on: :collection
+      end
     end
   end
 

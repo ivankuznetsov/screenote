@@ -75,6 +75,15 @@ class ImageAttachmentOrphanReconciliationJobTest < ActiveSupport::TestCase
     end
   end
 
+  test "variant reconciliation selects at most the requested missing rows" do
+    2.times { submitted_attachment }
+    clear_enqueued_jobs
+
+    ImageAttachmentOrphanReconciliationJob.perform_now(limit: 1)
+
+    assert_enqueued_jobs 1, only: ImageAttachmentThumbnailJob
+  end
+
   private
 
   # Foreign keys make this unreachable through the application, which is the

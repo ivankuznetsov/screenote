@@ -52,6 +52,9 @@ class ImageAttachmentBatch < ApplicationRecord
   end
 
   def self.outstanding_draft_bytes(user_id, excluding: nil)
+    # A removal tombstone keeps its byte_size until storage confirms purge, so
+    # it remains part of the scheduler-independent account ceiling during an
+    # outage even though claim and resume already treat it as removed.
     scope = ImageAttachment.where(image_attachment_batch: outstanding_for(user_id))
     scope = scope.where.not(id: excluding) if excluding
     scope.sum(:byte_size)
@@ -89,7 +92,7 @@ class ImageAttachmentBatch < ApplicationRecord
   end
 
   def total_byte_size(excluding: nil)
-    scope = image_attachments
+    scope = image_attachments.active_drafts
     scope = scope.where.not(id: excluding) if excluding
     scope.sum(:byte_size)
   end

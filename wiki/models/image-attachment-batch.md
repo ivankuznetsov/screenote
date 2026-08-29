@@ -46,11 +46,11 @@ account park unbounded bytes.
 
 Both caps live on the model. `ImageAttachmentBatch.open_for!` applies them to
 every draft that is opened, locking the account row so the check and the insert
-are one step and two composers cannot each read the same room. `Ingest`
-rechecks the byte ceiling inside the commit lock so batches opened under the
-cap cannot be filled past it afterwards. Expired batches that cleanup has not
-yet reclaimed still hold their rows and blobs, so they keep counting toward
-both caps.
+are one step and two composers cannot each read the same room. `Ingest` takes
+that same account lock before its batch lock and rechecks the byte ceiling at
+commit, so uploads into different open batches cannot each observe the same
+remaining room. Expired batches that cleanup has not yet reclaimed still hold
+their rows and blobs, so they keep counting toward both caps.
 
 ## Claim
 
@@ -68,11 +68,15 @@ returned exactly as it stands: replaying a lost 201 never reopens the row or
 replaces its blob. `ImageAttachments::WriteAltText` and
 `ImageAttachments::RemoveAttachment` both take the batch lock first, so a
 description or a removal racing a claim resolves as not-found rather than
-touching submitted metadata. The commit re-resolves its own row under that same
-lock and answers `attachment_removed` if the row is gone, so an upload that
-overlapped a removal cannot bind bytes onto a discarded slot. A failure
-recorded by a superseded attempt never un-readies a row another attempt
-finished.
+touching submitted metadata. Removal retains a bounded client-key tombstone
+inside the draft. It is hidden from resume and discarded at claim, but it stops
+an in-flight POST that had not created its row yet from bringing the removed
+image back. The commit re-resolves its own row under that same lock and answers
+`attachment_removed` for a tombstone. A failure recorded by a superseded
+attempt never un-readies a row another attempt finished or overwrites the
+tombstone. A tombstone keeps its byte count in the account ceiling until its
+blob purge succeeds, then clears the stored metadata; storage failure therefore
+cannot make the scheduler-independent cap optimistic.
 
 Decoding is serialized per batch as well as globally: `ImageDecoding::Guard`
 takes a per-key slot before a global one, so one batch's overlapping uploads

@@ -46,7 +46,9 @@ module ImageAttachments
         next replay if batch.state_claimed?
 
         validate_ownership!
-        attachments = locked_attachments
+        rows = locked_attachments
+        removed, attachments = rows.partition(&:removal_tombstone?)
+        removed.each(&:destroy!)
         validate_attachments!(attachments)
 
         parent = parent_builder.call

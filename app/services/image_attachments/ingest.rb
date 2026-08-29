@@ -45,7 +45,7 @@ module ImageAttachments
           media_type = detect_media_type!(tempfile)
           validate_declared_identity!(media_type)
           width, height = decode!(tempfile)
-          commit!(attachment, tempfile, media_type:, byte_size:, width:, height:)
+          attachment = commit!(attachment, tempfile, media_type:, byte_size:, width:, height:)
         end
 
         Result.new(attachment: attachment)
@@ -88,13 +88,15 @@ module ImageAttachments
         existing = batch.image_attachments.find_by(client_key: client_key)
 
         if existing
+          raise Error.new(code: "attachment_removed", status: :not_found) if existing.removal_tombstone?
+
           # Retry reuses the client idempotency key and therefore its slot. A
           # slot that already finished is returned exactly as it stands.
           existing.update!(state: :uploading, failure_code: nil) unless existing.state_ready?
           next existing
         end
 
-        invalid!("too_many_files") if batch.image_attachments.count >= ImageAttachment::MAX_FILES
+        invalid!("too_many_files") if batch.image_attachments.active_drafts.count >= ImageAttachment::MAX_FILES
 
         batch.image_attachments.create!(
           user_id: batch.user_id,
@@ -174,13 +176,19 @@ module ImageAttachments
       blob = stage_blob!(attachment, tempfile, media_type)
       attached = false
 
-      batch.with_lock do
+      # The account row is the serialization point for the scheduler-
+      # independent byte ceiling across every open batch. Taking it before the
+      # batch also agrees with open_for! and account deletion, avoiding a
+      # user/batch lock inversion.
+      ImageAttachment.transaction do
+        User.lock.find(batch.user_id)
+        batch.lock!
         ensure_usable!
         # Remove and cleanup destroy the reserved row without this request
         # knowing. Re-resolving it under the batch lock — the same lock both of
         # those take first — is what stops a commit from binding bytes the
         # composer already discarded onto a row a claim would then attach.
-        ensure_still_reserved!(attachment)
+        attachment = ensure_still_reserved!(attachment)
         ensure_slot_available!(attachment)
         ensure_total_within_limit!(attachment, byte_size)
         ensure_outstanding_drafts_within_limit!(attachment, byte_size)
@@ -236,7 +244,8 @@ module ImageAttachments
     end
 
     def ensure_still_reserved!(attachment)
-      return if batch.image_attachments.exists?(id: attachment.id)
+      current = batch.image_attachments.find_by(id: attachment.id)
+      return current if current && !current.removal_tombstone?
 
       raise Error.new(code: "attachment_removed", status: :not_found)
     end
@@ -269,6 +278,7 @@ module ImageAttachments
 
       attachment.reload
       return unless attachment.draft?
+      return if attachment.removal_tombstone?
       # A timed-out or aborted attempt shares its slot with the retry that
       # supersedes it. Once the row is ready the upload it names has already
       # succeeded, so a late failure from the disconnected attempt must not

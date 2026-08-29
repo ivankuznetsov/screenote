@@ -78,7 +78,24 @@ module ImageAttachmentDrafts
         assert_response :success
         assert_empty response.parsed_body["attachments"]
       end
-      assert_equal 0, @batch.image_attachments.count
+      assert_predicate @batch.image_attachments.sole, :removal_tombstone?
+      assert_not @batch.image_attachments.sole.image.attached?
+    end
+
+    test "removal by client key wins before an upload reserves its row" do
+      delete discard_image_attachment_draft_batch_attachments_path(@batch.public_id),
+        params: { client_key: "not-reserved-yet" }, as: :json
+
+      assert_response :success
+      assert_empty response.parsed_body["attachments"]
+      assert_predicate @batch.image_attachments.sole, :removal_tombstone?
+
+      post_upload("shot.png", client_key: "not-reserved-yet")
+
+      assert_response :not_found
+      assert_equal "attachment_removed", response.parsed_body.dig("error", "code")
+      assert_predicate @batch.image_attachments.sole, :removal_tombstone?
+      assert_not @batch.image_attachments.sole.image.attached?
     end
 
     test "a collaborator cannot upload into another member's draft" do
@@ -154,6 +171,16 @@ module ImageAttachmentDrafts
 
         assert_response :unprocessable_entity
       end
+    end
+
+    test "client-key removal requires a CSRF token" do
+      with_forgery_protection do
+        delete discard_image_attachment_draft_batch_attachments_path(@batch.public_id),
+          params: { client_key: "protected" }, as: :json
+
+        assert_response :unprocessable_entity
+      end
+      assert_empty @batch.image_attachments
     end
 
     private

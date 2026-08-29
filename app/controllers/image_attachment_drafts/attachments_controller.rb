@@ -39,5 +39,19 @@ module ImageAttachmentDrafts
 
       render_batch(batch.reload)
     end
+
+    # The browser always knows its client key, including before an in-flight
+    # POST has returned the numeric row ID. Reserving that key as removed makes
+    # an abort/delete race deterministic instead of letting a ghost row reach
+    # the next claim.
+    def discard
+      batch = find_batch!
+      ImageAttachments::RemoveAttachment.call(
+        batch: batch,
+        client_key: params.require(:client_key).to_s
+      )
+
+      render_batch(batch.reload)
+    end
   end
 end

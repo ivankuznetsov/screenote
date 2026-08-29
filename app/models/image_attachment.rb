@@ -18,6 +18,7 @@ class ImageAttachment < ApplicationRecord
   MAX_PIXELS = 50_000_000
   MAX_ALT_TEXT = 1000
   ALT_TEXT_FALLBACK = "Attached image"
+  REMOVAL_TOMBSTONE = "attachment_removed"
   THUMBNAIL_VARIANT_NAMES = %i[attachment_thumb_1x attachment_thumb_2x].freeze
   MEDIA_VARIANT_NAMES = (THUMBNAIL_VARIANT_NAMES + %i[original download]).freeze
   # Rendering must never query for or process a variant. Preload this and read
@@ -58,6 +59,7 @@ class ImageAttachment < ApplicationRecord
 
   scope :submitted, -> { where(image_attachment_batch_id: nil) }
   scope :drafts, -> { where.not(image_attachment_batch_id: nil) }
+  scope :active_drafts, -> { where("failure_code IS NULL OR failure_code <> ?", REMOVAL_TOMBSTONE) }
   scope :ordered, -> { order(:id) }
   scope :with_media, -> { includes(image_attachment: :blob) }
 
@@ -67,6 +69,13 @@ class ImageAttachment < ApplicationRecord
 
   def submitted?
     !draft?
+  end
+
+  # A removed client key stays reserved until the batch is claimed, discarded,
+  # or expires. That small tombstone is what makes a DELETE win even when the
+  # upload request has reached the server but has not reserved its row yet.
+  def removal_tombstone?
+    draft? && failure_code == REMOVAL_TOMBSTONE
   end
 
   def parent

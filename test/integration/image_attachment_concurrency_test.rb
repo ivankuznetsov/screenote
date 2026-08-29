@@ -111,10 +111,9 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     assert_equal claimed.parent.id, attachment.reload.annotation_id
   end
 
-  # Remove reserves nothing on the server, so the row an upload creates can be
-  # newer than the row Remove looked for. The commit has to notice under the
-  # batch lock, or a discarded image comes back as a ready draft that the next
-  # claim silently binds to the message.
+  # Removal reserves the client key as a tombstone, so the row an upload tries
+  # to create cannot be newer than the removal. The commit also rechecks that
+  # marker under the batch lock before it can bind bytes.
   test "a removal during an upload stops that upload from binding its bytes" do
     bytes = image_bytes
 
@@ -131,9 +130,10 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
       )
     end
 
-    assert_equal 1, outcomes.grep(ImageAttachments::Error).size
-    assert_equal "attachment_removed", outcomes.grep(ImageAttachments::Error).sole.code
-    assert_empty ImageAttachment.where(image_attachment_batch: @batch)
+    errors = outcomes.grep(ImageAttachments::Error)
+    assert_equal 1, errors.size, -> { outcomes.map { |outcome| [ outcome.class.name, outcome.inspect ] }.inspect }
+    assert_equal "attachment_removed", errors.sole.code
+    assert_predicate ImageAttachment.where(image_attachment_batch: @batch).sole, :removal_tombstone?
     assert_empty ActiveStorage::Blob.where("id > ?", @highest_blob_id)
 
     result = ImageAttachments::ClaimBatch.call(
@@ -145,6 +145,45 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     end
 
     assert_empty result.attachments
+    assert_empty ImageAttachment.where(image_attachment_batch: @batch)
+  end
+
+  test "the account byte ceiling serializes commits across different batches" do
+    skip "row-lock qualification runs on PostgreSQL" unless ApplicationRecord.connection.adapter_name == "PostgreSQL"
+
+    bytes = image_bytes
+    other_batch = build_batch(user: @user, project: @project)
+    parked_batch = build_batch(user: @user, project: @project)
+    parked_batch.image_attachments.create!(
+      user: @user,
+      project: @project,
+      client_key: "parked",
+      state: :ready,
+      media_type: "image/png",
+      width: 1,
+      height: 1,
+      byte_size: bytes.bytesize
+    )
+
+    stub_const(ImageAttachmentBatch, :MAX_OUTSTANDING_DRAFT_BYTES, bytes.bytesize * 2) do
+      outcomes = with_one_shot_instance_method_barrier(
+        ImageAttachments::Ingest,
+        :ensure_outstanding_drafts_within_limit!,
+        predicate: ->(_record, *_args) { true }
+      ) do |entered, release|
+        run_blocked_race(
+          entered: entered,
+          release: release,
+          first: -> { safe_ingest(bytes, "cap-a", batch: @batch) },
+          second: -> { safe_ingest(bytes, "cap-b", batch: other_batch) }
+        )
+      end
+
+      assert_equal 1, outcomes.grep(ImageAttachments::Error).size
+      assert_equal "draft_storage_exhausted", outcomes.grep(ImageAttachments::Error).sole.code
+      assert_equal bytes.bytesize * 2,
+        ImageAttachmentBatch.outstanding_draft_bytes(@user.id)
+    end
   end
 
   test "a cleanup pass overlapping a submission cannot take bytes away from the message" do
@@ -216,9 +255,9 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     ImageAttachments::RemoveAttachment.call(batch: ImageAttachmentBatch.find(@batch.id), attachment_id: row.id)
   end
 
-  def safe_ingest(bytes, client_key)
+  def safe_ingest(bytes, client_key, batch: @batch)
     ImageAttachments::Ingest.call(
-      batch: ImageAttachmentBatch.find(@batch.id),
+      batch: ImageAttachmentBatch.find(batch.id),
       io: StringIO.new(bytes),
       client_key: client_key,
       declared_content_type: "image/png"

@@ -57,8 +57,7 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
   def rewarm_variants(limit)
     enqueued = 0
 
-    unwarmed_candidates.find_each do |attachment|
-      break if enqueued >= limit
+    unwarmed_candidates(limit).each do |attachment|
       next if attachment.thumbnails_renderable?
 
       ImageAttachmentThumbnailJob.perform_later(attachment, attachment.image.blob.id)
@@ -73,8 +72,35 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
     enqueued
   end
 
-  def unwarmed_candidates
-    ImageAttachment.submitted.state_ready.includes(ImageAttachment::RENDER_PRELOAD).order(:id)
+  # The former Ruby-side `find_each` walked every submitted attachment on each
+  # hourly pass once most rows were warm. Select only blobs missing one of the
+  # two named variation digests and cap the candidate IDs in SQL, then preload
+  # exactly those rows for the final generation-aware recheck.
+  def unwarmed_candidates(limit)
+    digests = thumbnail_variant_digests
+    ids = ImageAttachment
+      .submitted
+      .state_ready
+      .joins(:image_blob)
+      .left_joins(image_blob: :variant_records)
+      .group("image_attachments.id")
+      .having(<<~SQL.squish, digests, digests.length)
+        COUNT(DISTINCT CASE
+          WHEN active_storage_variant_records.variation_digest IN (?)
+          THEN active_storage_variant_records.variation_digest
+        END) < ?
+      SQL
+      .order(:id)
+      .limit(limit)
+      .pluck(:id)
+
+    ImageAttachment.where(id: ids).includes(ImageAttachment::RENDER_PRELOAD).order(:id)
+  end
+
+  def thumbnail_variant_digests
+    ImageAttachment.attachment_reflections.fetch("image").named_variants
+      .values
+      .map { |variant| ActiveStorage::Variation.wrap(variant.transformations).digest }
   end
 
   def orphan_ids(limit)

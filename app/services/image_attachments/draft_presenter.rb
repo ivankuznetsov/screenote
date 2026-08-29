@@ -18,7 +18,7 @@ module ImageAttachments
             max_total_size: ImageAttachment::MAX_TOTAL_BYTES,
             accepted_media_types: ImageAttachment::ALLOWED_CONTENT_TYPES
           },
-          attachments: batch.image_attachments.ordered.map { |item| attachment(item) }
+          attachments: batch.image_attachments.active_drafts.ordered.map { |item| attachment(item) }
         }
       end
 

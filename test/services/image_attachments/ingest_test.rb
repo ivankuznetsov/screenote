@@ -241,7 +241,8 @@ module ImageAttachments
 
       assert_equal "attachment_removed", error.code
       assert_equal :not_found, error.status
-      assert_empty @batch.image_attachments.reload
+      assert_predicate @batch.image_attachments.reload.sole, :removal_tombstone?
+      assert_not @batch.image_attachments.sole.image.attached?
     end
 
     test "an unexpected IO failure still answers with a machine code" do
@@ -258,6 +259,7 @@ module ImageAttachments
 
       assert_equal "upload_failed", error.code
       assert_equal :internal_server_error, error.status
+      assert_predicate error, :retryable?
       assert_equal "upload_failed", @batch.image_attachments.sole.failure_code
     end
   end
