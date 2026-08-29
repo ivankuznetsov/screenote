@@ -156,8 +156,13 @@ and `url_expires_at`. `url` is minted per read against
 `/api/media/image_attachments/:id?token=…` and is valid for five minutes;
 fetching it requires the caller's own bearer credential in addition to the
 token, and the service rechecks live project access before streaming. Store
-the metadata, not the URL. List reads stay metadata-light and carry no
-attachments.
+the metadata, not the URL.
+
+List reads stay metadata-light and omit `attachments` entirely rather than
+sending an empty array. The Go structs hold it as a pointer, so a list row
+decoded and re-encoded by `annotation list` keeps the key absent: an empty
+array there would assert "this message has no images" about a message whose
+images are only reported on a detail read.
 
 The CLI cannot author attachments. Uploading an image is a browser session
 capability; agents read what people attached and reply with text.

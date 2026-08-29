@@ -65,11 +65,11 @@ func TestAnnotationDetailDecodesAttachments(t *testing.T) {
 	if annotation.Comment != "Broken button" || annotation.MIMEType != "image/png" {
 		t.Fatalf("shipped annotation fields changed: %+v", annotation)
 	}
-	if len(annotation.Attachments) != 1 {
-		t.Fatalf("expected one root attachment, got %d", len(annotation.Attachments))
+	if annotation.Attachments == nil || len(*annotation.Attachments) != 1 {
+		t.Fatalf("expected one root attachment, got %+v", annotation.Attachments)
 	}
 
-	root := annotation.Attachments[0]
+	root := (*annotation.Attachments)[0]
 	if root.ID != 11 || root.MediaType != "image/png" || root.Width != 800 || root.Size != 12345 {
 		t.Fatalf("root attachment metadata lost: %+v", root)
 	}
@@ -80,10 +80,11 @@ func TestAnnotationDetailDecodesAttachments(t *testing.T) {
 		t.Fatalf("url expiry lost: %q", root.URLExpiresAt)
 	}
 
-	if len(annotation.Comments) != 1 || len(annotation.Comments[0].Attachments) != 1 {
+	if len(annotation.Comments) != 1 || annotation.Comments[0].Attachments == nil ||
+		len(*annotation.Comments[0].Attachments) != 1 {
 		t.Fatalf("comment attachments lost: %+v", annotation.Comments)
 	}
-	if annotation.Comments[0].Attachments[0].AltText != nil {
+	if (*annotation.Comments[0].Attachments)[0].AltText != nil {
 		t.Fatalf("absent alt text must decode as nil")
 	}
 	if annotation.Comments[0].Body != "Here is the crop" {
@@ -91,41 +92,70 @@ func TestAnnotationDetailDecodesAttachments(t *testing.T) {
 	}
 }
 
-func TestAnnotationWithoutAttachmentsDecodes(t *testing.T) {
+// A detail read for a message with no images sends an empty array, and that is
+// an authoritative "no images" the round trip must preserve.
+func TestEmptyAttachmentsRemarshalAsAnArray(t *testing.T) {
 	var annotation Annotation
-	if err := json.Unmarshal([]byte(`{"id": 1, "comment": "No images", "attachments": []}`), &annotation); err != nil {
+	payload := `{"id": 1, "comment": "No images", "attachments": [], "comments": [{"id": 2, "attachments": []}]}`
+	if err := json.Unmarshal([]byte(payload), &annotation); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(annotation.Attachments) != 0 {
-		t.Fatalf("expected no attachments, got %d", len(annotation.Attachments))
-	}
-}
-
-// `attachments` is always present on a detail read, so a caller that decodes
-// into these structs and encodes them again must still emit an array — never
-// null, and never a missing key.
-func TestAttachmentsAlwaysMarshalAsAnArray(t *testing.T) {
-	encoded, err := json.Marshal(Annotation{ID: 1, Comments: []Comment{{ID: 2}}})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	if annotation.Attachments == nil || len(*annotation.Attachments) != 0 {
+		t.Fatalf("an empty array must decode as present and empty: %+v", annotation.Attachments)
 	}
 
-	var remarshalled map[string]any
-	if err := json.Unmarshal(encoded, &remarshalled); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
+	remarshalled := remarshal(t, annotation)
 	attachments, ok := remarshalled["attachments"].([]any)
 	if !ok || len(attachments) != 0 {
-		t.Fatalf("root attachments must remarshal as an empty array: %s", encoded)
+		t.Fatalf("root attachments must remarshal as an empty array: %+v", remarshalled)
 	}
 
 	comments, ok := remarshalled["comments"].([]any)
 	if !ok || len(comments) != 1 {
-		t.Fatalf("expected one comment: %s", encoded)
+		t.Fatalf("expected one comment: %+v", remarshalled)
 	}
 	commentAttachments, ok := comments[0].(map[string]any)["attachments"].([]any)
 	if !ok || len(commentAttachments) != 0 {
-		t.Fatalf("comment attachments must remarshal as an empty array: %s", encoded)
+		t.Fatalf("comment attachments must remarshal as an empty array: %+v", remarshalled)
 	}
+}
+
+// List rows carry no attachment metadata at all. Re-encoding one must not
+// invent `attachments: []`, which would tell an agent the message has no
+// images and stop it from ever asking for the detail read that reports them.
+func TestListRowsKeepAttachmentsAbsent(t *testing.T) {
+	var annotation Annotation
+	payload := `{"id": 1, "comment": "Only a list row", "comments_count": 2}`
+	if err := json.Unmarshal([]byte(payload), &annotation); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if annotation.Attachments != nil {
+		t.Fatalf("an absent key must decode as nil: %+v", annotation.Attachments)
+	}
+
+	remarshalled := remarshal(t, annotation)
+	if _, present := remarshalled["attachments"]; present {
+		t.Fatalf("a list row must not gain an attachments key: %+v", remarshalled)
+	}
+
+	comment := remarshal(t, Comment{ID: 2})
+	if _, present := comment["attachments"]; present {
+		t.Fatalf("a comment without attachments must not gain the key: %+v", comment)
+	}
+}
+
+func remarshal(t *testing.T, value any) map[string]any {
+	t.Helper()
+
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	return decoded
 }
