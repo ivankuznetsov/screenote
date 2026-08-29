@@ -5,6 +5,16 @@ Rails.application.routes.draw do
     as: :screenshot_image_media,
     constraints: { variant: /original|page_card_1x|page_card_2x|project_strip/ }
 
+  get "media/image_attachments/:id/:variant", to: "image_attachment_media#show",
+    as: :image_attachment_media,
+    constraints: { variant: /original|download|attachment_thumb_1x|attachment_thumb_2x/ }
+
+  scope module: :image_attachment_drafts, path: "image-attachment-drafts", as: :image_attachment_draft do
+    resources :batches, only: %i[create show], param: :public_id do
+      resources :attachments, only: %i[create update destroy]
+    end
+  end
+
   if Screenote::Deployment.current.self_hosted?
     resource :bootstrap, only: %i[show create], controller: "bootstrap"
   end
