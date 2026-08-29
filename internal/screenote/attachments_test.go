@@ -100,3 +100,32 @@ func TestAnnotationWithoutAttachmentsDecodes(t *testing.T) {
 		t.Fatalf("expected no attachments, got %d", len(annotation.Attachments))
 	}
 }
+
+// `attachments` is always present on a detail read, so a caller that decodes
+// into these structs and encodes them again must still emit an array — never
+// null, and never a missing key.
+func TestAttachmentsAlwaysMarshalAsAnArray(t *testing.T) {
+	encoded, err := json.Marshal(Annotation{ID: 1, Comments: []Comment{{ID: 2}}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var remarshalled map[string]any
+	if err := json.Unmarshal(encoded, &remarshalled); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	attachments, ok := remarshalled["attachments"].([]any)
+	if !ok || len(attachments) != 0 {
+		t.Fatalf("root attachments must remarshal as an empty array: %s", encoded)
+	}
+
+	comments, ok := remarshalled["comments"].([]any)
+	if !ok || len(comments) != 1 {
+		t.Fatalf("expected one comment: %s", encoded)
+	}
+	commentAttachments, ok := comments[0].(map[string]any)["attachments"].([]any)
+	if !ok || len(commentAttachments) != 0 {
+		t.Fatalf("comment attachments must remarshal as an empty array: %s", encoded)
+	}
+}
