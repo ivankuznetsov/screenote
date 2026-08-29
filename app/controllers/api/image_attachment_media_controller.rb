@@ -9,7 +9,7 @@ module Api
   # is never authority — revoking a credential or a membership takes effect on
   # the next byte request.
   class ImageAttachmentMediaController < Api::BaseController
-    include ActiveStorage::Streaming
+    include BlobStreaming
 
     def show
       return unless require_scope!(AuthenticatedPrincipal::READ_SCOPE)
@@ -17,7 +17,7 @@ module Api
       attachment = authorized_attachment
       return unless attachment
 
-      stream(attachment.image.blob)
+      stream_blob(attachment.image.blob)
     end
 
     private
@@ -38,19 +38,6 @@ module Api
     def deny
       render_error("Attachment is not available", code: "not_found", status: :not_found)
       nil
-    end
-
-    def stream(blob)
-      response.headers["Cache-Control"] = "private, no-store"
-      response.headers["X-Content-Type-Options"] = "nosniff"
-
-      if request.headers["Range"].present?
-        send_blob_byte_range_data(blob, request.headers["Range"], disposition: :inline)
-      else
-        response.headers["Accept-Ranges"] = "bytes"
-        response.headers["Content-Length"] = blob.byte_size.to_s
-        send_blob_stream(blob, disposition: :inline)
-      end
     end
   end
 end

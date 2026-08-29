@@ -4,7 +4,7 @@
 # routes stay disabled: nothing here redirects to the storage provider, and no
 # durable or provider-signed URL ever leaves the application.
 class ImageAttachmentMediaController < ApplicationController
-  include ActiveStorage::Streaming
+  include BlobStreaming
 
   ALLOWED_VARIANTS = ImageAttachment::MEDIA_VARIANT_NAMES.to_h { |name| [ name.to_s, name ] }.freeze
   DISPOSITIONS = { "download" => :attachment }.freeze
@@ -14,7 +14,7 @@ class ImageAttachmentMediaController < ApplicationController
     blob = media_blob(attachment, params[:variant])
     raise ActiveRecord::RecordNotFound unless blob
 
-    stream(blob, disposition: DISPOSITIONS.fetch(params[:variant], :inline))
+    stream_blob(blob, disposition: DISPOSITIONS.fetch(params[:variant], :inline))
   end
 
   private
@@ -51,18 +51,5 @@ class ImageAttachmentMediaController < ApplicationController
     # An authenticated GET never invokes libvips. A variant the post-claim
     # warming job has not produced yet simply is not available.
     attachment.image.variant(variant_key).image&.blob
-  end
-
-  def stream(blob, disposition:)
-    response.headers["Cache-Control"] = "private, no-store"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-
-    if request.headers["Range"].present?
-      send_blob_byte_range_data(blob, request.headers["Range"], disposition: disposition)
-    else
-      response.headers["Accept-Ranges"] = "bytes"
-      response.headers["Content-Length"] = blob.byte_size.to_s
-      send_blob_stream(blob, disposition: disposition)
-    end
   end
 end

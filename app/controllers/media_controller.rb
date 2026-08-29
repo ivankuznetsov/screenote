@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class MediaController < ApplicationController
-  include ActiveStorage::Streaming
+  include BlobStreaming
 
   ALLOWED_VARIANTS = ScreenshotImage::THUMBNAIL_VARIANT_NAMES.to_h { |name| [ name.to_s, name ] }.freeze
 
@@ -10,15 +10,7 @@ class MediaController < ApplicationController
     blob = media_blob(screenshot_image, params[:variant])
     raise ActiveRecord::RecordNotFound unless blob
 
-    response.headers["Cache-Control"] = "private, no-store"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    if request.headers["Range"].present?
-      send_blob_byte_range_data(blob, request.headers["Range"], disposition: :inline)
-    else
-      response.headers["Accept-Ranges"] = "bytes"
-      response.headers["Content-Length"] = blob.byte_size.to_s
-      send_blob_stream(blob, disposition: :inline)
-    end
+    stream_blob(blob)
   end
 
   private
