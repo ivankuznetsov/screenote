@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "timeout"
 require_relative "application_system_test_case"
 require_relative "pages/auth_page"
 require_relative "pages/projects_page"
@@ -93,30 +94,33 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     end
   end
 
+  # A synthetic ClipboardEvent never performs the browser's own text insertion,
+  # so this pastes for real: the clipboard carries both halves and the keystroke
+  # produces a trusted event. Only that can show the text actually lands.
   test "pasting an image into the composer attaches it and pasted text stays text" do
     open_root_composer
 
-    prevented = with_playwright_page do |pw_page|
+    with_playwright_page do |pw_page|
       pw_page.locator(ATTACH_BUTTON).wait_for(state: "visible", timeout: 10_000)
+      pw_page.context.grant_permissions(%w[clipboard-read clipboard-write])
       pw_page.evaluate(<<~JS)
         (async () => {
           #{IMAGE_FILE_HELPER}
           const file = await screenoteTestImageFile("pasted.png")
-          const transfer = new DataTransfer()
-          transfer.items.add(file)
-          transfer.setData("text/plain", "pasted words")
-          const form = document.querySelector("#annotation-form")
-          const event = new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true })
-
-          // dispatchEvent returns false only when a listener cancelled the
-          // event, which is what would swallow the text half of the paste.
-          return !form.dispatchEvent(event)
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "image/png": file,
+              "text/plain": new Blob(["pasted words"], { type: "text/plain" })
+            })
+          ])
         })()
       JS
+      pw_page.locator("#annotation-form textarea").click
+      pw_page.keyboard.press("ControlOrMeta+V")
     end
 
     assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
-    assert_equal false, prevented, "a mixed paste must leave the browser's own text insertion alone"
+    assert_equal "pasted words", composer_body, "the text half of a mixed paste must reach the textarea"
   end
 
   test "dropping an image on the composer attaches it and dropping on the canvas does not" do
@@ -129,6 +133,58 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
 
     drop_image_on("#annotation-form")
     assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+  end
+
+  # A browser leaves `dataTransfer.files` empty until the drop itself, so this
+  # is the only shape that proves a real OS drag is accepted: dragover must be
+  # cancelled from `types` alone, or the browser navigates to the file instead.
+  test "a system drag that exposes no files until the drop still attaches" do
+    open_root_composer
+
+    accepted = with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        (async () => {
+          #{IMAGE_FILE_HELPER}
+          const form = document.querySelector("#annotation-form")
+
+          // An OS drag in progress: `types` announces files, `files` is empty.
+          const hovering = new DataTransfer()
+          hovering.items.add(new File([], "placeholder.png", { type: "image/png" }))
+          hovering.items.clear()
+          Object.defineProperty(hovering, "types", { value: ["Files"] })
+          const dragover = new DragEvent("dragover", {
+            dataTransfer: hovering, bubbles: true, cancelable: true
+          })
+          const claimed = !form.dispatchEvent(dragover)
+
+          const dropped = new DataTransfer()
+          dropped.items.add(await screenoteTestImageFile("dragged.png"))
+          form.dispatchEvent(new DragEvent("drop", { dataTransfer: dropped, bubbles: true, cancelable: true }))
+
+          return claimed
+        })()
+      JS
+    end
+
+    assert_equal true, accepted, "dragover must be cancelled from types alone, before files are readable"
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+  end
+
+  # Cancelling is the one client action that throws a draft away, which is what
+  # makes "finish or discard one first" true when the open-batch ceiling is hit.
+  # Ordinary disconnect and navigation still leave the batch for its 24 hour
+  # recovery window, so nothing else may issue this request.
+  test "cancelling the overlay discards its draft batch" do
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+
+    discards = record_batch_discards
+    cancel_annotation
+
+    assert_no_selector "#annotation-form", wait: 10
+    Timeout.timeout(10) { sleep 0.05 until discards.any? }
+    assert_equal 1, discards.size
   end
 
   test "an unreadable file reports a specific error and can be removed" do
@@ -147,6 +203,7 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     attach_file_to_composer(TEST_IMAGE_PATH)
     assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
 
+    body = "x" * 5001
     with_playwright_page do |pw_page|
       pw_page.evaluate("document.querySelector('textarea[name=\"annotation[comment]\"]').value = 'x'.repeat(5001)")
     end
@@ -155,6 +212,7 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_selector COMPOSER_ERRORS, wait: 15
     assert_selector "#annotation-form", wait: 5
     assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 5
+    assert_equal body, composer_body, "a rejected post must keep the text that was typed"
   end
 
   test "replies carry their own attachments" do
@@ -290,6 +348,27 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
         })()
       JS
     end
+  end
+
+  # The overlay and the sidebar composers use different textareas, so the body
+  # is read from whichever one the current form owns.
+  def composer_body
+    with_playwright_page do |pw_page|
+      pw_page.evaluate("document.querySelector('#annotation-form textarea')?.value")
+    end
+  end
+
+  # Only an explicit cancel may discard a draft, so the assertion is on the
+  # request itself rather than on any state the page still shows.
+  def record_batch_discards
+    discards = []
+    with_playwright_page do |pw_page|
+      pw_page.route("**/image-attachment-drafts/batches/*", lambda do |route, request|
+        discards << request.url if request.method == "DELETE"
+        route.continue
+      end)
+    end
+    discards
   end
 
   def press_key(key)

@@ -20,6 +20,11 @@ export default class extends Controller {
   // slow connection, so the ceiling is generous rather than tight.
   static UPLOAD_TIMEOUT = 180000
 
+  // Every other draft call — batch create, alt text, remove, and the post
+  // itself — carries the same kind of ceiling. A hung claim must not leave the
+  // composer frozen with its submit button disabled.
+  static REQUEST_TIMEOUT = 60000
+
   connect() {
     this.disconnected = false
     this.items = new Map()
@@ -37,12 +42,14 @@ export default class extends Controller {
     this.onDragLeave = this.onDragLeave.bind(this)
     this.onDrop = this.onDrop.bind(this)
     this.onPaste = this.onPaste.bind(this)
+    this.onCancelled = this.onCancelled.bind(this)
 
     this.form.addEventListener("submit", this.onSubmit)
     this.form.addEventListener("dragover", this.onDragOver)
     this.form.addEventListener("dragleave", this.onDragLeave)
     this.form.addEventListener("drop", this.onDrop)
     this.form.addEventListener("paste", this.onPaste)
+    this.form.addEventListener("annotorious:form-cancelled", this.onCancelled)
 
     this.batchField = document.createElement("input")
     this.batchField.type = "hidden"
@@ -61,6 +68,7 @@ export default class extends Controller {
     this.form.removeEventListener("dragleave", this.onDragLeave)
     this.form.removeEventListener("drop", this.onDrop)
     this.form.removeEventListener("paste", this.onPaste)
+    this.form.removeEventListener("annotorious:form-cancelled", this.onCancelled)
     this.batchField?.remove()
     this.items.forEach(item => item.request?.abort())
     this.items.clear()
@@ -79,8 +87,12 @@ export default class extends Controller {
   }
 
   onDragOver(event) {
-    if (!this.hasImageFiles(event.dataTransfer)) return
+    if (!this.transfersFiles(event.dataTransfer)) return
 
+    // A real OS drag exposes only `types` until the drop itself: `files` stays
+    // empty, so dragover can ask whether files are coming and nothing more.
+    // Without preventDefault here the browser handles the drop and navigates
+    // away to the file.
     event.preventDefault()
     this.element.classList.add("image-attachment-composer--dropping")
   }
@@ -90,11 +102,20 @@ export default class extends Controller {
   }
 
   onDrop(event) {
-    if (!this.hasImageFiles(event.dataTransfer)) return
+    if (!this.transfersFiles(event.dataTransfer)) return
 
+    // The composer claimed this drag on dragover, so it owns the drop even
+    // when the dropped files turn out to be unusable.
     event.preventDefault()
     this.element.classList.remove("image-attachment-composer--dropping")
-    this.enqueue(this.imageFilesFrom(event.dataTransfer))
+
+    const images = this.imageFilesFrom(event.dataTransfer)
+    if (images.length === 0) {
+      this.showError("Attachments must be PNG, JPEG, or WebP images.")
+      return
+    }
+
+    this.enqueue(images)
   }
 
   onPaste(event) {
@@ -108,8 +129,8 @@ export default class extends Controller {
     this.enqueue(images)
   }
 
-  hasImageFiles(transfer) {
-    return Array.from(transfer?.types || []).includes("Files") && this.imageFilesFrom(transfer).length > 0
+  transfersFiles(transfer) {
+    return Array.from(transfer?.types || []).includes("Files")
   }
 
   imageFilesFrom(transfer) {
@@ -137,7 +158,11 @@ export default class extends Controller {
       this.showError(`You can attach up to ${this.maxFilesValue} images.`)
     }
 
+    // Slots are reserved synchronously, before the first upload is awaited, so
+    // an overlapping paste, drop, or picker sees the rows this call already
+    // took and the five-file limit holds across all of them.
     let total = this.totalBytes()
+    const queued = []
     for (const file of accepted) {
       if (file.size > this.maxFileSizeValue) {
         this.showError(`Each image must be ${Math.round(this.maxFileSizeValue / 1048576)}MB or smaller.`)
@@ -154,9 +179,10 @@ export default class extends Controller {
       }
 
       total += file.size
-      const item = this.createItem(file)
-      await this.upload(item)
+      queued.push(this.createItem(file))
     }
+
+    for (const item of queued) await this.upload(item)
   }
 
   totalBytes() {
@@ -173,13 +199,17 @@ export default class extends Controller {
       state: "uploading",
       serverId: null,
       previewUrl: null,
-      request: null
+      request: null,
+      removed: false,
+      altInput: element.querySelector("[data-attachment-alt]"),
+      savedAltText: "",
+      altRequest: null
     }
 
     element.dataset.clientKey = clientKey
     element.querySelector("[data-attachment-remove]").addEventListener("click", () => this.remove(item))
     element.querySelector("[data-attachment-retry]").addEventListener("click", () => this.upload(item))
-    element.querySelector("[data-attachment-alt]").addEventListener("change", event => {
+    item.altInput.addEventListener("change", event => {
       this.saveAltText(item, event.target.value)
     })
 
@@ -225,7 +255,14 @@ export default class extends Controller {
 
     try {
       const payload = await this.uploadWithProgress(`${batch.attachmentsUrl}`, body, item)
-      if (this.superseded(item, attempt)) return
+      if (this.superseded(item, attempt)) {
+        // Remove reserves nothing: the server row this attempt created may not
+        // have existed when Remove looked for it. A superseded success from a
+        // removed item therefore discards its own row rather than leaving a
+        // ready draft the claim would silently attach.
+        if (item.removed) this.discardServerAttachment(payload.attachment.id)
+        return
+      }
 
       item.serverId = payload.attachment.id
       item.state = payload.attachment.state
@@ -316,24 +353,30 @@ export default class extends Controller {
   }
 
   async remove(item) {
+    item.removed = true
     item.request?.abort()
     item.attempt = (item.attempt || 0) + 1
 
     const serverId = item.serverId || await this.resolveServerId(item)
-    if (serverId && this.batchUrls) {
-      try {
-        await this.request(`${this.batchUrls.attachmentsUrl}/${serverId}`, { method: "DELETE" })
-      } catch {
-        // Removal is idempotent server side; a lost response must not strand
-        // the row in the composer.
-      }
-    }
+    if (serverId) await this.discardServerAttachment(serverId)
 
     item.element.remove()
     this.items.delete(item.clientKey)
     this.announce("Image removed.")
     this.refreshSubmitState()
     this.notifyLayoutChanged()
+  }
+
+  // Removal is idempotent server side, and a commit racing it is rejected
+  // under the batch lock, so a lost response must not strand the row here.
+  async discardServerAttachment(serverId) {
+    if (!serverId || !this.batchUrls) return
+
+    try {
+      await this.request(`${this.batchUrls.attachmentsUrl}/${serverId}`, { method: "DELETE" })
+    } catch {
+      // Nothing to recover: the row is already gone from the composer.
+    }
   }
 
   // The server reserves a row before it reads a byte, so an upload that failed
@@ -354,17 +397,41 @@ export default class extends Controller {
     }
   }
 
-  async saveAltText(item, value) {
-    if (!item.serverId || !this.batchUrls) return
+  // The typed description is part of the message, so a write is a tracked
+  // promise the post waits on — and a rejected response is a failure, which a
+  // bare `fetch` would otherwise report as success.
+  saveAltText(item, value) {
+    if (!item.serverId || !this.batchUrls) return Promise.resolve(true)
+    if (value === item.savedAltText) return item.altRequest || Promise.resolve(true)
 
-    try {
-      await this.request(`${this.batchUrls.attachmentsUrl}/${item.serverId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ image_attachment: { alt_text: value } })
-      })
-    } catch {
-      this.showError("The description could not be saved. Try again.")
-    }
+    const write = (async () => {
+      try {
+        const response = await this.request(`${this.batchUrls.attachmentsUrl}/${item.serverId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ image_attachment: { alt_text: value } })
+        })
+        if (!response.ok) throw new Error("the description was rejected")
+
+        item.savedAltText = value
+        return true
+      } catch {
+        this.showError("The description could not be saved. Try again.")
+        return false
+      }
+    })()
+
+    item.altRequest = write
+    return write
+  }
+
+  // Saving without leaving the description field never fires `change`, and a
+  // write started on blur races the claim that moves the row off the batch. The
+  // post therefore flushes what is typed and waits for every write to land.
+  async flushAltText() {
+    const writes = Array.from(this.items.values()).map(item => this.saveAltText(item, item.altInput?.value ?? ""))
+    const results = await Promise.all(writes)
+
+    return results.every(Boolean)
   }
 
   async onSubmit(event) {
@@ -384,12 +451,19 @@ export default class extends Controller {
     // Cancelling the overlay mid-post tears the form out from under us, so the
     // navigation target is captured while it is still attached.
     const frame = this.form.closest("turbo-frame")
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.constructor.REQUEST_TIMEOUT)
 
     try {
+      // Descriptions are flushed before the claim, because a claim moves the
+      // rows off the batch and every later write is a 404 against them.
+      if (!(await this.flushAltText())) return
+
       const response = await fetch(this.form.action, {
         method: this.form.method || "POST",
         body,
         credentials: "same-origin",
+        signal: controller.signal,
         headers: { Accept: "application/json", "X-CSRF-Token": this.csrfToken }
       })
       const payload = await response.json().catch(() => ({}))
@@ -405,9 +479,30 @@ export default class extends Controller {
     } catch {
       this.showError("The message could not be posted. Try again.")
     } finally {
+      clearTimeout(timer)
       this.submitting = false
       this.refreshSubmitState()
     }
+  }
+
+  // An explicit Annotorious cancel throws the draft away so the per-account
+  // open-batch ceiling stays truthful. Ordinary disconnect, navigation, and
+  // reconnect still leave the batch for its 24 hour recovery window.
+  onCancelled() {
+    const batchUrl = this.batchUrls?.batchUrl
+    this.items.forEach(item => { item.removed = true })
+    this.batchId = null
+    this.batchUrls = null
+    if (this.batchField) this.batchField.value = ""
+    if (!batchUrl) return
+
+    // The composer is torn down in the same tick, so this outlives it.
+    fetch(batchUrl, {
+      method: "DELETE",
+      credentials: "same-origin",
+      keepalive: true,
+      headers: { Accept: "application/json", "X-CSRF-Token": this.csrfToken }
+    }).catch(() => {})
   }
 
   // Posting keeps the existing navigation contract. Both composers live inside
@@ -441,12 +536,20 @@ export default class extends Controller {
       }
     })
 
-    this.showError((payload.errors || [payload.error?.message]).filter(Boolean).join(" "))
+    // A 500, an HTML error page, or a rejected CSRF token carries no usable
+    // message. Falling back keeps a rejected post from looking like nothing
+    // happened at all.
+    const message = (payload.errors || [payload.error?.message]).filter(Boolean).join(" ")
+    this.showError(message || "The message could not be posted. Try again.")
   }
 
   request(url, options = {}) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.constructor.REQUEST_TIMEOUT)
+
     return fetch(url, {
       credentials: "same-origin",
+      signal: controller.signal,
       ...options,
       headers: {
         Accept: "application/json",
@@ -454,7 +557,7 @@ export default class extends Controller {
         "X-CSRF-Token": this.csrfToken,
         ...(options.headers || {})
       }
-    })
+    }).finally(() => clearTimeout(timer))
   }
 
   failItem(item, message) {
