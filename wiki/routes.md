@@ -100,6 +100,7 @@ rendering a second workspace.
 |--------|------|--------|------|
 | POST | `/image-attachment-drafts/batches` | Open a draft batch for one mounted composer | Session member of `project_id` |
 | GET | `/image-attachment-drafts/batches/:public_id` | Resume a draft batch | Session uploader of the batch |
+| DELETE | `/image-attachment-drafts/batches/:public_id` | Discard an unclaimed draft batch on an explicit composer cancel | Session uploader of the batch |
 | POST | `/image-attachment-drafts/batches/:batch_public_id/attachments` | Stream one image into the batch | Session uploader of the batch |
 | PATCH | `/image-attachment-drafts/batches/:batch_public_id/attachments/:id` | Edit optional alt text while still a draft | Session uploader of the batch |
 | DELETE | `/image-attachment-drafts/batches/:batch_public_id/attachments/:id` | Idempotent removal | Session uploader of the batch |

@@ -111,6 +111,42 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     assert_equal claimed.parent.id, attachment.reload.annotation_id
   end
 
+  # Remove reserves nothing on the server, so the row an upload creates can be
+  # newer than the row Remove looked for. The commit has to notice under the
+  # batch lock, or a discarded image comes back as a ready draft that the next
+  # claim silently binds to the message.
+  test "a removal during an upload stops that upload from binding its bytes" do
+    bytes = image_bytes
+
+    outcomes = with_one_shot_instance_method_barrier(
+      ActiveStorage::Blob, :upload_without_unfurling, predicate: ->(record, *_args) {
+        record.is_a?(ActiveStorage::Blob)
+      }
+    ) do |entered, release|
+      run_barriered_race(
+        entered: entered,
+        release: release,
+        first: -> { safe_ingest(bytes, "removed-mid-upload") },
+        second: -> { remove_by_client_key("removed-mid-upload") }
+      )
+    end
+
+    assert_equal 1, outcomes.grep(ImageAttachments::Error).size
+    assert_equal "attachment_removed", outcomes.grep(ImageAttachments::Error).sole.code
+    assert_empty ImageAttachment.where(image_attachment_batch: @batch)
+    assert_empty ActiveStorage::Blob.where("id > ?", @highest_blob_id)
+
+    result = ImageAttachments::ClaimBatch.call(
+      batch: ImageAttachmentBatch.find(@batch.id), user: @user, project: @project
+    ) do
+      @screenshot.annotations.create!(
+        user: @user, x_percent: 5, y_percent: 5, comment: "Nothing attached", viewport: :desktop
+      )
+    end
+
+    assert_empty result.attachments
+  end
+
   test "a cleanup pass overlapping a submission cannot take bytes away from the message" do
     attachment = ingest_image(batch: @batch)
     @batch.update_columns(last_activity_at: 30.hours.ago, expires_at: 1.minute.ago)
@@ -173,6 +209,11 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
   def revive_and_claim
     ImageAttachmentBatch.find(@batch.id).touch_activity!
     claim_result
+  end
+
+  def remove_by_client_key(client_key)
+    row = ImageAttachment.find_by!(image_attachment_batch_id: @batch.id, client_key: client_key)
+    ImageAttachments::RemoveAttachment.call(batch: ImageAttachmentBatch.find(@batch.id), attachment_id: row.id)
   end
 
   def safe_ingest(bytes, client_key)

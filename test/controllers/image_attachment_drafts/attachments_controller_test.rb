@@ -43,13 +43,17 @@ module ImageAttachmentDrafts
       post image_attachment_draft_batch_attachments_path(@batch.public_id),
         params: { client_key: "bad", file: uploaded("junk.png", "not an image") },
         headers: { "ACCEPT" => "application/json" }
+      raised = response.parsed_body.dig("error", "retryable")
 
       get image_attachment_draft_batch_path(@batch.public_id), as: :json
 
       attachment = response.parsed_body["attachments"].sole
       assert_equal "failed", attachment["state"]
       assert_equal "invalid_image", attachment.dig("failure", "code")
-      assert attachment.dig("failure", "retryable")
+      # Bytes the decoder will never accept are removable, not retryable, and a
+      # resumed row has to say exactly what the raise already said.
+      assert_equal raised, attachment.dig("failure", "retryable")
+      assert_not attachment.dig("failure", "retryable")
       assert_nil attachment["preview_url"]
     end
 

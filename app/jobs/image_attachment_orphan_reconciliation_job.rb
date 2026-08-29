@@ -1,9 +1,14 @@
 # frozen_string_literal: true
 
-# Catches submitted attachment rows whose message no longer resolves because a
-# delete bypassed the Rails callbacks — a database cascade, a bulk delete, or a
-# future code path. Without this, those primary blobs and their derivatives
-# would stay in the storage service forever.
+# Reconciles submitted attachments against what the storage service actually
+# holds, in both directions.
+#
+# Rows whose message no longer resolves — a database cascade, a bulk delete, or
+# a future code path that bypassed the Rails callbacks — are purged, so their
+# primary blobs and derivatives do not stay in the storage service forever.
+# Rows whose delivery variants were never produced are re-enqueued, so a claim
+# whose `perform_later` was lost does not leave a posted gallery on its stable
+# placeholder until the process restarts.
 class ImageAttachmentOrphanReconciliationJob < ApplicationJob
   BATCH_LIMIT = 500
 
@@ -14,6 +19,22 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
     on_conflict: :discard
 
   def perform(limit: BATCH_LIMIT)
+    purged = purge_orphans(limit)
+    rewarmed = rewarm_variants(limit)
+
+    if purged.positive? || rewarmed.positive?
+      Screenote::Monitoring.notify(
+        "Image attachments reconciled",
+        context: { purged: purged, rewarmed: rewarmed }
+      )
+    end
+
+    purged
+  end
+
+  private
+
+  def purge_orphans(limit)
     purged = 0
 
     orphan_ids(limit).each do |id|
@@ -25,17 +46,36 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
       )
     end
 
-    if purged.positive?
-      Screenote::Monitoring.notify(
-        "Image attachment orphans reconciled",
-        context: { purged: purged }
-      )
-    end
-
     purged
   end
 
-  private
+  # Re-enqueueing is idempotent and generation aware: the job is keyed on the
+  # attachment together with the exact blob it was asked to warm, and it skips
+  # a row whose variants already exist or whose bytes have since been replaced.
+  # Warming state is read from preloaded variant records, so this never
+  # processes an image itself.
+  def rewarm_variants(limit)
+    enqueued = 0
+
+    unwarmed_candidates.find_each do |attachment|
+      break if enqueued >= limit
+      next if attachment.thumbnails_renderable?
+
+      ImageAttachmentThumbnailJob.perform_later(attachment, attachment.image.blob.id)
+      enqueued += 1
+    rescue StandardError => error
+      Screenote::Monitoring.notify(
+        "Image attachment variant reconciliation failed",
+        context: { image_attachment_id: attachment.id, error_class: error.class.name }
+      )
+    end
+
+    enqueued
+  end
+
+  def unwarmed_candidates
+    ImageAttachment.submitted.state_ready.includes(ImageAttachment::RENDER_PRELOAD).order(:id)
+  end
 
   def orphan_ids(limit)
     ImageAttachment

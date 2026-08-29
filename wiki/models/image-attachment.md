@@ -71,7 +71,12 @@ Two routes read the bytes, both application-streamed with
 
 Destroying an [[annotation]] or [[annotation-comment]] destroys its
 attachments and purges the primary blob with every derivative.
-`ImageAttachmentOrphanReconciliationJob` is the backstop for a delete that
-bypasses the callbacks. Deleting a user whose submitted attachments live on
+`ImageAttachmentOrphanReconciliationJob` is the backstop in both directions: it
+purges rows whose message no longer resolves after a delete that bypassed the
+callbacks, and it re-enqueues `ImageAttachmentThumbnailJob` for submitted rows
+whose variants were never produced, so a claim whose `perform_later` was lost
+does not leave a posted gallery on its placeholder until the process restarts.
+Re-enqueueing is idempotent and generation aware: the job is keyed on the
+attachment together with the exact blob it was asked to warm. Deleting a user whose submitted attachments live on
 another member's message is rejected with a domain error rather than orphaning
 the uploader identity.

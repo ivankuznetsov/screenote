@@ -34,10 +34,15 @@ class ImageAttachmentBatch < ApplicationRecord
   end
 
   # Opening a draft is the one place the per-account ceilings are applied, so
-  # they hold no matter which composer asked for the batch.
+  # they hold no matter which composer asked for the batch. The account row is
+  # locked for the check and the insert together: two composers mounting at the
+  # same moment must not both read room under the ceiling and each add a batch.
   def self.open_for!(user:, project:)
-    enforce_outstanding_caps!(user)
-    create!(user: user, project: project)
+    transaction do
+      user.lock!
+      enforce_outstanding_caps!(user)
+      create!(user: user, project: project)
+    end
   end
 
   # Expired-but-unreclaimed batches still hold their rows and their blobs, so

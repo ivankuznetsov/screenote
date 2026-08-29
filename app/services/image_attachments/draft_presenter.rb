@@ -49,9 +49,11 @@ module ImageAttachments
         return nil unless attachment.state_failed?
 
         code = attachment.failure_code.presence || "upload_failed"
-        # The copy comes from the same table the raise used, so a replayed
-        # failure reads exactly like the response the composer already saw.
-        { code: code, message: Error.message_for(code), retryable: true }
+        # The copy and the retry verdict both come from the same place the
+        # raise used, so a replayed failure reads exactly like the response the
+        # composer already saw and never offers Retry for bytes the server will
+        # keep rejecting.
+        { code: code, message: Error.message_for(code), retryable: Error::RETRYABLE_CODES.include?(code) }
       end
 
       def routes

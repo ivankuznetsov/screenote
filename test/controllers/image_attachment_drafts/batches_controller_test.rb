@@ -112,5 +112,62 @@ module ImageAttachmentDrafts
 
       assert_response :not_found
     end
+
+    test "cancelling discards the draft and frees its slot against the open cap" do
+      batch = build_batch(user: @user, project: @project)
+      attachment = ingest_image(batch: batch)
+      (ImageAttachmentBatch::MAX_OPEN_PER_USER - 1).times { build_batch(user: @user, project: @project) }
+
+      delete image_attachment_draft_batch_path(batch.public_id), as: :json
+
+      assert_response :no_content
+      assert_not ImageAttachmentBatch.exists?(batch.id)
+      assert_not ImageAttachment.exists?(attachment.id)
+
+      post image_attachment_draft_batches_path, params: { project_id: @project.id }, as: :json
+
+      assert_response :created
+    end
+
+    test "discarding is idempotent and never touches a claimed batch" do
+      batch = build_batch(user: @user, project: @project)
+      attachment = ingest_image(batch: batch)
+      ImageAttachments::ClaimBatch.call(batch: batch, user: @user, project: @project) do
+        annotations(:point_annotation)
+      end
+
+      delete image_attachment_draft_batch_path(batch.public_id), as: :json
+
+      assert_response :no_content
+      assert_predicate batch.reload, :state_claimed?
+      assert_equal annotations(:point_annotation).id, attachment.reload.annotation_id
+
+      delete image_attachment_draft_batch_path(batch.public_id), as: :json
+
+      assert_response :no_content
+    end
+
+    test "another member cannot discard a guessed batch" do
+      batch = build_batch(user: @user, project: @project)
+      @project.project_memberships.find_or_create_by!(user: users(:bob)) { |m| m.role = :member }
+      delete session_path
+      sign_in users(:bob)
+
+      delete image_attachment_draft_batch_path(batch.public_id), as: :json
+
+      assert_response :not_found
+      assert ImageAttachmentBatch.exists?(batch.id)
+    end
+
+    test "discarding a draft requires a CSRF token" do
+      batch = build_batch(user: @user, project: @project)
+
+      with_forgery_protection do
+        delete image_attachment_draft_batch_path(batch.public_id), as: :json
+
+        assert_response :unprocessable_entity
+      end
+      assert ImageAttachmentBatch.exists?(batch.id)
+    end
   end
 end

@@ -2,8 +2,10 @@
 
 # Warms the delivery variants for a submitted attachment. Nothing enqueues this
 # for a draft, and an authenticated GET never invokes it: an unwarmed variant
-# stays unavailable until a run of this job produces it. Orphan reconciliation
-# only purges parentless rows; it never rewarms variants.
+# stays unavailable until a run of this job produces it. Claiming a batch
+# enqueues one of these per attachment; reconciliation re-enqueues the ones
+# whose variants are still missing, which is why every pass re-resolves both
+# ownership and the blob generation it was asked to warm.
 class ImageAttachmentThumbnailJob < ApplicationJob
   ThumbnailProcessingError = Class.new(StandardError)
 

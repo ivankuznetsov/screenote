@@ -45,6 +45,36 @@ class ImageAttachmentOrphanReconciliationJobTest < ActiveSupport::TestCase
     assert_equal 0, ImageAttachmentOrphanReconciliationJob.perform_now
   end
 
+  # A lost `perform_later` at claim time would otherwise leave a posted gallery
+  # on its stable placeholder until the process restarted.
+  test "re-enqueues warming for a submitted attachment whose variants are missing" do
+    attachment = submitted_attachment
+    clear_enqueued_jobs
+
+    assert_not attachment.thumbnail_variants_warmed?
+    assert_enqueued_with(job: ImageAttachmentThumbnailJob) { ImageAttachmentOrphanReconciliationJob.perform_now }
+  end
+
+  test "re-enqueueing stops once the variants exist" do
+    attachment = submitted_attachment
+    perform_enqueued_jobs(only: ImageAttachmentThumbnailJob)
+
+    assert attachment.reload.thumbnail_variants_warmed?
+    assert_no_enqueued_jobs(only: ImageAttachmentThumbnailJob) do
+      ImageAttachmentOrphanReconciliationJob.perform_now
+    end
+  end
+
+  test "never warms a draft" do
+    batch = build_batch
+    ingest_image(batch: batch)
+    clear_enqueued_jobs
+
+    assert_no_enqueued_jobs(only: ImageAttachmentThumbnailJob) do
+      ImageAttachmentOrphanReconciliationJob.perform_now
+    end
+  end
+
   private
 
   # Foreign keys make this unreachable through the application, which is the

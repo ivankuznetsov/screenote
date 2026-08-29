@@ -10,7 +10,7 @@ Rails.application.routes.draw do
     constraints: { variant: /original|download|attachment_thumb_1x|attachment_thumb_2x/ }
 
   scope module: :image_attachment_drafts, path: "image-attachment-drafts", as: :image_attachment_draft do
-    resources :batches, only: %i[create show], param: :public_id do
+    resources :batches, only: %i[create show destroy], param: :public_id do
       resources :attachments, only: %i[create update destroy]
     end
   end

@@ -140,7 +140,10 @@ module ImageAttachments
     end
 
     def decode!(tempfile)
-      ImageDecoding::Guard.synchronize do
+      # Keyed on the batch so overlapping uploads for one composer — a retry
+      # racing its aborted attempt, or a multi-file paste — decode one at a
+      # time instead of occupying every global slot.
+      ImageDecoding::Guard.synchronize(key: "image_attachment_batch:#{batch.id}") do
         decoded = Vips::Image.new_from_file(tempfile.path, access: :sequential, fail_on: :warning)
         width = decoded.width
         height = decoded.height
@@ -173,6 +176,11 @@ module ImageAttachments
 
       batch.with_lock do
         ensure_usable!
+        # Remove and cleanup destroy the reserved row without this request
+        # knowing. Re-resolving it under the batch lock — the same lock both of
+        # those take first — is what stops a commit from binding bytes the
+        # composer already discarded onto a row a claim would then attach.
+        ensure_still_reserved!(attachment)
         ensure_slot_available!(attachment)
         ensure_total_within_limit!(attachment, byte_size)
         ensure_outstanding_drafts_within_limit!(attachment, byte_size)
@@ -227,6 +235,12 @@ module ImageAttachments
       invalid!("batch_unusable")
     end
 
+    def ensure_still_reserved!(attachment)
+      return if batch.image_attachments.exists?(id: attachment.id)
+
+      raise Error.new(code: "attachment_removed", status: :not_found)
+    end
+
     def ensure_slot_available!(attachment)
       return if batch.image_attachments.where.not(id: attachment.id).count < ImageAttachment::MAX_FILES
 
@@ -255,6 +269,11 @@ module ImageAttachments
 
       attachment.reload
       return unless attachment.draft?
+      # A timed-out or aborted attempt shares its slot with the retry that
+      # supersedes it. Once the row is ready the upload it names has already
+      # succeeded, so a late failure from the disconnected attempt must not
+      # un-ready it and block the post with `attachments_not_ready`.
+      return if attachment.state_ready?
 
       attachment.update_columns(
         state: ImageAttachment.states[:failed],

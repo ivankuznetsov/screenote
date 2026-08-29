@@ -45,10 +45,12 @@ scheduler-independent backstop so a stopped cleanup supervisor cannot let one
 account park unbounded bytes.
 
 Both caps live on the model. `ImageAttachmentBatch.open_for!` applies them to
-every draft that is opened, and `ImageAttachments::Ingest` rechecks the byte
-ceiling inside the commit lock so batches opened under the cap cannot be filled
-past it afterwards. Expired batches that cleanup has not yet reclaimed still
-hold their rows and blobs, so they keep counting toward both caps.
+every draft that is opened, locking the account row so the check and the insert
+are one step and two composers cannot each read the same room. `Ingest`
+rechecks the byte ceiling inside the commit lock so batches opened under the
+cap cannot be filled past it afterwards. Expired batches that cleanup has not
+yet reclaimed still hold their rows and blobs, so they keep counting toward
+both caps.
 
 ## Claim
 
@@ -66,7 +68,27 @@ returned exactly as it stands: replaying a lost 201 never reopens the row or
 replaces its blob. `ImageAttachments::WriteAltText` and
 `ImageAttachments::RemoveAttachment` both take the batch lock first, so a
 description or a removal racing a claim resolves as not-found rather than
-touching submitted metadata.
+touching submitted metadata. The commit re-resolves its own row under that same
+lock and answers `attachment_removed` if the row is gone, so an upload that
+overlapped a removal cannot bind bytes onto a discarded slot. A failure
+recorded by a superseded attempt never un-readies a row another attempt
+finished.
+
+Decoding is serialized per batch as well as globally: `ImageDecoding::Guard`
+takes a per-key slot before a global one, so one batch's overlapping uploads
+cannot occupy every decoder slot and answer screenshot work with
+`decoder_busy`.
+
+## Discard
+
+`DELETE /image-attachment-drafts/batches/:public_id` throws an unclaimed batch
+away, and `ImageAttachments::DiscardBatch` locks and rechecks the state first,
+so a cancel racing a successful claim resolves as "already claimed" and can
+never take attachments away from a posted message. Only an explicit Annotorious
+cancel calls it — the composer listens for `annotorious:form-cancelled`.
+Ordinary Turbo disconnect, navigation, and reconnect still leave the batch for
+its 24 hour recovery window. This is what makes the open-batch ceiling's
+"finish or discard one first" copy true.
 
 ## Cleanup
 

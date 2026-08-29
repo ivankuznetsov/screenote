@@ -12,5 +12,13 @@ module ImageAttachmentDrafts
     def show
       render_batch(find_batch!)
     end
+
+    # An explicit composer cancel discards its own unclaimed draft, which is
+    # what makes the open-batch ceiling's "finish or discard one first" true.
+    # Discarding an already claimed or already discarded batch is a no-op.
+    def destroy
+      ImageAttachments::DiscardBatch.call(batch: find_batch!)
+      head :no_content
+    end
   end
 end

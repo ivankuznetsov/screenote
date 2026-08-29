@@ -336,6 +336,9 @@ export default class extends Controller {
   cancelForm() {
     this.cancelPendingAnnotationSync()
     if (this.hasFormTarget) {
+      // Cancelling is a decision to throw this draft away, unlike an ordinary
+      // disconnect. The composer listens for it and discards its draft batch.
+      this.formTarget.dispatchEvent(new CustomEvent("annotorious:form-cancelled"))
       this.formTarget.remove()
     }
     if (this.pendingAnnotationId && this.anno && !this.pendingAnnotationLocal) {
