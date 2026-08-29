@@ -1,0 +1,59 @@
+name: concurrency-qualification
+
+# The application and its portable contracts stay database-agnostic, so this
+# adapter-specific job lives outside ci.yml. It re-runs the image attachment
+# lifecycle suites against a server database whose row locks match hosted
+# production, proving lock ordering, atomic claim, and the aggregate races that
+# SQLite can only assert by outcome.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  image-attachment-lifecycle:
+    name: image-attachment-lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAILS_ENV: test
+      PARALLEL_WORKERS: "1"
+      DATABASE_URL: postgresql://screenote:screenote@localhost:5432/screenote_test
+    services:
+      database:
+        image: postgres:17
+        env:
+          POSTGRES_USER: screenote
+          POSTGRES_PASSWORD: screenote
+          POSTGRES_DB: screenote_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U screenote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Install runtime packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips libpq-dev
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
+        with:
+          bundler-cache: true
+      - name: Load the schema onto the server database
+        run: bin/rails db:test:prepare
+      - name: Exercise locks, constraints, and lifecycle races
+        run: >-
+          bin/rails test
+          test/integration/image_attachment_concurrency_test.rb
+          test/integration/database_constraint_contract_test.rb
+          test/models/image_attachment_test.rb
+          test/services/image_attachments
+          test/jobs/image_attachment_draft_cleanup_job_test.rb
+          test/jobs/image_attachment_orphan_reconciliation_job_test.rb
+          test/controllers/image_attachment_drafts

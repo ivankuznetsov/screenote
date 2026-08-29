@@ -4,6 +4,12 @@ class AnnotationComment < ApplicationRecord
   belongs_to :annotation
   belongs_to :user, optional: true
   belongs_to :api_key, optional: true
+  has_many :image_attachments, -> { ordered }, dependent: :destroy, inverse_of: :annotation_comment
+  has_many :claimed_image_attachment_batches,
+    class_name: "ImageAttachmentBatch",
+    foreign_key: :claimed_annotation_comment_id,
+    inverse_of: :claimed_annotation_comment,
+    dependent: :destroy
 
   enum :action, { comment: 0, resolved: 1, reopened: 2 }, default: :comment
 

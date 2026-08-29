@@ -26,6 +26,11 @@ class User < ApplicationRecord
   has_many :project_memberships, dependent: :destroy
   has_many :projects, through: :project_memberships
   has_many :annotations, dependent: :destroy
+  # Drafts are disposable, but a submitted attachment is part of another
+  # person's message history. Deleting the account must fail loudly rather
+  # than orphan the uploader identity those rows record.
+  has_many :image_attachment_batches, dependent: :destroy
+  has_many :image_attachments, dependent: :restrict_with_error
   has_one :subscription, dependent: :destroy
   has_many :authentication_tokens, dependent: :destroy
   has_many :installation_audit_events_as_actor,

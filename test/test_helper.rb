@@ -6,6 +6,7 @@ require_relative "../config/environment"
 require "rails/test_help"
 require_relative "support/device_authorization_test_helper"
 require_relative "support/deployment_mode_helper"
+require_relative "support/image_attachment_test_helper"
 require_relative "support/oauth_test_helper"
 require_relative "support/principal_action_contract"
 require_relative "support/snapshot_manifest_contract_helper"
@@ -26,6 +27,7 @@ module ActiveSupport
     include DeviceAuthorizationTestHelper
     include DeploymentModeHelper
     include SnapshotManifestContractHelper
+    include ImageAttachmentTestHelper
   end
 end
 

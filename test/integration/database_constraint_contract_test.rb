@@ -20,6 +20,14 @@ class DatabaseConstraintContractTest < ActiveSupport::TestCase
     authentication_tokens: %w[
       authentication_tokens_exact_subject authentication_tokens_recovery_issuer
       authentication_tokens_terminal_state
+    ],
+    image_attachment_batches: %w[
+      image_attachment_batches_valid_state image_attachment_batches_future_expiry
+      image_attachment_batches_claim_state
+    ],
+    image_attachments: %w[
+      image_attachments_valid_state image_attachments_exclusive_parent
+      image_attachments_submitted_ready
     ]
   }.freeze
 
