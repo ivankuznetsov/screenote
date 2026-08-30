@@ -3,7 +3,7 @@ title: Dependencies
 type: dependencies
 source: Gemfile, Gemfile.lock
 created: 2026-05-14
-updated: 2026-07-31
+updated: 2026-08-30
 tags: [dependencies]
 ---
 
@@ -22,3 +22,6 @@ tags: [dependencies]
   security fix. Production must provide native libvips 8.13 or newer.
 - The same security refresh locks Loofah 2.25.2 and
   rails-html-sanitizer 1.7.1 so the repository's gem-audit gate is clean.
+- WEBrick is a test-only dependency for the isolated retry proxy and legacy
+  server stub used by `script/public_cli_source_qualification`; declaring it
+  keeps the source contract reproducible on clean Ruby installations.

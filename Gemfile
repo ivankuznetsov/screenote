@@ -95,4 +95,6 @@ group :test do
   gem "capybara"
   gem "capybara-playwright-driver"
   gem "simplecov", require: false
+  # Host the retry and old-server stubs in public CLI source qualification.
+  gem "webrick", require: false
 end
