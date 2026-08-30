@@ -24,6 +24,7 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
   ATTACHMENT_REMOVE = '[data-testid="attachment-remove"]'
   ATTACHMENT_RETRY = '[data-testid="attachment-retry"]'
   ATTACHMENT_ALT = '[data-testid="attachment-alt-input"]'
+  ATTACHMENT_STATUS = '[data-testid="attachment-status"]'
   COMPOSER_ERRORS = '[data-testid="composer-errors"]'
   GALLERY = '[data-testid="image-attachment-gallery"]'
   THUMBNAIL = '[data-testid="attachment-thumbnail"]'
@@ -63,36 +64,42 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_selector "#{GALLERY} #{THUMBNAIL}", count: 1, wait: 15
   end
 
+  # Plan Unit 3 requires the clamped overlay rail to stay off the region the
+  # person just selected. That is a claim about real geometry, so it is measured
+  # against a full-size page capture rather than a thumbnail-sized fixture: on a
+  # 1440x900 screenshot the placement has somewhere to go, and "somewhere" has
+  # to be provably clear of the selection.
+  test "the overlay composer never covers the selected region on a full-size screenshot" do
+    create_screenshot_for_annotation(image_path: DESKTOP_SCREENSHOT_PATH)
+
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+
+    geometry = overlay_geometry
+
+    assert_operator geometry["imageWidth"], :>=, 600,
+      "the overlap claim is only meaningful against a real screenshot"
+    assert geometry["withinImage"], "the clamped overlay must stay inside the image"
+    assert_equal 0, geometry["overlapArea"],
+      "the rail must not cover the selected region: #{geometry.inspect}"
+    assert_equal "row", geometry["direction"]
+    assert_equal 1, geometry["rowCount"]
+    assert_operator geometry["railHeight"], :<=, 80
+    capture_evidence("overlay-rail-clear-of-selection", facts: { geometry: geometry })
+  end
+
   test "the overlay composer stays a compact rail inside the image" do
     open_root_composer
     attach_file_to_composer(TEST_IMAGE_PATH)
     assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
 
-    with_playwright_page do |pw_page|
-      geometry = pw_page.evaluate(<<~JS)
-        (() => {
-          const form = document.querySelector("#annotation-form")
-          const image = document.querySelector("[data-testid='screenshot-image']")
-          const items = document.querySelector(".image-attachment-composer__items")
-          const formRect = form.getBoundingClientRect()
-          const imageRect = image.getBoundingClientRect()
-          const itemsRect = items.getBoundingClientRect()
+    geometry = overlay_geometry
 
-          return {
-            withinImage: formRect.left >= imageRect.left - 1 && formRect.top >= imageRect.top - 1 &&
-                         formRect.right <= imageRect.right + 1 && formRect.bottom <= imageRect.bottom + 1,
-            direction: getComputedStyle(items).flexDirection,
-            railHeight: itemsRect.height,
-            rowCount: items.children.length
-          }
-        })()
-      JS
-
-      assert geometry["withinImage"], "the clamped overlay must stay inside the image"
-      assert_equal "row", geometry["direction"]
-      assert_equal 1, geometry["rowCount"]
-      assert_operator geometry["railHeight"], :<=, 80
-    end
+    assert geometry["withinImage"], "the clamped overlay must stay inside the image"
+    assert_equal "row", geometry["direction"]
+    assert_equal 1, geometry["rowCount"]
+    assert_operator geometry["railHeight"], :<=, 80
   end
 
   # A synthetic ClipboardEvent never performs the browser's own text insertion,
@@ -367,6 +374,27 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_selector "#{THUMBNAIL}[data-alt='A dialog showing the failed save']", wait: 15
   end
 
+  # A screen reader only learns about an upload from the composer's live region,
+  # so the region and the exact text it carries are asserted rather than left to
+  # a manual listen.
+  test "the composer announces every upload transition in a polite live region" do
+    open_root_composer
+
+    assert_selector "#{COMPOSER} [role=status][aria-live=polite]", visible: :all
+
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+    assert_selector ATTACHMENT_STATUS, text: "Image 1 uploaded.", wait: 10
+
+    find(ATTACHMENT_REMOVE).click
+    assert_no_selector ATTACHMENT_ITEM, wait: 10
+    assert_selector ATTACHMENT_STATUS, text: "Image removed.", wait: 10
+
+    attach_file_to_composer(Rails.root.join("test/fixtures/files/test_invalid.png").to_s)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=failed]", wait: 15
+    assert_selector ATTACHMENT_STATUS, text: /Image 1 failed\./, wait: 10
+  end
+
   test "the viewer opens on two images, navigates with the keyboard, and restores focus" do
     open_root_composer
     attach_file_to_composer(TEST_IMAGE_PATH)
@@ -389,6 +417,15 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_viewer_shows first_url
     assert_equal "attachment-viewer-image", focused_testid, "the dialog must open focus onto its content"
 
+    # The viewer is the only place an attachment can be read at full size, so
+    # every control the plan names has to be on it, pointed at the application.
+    assert_selector "#{VIEWER}[aria-label='Attached image viewer']"
+    assert_selector '[data-testid="attachment-viewer-previous"]'
+    assert_selector '[data-testid="attachment-viewer-zoom-in"]'
+    assert_selector "[data-testid='attachment-viewer-download'][href^='/media/image_attachments/']"
+    assert_selector "[data-testid='attachment-viewer-open-original'][href^='/media/image_attachments/']"
+    capture_evidence("viewer-open", facts: gallery_facts)
+
     press_key("ArrowRight")
     assert_viewer_shows second_url
     press_key("ArrowLeft")
@@ -409,21 +446,136 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
       assert_operator box["width"], :>, 0
       assert_operator box["x"] + box["width"], :<=, 480
     end
+    capture_evidence("gallery-narrow-width", facts: gallery_facts)
   end
 
   test "the composer exposes explicit light and dark component contexts" do
     open_root_composer
 
     assert_selector "#{COMPOSER}.image-attachment-context--dark", visible: :all, wait: 10
+    capture_evidence("composer-dark-overlay-context", facts: { context: "dark" })
 
     create_annotation_after_cancel("Sidebar context")
     within find(ANNOTATION_ITEM, text: "Sidebar context") do
       find(REPLY_TOGGLE).click
       assert_selector "#{COMPOSER}.image-attachment-context--light", wait: 10
     end
+    capture_evidence("composer-light-sidebar-context", facts: { context: "light" })
+  end
+
+  # Rendering never processes an image, so a posted gallery shows a neutral
+  # placeholder until the post-claim warming job has run. Both halves matter:
+  # the placeholder is what a reader sees first, and the responsive thumbnail is
+  # what the job is for.
+  test "a posted gallery shows a neutral placeholder and warms into responsive thumbnails" do
+    create_screenshot_for_annotation(image_path: DESKTOP_SCREENSHOT_PATH)
+    post_annotation_with_attachment("Warmed thumbnails")
+
+    assert_selector "#{GALLERY} [data-testid='attachment-placeholder']", count: 1, wait: 15
+    assert_selector "#{THUMBNAIL}[data-alt='Attached image']"
+    capture_evidence("gallery-pending-placeholder", facts: gallery_facts)
+
+    within find(ANNOTATION_ITEM, text: "Warmed thumbnails") do
+      find(REPLY_TOGGLE).click
+      find(REPLY_TEXTAREA).set("And here is mine")
+      attach_file_to_composer(SECOND_IMAGE_PATH)
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", wait: 15
+      find(REPLY_BUTTON).click
+    end
+    wait_for_turbo
+    assert_selector "#{THREAD_ENTRY} #{GALLERY} #{THUMBNAIL}", count: 1, wait: 15
+
+    warm_attachment_thumbnails
+    page.refresh
+    assert_selector "#{GALLERY} img.image-attachment-gallery__image", count: 2, wait: 15
+    assert_no_selector "[data-testid='attachment-placeholder']"
+
+    facts = gallery_facts
+    assert facts["thumbnailSources"].all? { |src| src.start_with?("/media/image_attachments/") },
+      "thumbnails must be fetched from the application, not the storage provider: #{facts.inspect}"
+    assert facts["thumbnailSrcsets"].all? { |set| set.include?("2x") },
+      "each thumbnail must offer a 2x source: #{facts.inspect}"
+    capture_evidence("gallery-warmed-thumbnails-desktop", facts: facts)
   end
 
   private
+
+  # The DOM facts a gallery screenshot cannot show on its own: which URL each
+  # image came from, whether a 2x source was offered, and how many items are
+  # still waiting on the warming job.
+  def gallery_facts
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        (() => {
+          const triggers = Array.from(document.querySelectorAll("[data-testid='attachment-thumbnail']"))
+          const images = Array.from(document.querySelectorAll(".image-attachment-gallery__image"))
+          return {
+            thumbnailCount: triggers.length,
+            placeholderCount: document.querySelectorAll("[data-testid='attachment-placeholder']").length,
+            thumbnailSources: images.map(image => new URL(image.src).pathname),
+            thumbnailSrcsets: images.map(image => image.getAttribute("srcset") || ""),
+            originalUrls: triggers.map(trigger => trigger.dataset.originalUrl),
+            downloadUrls: triggers.map(trigger => trigger.dataset.downloadUrl),
+            altText: triggers.map(trigger => trigger.dataset.alt)
+          }
+        })()
+      JS
+    end
+  end
+
+  # The warming job is what turns a placeholder into a thumbnail. Test jobs are
+  # enqueued and never run, so evidence for the warmed state has to run it.
+  def warm_attachment_thumbnails
+    ImageAttachment.submitted.includes(image_attachment: :blob).find_each do |attachment|
+      ImageAttachmentThumbnailJob.perform_now(attachment, attachment.image.blob.id)
+    end
+  end
+
+  # Reads the same numbers the placement algorithm uses: the selected region
+  # comes from the form's own percentage fields against the image box, so the
+  # measurement cannot drift from what was actually selected.
+  def overlay_geometry
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        (() => {
+          const form = document.querySelector("#annotation-form")
+          const image = document.querySelector("[data-testid='screenshot-image']")
+          const items = document.querySelector(".image-attachment-composer__items")
+          const formRect = form.getBoundingClientRect()
+          const imageRect = image.getBoundingClientRect()
+          const itemsRect = items.getBoundingClientRect()
+          const percent = name => Number(form.querySelector(`[name='annotation[${name}]']`)?.value) || 0
+          const region = {
+            left: imageRect.left + (percent("x_percent") / 100) * imageRect.width,
+            top: imageRect.top + (percent("y_percent") / 100) * imageRect.height
+          }
+          region.right = region.left + (percent("width_percent") / 100) * imageRect.width
+          region.bottom = region.top + (percent("height_percent") / 100) * imageRect.height
+          const overlapWidth = Math.max(
+            Math.min(formRect.right, region.right) - Math.max(formRect.left, region.left), 0
+          )
+          const overlapHeight = Math.max(
+            Math.min(formRect.bottom, region.bottom) - Math.max(formRect.top, region.top), 0
+          )
+
+          return {
+            imageWidth: Math.round(imageRect.width),
+            imageHeight: Math.round(imageRect.height),
+            formWidth: Math.round(formRect.width),
+            formHeight: Math.round(formRect.height),
+            regionWidth: Math.round(region.right - region.left),
+            regionHeight: Math.round(region.bottom - region.top),
+            overlapArea: Math.round(overlapWidth * overlapHeight),
+            withinImage: formRect.left >= imageRect.left - 1 && formRect.top >= imageRect.top - 1 &&
+                         formRect.right <= imageRect.right + 1 && formRect.bottom <= imageRect.bottom + 1,
+            direction: getComputedStyle(items).flexDirection,
+            railHeight: Math.round(itemsRect.height),
+            rowCount: items.children.length
+          }
+        })()
+      JS
+    end
+  end
 
   def open_root_composer(x_offset: 0, y_offset: 0)
     click_on_image_to_annotate(x_offset: x_offset, y_offset: y_offset)
@@ -502,12 +654,12 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     create_annotation(comment)
   end
 
-  def create_screenshot_for_annotation
+  def create_screenshot_for_annotation(image_path: TEST_IMAGE_PATH)
     navigate_to_demo_project
     navigate_to_first_page
 
     click_link "Upload version"
-    fill_screenshot_form(title: "Attachment Test #{Time.now.to_i}", image_path: TEST_IMAGE_PATH)
+    fill_screenshot_form(title: "Attachment Test #{Time.now.to_i}-#{rand(1000)}", image_path: image_path)
     submit_screenshot_form
     assert_on_screenshot_show
     assert_screenshot_image_loaded

@@ -145,18 +145,30 @@ The following gaps from the original bootstrap have been partially or fully addr
 
 ## Image attachments
 
-- Attachment delivery is proven against the Disk service in tests. A run with
-  the production Rabata S3 service configured — showing the application streams
-  the bytes itself, never returns a provider location, and that an expired
-  purpose token fails — is still outstanding before release.
-- The clamped Annotorious overlay minimizes overlap with the selected region
-  but cannot guarantee zero overlap on a small screenshot: once a thumbnail row
-  is present the form can be taller than a 300px-tall image. The rail is
-  verified to stay a single compact row inside the image; a smaller attached
-  state or an out-of-canvas composer would be needed for a hard guarantee.
-- Screen-reader announcements are exercised through the `role="status"` live
-  region in browser tests but have not been smoke-tested with a real screen
-  reader.
+- Attachment delivery now has an object-store contract of its own.
+  `test/integration/image_attachment_s3_delivery_contract_test.rb` points the
+  whole application at a real S3-compatible service and drives the protected
+  session and bearer routes through it, asserting provider-stored bytes, no
+  `Location`, no provider host in any header, application-served byte ranges,
+  the five-minute purpose token expiring, and revoked membership losing access.
+  It runs in the existing `script/release_test_matrix s3` gate against MinIO.
+  Running it against the production Rabata endpoint specifically still needs
+  operator-supplied credentials; the contract itself is no longer deferred.
+- The clamped Annotorious overlay is now verified to leave the selected region
+  completely uncovered against a full-size 1440x900 page capture
+  (`test/fixtures/files/desktop_screenshot.png`), which is the geometry the
+  claim is about. On a screenshot small enough that no placement can avoid the
+  form — a 300px-tall image with a thumbnail row present — the algorithm still
+  only minimizes overlap, and the older compact-rail assertion covers that case.
+- Browser evidence is captured as named frames plus a Playwright trace, not as
+  a video: `capybara-playwright-driver` resolves a recorded video path through a
+  future that the page-close event rejects, so asking for one deadlocks the run
+  with ffmpeg still holding the browser context open. `SCREENOTE_EVIDENCE_DIR`
+  writes `<frame>.png`, `<frame>.json`, and `<test>.trace.zip` instead.
+- Live-region announcements are asserted from the DOM: the composer's
+  `role="status"` region, its polite politeness, and the exact uploaded,
+  removed, and failed text it carries. A listen-through with a real screen
+  reader is still a manual step nothing in the suite can stand in for.
 
 ## Questions to Resolve
 

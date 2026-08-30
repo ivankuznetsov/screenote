@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# Records the image attachment browser flow and leaves reviewable artifacts.
+#
+#   script/attachment_browser_evidence [OUTPUT_DIRECTORY]
+#
+# Produces, per test, a Playwright trace plus an ordered filmstrip extracted
+# from it, and, at the points the plan names, a captured frame with the page
+# facts a picture cannot show on its own — which URL each thumbnail was fetched
+# from, which component context rendered it, and the measured overlay geometry.
+#
+# Playwright video recording is deliberately not used: this driver resolves a
+# recorded video path through a future that the page-close event rejects, so a
+# run that asks for one deadlocks with ffmpeg still holding the context open.
+# The trace carries the same screencast frames without that failure mode.
+
+set -Eeuo pipefail
+umask 077
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly OUTPUT_DIRECTORY="$(cd "${REPOSITORY_ROOT}" && mkdir -p "${1:-tmp/evidence/attachments}" && cd "${1:-tmp/evidence/attachments}" && pwd)"
+readonly SUITE="test/system/image_attachments_test.rb"
+
+fail() {
+  printf 'attachment browser evidence: %s\n' "$*" >&2
+  exit 1
+}
+
+command -v unzip >/dev/null 2>&1 || fail "unzip is required to extract trace filmstrips"
+
+cd "${REPOSITORY_ROOT}"
+[[ -f "${SUITE}" ]] || fail "required suite is missing: ${SUITE}"
+
+env RAILS_ENV=test CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
+  SCREENOTE_EVIDENCE_DIR="${OUTPUT_DIRECTORY}" \
+  bin/rails test "${SUITE}"
+
+shopt -s nullglob
+for trace in "${OUTPUT_DIRECTORY}"/*.trace.zip; do
+  test_name="$(basename "${trace}" .trace.zip)"
+  filmstrip="${OUTPUT_DIRECTORY}/filmstrip/${test_name}"
+  rm -rf -- "${filmstrip}"
+  mkdir -p "${filmstrip}"
+  unzip -q -o -j "${trace}" 'resources/*.jpeg' -d "${filmstrip}" || true
+
+  # Trace frames carry a millisecond timestamp suffix, so sorting the names
+  # recovers the order they were captured in.
+  frame_number=0
+  while IFS= read -r frame; do
+    frame_number=$((frame_number + 1))
+    mv -- "${frame}" "$(printf '%s/%04d.jpeg' "${filmstrip}" "${frame_number}")"
+  done < <(find "${filmstrip}" -maxdepth 1 -name 'page@*.jpeg' | sort -t- -k2,2n)
+
+  printf '%s: %d filmstrip frames\n' "${test_name}" "${frame_number}"
+done
+
+printf 'evidence written to %s\n' "${OUTPUT_DIRECTORY}"

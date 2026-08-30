@@ -79,6 +79,28 @@ invalidates an existing browser session, restoration requires a fresh sign-in,
 and a private recovery link resets credentials once in a separate session while
 rejecting replay and the former password.
 
+`test/system/image_attachments_test.rb` is the browser contract for image
+attachments. It covers the picker, composer-scoped drop and paste, mixed
+clipboard input, per-file progress, retry, removal, alt text, blocked submit,
+422 rehydration, the root/reply/unresolve composers, the gallery placeholder
+warming into responsive thumbnails, the modal viewer, narrow layout, the
+explicit light and dark component contexts, and the composer's polite live
+region. Two geometry contracts sit side by side: against the full-size
+`desktop_screenshot.png` fixture the clamped overlay must leave the selected
+region completely uncovered, and against a thumbnail-sized capture it must at
+least stay one compact rail inside the image.
+
+`SCREENOTE_EVIDENCE_DIR` turns any browser run into a recorded one. Each test
+writes a Playwright trace (`<test>.trace.zip`), and `capture_evidence` writes a
+named frame plus the page facts a picture cannot show — resolved media paths,
+srcset candidates, component context, measured geometry.
+`script/attachment_browser_evidence` runs the attachment suite that way and
+extracts each trace into an ordered filmstrip. Playwright video recording is not
+used: `capybara-playwright-driver` resolves a video path through a future that
+the page-close event rejects, so requesting one deadlocks the run. Anything read
+from the live browser must also happen in `before_teardown`, because Capybara
+closes the context in `after_teardown`, ahead of ordinary teardown callbacks.
+
 `DEVICE_SCALE_FACTOR` configures the Playwright context for responsive-image
 proof. Run `test/system/pages_test.rb` at both `1` and `2`; its responsive card
 test verifies `currentSrc` selects the 480w and 960w candidates respectively
@@ -111,14 +133,30 @@ currently commented out as optional in `config/ci.rb`, so run the Playwright
 command above separately when browser behavior changes.
 
 One adapter-specific workflow sits outside that boundary. `concurrency-qualification.yml`
-re-runs the image attachment model, service, request, job, and interleaving
-suites against a PostgreSQL server database so real row locks exercise lock
-ordering, atomic claim, aggregate races, and the cleanup/remove/submit races
-that SQLite can only assert by outcome. It is a separate workflow precisely so
-`ci.yml` stays free of adapter-specific content and the portability contract
-keeps passing. The ephemeral, runner-local PostgreSQL service uses trust
-authentication and a credential-free loopback URL, so the workflow does not
-carry a reusable test password in its published source.
+runs `script/release_test_matrix attachment-lifecycle` against a PostgreSQL
+server database so real row locks exercise lock ordering, atomic claim,
+aggregate races, and the cleanup/remove/submit races that SQLite can only assert
+by outcome. It is a separate workflow precisely so `ci.yml` stays free of
+adapter-specific content and the portability contract keeps passing. The
+ephemeral, runner-local PostgreSQL service uses trust authentication and a
+credential-free loopback URL, so the workflow does not carry a reusable test
+password in its published source.
+
+The gate names one list of suites and runs it against whatever database is
+configured, so the SQLite and server-database halves cannot drift apart. Two
+cases in that list only mean something on a server database — the account
+byte-ceiling serialization race and the adapter assertion that keeps the
+qualification honest — and they skip on SQLite.
+`script/attachment_server_database_qualification` boots an ephemeral server
+database, exports `SCREENOTE_SERVER_DATABASE_QUALIFICATION=1`, and reruns the
+gate, so that half is reproducible outside CI rather than only inside it.
+
+The `s3` gate carries the delivery half of the same contract.
+`test/integration/image_attachment_s3_delivery_contract_test.rb` points the
+whole application at the configured object store and drives the protected
+session and bearer routes through it, which is the only way to prove the
+application streams the bytes itself: a Disk service has no presigned URL to
+leak and no remote host to redirect to.
 
 The source workflow has one adapter-neutral `test` job for the Rails suite and
 the self-hosted-only smoke tests. It replaces separate SQLite and PostgreSQL
