@@ -3,11 +3,13 @@
 # screenote-edition: self_hosted
 
 require "test_helper"
-require "aws-sdk-s3"
+require_relative "../support/s3_contract_helper"
 require "base64"
 require "stringio"
 
 class SelfHostedS3ContractTest < ActiveSupport::TestCase
+  include S3ContractHelper
+
   setup do
     require_s3_contract!
     @client = Aws::S3::Client.new(client_options)
@@ -84,60 +86,5 @@ class SelfHostedS3ContractTest < ActiveSupport::TestCase
       unavailable.exist?("outage-probe")
     end
     assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 5
-  end
-
-  private
-
-  def require_s3_contract!
-    required = ENV["SCREENOTE_REQUIRE_S3"] == "1"
-    missing = %w[
-      SCREENOTE_S3_ENDPOINT SCREENOTE_S3_REGION SCREENOTE_S3_BUCKET
-      SCREENOTE_S3_PREFIX SCREENOTE_S3_ACCESS_KEY_ID SCREENOTE_S3_SECRET_ACCESS_KEY
-    ].reject { |name| ENV[name].present? }
-    if missing.any?
-      flunk "S3 matrix missing #{missing.join(', ')}" if required
-      skip "run through script/release_test_matrix s3 against MinIO"
-    end
-  end
-
-  def storage_service
-    ActiveStorage::Service::PrefixedS3Service.new(
-      bucket: bucket,
-      prefix: prefix,
-      **client_options,
-      http_open_timeout: 2,
-      http_read_timeout: 2,
-      retry_limit: 1
-    )
-  end
-
-  def client_options
-    {
-      region: region,
-      access_key_id: access_key,
-      secret_access_key: secret_key,
-      endpoint: ENV.fetch("SCREENOTE_S3_ENDPOINT"),
-      force_path_style: true
-    }
-  end
-
-  def bucket
-    ENV.fetch("SCREENOTE_S3_BUCKET")
-  end
-
-  def prefix
-    ENV.fetch("SCREENOTE_S3_PREFIX")
-  end
-
-  def region
-    ENV.fetch("SCREENOTE_S3_REGION")
-  end
-
-  def access_key
-    ENV.fetch("SCREENOTE_S3_ACCESS_KEY_ID")
-  end
-
-  def secret_key
-    ENV.fetch("SCREENOTE_S3_SECRET_ACCESS_KEY")
   end
 end

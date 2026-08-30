@@ -48,15 +48,5 @@ jobs:
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
-      - name: Load the schema onto the server database
-        run: bin/rails db:test:prepare
       - name: Exercise locks, constraints, and lifecycle races
-        run: >-
-          bin/rails test
-          test/integration/image_attachment_concurrency_test.rb
-          test/integration/database_constraint_contract_test.rb
-          test/models/image_attachment_test.rb
-          test/services/image_attachments
-          test/jobs/image_attachment_draft_cleanup_job_test.rb
-          test/jobs/image_attachment_orphan_reconciliation_job_test.rb
-          test/controllers/image_attachment_drafts
+        run: script/release_test_matrix attachment-lifecycle
