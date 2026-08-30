@@ -119,6 +119,48 @@ module Api
         assert_equal "invalid_body", response.parsed_body.fetch("code")
       end
 
+      test "rejects missing or structured scalar params and non-upload image parts" do
+        post_image(include_body: false, key: "missing_body_image_key_123456")
+        assert_response :unprocessable_entity
+        assert_equal "invalid_body", response.parsed_body.fetch("code")
+
+        post_image(body: { unexpected: "nested" }, key: "structured_body_key_123456")
+        assert_response :unprocessable_entity
+        assert_equal "invalid_body", response.parsed_body.fetch("code")
+
+        post_image(project_id: { unexpected: "nested" }, key: "structured_project_key_1234")
+        assert_response :unprocessable_entity
+        assert_equal "invalid_project", response.parsed_body.fetch("code")
+
+        post_image(image_parts: [ "not-an-upload" ], key: "non_upload_image_key_123456")
+        assert_response :unprocessable_entity
+        assert_equal "missing_image", response.parsed_body.fetch("code")
+      end
+
+      test "rate limit identity distinguishes project credentials from unbound principals" do
+        controller = @controller_class.new
+        principals = [
+          [ @project.id, AuthenticatedPrincipal.for_api_key(api_keys(:alice_key)) ],
+          [ @project.id, AuthenticatedPrincipal.for_oauth_token(
+            create_oauth_token(
+              application: create_oauth_application(name: "Project rate limit identity"),
+              user: users(:alice),
+              project: @project,
+              scopes: "mcp_write"
+            )
+          ) ],
+          [ "unbound", AuthenticatedPrincipal.for_oauth_token(
+            oauth_token(user: users(:alice), scopes: "mcp_write")
+          ) ],
+          [ "unbound", AuthenticatedPrincipal.for_user(users(:alice)) ]
+        ]
+
+        principals.each do |expected, principal|
+          controller.instance_variable_set(:@current_principal, principal)
+          assert_equal expected, controller.send(:upload_rate_limit_project_id)
+        end
+      end
+
       test "rejects missing malformed and conflicting request identity" do
         post_image(key: nil)
         assert_response :unprocessable_entity
@@ -278,11 +320,14 @@ module Api
       def post_image(annotation: @annotation, project: @project, token: ALICE_TOKEN, body: "Use this layout",
         bytes: @bytes, media_type: "image/png", filename: "upload.png", key: @key,
         digest: Digest::SHA256.hexdigest(bytes), include_image: true, image_count: 1,
-        use_scalar_image_name: false)
+        use_scalar_image_name: false, project_id: project.id, image_parts: nil, include_body: true)
         uploads = Array.new(image_count) { uploaded_file(bytes, media_type:, filename:) }
-        params = { project_id: project.id, body: body }
+        params = { project_id: }
+        params[:body] = body if include_body
         if use_scalar_image_name
           params[:image] = uploads.first
+        elsif image_parts
+          params[:images] = image_parts
         elsif include_image
           params[:images] = uploads
         end

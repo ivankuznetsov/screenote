@@ -6,6 +6,8 @@ module ImageAttachments
   class CreateApiCommentTest < ActiveSupport::TestCase
     include ActiveJob::TestHelper
 
+    DERIVED_DIGEST = Object.new.freeze
+
     self.use_transactional_tests = false
 
     setup do
@@ -79,6 +81,24 @@ module ImageAttachments
       end
     end
 
+    test "a uniqueness race recovers the durable pair without another blob or job" do
+      principal = AuthenticatedPrincipal.for_user(users(:alice))
+      first = create_comment(principal:)
+      service = build_comment(principal:)
+      service.define_singleton_method(:replay_result) { nil }
+      service.define_singleton_method(:persist) { |*, **| raise ActiveRecord::RecordNotUnique }
+
+      assert_no_enqueued_jobs only: ImageAttachmentThumbnailJob do
+        assert_no_difference [ "AnnotationComment.count", "ImageAttachment.count", "ActiveStorage::Blob.count" ] do
+          replay = service.call
+
+          assert_predicate replay, :replayed?
+          assert_equal first.comment.id, replay.comment.id
+          assert_equal first.attachment.id, replay.attachment.id
+        end
+      end
+    end
+
     test "same scoped key with changed body or image conflicts without another pair" do
       principal = AuthenticatedPrincipal.for_user(users(:alice))
       create_comment(principal:)
@@ -118,6 +138,17 @@ module ImageAttachments
       end
     end
 
+    test "an invalid idempotency key fails before staging an upload" do
+      principal = AuthenticatedPrincipal.for_user(users(:alice))
+
+      assert_no_difference [ "AnnotationComment.count", "ImageAttachment.count", "ActiveStorage::Blob.count" ] do
+        error = assert_raises(ImageAttachments::Error) do
+          create_comment(principal:, idempotency_key: "bad key")
+        end
+        assert_equal "invalid_idempotency_key", error.code
+      end
+    end
+
     test "a storage association failure rolls back the pair and purges the staged blob" do
       principal = AuthenticatedPrincipal.for_user(users(:alice))
       original = ActiveStorage::Attached::One.instance_method(:attach)
@@ -149,6 +180,32 @@ module ImageAttachments
       end
     ensure
       ImageAttachmentThumbnailJob.define_singleton_method(:perform_later, original) if original
+    end
+
+    test "an unsuccessful thumbnail enqueue is reported without undoing the complete pair" do
+      principal = AuthenticatedPrincipal.for_user(users(:alice))
+      original_enqueue = ImageAttachmentThumbnailJob.method(:perform_later)
+      original_notify = Screenote::Monitoring.method(:notify)
+      failed_job = Object.new
+      failed_job.define_singleton_method(:successfully_enqueued?) { false }
+      notifications = []
+      ImageAttachmentThumbnailJob.define_singleton_method(:perform_later) { |*| failed_job }
+      Screenote::Monitoring.define_singleton_method(:notify) do |error, context:|
+        notifications << [ error, context ]
+      end
+
+      assert_difference [ "AnnotationComment.count", "ImageAttachment.count", "ActiveStorage::Blob.count" ], 1 do
+        result = create_comment(principal:)
+
+        assert_predicate result, :created?
+        assert_predicate result.attachment.image, :attached?
+        assert_instance_of ActiveJob::EnqueueError, notifications.dig(0, 0)
+        assert_equal result.comment.id, notifications.dig(0, 1, :annotation_comment_id)
+        assert_equal result.attachment.id, notifications.dig(0, 1, :image_attachment_id)
+      end
+    ensure
+      ImageAttachmentThumbnailJob.define_singleton_method(:perform_later, original_enqueue) if original_enqueue
+      Screenote::Monitoring.define_singleton_method(:notify, original_notify) if original_notify
     end
 
     test "outer transaction commit adopts the object and warms only after commit" do
@@ -186,6 +243,32 @@ module ImageAttachments
       assert_empty enqueued_jobs
     end
 
+    test "outer rollback contains and logs an object deletion failure" do
+      principal = AuthenticatedPrincipal.for_user(users(:alice))
+      storage_service = ActiveStorage::Blob.service
+      original_delete = storage_service.method(:delete)
+      original_log = Rails.logger.method(:error)
+      messages = []
+      blob = nil
+      storage_service.define_singleton_method(:delete) { |*| raise IOError, "provider unavailable" }
+      Rails.logger.define_singleton_method(:error) { |message| messages << message }
+
+      assert_no_difference [ "AnnotationComment.count", "ImageAttachment.count", "ActiveStorage::Blob.count" ] do
+        ActiveRecord::Base.transaction(requires_new: true) do
+          result = create_comment(principal:)
+          blob = result.attachment.image.blob
+          raise ActiveRecord::Rollback
+        end
+      end
+
+      assert storage_service.exist?(blob.key)
+      assert_includes messages, "Failed to remove a rolled-back image comment object (IOError)"
+    ensure
+      storage_service&.define_singleton_method(:delete, original_delete) if original_delete
+      Rails.logger.define_singleton_method(:error, original_log) if original_log
+      original_delete&.call(blob.key) if blob
+    end
+
     test "a supplied image digest must match the verified bytes" do
       principal = AuthenticatedPrincipal.for_user(users(:alice))
 
@@ -195,6 +278,19 @@ module ImageAttachments
         end
         assert_equal "content_digest_mismatch", error.code
       end
+    end
+
+    test "an omitted image digest accepts the independently verified bytes" do
+      principal = AuthenticatedPrincipal.for_user(users(:alice))
+
+      result = create_comment(
+        principal:,
+        idempotency_key: "omitted_digest_key_123456789",
+        expected_sha256: nil
+      )
+
+      assert_predicate result, :created?
+      assert_equal @bytes, result.attachment.image.download
     end
 
     private
@@ -209,16 +305,22 @@ module ImageAttachments
       ActiveStorage::Blob.unattached.find_each(&:purge)
     end
 
-    def create_comment(principal:, annotation: @annotation, project: @project, body: "Use this layout", bytes: @bytes,
-      idempotency_key: @key, expected_sha256: nil)
-      ImageAttachments::CreateApiComment.call(
+    def create_comment(**kwargs)
+      build_comment(**kwargs).call
+    end
+
+    def build_comment(principal:, annotation: @annotation, project: @project, body: "Use this layout", bytes: @bytes,
+      idempotency_key: @key, expected_sha256: DERIVED_DIGEST)
+      expected_sha256 = Digest::SHA256.hexdigest(bytes) if expected_sha256.equal?(DERIVED_DIGEST)
+
+      ImageAttachments::CreateApiComment.new(
         annotation:,
         project:,
         principal:,
         body:,
         io: StringIO.new(bytes),
         idempotency_key:,
-        expected_sha256: expected_sha256 || Digest::SHA256.hexdigest(bytes),
+        expected_sha256:,
         declared_content_type: "image/png",
         declared_length: bytes.bytesize,
         filename: "upload.png"

@@ -85,6 +85,33 @@ class Screenote::ImageCommentRequestLimitTest < ActiveSupport::TestCase
     assert_equal "request_too_large", JSON.parse(body.join).fetch("code")
   end
 
+  test "readpartial accounts for reads with and without an output buffer" do
+    input = Screenote::ImageCommentRequestLimit::LimitedInput.new(StringIO.new("123456789"), max_bytes: 8)
+    output = +"stale"
+
+    assert_equal "1234", input.readpartial(4, output)
+    assert_equal "1234", output
+    assert_equal "5678", input.readpartial(4)
+    assert_raises(Screenote::ImageCommentRequestLimit::TooLarge) { input.readpartial(1) }
+  end
+
+  test "preserves line enumeration and closeable IO behavior" do
+    input = Screenote::ImageCommentRequestLimit::LimitedInput.new(StringIO.new("one\ntwo\n"), max_bytes: 8)
+    chomped = Screenote::ImageCommentRequestLimit::LimitedInput.new(StringIO.new("one\n"), max_bytes: 4)
+
+    assert_equal "one", chomped.gets(chomp: true)
+    assert_equal "one\ntwo\n", input.gets(nil)
+    assert_predicate input, :eof?
+
+    input.rewind
+    assert_instance_of Enumerator, input.each
+    assert_equal [ "one\n", "two\n" ], input.each.to_a
+    assert_predicate input, :eof?
+
+    input.close
+    assert_predicate input, :closed?
+  end
+
   test "allows an exact-limit body and preserves rewind behavior" do
     observed = []
     middleware = build_middleware(8) do |env|
