@@ -138,6 +138,19 @@ module Api
           payload
         end
 
+        def image_comment(result)
+          {
+            success: true,
+            operation: result.operation,
+            comment: annotation_comment(result.comment),
+            attachment: image_attachment_metadata(result.attachment)
+          }
+        end
+
+        def image_attachment_metadata(attachment)
+          attachment.as_contract_json.except(:url, :url_expires_at)
+        end
+
         # URLs are minted at serialization time and never stored. Each one
         # carries a five-minute purpose token that must still be presented
         # alongside a bearer principal with live access to the project.
@@ -145,9 +158,9 @@ module Api
           expires_at = ImageAttachment::MEDIA_TOKEN_EXPIRY.from_now
 
           parent.image_attachments.map do |attachment|
-            attachment.as_contract_json(
+            image_attachment_metadata(attachment).merge(
               url: image_attachment_media_url(attachment, url_options),
-              url_expires_at: expires_at
+              url_expires_at: expires_at.iso8601
             )
           end
         end

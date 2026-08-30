@@ -129,6 +129,7 @@ Rails.application.routes.draw do
       end
       resources :annotations, only: [ :show ] do
         resources :comments, controller: "annotation_comments", only: [ :create ]
+        resources :image_comments, only: [ :create ]
       end
       post "annotations/:annotation_id/resolve", to: "annotation_resolutions#create",
         as: :annotation_resolve

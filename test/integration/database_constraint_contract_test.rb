@@ -201,11 +201,8 @@ class DatabaseConstraintContractTest < ActiveSupport::TestCase
     assert_not PrincipalActionContract.supported?(:create_point, :rest)
     assert_not PrincipalActionContract.supported?(:create_area, :public_cli)
     assert PrincipalActionContract.supported?(:reopen, :mcp)
-    assert PrincipalActionContract.supported?(:attach_image, :browser)
-    %i[rest public_cli mcp].each do |surface|
-      assert_not PrincipalActionContract.supported?(:attach_image, surface),
-        "attaching an image must stay a session-only capability"
-    end
+    %i[browser rest public_cli].each { |surface| assert PrincipalActionContract.supported?(:attach_image, surface) }
+    assert_not PrincipalActionContract.supported?(:attach_image, :mcp)
   end
 
   private

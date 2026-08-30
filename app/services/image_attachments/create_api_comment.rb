@@ -68,6 +68,14 @@ module ImageAttachments
       result
     rescue ActiveRecord::RecordNotUnique
       replay_result!
+    rescue Error, ActiveRecord::RecordInvalid, ArgumentError
+      raise
+    rescue StandardError => error
+      Screenote::Monitoring.notify(
+        error,
+        context: { annotation_id: annotation.id, project_id: project.id }
+      )
+      raise Error.new(code: "upload_failed", status: :internal_server_error)
     ensure
       prepared&.cleanup
     end
