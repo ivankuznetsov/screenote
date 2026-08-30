@@ -151,20 +151,26 @@ The following gaps from the original bootstrap have been partially or fully addr
   session and bearer routes through it, asserting provider-stored bytes, no
   `Location`, no provider host in any header, application-served byte ranges,
   the five-minute purpose token expiring, and revoked membership losing access.
-  It runs in the existing `script/release_test_matrix s3` gate against MinIO.
+  It runs in the existing `script/release_test_matrix s3` gate against MinIO,
+  and `script/attachment_object_store_qualification` supplies that store on any
+  machine with a container engine, so the run no longer waits on an operator.
   Running it against the production Rabata endpoint specifically still needs
-  operator-supplied credentials; the contract itself is no longer deferred.
+  operator-supplied credentials, which the same script accepts through
+  `SCREENOTE_S3_ENDPOINT` and its companions.
 - The clamped Annotorious overlay is now verified to leave the selected region
   completely uncovered against a full-size 1440x900 page capture
   (`test/fixtures/files/desktop_screenshot.png`), which is the geometry the
   claim is about. On a screenshot small enough that no placement can avoid the
   form — a 300px-tall image with a thumbnail row present — the algorithm still
   only minimizes overlap, and the older compact-rail assertion covers that case.
-- Browser evidence is captured as named frames plus a Playwright trace, not as
-  a video: `capybara-playwright-driver` resolves a recorded video path through a
-  future that the page-close event rejects, so asking for one deadlocks the run
-  with ffmpeg still holding the browser context open. `SCREENOTE_EVIDENCE_DIR`
-  writes `<frame>.png`, `<frame>.json`, and `<test>.trace.zip` instead.
+- Browser evidence is a watchable video per test plus named frames.
+  `SCREENOTE_EVIDENCE_DIR` writes `<frame>.png`, `<frame>.json`, and
+  `<test>.trace.zip`, and `script/attachment_browser_evidence` encodes each
+  trace's screencast into `<test>.webm` at the run's own pace. Playwright's own
+  `record_video_dir` is not used: `capybara-playwright-driver` asks the page for
+  its video path while the page is open, and that path blocks on a future the
+  page-close event rejects, so a run that sets the option hangs and leaves a
+  zero-byte file.
 - Live-region announcements are asserted from the DOM: the composer's
   `role="status"` region, its polite politeness, and the exact uploaded,
   removed, and failed text it carries. A listen-through with a real screen

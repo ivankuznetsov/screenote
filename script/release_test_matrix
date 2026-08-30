@@ -444,6 +444,10 @@ attachment-lifecycle runs against the configured database. Export a server
 DATABASE_URL to rerun the same list against real row locks:
   script/attachment_server_database_qualification
 
+s3 needs a real object store. To supply an ephemeral one and run the gate
+against it:
+  script/attachment_object_store_qualification
+
 Coverage requires an explicit comparison commit:
   SCREENOTE_COVERAGE_BASE_SHA=<full-ancestor-sha> script/release_test_matrix coverage
 

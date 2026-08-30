@@ -27,11 +27,15 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # overlay only mean something against a screenshot the size of a real one.
   DESKTOP_SCREENSHOT_PATH = Rails.root.join("test/fixtures/files/desktop_screenshot.png").to_s
   # Set SCREENOTE_EVIDENCE_DIR to have a run write named frames, the page facts
-  # behind each frame, and a per-test video into that directory. Nothing is
-  # recorded otherwise, so an ordinary run pays nothing for it.
+  # behind each frame, and a per-test trace into that directory. The trace
+  # carries the screencast `script/attachment_browser_evidence` encodes into a
+  # video. Nothing is recorded otherwise, so an ordinary run pays nothing for it.
   EVIDENCE_DIR = ENV["SCREENOTE_EVIDENCE_DIR"].presence
+  # The width every desktop layout claim is measured at, and the width a test
+  # returns to after narrowing the viewport.
+  SCREEN_SIZE = [ 1280, 720 ].freeze
 
-  driven_by :playwright, screen_size: [ 1280, 720 ], options: {
+  driven_by :playwright, screen_size: SCREEN_SIZE, options: {
     browser_type: ENV.fetch("PLAYWRIGHT_BROWSER", "chromium").to_sym,
     headless: ENV["HEADED"] != "true",
     deviceScaleFactor: Float(ENV.fetch("DEVICE_SCALE_FACTOR", "1"))
@@ -80,11 +84,13 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
 
   # Records the run itself, not just its outcome: a Playwright trace carries a
   # timestamped screencast and a DOM snapshot per action, so the whole authoring
-  # flow can be replayed with `npx playwright show-trace <file>`.
+  # flow can be replayed with `npx playwright show-trace <file>` and encoded
+  # into a watchable video from the screencast alone.
   #
-  # Playwright video recording is deliberately not used. This driver resolves a
-  # video path through a future that the page-close event rejects, so a run that
-  # asks for one deadlocks with ffmpeg still holding the context open.
+  # Playwright's own `record_video_dir` is deliberately not set. `reset!` in this
+  # driver asks the page for its video path while the page is still open, and
+  # `Playwright::Video#path` blocks on a future that the page-close event
+  # rejects, so a run that sets the option hangs and leaves a zero-byte file.
   def start_evidence_trace
     @evidence_frame_number = 0
     return unless evidence_capture?

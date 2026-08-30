@@ -33,6 +33,8 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
   VIEWER_CLOSE = '[data-testid="attachment-viewer-close"]'
   VIEWER_NEXT = '[data-testid="attachment-viewer-next"]'
   SECOND_IMAGE_PATH = Rails.root.join("test/fixtures/files/test_image.png").to_s
+  # Phone-sized, so a layout claim is made where the space actually runs out.
+  NARROW_VIEWPORT = [ 480, 800 ].freeze
 
   # Drag and clipboard payloads have to be synthesized inside the page, and a
   # canvas is the only PNG a page script can produce without a file picker.
@@ -436,17 +438,29 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_equal "attachment-thumbnail", focused_testid, "closing must restore focus to the trigger"
   end
 
-  test "the gallery renders at a narrow width" do
+  test "the gallery and its viewer render at a narrow width" do
     post_annotation_with_attachment("Narrow layout")
 
+    resize_viewport(NARROW_VIEWPORT)
     with_playwright_page do |pw_page|
-      pw_page.set_viewport_size(width: 480, height: 800)
       box = pw_page.locator(THUMBNAIL).first.bounding_box
 
       assert_operator box["width"], :>, 0
-      assert_operator box["x"] + box["width"], :<=, 480
+      assert_operator box["x"] + box["width"], :<=, NARROW_VIEWPORT.first
     end
     capture_evidence("gallery-narrow-width", facts: gallery_facts)
+
+    # A viewer that overflows the viewport cannot be read on a phone, so the
+    # narrow claim covers the full-size view as well as the thumbnails.
+    find(THUMBNAIL, match: :first).click
+    assert_selector "#{VIEWER}[open]", wait: 10
+    with_playwright_page do |pw_page|
+      box = pw_page.locator(VIEWER_IMAGE).bounding_box
+
+      assert_operator box["x"], :>=, -1
+      assert_operator box["x"] + box["width"], :<=, NARROW_VIEWPORT.first + 1
+    end
+    capture_evidence("viewer-narrow-width", facts: gallery_facts)
   end
 
   test "the composer exposes explicit light and dark component contexts" do
@@ -454,6 +468,10 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
 
     assert_selector "#{COMPOSER}.image-attachment-context--dark", visible: :all, wait: 10
     capture_evidence("composer-dark-overlay-context", facts: { context: "dark" })
+    resize_viewport(NARROW_VIEWPORT)
+    assert_selector "#{COMPOSER}.image-attachment-context--dark", visible: :all, wait: 10
+    capture_evidence("composer-dark-overlay-context-narrow", facts: { context: "dark" })
+    resize_viewport(SCREEN_SIZE)
 
     create_annotation_after_cancel("Sidebar context")
     within find(ANNOTATION_ITEM, text: "Sidebar context") do
@@ -461,6 +479,9 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
       assert_selector "#{COMPOSER}.image-attachment-context--light", wait: 10
     end
     capture_evidence("composer-light-sidebar-context", facts: { context: "light" })
+    resize_viewport(NARROW_VIEWPORT)
+    assert_selector "#{COMPOSER}.image-attachment-context--light", wait: 10
+    capture_evidence("composer-light-sidebar-context-narrow", facts: { context: "light" })
   end
 
   # Rendering never processes an image, so a posted gallery shows a neutral
@@ -625,6 +646,11 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
       end)
     end
     discards
+  end
+
+  def resize_viewport(size)
+    width, height = size
+    with_playwright_page { |pw_page| pw_page.set_viewport_size(width: width, height: height) }
   end
 
   def press_key(key)

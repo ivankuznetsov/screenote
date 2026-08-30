@@ -4,15 +4,20 @@
 #
 #   script/attachment_browser_evidence [OUTPUT_DIRECTORY]
 #
-# Produces, per test, a Playwright trace plus an ordered filmstrip extracted
-# from it, and, at the points the plan names, a captured frame with the page
-# facts a picture cannot show on its own — which URL each thumbnail was fetched
-# from, which component context rendered it, and the measured overlay geometry.
+# Produces, per test, a watchable WebM of the run, the ordered filmstrip it was
+# built from, the Playwright trace both came out of, and, at the points the plan
+# names, a captured frame with the page facts a picture cannot show on its own —
+# which URL each thumbnail was fetched from, which component context rendered
+# it, and the measured overlay geometry.
 #
-# Playwright video recording is deliberately not used: this driver resolves a
-# recorded video path through a future that the page-close event rejects, so a
-# run that asks for one deadlocks with ffmpeg still holding the context open.
-# The trace carries the same screencast frames without that failure mode.
+# The video is encoded from the trace's screencast rather than recorded by the
+# browser. Playwright's own `record_video_dir` cannot be used here: this driver
+# asks the page for its video path while the page is still open, and that path
+# resolves through a future the page-close event rejects, so a run that sets the
+# option blocks forever with an empty file. The screencast carries the same
+# picture — it runs at roughly 20fps for the whole length of a test — and every
+# frame keeps the timestamp it was captured at, so the encode below reproduces
+# the run's real timing instead of a nominal frame rate.
 
 set -Eeuo pipefail
 umask 077
@@ -27,6 +32,7 @@ fail() {
 }
 
 command -v unzip >/dev/null 2>&1 || fail "unzip is required to extract trace filmstrips"
+command -v ffmpeg >/dev/null 2>&1 || fail "ffmpeg is required to encode the filmstrips"
 
 cd "${REPOSITORY_ROOT}"
 [[ -f "${SUITE}" ]] || fail "required suite is missing: ${SUITE}"
@@ -36,22 +42,64 @@ env RAILS_ENV=test CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
   bin/rails test "${SUITE}"
 
 shopt -s nullglob
-for trace in "${OUTPUT_DIRECTORY}"/*.trace.zip; do
+traces=("${OUTPUT_DIRECTORY}"/*.trace.zip)
+(( ${#traces[@]} > 0 )) || fail "the run wrote no traces, so there is nothing to show"
+
+for trace in "${traces[@]}"; do
   test_name="$(basename "${trace}" .trace.zip)"
   filmstrip="${OUTPUT_DIRECTORY}/filmstrip/${test_name}"
   rm -rf -- "${filmstrip}"
   mkdir -p "${filmstrip}"
   unzip -q -o -j "${trace}" 'resources/*.jpeg' -d "${filmstrip}" || true
 
-  # Trace frames carry a millisecond timestamp suffix, so sorting the names
-  # recovers the order they were captured in.
-  frame_number=0
-  while IFS= read -r frame; do
-    frame_number=$((frame_number + 1))
-    mv -- "${frame}" "$(printf '%s/%04d.jpeg' "${filmstrip}" "${frame_number}")"
-  done < <(find "${filmstrip}" -maxdepth 1 -name 'page@*.jpeg' | sort -t- -k2,2n)
+  # Each screencast frame is named `page@<page>-<capture-milliseconds>.jpeg`, so
+  # the numeric tail both orders the frames and dates them. Sorting has to run
+  # on the bare file name: the enclosing path is free to contain hyphens of its
+  # own, and sorting whole paths would key on one of those instead.
+  mapfile -t frames < <(
+    find "${filmstrip}" -maxdepth 1 -name 'page@*.jpeg' -printf '%f\n' |
+      awk -F- '{ print $NF, $0 }' | sort -n -k1,1 | cut -d' ' -f2-
+  )
 
-  printf '%s: %d filmstrip frames\n' "${test_name}" "${frame_number}"
+  if (( ${#frames[@]} == 0 )); then
+    fail "${test_name} recorded no screencast frames"
+  fi
+
+  timings=()
+  for index in "${!frames[@]}"; do
+    captured_at="${frames[index]##*-}"
+    timings+=("${captured_at%.jpeg}")
+    mv -- "${filmstrip}/${frames[index]}" "$(printf '%s/%04d.jpeg' "${filmstrip}" "$((index + 1))")"
+  done
+
+  # The concat demuxer holds each frame for the gap until the next one was
+  # captured, which is what makes the encode replay the run at its real pace.
+  # The final frame has no successor, so it gets a one-second tail, and the
+  # demuxer requires it listed once more for that duration to apply.
+  concat_list="${filmstrip}/frames.txt"
+  : >"${concat_list}"
+  for index in "${!timings[@]}"; do
+    frame="$(printf '%04d.jpeg' "$((index + 1))")"
+    if (( index + 1 < ${#timings[@]} )); then
+      duration="$(awk -v a="${timings[index]}" -v b="${timings[index + 1]}" 'BEGIN { printf "%.3f", (b - a) / 1000 }')"
+    else
+      duration="1.000"
+    fi
+    printf "file '%s'\nduration %s\n" "${frame}" "${duration}" >>"${concat_list}"
+  done
+  printf "file '%04d.jpeg'\n" "${#timings[@]}" >>"${concat_list}"
+
+  video="${OUTPUT_DIRECTORY}/${test_name}.webm"
+  ffmpeg -nostdin -loglevel error -y -f concat -safe 0 -i "${concat_list}" \
+    -r 30 -c:v libvpx-vp9 -b:v 0 -crf 34 -deadline realtime -cpu-used 5 \
+    -pix_fmt yuv420p "${video}" ||
+    fail "could not encode ${test_name}"
+
+  [[ -s "${video}" ]] || fail "${test_name} produced an empty video"
+
+  span="$(awk -v a="${timings[0]}" -v b="${timings[-1]}" 'BEGIN { printf "%.1f", (b - a) / 1000 }')"
+  printf '%s: %d frames over %ss, %d video bytes\n' \
+    "${test_name}" "${#frames[@]}" "${span}" "$(wc -c <"${video}")"
 done
 
 printf 'evidence written to %s\n' "${OUTPUT_DIRECTORY}"

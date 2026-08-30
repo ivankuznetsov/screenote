@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+# Runs the S3 delivery gate against a real object store.
+#
+# Disk storage has no presigned URL to leak and no remote host to redirect to,
+# so "the application streams the bytes itself" cannot be executed against it.
+# The container-s3 CI job supplies a real store as a service; this script
+# supplies the same thing on a developer or agent machine, so the object-store
+# half of the delivery claim can be executed anywhere rather than deferred to
+# an operator.
+#
+#   script/attachment_object_store_qualification
+#
+# Set SCREENOTE_S3_ENDPOINT and its companions to qualify against a store you
+# already run — the hosted Rabata endpoint, for instance; otherwise an ephemeral
+# MinIO container is started and removed.
+
+set -Eeuo pipefail
+umask 077
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly CONTAINER_ENGINE="${SCREENOTE_CONTAINER_ENGINE:-docker}"
+# The same immutable image the container-s3 workflow qualifies against, so a
+# local run and a CI run cannot be measuring different S3 implementations.
+readonly OBJECT_STORE_IMAGE="${SCREENOTE_OBJECT_STORE_IMAGE:-minio/minio:RELEASE.2025-05-24T17-08-30Z@sha256:a616cd8f37758b0296db62cc9e6af05a074e844cc7b5c0a0e62176d73828d440}"
+readonly CONTAINER_NAME="screenote-attachment-object-store-$$"
+readonly ACCESS_KEY_ID="screenote-qualification"
+readonly SECRET_ACCESS_KEY="screenote-qualification-secret"
+
+started_container=false
+
+fail() {
+  printf 'attachment object store qualification: %s\n' "$*" >&2
+  exit 1
+}
+
+cleanup() {
+  local exit_status=$?
+
+  if [[ "${started_container}" == true ]]; then
+    if (( exit_status != 0 )); then
+      "${CONTAINER_ENGINE}" logs "${CONTAINER_NAME}" >&2 2>&1 || true
+    fi
+    "${CONTAINER_ENGINE}" rm --force "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+start_object_store() {
+  command -v "${CONTAINER_ENGINE}" >/dev/null 2>&1 ||
+    fail "${CONTAINER_ENGINE} is required, or configure SCREENOTE_S3_ENDPOINT"
+
+  # An ephemeral host port keeps a qualification run from colliding with a
+  # store the machine already publishes.
+  "${CONTAINER_ENGINE}" run --detach --name "${CONTAINER_NAME}" \
+    --publish "127.0.0.1::9000" \
+    --env "MINIO_ROOT_USER=${ACCESS_KEY_ID}" \
+    --env "MINIO_ROOT_PASSWORD=${SECRET_ACCESS_KEY}" \
+    "${OBJECT_STORE_IMAGE}" server /data >/dev/null
+  started_container=true
+
+  local host_port
+  host_port="$("${CONTAINER_ENGINE}" port "${CONTAINER_NAME}" 9000/tcp | head -1 | sed 's/.*://')"
+  [[ -n "${host_port}" ]] || fail "the object store published no host port"
+
+  export SCREENOTE_S3_ENDPOINT="http://127.0.0.1:${host_port}"
+  export SCREENOTE_S3_REGION="us-east-1"
+  export SCREENOTE_S3_BUCKET="screenote-qualification"
+  export SCREENOTE_S3_PREFIX="attachment-delivery"
+  export SCREENOTE_S3_ACCESS_KEY_ID="${ACCESS_KEY_ID}"
+  export SCREENOTE_S3_SECRET_ACCESS_KEY="${SECRET_ACCESS_KEY}"
+
+  local attempt
+  for attempt in $(seq 1 60); do
+    if curl --fail --silent "${SCREENOTE_S3_ENDPOINT}/minio/health/ready" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  fail "the object store did not become ready"
+}
+
+cd "${REPOSITORY_ROOT}"
+
+if [[ -n "${SCREENOTE_S3_ENDPOINT-}" ]]; then
+  for name in SCREENOTE_S3_REGION SCREENOTE_S3_BUCKET SCREENOTE_S3_PREFIX \
+    SCREENOTE_S3_ACCESS_KEY_ID SCREENOTE_S3_SECRET_ACCESS_KEY; do
+    [[ -n "${!name-}" ]] || fail "${name} must be set alongside SCREENOTE_S3_ENDPOINT"
+  done
+else
+  start_object_store
+fi
+
+# The s3 gate exports SCREENOTE_REQUIRE_S3, which turns the suite's "no store
+# configured" skip into a failure, so this run cannot pass by not running.
+script/release_test_matrix s3

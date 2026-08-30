@@ -94,12 +94,23 @@ least stay one compact rail inside the image.
 writes a Playwright trace (`<test>.trace.zip`), and `capture_evidence` writes a
 named frame plus the page facts a picture cannot show — resolved media paths,
 srcset candidates, component context, measured geometry.
-`script/attachment_browser_evidence` runs the attachment suite that way and
-extracts each trace into an ordered filmstrip. Playwright video recording is not
-used: `capybara-playwright-driver` resolves a video path through a future that
-the page-close event rejects, so requesting one deadlocks the run. Anything read
-from the live browser must also happen in `before_teardown`, because Capybara
-closes the context in `after_teardown`, ahead of ordinary teardown callbacks.
+`script/attachment_browser_evidence` runs the attachment suite that way,
+extracts each trace into an ordered filmstrip, and encodes that filmstrip into
+a watchable `<test>.webm`.
+
+The video is encoded from the trace screencast, not recorded by the browser.
+Playwright's own `record_video_dir` cannot be used here: `reset!` in
+`capybara-playwright-driver` asks the page for its video path while the page is
+still open, and `Playwright::Video#path` blocks on a future that the page-close
+event rejects, so a run that sets the option hangs and leaves a zero-byte file.
+The trace screencast carries the same picture — roughly 20 frames a second for
+the whole length of a test — and each frame keeps the millisecond it was
+captured at in its name, so the concat encode reproduces the run's real timing
+rather than a nominal frame rate. Frames must be ordered by that numeric tail
+read from the bare file name; the enclosing path contains hyphens of its own.
+Anything read from the live browser must happen in `before_teardown`, because
+Capybara closes the context in `after_teardown`, ahead of ordinary teardown
+callbacks.
 
 `DEVICE_SCALE_FACTOR` configures the Playwright context for responsive-image
 proof. Run `test/system/pages_test.rb` at both `1` and `2`; its responsive card
@@ -126,7 +137,10 @@ model, and Rake task tests.
 ## Full gate
 
 `bin/ci` installs missing dependencies and runs formatting/whitespace checks,
-security scans, Rails tests, seed validation, and any configured Go tests. Set
+security scans, Rails tests, seed validation, and the Go tests as
+`env GOFLAGS=-mod=mod go test ./...` — the module flag is required because the
+repository's top-level `vendor/` directory belongs to Ruby, and a bare
+`go test` reads it as an inconsistent Go vendor tree and refuses to run. Set
 `REQUIRE_COVERAGE=true` to enforce the SimpleCov line and branch thresholds;
 coverage mode forces one Rails worker for stable accounting. System tests are
 currently commented out as optional in `config/ci.rb`, so run the Playwright
@@ -157,6 +171,14 @@ whole application at the configured object store and drives the protected
 session and bearer routes through it, which is the only way to prove the
 application streams the bytes itself: a Disk service has no presigned URL to
 leak and no remote host to redirect to.
+`script/attachment_object_store_qualification` supplies that store the same way
+the database script supplies a database — an ephemeral MinIO container on the
+same immutable image `container-s3` uses — and reruns the gate, so the delivery
+half is reproducible outside CI too. It accepts an operator's own endpoint
+through `SCREENOTE_S3_ENDPOINT` and its companions for a run against the hosted
+provider. The gate exports `SCREENOTE_REQUIRE_S3=1`, which turns the suite's
+"no store configured" skip into a failure, so a qualification run cannot pass
+by not running.
 
 The source workflow has one adapter-neutral `test` job for the Rails suite and
 the self-hosted-only smoke tests. It replaces separate SQLite and PostgreSQL
