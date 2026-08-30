@@ -21,9 +21,9 @@ module ImageAttachments
       @batch = batch
       @io = io
       @client_key = client_key.to_s
-      @declared_content_type = declared_content_type.to_s.downcase.presence
+      @declared_content_type = declared_content_type
       @declared_length = declared_length
-      @filename = filename.to_s.presence
+      @filename = filename
     end
 
     def call
@@ -33,7 +33,6 @@ module ImageAttachments
       # Replaying it must not reopen the row or replace the stored blob.
       return Result.new(attachment: attachment) if attachment.state_ready?
 
-      prepared = nil
       begin
         prepared = PrepareUpload.call(
           io:,

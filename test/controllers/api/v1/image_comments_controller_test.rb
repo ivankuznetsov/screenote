@@ -57,6 +57,18 @@ module Api
         assert_equal first.dig("attachment", "id"), response.parsed_body.dig("attachment", "id")
       end
 
+      test "same key with changed content returns a stable conflict without another pair" do
+        post_image
+
+        assert_no_difference [ "AnnotationComment.count", "ImageAttachment.count", "ActiveStorage::Blob.count" ] do
+          post_image(body: "Use a different layout")
+        end
+
+        assert_response :conflict
+        assert_equal "idempotency_conflict", response.parsed_body.fetch("code")
+        assert_capability
+      end
+
       test "oauth user and project-bound tokens create user-authored image comments" do
         user_token = oauth_token(user: users(:alice), scopes: "mcp_write")
         post_image(token: user_token.token, key: "oauth_user_image_key_123456")
@@ -118,6 +130,10 @@ module Api
         assert_equal "invalid_idempotency_key", response.parsed_body.fetch("code")
 
         post_image(digest: "0" * 64, key: "wrong_digest_image_key_1234")
+        assert_response :conflict
+        assert_equal "content_digest_mismatch", response.parsed_body.fetch("code")
+
+        post_image(digest: "not-a-sha256", key: "malformed_digest_image_key_123")
         assert_response :conflict
         assert_equal "content_digest_mismatch", response.parsed_body.fetch("code")
       end
@@ -191,6 +207,28 @@ module Api
         assert_response 413
         assert_equal "request_too_large", response.parsed_body.fetch("code")
         assert_nil response.headers["Screenote-API-Capability"]
+      end
+
+      test "declared oversized route aliases are rejected before controller dispatch" do
+        paths = [
+          "#{raw_image_comments_path}/",
+          "#{raw_image_comments_path}//",
+          "#{raw_image_comments_path}.json/"
+        ]
+
+        paths.each do |path|
+          post path,
+            headers: auth_headers(ALICE_TOKEN).merge(
+              "Content-Type" => "multipart/form-data; boundary=unused",
+              "Content-Length" => (Screenote::ImageCommentRequestLimit.max_request_size + 1).to_s,
+              "Idempotency-Key" => @key
+            ),
+            env: { "RAW_POST_DATA" => "ignored" }
+
+          assert_response 413, path
+          assert_equal "request_too_large", response.parsed_body.fetch("code"), path
+          assert_nil response.headers["Screenote-API-Capability"], path
+        end
       end
 
       test "rate limiting fails closed before multipart parsing when its store is unavailable" do

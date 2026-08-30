@@ -3,7 +3,7 @@ title: API Controllers
 type: controller
 source: app/controllers/api/
 created: 2026-04-10
-updated: 2026-08-06
+updated: 2026-08-30
 tags: [controller, api, rest, bearer-auth]
 ---
 
@@ -143,6 +143,44 @@ Source: `app/controllers/api/v1/annotation_comments_controller.rb`
 
 ---
 
+## Api::V1::ImageCommentsController
+
+Source: `app/controllers/api/v1/image_comments_controller.rb`,
+`app/services/image_attachments/create_api_comment.rb`
+
+| Action | Method | Path | Notes |
+|--------|--------|------|-------|
+| create | POST | `/api/v1/annotations/:annotation_id/image_comments` | Atomically creates one comment and one verified submitted attachment |
+
+- Requires API-key project access or OAuth `mcp_write` with explicit project context.
+- Requires a 16-64 character base64url-style `Idempotency-Key`, a nonblank scalar `body`, and exactly one multipart `images[]` upload. An optional `Screenote-Image-SHA256` is checked against the bytes but does not replace server-side digesting.
+- Reuses the shared credential/project and IP upload budgets of 250/hour. A missing limiter fails closed with `503 rate_limit_unavailable`.
+- Every controller-owned response after authentication carries `Screenote-API-Capability: image-comments-v1`, including validation, throttling, and annotation-not-found responses.
+- A durable principal-and-annotation-scoped receipt returns `201 operation: created` once and `200 operation: replayed` for the identical body and image. Reusing the key with changed content returns `409 idempotency_conflict`.
+- Byte preparation and object-store staging precede one database transaction that owns the comment, attachment, blob association, and receipt. Handled failures purge the staged blob, an enclosing transaction rollback also removes provider bytes, and preview warming starts only after the outermost transaction commits. No text-only or attachment-only state is visible.
+
+---
+
+## Api::ImageAttachmentMediaController
+
+Source: `app/controllers/api/image_attachment_media_controller.rb`
+
+| Action | Method | Path | Notes |
+|--------|--------|------|-------|
+| show | GET | `/api/media/image_attachments/:id?token=...` | Privately streams one submitted original image through the application |
+
+The route requires a bearer principal with `mcp_read`, an unexpired five-minute
+purpose token for that exact attachment, and current access to its project.
+Missing, mismatched, draft, detached, revoked, and expired cases share the
+non-enumerating `404 not_found` envelope. The application streams with private
+headers and does not redirect to or reveal the storage provider.
+
+Annotation-detail responses that project these purpose-token URLs use
+`Cache-Control: private, no-store`, so intermediaries and clients do not retain
+credentials beyond the request that generated them.
+
+---
+
 ## Api::V1::AnnotationResolutionsController
 
 Source: `app/controllers/api/v1/annotation_resolutions_controller.rb`
@@ -187,6 +225,7 @@ Source: `app/controllers/api/screenshot_uploads_controller.rb`
 | Endpoint | Auth Method |
 |----------|------------|
 | `Api::V1::*` | Bearer token via project API key or Doorkeeper OAuth access token |
+| `Api::ImageAttachmentMediaController` | Bearer token plus attachment-scoped five-minute purpose token |
 | `Api::ScreenshotUploadsController` | One-time upload token via `Authorization: Bearer` |
 
 OAuth REST scopes reuse MCP scopes: read endpoints require `mcp_read`, and write endpoints require `mcp_write`. OAuth project-scoped endpoints require explicit project context and membership validation; object IDs alone are not enough.

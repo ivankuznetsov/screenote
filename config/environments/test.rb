@@ -20,7 +20,10 @@ Rails.application.configure do
 
   # Show full error reports.
   config.consider_all_requests_local = true
-  config.cache_store = :null_store
+  # External source-contract probes run a real test server, outside the
+  # per-test cache swap in test_helper. Let only that explicit process use an
+  # isolated in-memory limiter store; ordinary tests retain NullStore.
+  config.cache_store = ENV["SCREENOTE_TEST_MEMORY_CACHE"] == "1" ? :memory_store : :null_store
 
   # Render exception templates for rescuable exceptions and raise for other exceptions.
   config.action_dispatch.show_exceptions = :rescuable
@@ -28,8 +31,9 @@ Rails.application.configure do
   # Disable request forgery protection in test environment.
   config.action_controller.allow_forgery_protection = false
 
-  # Store uploaded files on the local file system in a temporary directory.
-  config.active_storage.service = :test
+  # Source qualification can point a real test server at the same named S3
+  # service used in production. Ordinary tests stay on the isolated Disk root.
+  config.active_storage.service = ENV.fetch("SCREENOTE_TEST_ACTIVE_STORAGE_SERVICE", "test").to_sym
 
   # Tell Action Mailer not to deliver emails to the real world.
   # The :test delivery method accumulates sent emails in the

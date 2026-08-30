@@ -7,7 +7,7 @@ module ImageAttachments
   # idempotent domain operation.
   class CreateApiComment
     IDEMPOTENCY_KEY = /\A[A-Za-z0-9_-]{16,64}\z/
-    SHA256 = /\A[0-9a-f]{64}\z/
+    SHA256 = Snapshot::SHA256_FORMAT
 
     Result = Data.define(:comment, :attachment, :operation) do
       def created?
@@ -63,8 +63,7 @@ module ImageAttachments
       )
 
       result = persist(prepared, blob)
-      prepared.adopt_blob! if result.created?
-      prewarm(result) if result.created?
+      finalize_created_blob(prepared, blob, result) if result.created?
       result
     rescue ActiveRecord::RecordNotUnique
       replay_result!
@@ -144,49 +143,66 @@ module ImageAttachments
       raise Error.new(code: "idempotency_conflict", status: :conflict) unless
         ActiveSupport::SecurityUtils.secure_compare(comment.request_digest, @request_digest)
 
-      Result.new(comment:, attachment: comment.image_attachments.with_media.sole, operation: "replayed")
+      Result.new(comment:, attachment: comment.image_attachments.sole, operation: "replayed")
     end
 
     def persist(prepared, blob)
-      operation = lambda do |_attempt = nil|
-        ImageAttachment.transaction do
-          existing = AnnotationComment.find_by(idempotency_fingerprint: @fingerprint)
-          next replay_for(existing) if existing
+      return persist_once(prepared, blob) if ApplicationRecord.connection.transaction_open?
 
-          comment = annotation.annotation_comments.create!(
-            **principal.annotation_actor_attributes,
-            body:,
-            action: :comment,
-            idempotency_fingerprint: @fingerprint,
-            request_digest: @request_digest
-          )
-          attachment = comment.image_attachments.create!(
-            user: principal.issuer,
-            project:,
-            client_key: @fingerprint,
-            state: :ready,
-            media_type: prepared.media_type,
-            width: prepared.width,
-            height: prepared.height,
-            byte_size: prepared.byte_size
-          )
-          attachment.image.attach(blob)
+      DatabaseRetry.call { persist_once(prepared, blob) }
+    end
 
-          Result.new(comment:, attachment:, operation: "created")
-        end
+    def persist_once(prepared, blob)
+      ImageAttachment.transaction do
+        existing = AnnotationComment.find_by(idempotency_fingerprint: @fingerprint)
+        next replay_for(existing) if existing
+
+        comment = annotation.annotation_comments.create!(
+          **principal.annotation_actor_attributes,
+          body:,
+          action: :comment,
+          idempotency_fingerprint: @fingerprint,
+          request_digest: @request_digest
+        )
+        attachment = comment.image_attachments.create!(
+          user: principal.issuer,
+          project:,
+          client_key: @fingerprint,
+          state: :ready,
+          media_type: prepared.media_type,
+          width: prepared.width,
+          height: prepared.height,
+          byte_size: prepared.byte_size
+        )
+        attachment.image.attach(blob)
+
+        Result.new(comment:, attachment:, operation: "created")
       end
+    end
 
-      return operation.call if ApplicationRecord.connection.transaction_open?
+    def finalize_created_blob(prepared, blob, result)
+      delete_staged_object_after_rollback(blob)
+      prepared.adopt_blob!
+      ActiveRecord.after_all_transactions_commit { prewarm(result) }
+    end
 
-      DatabaseRetry.call(&operation)
+    def delete_staged_object_after_rollback(blob)
+      transaction = ImageAttachment.current_transaction
+      return unless transaction.open?
+
+      transaction.after_rollback do
+        blob.service.delete(blob.key)
+      rescue StandardError => error
+        Rails.logger.error("Failed to remove a rolled-back image comment object (#{error.class})")
+      end
     end
 
     def prewarm(result)
       job = ImageAttachmentThumbnailJob.perform_later(result.attachment, result.attachment.image.blob.id)
-      return if !job.respond_to?(:successfully_enqueued?) || job.successfully_enqueued?
+      return if job && (!job.respond_to?(:successfully_enqueued?) || job.successfully_enqueued?)
 
       raise ActiveJob::EnqueueError, "image attachment thumbnail job was not enqueued"
-    rescue ActiveJob::EnqueueError => error
+    rescue StandardError => error
       Screenote::Monitoring.notify(
         error,
         context: { annotation_comment_id: result.comment.id, image_attachment_id: result.attachment.id }

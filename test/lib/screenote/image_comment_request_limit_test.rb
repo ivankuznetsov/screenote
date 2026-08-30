@@ -19,6 +19,48 @@ class Screenote::ImageCommentRequestLimitTest < ActiveSupport::TestCase
     assert_not called
   end
 
+  test "bounds every trailing-slash alias that Rails routes to image comment creation" do
+    paths = %w[
+      /api/v1/annotations/12/image_comments/
+      /api/v1/annotations/12/image_comments//
+      /api/v1/annotations/12/image_comments.json/
+    ]
+
+    paths.each do |path|
+      called = false
+      middleware = build_middleware(8) do
+        called = true
+        ok_response
+      end
+
+      status, _headers, body = middleware.call(environment("123456789", path:, content_length: 9))
+
+      assert_equal 413, status, path
+      assert_equal "request_too_large", JSON.parse(body.join).fetch("code"), path
+      assert_not called, path
+    end
+  end
+
+  test "bounds chunked trailing-slash aliases while the parser reads" do
+    paths = %w[
+      /api/v1/annotations/12/image_comments/
+      /api/v1/annotations/12/image_comments//
+      /api/v1/annotations/12/image_comments.json/
+    ]
+
+    paths.each do |path|
+      middleware = build_middleware(8) do |env|
+        env.fetch("rack.input").read
+        ok_response
+      end
+
+      status, _headers, body = middleware.call(environment("123456789", path:))
+
+      assert_equal 413, status, path
+      assert_equal "request_too_large", JSON.parse(body.join).fetch("code"), path
+    end
+  end
+
   test "bounds a chunked body while the downstream parser reads it" do
     middleware = build_middleware(8) do |env|
       env.fetch("rack.input").read

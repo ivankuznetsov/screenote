@@ -3,7 +3,7 @@ title: Routes
 type: architecture
 source: config/routes.rb
 created: 2026-04-10
-updated: 2026-08-29
+updated: 2026-08-30
 tags: [routes, api, endpoints, auth]
 ---
 
@@ -109,8 +109,9 @@ rendering a second workspace.
 Forgery protection stays on: the composer sends `X-CSRF-Token` with every
 multipart and JSON request. A foreign or unknown batch answers `404`, never
 `403`, so sequential attachment IDs and guessed batch IDs confirm nothing.
-Attaching an image is a session-only capability — REST, the public CLI, and
-MCP read attachments but cannot author them.
+These draft routes remain session-only. Bearer clients author a single image
+comment through the separate atomic REST route below; they never receive or
+claim a browser draft batch.
 
 ### Attachment media
 
@@ -192,6 +193,7 @@ SaaS only; this hosted analytics authority is unrelated to self-hosted instance 
 | GET | `/api/v1/screenshots/:screenshot_id/annotations` | List annotations with `status`, `viewport`, `limit`, and `offset` filters | API key or OAuth `mcp_read` |
 | GET | `/api/v1/annotations/:id` | Get annotation details, comments, best-effort crop data, and attachment metadata | API key or OAuth `mcp_read` |
 | POST | `/api/v1/annotations/:annotation_id/comments` | Add an API-key-authored or OAuth-user-authored annotation comment | API key or OAuth `mcp_write` |
+| POST | `/api/v1/annotations/:annotation_id/image_comments` | Atomically add one idempotent comment plus one PNG/JPEG/WebP attachment | API key or OAuth `mcp_write` |
 | POST | `/api/v1/annotations/:annotation_id/resolve` | Idempotently resolve an annotation and create its audit comment | API key or OAuth `mcp_write` |
 
 API-key auth is project-scoped. If `:project_id` does not match the key's project, the v1 API returns a stable JSON error with `code: "forbidden"` rather than crossing project boundaries. OAuth project-scoped calls require explicit `project_id` where the route does not already carry it, and the authenticated user must be a project member. Project listing also returns only the bound project for a project-scoped token. Deleting that project deletes its scoped OAuth grants and tokens rather than widening them to user scope.
@@ -199,6 +201,20 @@ API-key auth is project-scoped. If `:project_id` does not match the key's projec
 Project creation is intentionally different from project-scoped operations: API keys and project-scoped OAuth tokens cannot create another project. A user-scoped OAuth token needs `mcp_write`; successful creation returns `201` with the standard project representation and `role: "owner"`. Free-plan quota exhaustion returns `403` with `code: "project_limit_reached"`.
 
 Annotation resolution accepts optional string `comment`; an omitted or blank value records `Marked as resolved`, while arrays and objects receive `422 validation_failed`. A first resolution returns `operation: "resolved"`, while a retry returns `operation: "already_resolved"` without creating another audit comment. Locking lives at the shared annotation model boundary so stale REST, web, and legacy MCP writers cannot duplicate a resolution comment. Project-scoped OAuth tokens are bound to the project recorded on the token and cannot select another project through `project_id`.
+
+Image-comment creation requires `Idempotency-Key`, a required `body`, exactly
+one `images[]` multipart upload, and explicit OAuth `project_id` where
+applicable. The service verifies at most 20 MiB of PNG/JPEG/WebP bytes, binds
+the key to the authenticated principal, annotation, body, media type, and byte
+digest, and returns `201 operation: created` or `200 operation: replayed` for
+the same logical request. Controller-owned responses advertise
+`Screenote-API-Capability: image-comments-v1`; a changed replay returns
+`409 idempotency_conflict`.
+
+A Rack request limiter rejects oversized declared and chunked multipart bodies
+before Rails parses them. Its route match covers the canonical path, an
+optional trailing slash, and formatted aliases such as `.json`, so spelling the
+same route differently cannot bypass the 20 MiB request cap.
 
 ### Upload API (single-use bearer, no persistent auth)
 

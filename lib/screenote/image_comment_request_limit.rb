@@ -6,7 +6,7 @@ module Screenote
   # Bounds the dedicated multipart image-comment route before Rack parses it.
   class ImageCommentRequestLimit
     MULTIPART_OVERHEAD = 1.megabyte
-    TARGET_PATH = %r{\A/api/v1/annotations/[^/]+/image_comments(?:\.[^/]+)?\z}
+    TARGET_PATH = %r{\A/api/v1/annotations/[^/]+/image_comments(?:\.[^/]+)?/*\z}
 
     class TooLarge < StandardError; end
 

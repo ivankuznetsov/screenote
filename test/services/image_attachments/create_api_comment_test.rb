@@ -6,12 +6,21 @@ module ImageAttachments
   class CreateApiCommentTest < ActiveSupport::TestCase
     include ActiveJob::TestHelper
 
+    self.use_transactional_tests = false
+
     setup do
+      cleanup_created_comments
+      clear_enqueued_jobs
       require_vips!
       @annotation = annotations(:point_annotation)
       @project = projects(:alice_project)
       @bytes = image_bytes
       @key = "test_image_comment_key_1234567890"
+    end
+
+    teardown do
+      cleanup_created_comments
+      clear_enqueued_jobs
     end
 
     test "creates one user-authored comment and ready submitted attachment" do
@@ -124,11 +133,12 @@ module ImageAttachments
       ActiveStorage::Attached::One.define_method(:attach, original) if original
     end
 
-    test "thumbnail enqueue failure after commit keeps and returns the complete pair" do
+    test "adapter-specific thumbnail enqueue failure after commit keeps and returns the complete pair" do
       principal = AuthenticatedPrincipal.for_user(users(:alice))
       original = ImageAttachmentThumbnailJob.method(:perform_later)
+      adapter_error = Class.new(StandardError)
       ImageAttachmentThumbnailJob.define_singleton_method(:perform_later) do |*|
-        raise ActiveJob::EnqueueError, "queue unavailable"
+        raise adapter_error, "queue unavailable"
       end
 
       assert_difference [ "AnnotationComment.count", "ImageAttachment.count", "ActiveStorage::Blob.count" ], 1 do
@@ -139,6 +149,41 @@ module ImageAttachments
       end
     ensure
       ImageAttachmentThumbnailJob.define_singleton_method(:perform_later, original) if original
+    end
+
+    test "outer transaction commit adopts the object and warms only after commit" do
+      principal = AuthenticatedPrincipal.for_user(users(:alice))
+      result = nil
+
+      ActiveRecord::Base.transaction do
+        result = create_comment(principal:)
+
+        assert_empty enqueued_jobs
+        assert result.attachment.image.blob.service.exist?(result.attachment.image.blob.key)
+      end
+
+      assert_enqueued_jobs 1, only: ImageAttachmentThumbnailJob
+      assert_predicate result.comment.reload, :persisted?
+      assert_predicate result.attachment.reload.image, :attached?
+    end
+
+    test "outer transaction rollback removes the staged object and warming job" do
+      principal = AuthenticatedPrincipal.for_user(users(:alice))
+      before = [ AnnotationComment.count, ImageAttachment.count, ActiveStorage::Blob.count ]
+      blob = nil
+
+      ActiveRecord::Base.transaction(requires_new: true) do
+        result = create_comment(principal:)
+        blob = result.attachment.image.blob
+
+        assert blob.service.exist?(blob.key)
+        assert_empty enqueued_jobs
+        raise ActiveRecord::Rollback
+      end
+
+      assert_equal before, [ AnnotationComment.count, ImageAttachment.count, ActiveStorage::Blob.count ]
+      assert_not blob.service.exist?(blob.key)
+      assert_empty enqueued_jobs
     end
 
     test "a supplied image digest must match the verified bytes" do
@@ -153,6 +198,16 @@ module ImageAttachments
     end
 
     private
+
+    def cleanup_created_comments
+      AnnotationComment.where.not(idempotency_fingerprint: nil).find_each do |comment|
+        comment.image_attachments.each do |attachment|
+          attachment.image.purge if attachment.image.attached?
+        end
+        comment.destroy!
+      end
+      ActiveStorage::Blob.unattached.find_each(&:purge)
+    end
 
     def create_comment(principal:, annotation: @annotation, project: @project, body: "Use this layout", bytes: @bytes,
       idempotency_key: @key, expected_sha256: nil)

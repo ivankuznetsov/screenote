@@ -41,6 +41,7 @@ module Api
           nil
         end
 
+        response.set_header("Cache-Control", "private, no-store")
         render json: Api::V1::ContractSerializer.annotation_detail(
           annotation, cropped_base64: cropped_base64, url_options: serializer_url_options
         )

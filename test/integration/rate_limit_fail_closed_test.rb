@@ -22,7 +22,7 @@ class RateLimitFailClosedTest < ActiveSupport::TestCase
       "app/controllers/oauth/device_authorizations_controller.rb",
       /DeviceAuthorizationRateLimiter::Unavailable/
     ],
-    upload: [ "app/controllers/api/v1/screenshot_images_controller.rb", /RateLimitStore::Unavailable/ ],
+    upload: [ "app/controllers/concerns/api/image_upload_rate_limiting.rb", /RateLimitStore::Unavailable/ ],
     mcp: [ "config/initializers/fast_mcp.rb", /RateLimitStore::Unavailable/ ]
   }.freeze
 
@@ -39,6 +39,13 @@ class RateLimitFailClosedTest < ActiveSupport::TestCase
     ENDPOINT_CONTRACTS.each do |endpoint, (path, pattern)|
       source = Rails.root.join(path).read
       assert_match pattern, source, "#{endpoint} lost its rate-limit failure boundary in #{path}"
+    end
+  end
+
+  test "every API image upload controller includes the shared limiter boundary" do
+    [ Api::V1::ScreenshotImagesController, Api::V1::ImageCommentsController ].each do |controller|
+      assert_includes controller.ancestors, Api::ImageUploadRateLimiting,
+        "#{controller.name} lost the shared image upload limiter"
     end
   end
 

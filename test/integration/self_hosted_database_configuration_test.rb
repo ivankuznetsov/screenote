@@ -145,7 +145,11 @@ class SelfHostedDatabaseConfigurationTest < ActiveSupport::TestCase
   end
 
   test "self hosted Puma runs one process with its Solid Queue supervisor" do
-    with_environment("SCREENOTE_EDITION" => "self_hosted", "SOLID_QUEUE_IN_PUMA" => nil) do
+    with_environment(
+      "RAILS_ENV" => "production",
+      "SCREENOTE_EDITION" => "self_hosted",
+      "SOLID_QUEUE_IN_PUMA" => nil
+    ) do
       configuration = Puma::Configuration.new(config_files: [ Rails.root.join("config/puma.rb").to_s ])
       configuration.load
       configuration.clamp
@@ -169,6 +173,21 @@ class SelfHostedDatabaseConfigurationTest < ActiveSupport::TestCase
       worker = YAML.safe_load(queue, aliases: true).fetch("production").fetch("workers").sole
       assert_equal 4, worker.fetch("processes")
       assert_equal 3, worker.fetch("threads")
+    end
+  end
+
+  test "self hosted test servers do not start the production queue supervisor" do
+    with_environment(
+      "RAILS_ENV" => "test",
+      "SCREENOTE_EDITION" => "self_hosted",
+      "SOLID_QUEUE_IN_PUMA" => nil
+    ) do
+      configuration = Puma::Configuration.new(config_files: [ Rails.root.join("config/puma.rb").to_s ])
+      configuration.load
+      configuration.clamp
+
+      plugin_instances = configuration.plugins.instance_variable_get(:@instances)
+      assert plugin_instances.none? { |plugin| plugin.respond_to?(:solid_queue_supervisor) }
     end
   end
 

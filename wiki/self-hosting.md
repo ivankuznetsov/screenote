@@ -3,7 +3,7 @@ title: Self-Hosted Distribution
 type: initiative
 source: Dockerfile, bin/docker-entrypoint, app/jobs/reconcile_screenshot_processing_job.rb, lib/screenote/deployment.rb, docs/once-deployment.md, docs/releases/PUBLICATION_BLOCKED.md, config/deploy.saas.yml
 created: 2026-08-05
-updated: 2026-08-10
+updated: 2026-08-30
 tags: [self-hosting, once, docker, deployment, storage, release, kamal-saas]
 ---
 
@@ -169,7 +169,7 @@ Default Active Storage blob, representation, disk, and direct-upload routes are 
 
 Both the legacy signed upload and manifest upload pass through `Snapshots::AttachImage`. It streams into a process-owned temporary file, enforces the 20 MiB declared and observed limit, verifies PNG/JPEG magic and declared/manifest identity, limits decoder concurrency, and rejects a dimension above 32,768 pixels or more than 50 million decoded pixels before attaching. The validated bytes are staged in the selected storage service before their Blob is attached, making Active Storage's later commit callback a no-op; a concurrent loser or failed database transaction removes its staged object, and the temporary file remains block-scoped.
 
-An attached pending image is durable work intent. Dimension processing is handed to Solid Queue only after the attachment's outer database transaction commits, so a worker cannot discard a replacement job while the new blob reference is still invisible. `ScreenshotImages::EnsureProcessing` treats queue insertion failure as deferred work, and `ReconcileScreenshotProcessingJob` completes missing dimension and thumbnail work idempotently inline. After database, installation, and authentication-key preparation, the entrypoint enqueues one reconciliation job and fails startup if Solid Queue cannot accept it. Puma and its Solid Queue plugin can therefore begin serving without synchronously walking the full image corpus; the recurring schedule repeats reconciliation every five minutes. See [[models/screenshot-image]] and [[services/annotation-crop-service]].
+An attached pending image is durable work intent. Dimension processing is handed to Solid Queue only after the attachment's outer database transaction commits, so a worker cannot discard a replacement job while the new blob reference is still invisible. `ScreenshotImages::EnsureProcessing` treats queue insertion failure as deferred work, and `ReconcileScreenshotProcessingJob` completes missing dimension and thumbnail work idempotently inline. After database, installation, and authentication-key preparation, the entrypoint enqueues one reconciliation job and fails startup if Solid Queue cannot accept it. Puma and its production-only Solid Queue plugin can therefore begin serving without synchronously walking the full image corpus; test servers never start the production queue supervisor, and the recurring production schedule repeats reconciliation every five minutes. See [[models/screenshot-image]] and [[services/annotation-crop-service]].
 
 ## Whole-Instance Operations
 

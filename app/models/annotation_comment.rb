@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class AnnotationComment < ApplicationRecord
-  HEX_64 = /\A[0-9a-f]{64}\z/
+  HEX_64 = Snapshot::SHA256_FORMAT
 
   belongs_to :annotation
   belongs_to :user, optional: true

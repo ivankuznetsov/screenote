@@ -3,7 +3,7 @@ title: Schema Evolution
 type: architecture
 source: db/migrate/
 created: 2026-04-10
-updated: 2026-08-10
+updated: 2026-08-30
 tags: [database, migrations, schema, history]
 ---
 
@@ -128,6 +128,12 @@ Source: `db/migrate/`
 |-----------|---------|
 | `20260809120000_allow_tokenless_installation_bootstrap` | Stop requiring a bootstrap-token digest for unclaimed installations while retaining the nullable transition column for predecessor overlap; the locked first-visitor transition records exactly one administrator and clears any legacy digest |
 
+### Phase 16: API Image-Comment Idempotency (2026-08-30)
+
+| Migration | Purpose |
+|-----------|---------|
+| `20260830170000_add_image_comment_idempotency_to_annotation_comments` | Add nullable paired 64-character receipt digests, database format/pair checks, and a partial unique fingerprint index so an atomic comment-plus-image request has one durable replay identity without changing legacy comment rows. The migration stays inside the adapter-neutral Active Record boundary and relies on the release process's quiesced-maintenance safety contract. |
+
 ## Key Schema Decisions
 
 1. **Pages added late (2026-02-20)**: Screenshots were originally flat under Project. The Page hierarchy was introduced to group screenshots logically. See commit `dea90b0`.
@@ -165,5 +171,7 @@ Source: `db/migrate/`
 17. **Admission locks are bounded, opaque stripes**: each normalized email maps deterministically to one of 256 unique `admission_locks.slot` rows. `create_or_find_by!` plus a no-op Active Record update serializes matching-email admission even before a User row exists, without persisting the submitted address or a reversible address digest and without selecting adapter-specific advisory/row-lock SQL.
 
 18. **Deployment topology is separate from schema correctness**: the supported self-hosted runtime uses four SQLite roles, and the current hosted Kamal configuration may provide four PostgreSQL URLs. Application tests, required CI, migrations, and exact-image SaaS qualification exercise the configured roles through Active Record without treating either adapter name or server version as the release contract.
+
+19. **The successful comment is the image-request receipt**: API image comments do not add a separate mutable idempotency ledger or expose browser draft batches. A versioned, length-framed fingerprint scopes the principal, annotation, and caller key; an independent request digest binds the exact body, verified media type, and server-derived image SHA-256. Both fields are nullable for every preexisting/comment-only workflow, required together for image-comment receipts, immutable in Rails, checked for lowercase hex in the database, and unique by fingerprint when present.
 
 See also: [[data-model]], [[decisions]], [[models/snapshot]], [[models/screenshot-image]]
