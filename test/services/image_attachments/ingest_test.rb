@@ -255,17 +255,21 @@ module ImageAttachments
     test "a commit refuses to bind bytes onto a row that was removed" do
       attachment = ingest_image(batch: @batch, client_key: "removed")
       ImageAttachments::RemoveAttachment.call(batch: @batch, attachment_id: attachment.id)
+      prepared = ImageAttachments::PrepareUpload.call(
+        io: StringIO.new(image_bytes), declared_content_type: "image/png"
+      )
 
       error = assert_raises(ImageAttachments::Error) do
         ImageAttachments::Ingest.new(batch: @batch, io: StringIO.new(image_bytes), client_key: "removed")
-          .send(:commit!, attachment, Tempfile.new([ "gone", ".png" ]),
-            media_type: "image/png", byte_size: 8, width: 8, height: 8)
+          .send(:commit!, attachment, prepared)
       end
 
       assert_equal "attachment_removed", error.code
       assert_equal :not_found, error.status
       assert_predicate @batch.image_attachments.reload.sole, :removal_tombstone?
       assert_not @batch.image_attachments.sole.image.attached?
+    ensure
+      prepared&.cleanup
     end
 
     test "an unexpected IO failure still answers with a machine code" do

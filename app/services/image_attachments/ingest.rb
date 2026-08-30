@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require "tempfile"
-require "vips"
-
 module ImageAttachments
   # Streams one composer upload into a draft batch.
   #
@@ -12,8 +9,6 @@ module ImageAttachments
   # through the global two-slot guard — happens with no row lock held. Only the
   # aggregate recheck and the state transition run inside the batch lock.
   class Ingest
-    CHUNK_SIZE = 64.kilobytes
-
     Result = Data.define(:attachment)
 
     class << self
@@ -38,15 +33,16 @@ module ImageAttachments
       # Replaying it must not reopen the row or replace the stored blob.
       return Result.new(attachment: attachment) if attachment.state_ready?
 
+      prepared = nil
       begin
-        Tempfile.create([ "screenote-attachment-#{Process.pid}-", ".image" ], Rails.root.join("tmp")) do |tempfile|
-          tempfile.binmode
-          byte_size = stream_to!(tempfile)
-          media_type = detect_media_type!(tempfile)
-          validate_declared_identity!(media_type)
-          width, height = decode!(tempfile)
-          attachment = commit!(attachment, tempfile, media_type:, byte_size:, width:, height:)
-        end
+        prepared = PrepareUpload.call(
+          io:,
+          declared_content_type:,
+          declared_length:,
+          filename:,
+          decoder_key: "image_attachment_batch:#{batch.id}"
+        )
+        attachment = commit!(attachment, prepared)
 
         Result.new(attachment: attachment)
       rescue Error => error
@@ -59,6 +55,8 @@ module ImageAttachments
         failure = Error.new(code: "upload_failed", status: :internal_server_error)
         record_failure(attachment, failure)
         raise failure
+      ensure
+        prepared&.cleanup
       end
     end
 
@@ -71,12 +69,7 @@ module ImageAttachments
       invalid!("missing_client_key") if client_key.blank?
       invalid!("invalid_client_key") if client_key.length > 64
 
-      if declared_content_type.present? && !declared_content_type.in?(ImageAttachment::ALLOWED_CONTENT_TYPES)
-        invalid!("invalid_content_type")
-      end
-      return if declared_length.nil? || declared_length <= ImageAttachment::MAX_FILE_SIZE
-
-      invalid!("file_too_large")
+      PrepareUpload.validate_declarations!(declared_content_type:, declared_length:)
     end
 
     # Reserving the slot up front means a client that dies mid-stream still
@@ -107,76 +100,9 @@ module ImageAttachments
       end
     end
 
-    def stream_to!(tempfile)
-      total = 0
-
-      # IO#read(n) answers nil at EOF; a chunk of whitespace bytes is real
-      # data, so only nil may end the loop.
-      while (chunk = io.read(CHUNK_SIZE))
-        total += chunk.bytesize
-        invalid!("file_too_large") if total > ImageAttachment::MAX_FILE_SIZE
-        tempfile.write(chunk)
-      end
-      invalid!("empty_file") if total.zero?
-
-      tempfile.flush
-      total
-    end
-
-    def detect_media_type!(tempfile)
-      tempfile.rewind
-      detected = Marcel::MimeType.for(tempfile)
-      invalid!("invalid_image", Error::UNSUPPORTED_MEDIA_TYPE) unless
-        detected.in?(ImageAttachment::ALLOWED_CONTENT_TYPES)
-      detected
-    end
-
-    # A declaration is optional, but where the browser supplies one it must
-    # agree with the bytes and with the filename extension.
-    def validate_declared_identity!(media_type)
-      invalid!("content_type_mismatch") if declared_content_type.present? && declared_content_type != media_type
-
-      extension = File.extname(filename.to_s).delete_prefix(".").downcase
-      return if extension.blank?
-      return if ImageAttachment::ALLOWED_EXTENSIONS.fetch(media_type, []).include?(extension)
-
-      invalid!("extension_mismatch")
-    end
-
-    def decode!(tempfile)
-      # Keyed on the batch so overlapping uploads for one composer — a retry
-      # racing its aborted attempt, or a multi-file paste — decode one at a
-      # time instead of occupying every global slot.
-      ImageDecoding::Guard.synchronize(key: "image_attachment_batch:#{batch.id}") do
-        decoded = Vips::Image.new_from_file(tempfile.path, access: :sequential, fail_on: :warning)
-        width = decoded.width
-        height = decoded.height
-        validate_dimensions!(width, height)
-
-        # Vips loading is lazy. Reducing the whole image forces every scanline
-        # through the decoder while the global guard is held, so a truncated or
-        # polyglot file cannot reach storage.
-        decoded.avg
-        [ width, height ]
-      end
-    rescue ImageDecoding::Guard::Busy
-      raise Error.new(code: "decoder_busy", status: :service_unavailable)
-    rescue Vips::Error
-      invalid!("invalid_image")
-    end
-
-    def validate_dimensions!(width, height)
-      if width > ImageAttachment::MAX_DIMENSION || height > ImageAttachment::MAX_DIMENSION
-        invalid!("image_dimensions_too_large")
-      end
-      return if width * height <= ImageAttachment::MAX_PIXELS
-
-      invalid!("image_pixels_too_large")
-    end
-
-    def commit!(attachment, tempfile, media_type:, byte_size:, width:, height:)
-      blob = stage_blob!(attachment, tempfile, media_type)
-      attached = false
+    def commit!(attachment, prepared)
+      extension = ImageAttachment::ALLOWED_EXTENSIONS.fetch(prepared.media_type).first
+      blob = prepared.stage!(record: attachment, filename: "image-attachment-#{attachment.id}.#{extension}")
 
       # The account row is the serialization point for the scheduler-
       # independent byte ceiling across every open batch. Taking it before the
@@ -192,54 +118,22 @@ module ImageAttachments
         # composer already discarded onto a row a claim would then attach.
         attachment = ensure_still_reserved!(attachment)
         ensure_slot_available!(attachment)
-        ensure_total_within_limit!(attachment, byte_size)
-        ensure_outstanding_drafts_within_limit!(attachment, byte_size)
+        ensure_total_within_limit!(attachment, prepared.byte_size)
+        ensure_outstanding_drafts_within_limit!(attachment, prepared.byte_size)
 
         attachment.image.attach(blob)
         attachment.update!(
           state: :ready,
           failure_code: nil,
-          media_type: media_type,
-          width: width,
-          height: height,
-          byte_size: byte_size
+          media_type: prepared.media_type,
+          width: prepared.width,
+          height: prepared.height,
+          byte_size: prepared.byte_size
         )
       end
-      # Only a committed transaction owns the blob. Setting this inside the
-      # block would skip the purge when COMMIT itself raises and the row rolls
-      # back to `uploading`, stranding staged bytes nothing reconciles.
-      attached = true
-
+      prepared.adopt_blob!
       batch.touch_activity!
       attachment
-    ensure
-      discard_blob(blob) if blob && !attached
-    end
-
-    def stage_blob!(attachment, tempfile, media_type)
-      tempfile.rewind
-      extension = ImageAttachment::ALLOWED_EXTENSIONS.fetch(media_type).first
-      blob = ActiveStorage::Blob.create_after_unfurling!(
-        io: tempfile,
-        # The stored name is generated server-side; the client filename never
-        # reaches storage or any rendered label.
-        filename: "image-attachment-#{attachment.id}.#{extension}",
-        content_type: media_type,
-        identify: false,
-        record: attachment
-      )
-      tempfile.rewind
-      blob.upload_without_unfurling(tempfile)
-      blob
-    rescue StandardError
-      discard_blob(blob) if blob
-      raise
-    end
-
-    def discard_blob(blob)
-      blob.purge
-    rescue StandardError => error
-      Rails.logger.error("Failed to discard an unattached image attachment blob (#{error.class})")
     end
 
     def ensure_usable!
