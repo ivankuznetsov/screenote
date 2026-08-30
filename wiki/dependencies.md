@@ -23,5 +23,6 @@ tags: [dependencies]
 - The same security refresh locks Loofah 2.25.2 and
   rails-html-sanitizer 1.7.1 so the repository's gem-audit gate is clean.
 - WEBrick is a test-only dependency for the isolated retry proxy and legacy
-  server stub used by `script/public_cli_source_qualification`; declaring it
-  keeps the source contract reproducible on clean Ruby installations.
+  server stub used by `script/public_cli_source_qualification`. Those stubs run
+  through `bundle exec ruby`, so clean CI runners resolve the gem from the
+  locked, isolated bundle rather than requiring a global installation.

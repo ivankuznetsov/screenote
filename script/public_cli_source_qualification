@@ -242,7 +242,7 @@ expired_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
 [[ "${expired_status}" == "404" ]] || fail "expired purpose token did not fail closed"
 
 proxy_port_file="${qualification_root}/retry-proxy.port"
-PROXY_ORIGIN="${origin}" PROXY_ROOT="${qualification_root}" PROXY_PORT_FILE="${proxy_port_file}" ruby <<'RUBY' &
+PROXY_ORIGIN="${origin}" PROXY_ROOT="${qualification_root}" PROXY_PORT_FILE="${proxy_port_file}" bundle exec ruby <<'RUBY' &
 require "json"
 require "net/http"
 require "uri"
@@ -318,7 +318,7 @@ mapfile -t retry_keys <"${qualification_root}/retry-keys"
 
 old_server_port_file="${qualification_root}/old-server.port"
 OLD_SERVER_LOG="${qualification_root}/old-server.requests" \
-  OLD_SERVER_PORT_FILE="${old_server_port_file}" ruby <<'RUBY' &
+  OLD_SERVER_PORT_FILE="${old_server_port_file}" bundle exec ruby <<'RUBY' &
 require "json"
 require "webrick"
 
