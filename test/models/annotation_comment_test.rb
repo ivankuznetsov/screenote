@@ -79,4 +79,35 @@ class AnnotationCommentTest < ActiveSupport::TestCase
     comment = annotation_comments(:resolved_comment)
     assert_equal annotations(:resolved_annotation), comment.annotation
   end
+
+  test "idempotency receipt fields are present together and use lowercase sha256" do
+    comment = AnnotationComment.new(
+      annotation: annotations(:point_annotation),
+      user: users(:alice),
+      body: "Durable image comment",
+      idempotency_fingerprint: "a" * 64,
+      request_digest: "b" * 64
+    )
+
+    assert_predicate comment, :valid?
+
+    comment.request_digest = nil
+    assert_not comment.valid?
+
+    comment.request_digest = "B" * 64
+    assert_not comment.valid?
+  end
+
+  test "idempotency receipt identity is immutable" do
+    comment = annotations(:point_annotation).annotation_comments.create!(
+      user: users(:alice),
+      body: "Durable image comment",
+      idempotency_fingerprint: "a" * 64,
+      request_digest: "b" * 64
+    )
+
+    comment.idempotency_fingerprint = "c" * 64
+    assert_not comment.valid?
+    assert_includes comment.errors[:idempotency_fingerprint], "cannot change"
+  end
 end
