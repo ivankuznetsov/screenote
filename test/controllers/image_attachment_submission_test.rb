@@ -336,6 +336,21 @@ class ImageAttachmentSubmissionTest < ActionDispatch::IntegrationTest
     assert_equal comment_id, response.parsed_body["annotation_comment_id"]
   end
 
+  test "a response-loss retry of a reply replays the comment it already created" do
+    ingest_image(batch: @batch)
+
+    post_reply
+    assert_response :created
+    comment_id = response.parsed_body["annotation_comment_id"]
+
+    assert_no_difference -> { AnnotationComment.count } do
+      post_reply
+    end
+
+    assert_response :created
+    assert_equal comment_id, response.parsed_body["annotation_comment_id"]
+  end
+
   test "a reply response identifies the comment the claim produced" do
     ingest_image(batch: @batch)
 
@@ -432,6 +447,15 @@ class ImageAttachmentSubmissionTest < ActionDispatch::IntegrationTest
     post screenshot_annotation_annotation_comments_path(@screenshot, annotation),
       params: {
         annotation_comment: { body: "Still broken", reopen: "1" },
+        image_attachment_batch_id: @batch.public_id
+      },
+      as: :json
+  end
+
+  def post_reply
+    post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+      params: {
+        annotation_comment: { body: "See the crop" },
         image_attachment_batch_id: @batch.public_id
       },
       as: :json
