@@ -78,7 +78,7 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
         record.is_a?(ImageAttachment) && attributes[:state] == :ready
       }
     ) do |entered, release|
-      run_barriered_race(
+      run_blocked_race(
         entered: entered,
         release: release,
         first: -> { safe_ingest(bytes, "race-a") },
@@ -89,6 +89,46 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     assert_equal ImageAttachment::MAX_FILES, ImageAttachment.where(image_attachment_batch: @batch).count
     assert_equal 1, outcomes.grep(ImageAttachments::Error).size
     assert_equal "too_many_files", outcomes.grep(ImageAttachments::Error).sole.code
+  end
+
+  # The 50 MB ceiling is the one every message is actually held to, so the race
+  # is run against that constant rather than a stubbed one. The batch is seeded
+  # up to exactly one more file's worth of room using recorded byte sizes, so
+  # two concurrent commits both see room and only one can be allowed to take it.
+  test "concurrent commits cannot exceed the fifty megabyte message total" do
+    bytes = image_bytes
+    headroom = ImageAttachment::MAX_TOTAL_BYTES - bytes.bytesize
+    seed_sizes = [
+      ImageAttachment::MAX_FILE_SIZE,
+      ImageAttachment::MAX_FILE_SIZE,
+      headroom - (2 * ImageAttachment::MAX_FILE_SIZE)
+    ]
+    seed_sizes.each_with_index do |size, index|
+      @batch.image_attachments.create!(
+        user: @user, project: @project, client_key: "seed-#{index}", state: :ready,
+        media_type: "image/png", width: 1, height: 1, byte_size: size
+      )
+    end
+
+    assert_equal headroom, @batch.reload.total_byte_size
+
+    outcomes = with_one_shot_instance_method_barrier(
+      ImageAttachment, :update!, predicate: ->(record, attributes) {
+        record.is_a?(ImageAttachment) && attributes[:state] == :ready
+      }
+    ) do |entered, release|
+      run_blocked_race(
+        entered: entered,
+        release: release,
+        first: -> { safe_ingest(bytes, "total-a") },
+        second: -> { safe_ingest(bytes, "total-b") }
+      )
+    end
+
+    errors = outcomes.grep(ImageAttachments::Error)
+    assert_equal 1, errors.size, -> { outcomes.map(&:inspect).inspect }
+    assert_equal "batch_too_large", errors.sole.code
+    assert_equal ImageAttachment::MAX_TOTAL_BYTES, @batch.reload.total_byte_size
   end
 
   test "removal loses to a concurrent claim rather than partially binding a message" do
@@ -239,22 +279,6 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     [ pop_with_timeout(first_result), pop_with_timeout(second_result) ]
   ensure
     release << true if release
-    [ first_thread, second_thread ].compact.each { |thread| thread.kill if thread.alive? }
-  end
-
-  def run_barriered_race(entered:, release:, first:, second:)
-    first_result = Queue.new
-    second_result = Queue.new
-    first_thread = concurrency_thread(first_result, Queue.new, first)
-    pop_with_timeout(entered)
-
-    second_thread = concurrency_thread(second_result, Queue.new, second)
-    release << true
-    join_with_timeout(second_thread)
-    join_with_timeout(first_thread)
-
-    [ pop_with_timeout(first_result), pop_with_timeout(second_result) ]
-  ensure
     [ first_thread, second_thread ].compact.each { |thread| thread.kill if thread.alive? }
   end
 

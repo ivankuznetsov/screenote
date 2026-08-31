@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_29_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -146,6 +146,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_120000) do
   create_table "image_attachment_batches", force: :cascade do |t|
     t.integer "claimed_annotation_comment_id"
     t.integer "claimed_annotation_id"
+    t.string "client_key", limit: 64
     t.datetime "created_at", null: false
     t.datetime "expires_at", null: false
     t.datetime "last_activity_at", null: false
@@ -159,6 +160,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_120000) do
     t.index ["project_id"], name: "index_image_attachment_batches_on_project_id"
     t.index ["public_id"], name: "index_image_attachment_batches_on_public_id", unique: true
     t.index ["state", "expires_at"], name: "index_image_attachment_batches_on_state_and_expires_at"
+    t.index ["user_id", "client_key"], name: "index_image_attachment_batches_on_user_and_client_key", unique: true, where: "client_key IS NOT NULL AND state = 0"
     t.index ["user_id", "state"], name: "index_image_attachment_batches_on_user_id_and_state"
     t.index ["user_id"], name: "index_image_attachment_batches_on_user_id"
     t.check_constraint "(state = 0 AND claimed_annotation_id IS NULL AND claimed_annotation_comment_id IS NULL) OR (state = 1 AND claimed_annotation_id IS NOT NULL AND claimed_annotation_comment_id IS NULL) OR (state = 1 AND claimed_annotation_id IS NULL AND claimed_annotation_comment_id IS NOT NULL)", name: "image_attachment_batches_claim_state"

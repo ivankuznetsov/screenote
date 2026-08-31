@@ -268,6 +268,59 @@ module ImageAttachments
       assert_not @batch.image_attachments.sole.image.attached?
     end
 
+    # A decoder stops at the end of the picture, so a valid image with a payload
+    # appended after its end marker decodes perfectly. Storing those bytes would
+    # serve the payload back verbatim from the original and download routes.
+    test "rejects a trailing-payload polyglot in every accepted format" do
+      { "png" => "image/png", "jpg" => "image/jpeg", "webp" => "image/webp" }.each do |format, media_type|
+        polyglot = image_bytes(format: format) + "<?php system($_GET[0]); ?>"
+
+        error = assert_raises(ImageAttachments::Error) do
+          ingest_image(batch: @batch, bytes: polyglot, declared_content_type: media_type, client_key: format)
+        end
+
+        assert_equal "invalid_image", error.code, "a #{media_type} polyglot was accepted"
+      end
+    end
+
+    test "rejects a second image appended to a valid one" do
+      polyglot = image_bytes(format: "png") + image_bytes(format: "png")
+
+      error = assert_raises(ImageAttachments::Error) do
+        ingest_image(batch: @batch, bytes: polyglot, declared_content_type: "image/png")
+      end
+
+      assert_equal "invalid_image", error.code
+    end
+
+    # The read and the write are separate statements, so the retry that
+    # supersedes an aborted attempt can commit between them. The write has to be
+    # the database's decision, not the stale attempt's.
+    test "a late failure that loses the race writes nothing at all" do
+      attachment = ingest_image(batch: @batch, client_key: "superseded")
+      ingest = ImageAttachments::Ingest.new(batch: @batch, io: StringIO.new(""), client_key: "superseded")
+      stale = ImageAttachment.find(attachment.id)
+      stale.update_columns(state: ImageAttachment.states[:uploading])
+      # The stale attempt holds an `uploading` snapshot; the retry finishes first.
+      ImageAttachment.find(attachment.id).update_columns(state: ImageAttachment.states[:ready])
+
+      ingest.send(:record_failure, stale, ImageAttachments::Error.new(code: "upload_failed"))
+
+      assert_predicate attachment.reload, :state_ready?
+      assert_nil attachment.failure_code
+    end
+
+    test "a late failure cannot overwrite a removal tombstone" do
+      attachment = ingest_image(batch: @batch, client_key: "removed-late")
+      ImageAttachments::RemoveAttachment.call(batch: @batch, attachment_id: attachment.id)
+
+      ImageAttachments::Ingest
+        .new(batch: @batch, io: StringIO.new(""), client_key: "removed-late")
+        .send(:record_failure, attachment, ImageAttachments::Error.new(code: "upload_failed"))
+
+      assert_predicate attachment.reload, :removal_tombstone?
+    end
+
     test "an unexpected IO failure still answers with a machine code" do
       failing_io = Object.new
       def failing_io.read(*)

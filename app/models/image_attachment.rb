@@ -36,7 +36,11 @@ class ImageAttachment < ApplicationRecord
   belongs_to :user
   belongs_to :project
 
-  has_one_attached :image do |attachable|
+  # Active Storage's own `:purge_later` runs after the destroy has already
+  # committed and has no fallback: if the queue refuses the job, this row is
+  # gone, the blob is unattached, and nothing row-based can rediscover it. The
+  # blob is therefore released here, with an inline purge behind the enqueue.
+  has_one_attached :image, dependent: false do |attachable|
     attachable.variant :attachment_thumb_1x, resize_to_limit: [ 480, 480 ]
     attachable.variant :attachment_thumb_2x, resize_to_limit: [ 960, 960 ]
   end
@@ -56,6 +60,9 @@ class ImageAttachment < ApplicationRecord
   validate :submitted_rows_are_complete
   validate :identity_is_immutable
   validate :submitted_metadata_is_immutable
+
+  before_destroy :remember_image_blob
+  after_destroy_commit :release_image_blob
 
   scope :submitted, -> { where(image_attachment_batch_id: nil) }
   scope :drafts, -> { where.not(image_attachment_batch_id: nil) }
@@ -131,6 +138,29 @@ class ImageAttachment < ApplicationRecord
   end
 
   private
+
+  # Read while the row still exists; the join record is gone by the time the
+  # destroy commits.
+  def remember_image_blob
+    @discarded_image_blob = image.attached? ? image.blob : nil
+  end
+
+  # Purging is background work, but an enqueue that fails must not be the end of
+  # it: the bytes are already unreachable through this row, so the fallback runs
+  # the purge inline, and a purge whose provider delete fails leaves the blob
+  # record behind for the bounded reconciliation pass to retry.
+  def release_image_blob
+    blob = @discarded_image_blob
+    @discarded_image_blob = nil
+    return unless blob
+
+    begin
+      blob.purge_later
+    rescue StandardError => error
+      Screenote::Monitoring.notify(error, context: { image_attachment_id: id, active_storage_blob_id: blob.id })
+      ImageAttachments::PurgeBlob.call(blob)
+    end
+  end
 
   def exactly_one_owner
     owners = [ image_attachment_batch_id, annotation_id, annotation_comment_id ].compact

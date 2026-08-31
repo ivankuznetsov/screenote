@@ -2,6 +2,7 @@ package screenote
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -158,4 +159,85 @@ func remarshal(t *testing.T, value any) map[string]any {
 	}
 
 	return decoded
+}
+
+// The shipped detail contract, recorded whole. A key allowlist would not catch
+// a value that changed meaning or a field that quietly stopped round-tripping,
+// so this decodes the canonical payload and re-encodes it: every previously
+// shipped key, the canonical root attachment object, and the per-comment
+// attachment object all have to come back exactly as they went in.
+const goldenAnnotationDetail = `{
+	"id": 7,
+	"screenshot_id": 3,
+	"viewport": "desktop",
+	"type": "region",
+	"coordinates": {"x_percent": 50, "y_percent": 30, "width_percent": 12.5, "height_percent": 8.25},
+	"comment": "Button text too small",
+	"status": "open",
+	"author": "alice@example.com",
+	"comments_count": 2,
+	"created_at": "2026-08-29T00:00:00Z",
+	"screenshot_status": "ready",
+	"cropped_image_base64": "iVBORw0KGgo=",
+	"mime_type": "image/png",
+	"attachments": [
+		{
+			"id": 11,
+			"alt_text": "The disabled save button",
+			"media_type": "image/png",
+			"width": 800,
+			"height": 600,
+			"size": 12345,
+			"url": "https://screenote.test/api/media/image_attachments/11?token=abc",
+			"url_expires_at": "2026-08-29T00:05:00Z"
+		}
+	],
+	"comments": [
+		{
+			"id": 21,
+			"action": "comment",
+			"body": "And here",
+			"author": "bob@example.com",
+			"created_at": "2026-08-29T00:01:00Z",
+			"attachments": [
+				{
+					"id": 12,
+					"alt_text": null,
+					"media_type": "image/webp",
+					"width": 100,
+					"height": 50,
+					"size": 900,
+					"url": "https://screenote.test/api/media/image_attachments/12?token=def",
+					"url_expires_at": "2026-08-29T00:05:00Z"
+				}
+			]
+		},
+		{
+			"id": 22,
+			"action": "resolved",
+			"body": "Fixed",
+			"author": "alice@example.com",
+			"created_at": "2026-08-29T00:02:00Z",
+			"attachments": []
+		}
+	]
+}`
+
+func TestAnnotationDetailGoldenRoundTrip(t *testing.T) {
+	var annotation Annotation
+	if err := json.Unmarshal([]byte(goldenAnnotationDetail), &annotation); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	var expected map[string]any
+	if err := json.Unmarshal([]byte(goldenAnnotationDetail), &expected); err != nil {
+		t.Fatalf("unmarshal golden: %v", err)
+	}
+
+	actual := remarshal(t, annotation)
+	if !reflect.DeepEqual(expected, actual) {
+		expectedJSON, _ := json.MarshalIndent(expected, "", "  ")
+		actualJSON, _ := json.MarshalIndent(actual, "", "  ")
+		t.Fatalf("the detail contract changed:\nwant %s\ngot  %s", expectedJSON, actualJSON)
+	}
 }

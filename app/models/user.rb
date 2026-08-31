@@ -44,6 +44,12 @@ class User < ApplicationRecord
     inverse_of: :target_user,
     dependent: :restrict_with_exception
 
+  # Attachment ingest locks the account row before the batch row, so account
+  # deletion has to take the same order: `dependent: :destroy` above would
+  # otherwise lock batches first and deadlock against a concurrent upload.
+  # Prepending puts this ahead of every dependent-destroy callback.
+  before_destroy :lock_account_before_dependent_attachments, prepend: true
+
   enum :access_status, { active: 0, suspended: 1 }, validate: true
 
   validates :oauth_provider, :oauth_uid, presence: true, if: :oauth_identity_present?
@@ -172,6 +178,10 @@ class User < ApplicationRecord
   end
 
   private
+
+  def lock_account_before_dependent_attachments
+    self.class.lock.find(id)
+  end
 
   def oauth_identity_present?
     oauth_provider.present? || oauth_uid.present?

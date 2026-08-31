@@ -3,7 +3,7 @@ title: ImageAttachment
 type: model
 source: app/models/image_attachment.rb
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-08-31
 tags: [model, attachment, image, browser, active-storage]
 ---
 
@@ -50,6 +50,20 @@ Source: `app/models/image_attachment.rb`
 50 MB per message, `MAX_DIMENSION` and `MAX_PIXELS` shared with screenshot
 policy. `ALT_TEXT_FALLBACK` is the exact string `Attached image`.
 
+## Accepted bytes
+
+`ImageAttachments::Ingest` derives the media type from the bytes, requires any
+declared type and filename extension to agree with them, and fully decodes the
+file through the bounded `ImageDecoding::Guard`.
+
+A decode alone is not enough. libvips stops at the end of the picture, so a
+valid PNG, JPEG, or WebP carrying an appended archive, script, or second file
+decodes cleanly, and the original and download routes would then serve those
+bytes back verbatim. Ingest therefore walks the container and requires its
+declared end to be the end of the file: PNG chunks to `IEND`, the RIFF declared
+length, and the JPEG segment and entropy stream — respecting byte stuffing and
+restart markers — to `EOI`. Anything trailing is `invalid_image`.
+
 ## Delivery
 
 `has_one_attached :image` with `attachment_thumb_1x` and `attachment_thumb_2x`
@@ -70,15 +84,29 @@ Two routes read the bytes, both application-streamed with
 ## Lifecycle
 
 Destroying an [[annotation]] or [[annotation-comment]] destroys its
-attachments and purges the primary blob with every derivative.
+attachments and purges the primary blob with every derivative. The model owns
+that release rather than Active Storage's `:purge_later` default: that callback
+runs after the destroy has committed and has no fallback, so an enqueue the
+queue refuses would leave an unattached blob no row-based pass could find. The
+row therefore remembers its blob before the destroy and, if `purge_later`
+raises, purges inline. Every purge path goes through
+`ImageAttachments::PurgeBlob`, which deletes the stored bytes before the row
+that names them: a provider failure then leaves a discoverable unattached blob
+rather than an untracked key, and the reconciliation pass retries it.
 `ImageAttachmentOrphanReconciliationJob` is the backstop in both directions: it
 purges rows whose message no longer resolves after a delete that bypassed the
 callbacks, and it re-enqueues `ImageAttachmentThumbnailJob` for submitted rows
 whose variants were never produced, so a claim whose `perform_later` was lost
 does not leave a posted gallery on its placeholder until the process restarts.
 The reconciliation query selects only rows missing one of the two named
-variant digests and is capped before preloading them. Re-enqueueing is
+variant digests, expressed as a `NOT EXISTS` predicate per digest so the LIMIT
+can stop the scan early instead of grouping every submitted attachment ever
+posted. It also runs a bounded pass over unattached blobs whose server-generated
+name marks them as this feature's, once they are old enough that no in-flight
+upload could still be about to attach them. Re-enqueueing is
 idempotent and generation aware: the job is keyed on the attachment together
 with the exact blob it was asked to warm. Deleting a user whose submitted
 attachments live on another member's message is rejected with a domain error
-rather than orphaning the uploader identity.
+rather than orphaning the uploader identity. Account deletion locks the account
+row before its dependent batches are destroyed, which is the order ingest also
+takes, so the two cannot deadlock against each other.

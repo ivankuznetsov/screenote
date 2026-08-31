@@ -11,6 +11,9 @@ class ImageAttachmentBatch < ApplicationRecord
   # unbounded number of bytes in the storage service.
   MAX_OUTSTANDING_DRAFT_BYTES = 250.megabytes
   PUBLIC_ID_FORMAT = /\A[A-Za-z0-9_-]{22,43}\z/
+  # The composer's own idempotency handle. It never identifies the batch to
+  # anybody else, so it only has to be well formed and scoped to the account.
+  CLIENT_KEY_FORMAT = /\A[A-Za-z0-9_-]{8,64}\z/
 
   belongs_to :user
   belongs_to :project
@@ -24,6 +27,7 @@ class ImageAttachmentBatch < ApplicationRecord
   before_validation :assign_activity_window, on: :create
 
   validates :public_id, presence: true, uniqueness: true, format: { with: PUBLIC_ID_FORMAT }
+  validates :client_key, format: { with: CLIENT_KEY_FORMAT }, allow_nil: true
   validate :claim_target_matches_state
 
   scope :expired, ->(now = Time.current) { where(expires_at: ...now) }
@@ -37,12 +41,41 @@ class ImageAttachmentBatch < ApplicationRecord
   # they hold no matter which composer asked for the batch. The account row is
   # locked for the check and the insert together: two composers mounting at the
   # same moment must not both read room under the ceiling and each add a batch.
-  def self.open_for!(user:, project:)
+  #
+  # A mounted composer supplies its own key so that a retry after a lost
+  # response resumes the batch it already opened instead of spending another of
+  # the six an account is allowed. An expired batch still holding the key is
+  # reclaimed here rather than handed back: the composer asked for something it
+  # can upload to.
+  def self.open_for!(user:, project:, client_key: nil)
+    key = normalize_client_key!(client_key)
+
     transaction do
       user.lock!
+      existing = key && resume_candidate(user, key)
+      next existing if existing&.usable? && existing.project_id == project.id
+
+      if existing
+        # Same global lock order every other reclaim uses: the batch, then its
+        # attachment rows by ID.
+        existing.image_attachments.ordered.lock.to_a
+        existing.destroy!
+      end
       enforce_outstanding_caps!(user)
-      create!(user: user, project: project)
+      create!(user: user, project: project, client_key: key)
     end
+  end
+
+  def self.resume_candidate(user, key)
+    outstanding_for(user.id).lock.find_by(client_key: key)
+  end
+
+  def self.normalize_client_key!(client_key)
+    key = client_key.to_s.strip.presence
+    return nil unless key
+    raise ImageAttachments::Error.new(code: "invalid_client_key") unless key.match?(CLIENT_KEY_FORMAT)
+
+    key
   end
 
   # Expired-but-unreclaimed batches still hold their rows and their blobs, so

@@ -274,6 +274,136 @@ class ImageAttachmentSubmissionTest < ActionDispatch::IntegrationTest
     assert_equal "batch_not_owned", response.parsed_body.dig("error", "code")
   end
 
+  # A reply batch is claimed by one disclosure. Parent class alone cannot tell
+  # two reply composers apart, so a public ID replayed from another thread must
+  # not answer with that thread's comment as if this post had succeeded.
+  test "a reply batch replayed from another thread is refused" do
+    ingest_image(batch: @batch)
+    post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+      params: { annotation_comment: { body: "See the crop" }, image_attachment_batch_id: @batch.public_id },
+      as: :json
+    assert_response :created
+
+    other = annotations(:resolved_annotation)
+    assert_no_difference -> { AnnotationComment.count } do
+      post screenshot_annotation_annotation_comments_path(@screenshot, other),
+        params: { annotation_comment: { body: "See the crop" }, image_attachment_batch_id: @batch.public_id },
+        as: :json
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "batch_not_owned", response.parsed_body.dig("error", "code")
+  end
+
+  test "a reply batch replayed from the reopen composer is refused" do
+    resolved = annotations(:resolved_annotation)
+    ingest_image(batch: @batch)
+    post screenshot_annotation_annotation_comments_path(@screenshot, resolved),
+      params: { annotation_comment: { body: "See the crop" }, image_attachment_batch_id: @batch.public_id },
+      as: :json
+    assert_response :created
+
+    assert_no_difference -> { AnnotationComment.count } do
+      post screenshot_annotation_annotation_comments_path(@screenshot, resolved),
+        params: {
+          annotation_comment: { body: "See the crop", reopen: "1" },
+          image_attachment_batch_id: @batch.public_id
+        },
+        as: :json
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "batch_not_owned", response.parsed_body.dig("error", "code")
+  end
+
+  # The first reopen leaves the annotation open, so a retry of the identical
+  # request arrives against a state its own first attempt produced. It has to
+  # reach the claimed batch and get the comment back.
+  test "a response-loss retry of a reopen replays the comment it already created" do
+    resolved = annotations(:resolved_annotation)
+    ingest_image(batch: @batch)
+
+    post_reopen(resolved)
+    assert_response :created
+    comment_id = response.parsed_body["annotation_comment_id"]
+    assert_equal resolved.annotation_comments.where(action: :reopened).sole.id, comment_id
+
+    assert_no_difference -> { AnnotationComment.count } do
+      post_reopen(resolved)
+    end
+
+    assert_response :created
+    assert_equal comment_id, response.parsed_body["annotation_comment_id"]
+  end
+
+  test "a reply response identifies the comment the claim produced" do
+    ingest_image(batch: @batch)
+
+    post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+      params: { annotation_comment: { body: "See the crop" }, image_attachment_batch_id: @batch.public_id },
+      as: :json
+
+    assert_response :created
+    assert_equal @annotation.annotation_comments.order(:id).last.id,
+      response.parsed_body["annotation_comment_id"]
+  end
+
+  test "an invalid root post returns the body and the selected region" do
+    ingest_image(batch: @batch)
+
+    post screenshot_annotations_path(@screenshot),
+      params: {
+        annotation: {
+          x_percent: 12.5, y_percent: 30.25, width_percent: 8.0, height_percent: 4.5,
+          comment: "", viewport: "desktop"
+        },
+        image_attachment_batch_id: @batch.public_id
+      },
+      as: :json
+
+    assert_response :unprocessable_entity
+    form = response.parsed_body.fetch("form")
+    assert_equal "", form.fetch("body")
+    assert_equal 12.5, form.fetch("x_percent")
+    assert_equal 30.25, form.fetch("y_percent")
+    assert_equal 8.0, form.fetch("width_percent")
+    assert_equal 4.5, form.fetch("height_percent")
+    assert_equal "desktop", form.fetch("viewport")
+  end
+
+  test "an invalid reply returns the body and the composer it came from" do
+    ingest_image(batch: @batch)
+
+    post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+      params: {
+        annotation_comment: { body: "x" * 5001 },
+        image_attachment_batch_id: @batch.public_id
+      },
+      as: :json
+
+    assert_response :unprocessable_entity
+    form = response.parsed_body.fetch("form")
+    assert_equal "x" * 5001, form.fetch("body")
+    assert_equal @annotation.id, form.fetch("annotation_id")
+    assert_equal false, form.fetch("reopen")
+  end
+
+  test "an invalid reopen returns the body and its reopen intent" do
+    ingest_image(batch: @batch)
+
+    post screenshot_annotation_annotation_comments_path(@screenshot, @annotation),
+      params: {
+        annotation_comment: { body: "Reopen please", reopen: "1" },
+        image_attachment_batch_id: @batch.public_id
+      },
+      as: :json
+
+    assert_response :unprocessable_entity
+    form = response.parsed_body.fetch("form")
+    assert_equal "Reopen please", form.fetch("body")
+    assert_equal true, form.fetch("reopen")
+  end
+
   test "deleting the message removes its attachments and their bytes" do
     attachment = ingest_image(batch: @batch)
     post_annotation
@@ -294,6 +424,15 @@ class ImageAttachmentSubmissionTest < ActionDispatch::IntegrationTest
       params: {
         annotation: { x_percent: 10, y_percent: 10, comment: comment, viewport: "desktop" },
         image_attachment_batch_id: batch_id || @batch.public_id
+      },
+      as: :json
+  end
+
+  def post_reopen(annotation)
+    post screenshot_annotation_annotation_comments_path(@screenshot, annotation),
+      params: {
+        annotation_comment: { body: "Still broken", reopen: "1" },
+        image_attachment_batch_id: @batch.public_id
       },
       as: :json
   end

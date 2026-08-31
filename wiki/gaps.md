@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-10
+updated: 2026-08-31
 tags: [gaps, documentation, todo, deployment, once, release]
 ---
 
@@ -171,6 +171,17 @@ The following gaps from the original bootstrap have been partially or fully addr
   its video path while the page is open, and that path blocks on a future the
   page-close event rejects, so a run that sets the option hangs and leaves a
   zero-byte file.
+- Readiness now requires live supervisor proof — a Solid Queue scheduler
+  heartbeat plus the recurring tasks registered in the queue database — but only
+  after a bounded startup grace. Inside that window a supervised environment
+  still reports ready on the checked-in schedule alone, because a probe that
+  demanded proof from the first second would stop the deployment it gates from
+  coming up. The window's length is a judgement, not a measurement.
+- Polyglot rejection walks each accepted container to its declared end. That
+  covers appended payloads, the case the OWASP guidance names, and it is not a
+  general malformed-input proof: a file whose declared structure is internally
+  consistent but semantically hostile is still only caught by the full libvips
+  decode that runs alongside it.
 - Live-region announcements are asserted from the DOM: the composer's
   `role="status"` region, its polite politeness, and the exact uploaded,
   removed, and failed text it carries. A listen-through with a real screen

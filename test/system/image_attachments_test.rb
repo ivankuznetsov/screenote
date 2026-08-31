@@ -197,6 +197,137 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     assert_equal 1, discards.size
   end
 
+  # Plan Unit 3 requires every input path to reach a posted message, not merely
+  # to attach. Picker, composer-scoped drop, and a real clipboard paste each add
+  # one image to the same root composer, and the post has to carry all three.
+  test "a root annotation posts images added by picker, drop, and paste together" do
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+
+    drop_image_on("#annotation-form")
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 2, wait: 15
+
+    paste_image_into("#annotation-form textarea")
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 3, wait: 15
+
+    fill_annotation_comment("Three ways in")
+    submit_annotation
+    wait_for_turbo
+
+    assert_annotation_visible("Three ways in")
+    assert_selector "#{GALLERY} #{THUMBNAIL}", count: 3, wait: 15
+  end
+
+  test "a reply posts several images added by picker, drop, and paste" do
+    create_annotation("Needs several crops")
+
+    within find(ANNOTATION_ITEM, text: "Needs several crops") do
+      find(REPLY_TOGGLE).click
+      find(REPLY_TEXTAREA).set("All three crops")
+      attach_file_to_composer(TEST_IMAGE_PATH)
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+    end
+
+    drop_image_on("form:has([data-testid='reply-textarea'])")
+    within find(ANNOTATION_ITEM, text: "Needs several crops") do
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 2, wait: 15
+    end
+
+    paste_image_into(REPLY_TEXTAREA)
+    within find(ANNOTATION_ITEM, text: "Needs several crops") do
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 3, wait: 15
+      find(REPLY_BUTTON).click
+    end
+    wait_for_turbo
+
+    assert_selector "#{THREAD_ENTRY} #{GALLERY} #{THUMBNAIL}", count: 3, wait: 15
+  end
+
+  test "unresolving posts several images added by picker and drop" do
+    create_annotation("Fix the footer")
+    resolve_annotation("Fix the footer")
+    wait_for_turbo
+
+    within find(ANNOTATION_ITEM, text: "Fix the footer") do
+      find(UNRESOLVE_BUTTON).click
+      within find('[data-testid="unresolve-form"]') do
+        find(UNRESOLVE_TEXTAREA).set("Still wrong, twice over")
+        attach_file_to_composer(TEST_IMAGE_PATH)
+        assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+      end
+    end
+
+    # The listener is on the composer's own form, and the disclosure wraps it in
+    # a div, so the drop is dispatched at the form itself.
+    drop_image_on("[data-testid='unresolve-form'] form")
+    within find('[data-testid="unresolve-form"]') do
+      assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 2, wait: 15
+      find(SUBMIT_UNRESOLVE_BUTTON).click
+    end
+    wait_for_turbo
+
+    assert_selector THREAD_BADGE_REOPENED, wait: 15
+    assert_selector "#{THREAD_ENTRY} #{GALLERY} #{THUMBNAIL}", count: 2, wait: 15
+  end
+
+  # A message must never be posted while one of its images is missing, so the
+  # submit control is the assertion: blocked while a row is not ready, released
+  # only once the retry succeeds, and the post then carries both images.
+  test "a failed upload blocks the post until a retry finishes it" do
+    open_root_composer
+    attach_file_to_composer(TEST_IMAGE_PATH)
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 1, wait: 15
+
+    with_playwright_page do |pw_page|
+      pw_page.route("**/attachments", ->(route, _request) { route.abort })
+    end
+    attach_file_to_composer(SECOND_IMAGE_PATH)
+
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=failed]", wait: 15
+    assert submit_disabled?(SAVE_BUTTON), "a failed image must block the post"
+
+    with_playwright_page { |pw_page| pw_page.unroute("**/attachments") }
+    find(ATTACHMENT_RETRY, match: :first).click
+    assert_selector "#{ATTACHMENT_ITEM}[data-state=ready]", count: 2, wait: 15
+    assert_not submit_disabled?(SAVE_BUTTON), "a settled composer must release the post"
+
+    fill_annotation_comment("Retried into place")
+    submit_annotation
+    wait_for_turbo
+
+    assert_annotation_visible("Retried into place")
+    assert_selector "#{GALLERY} #{THUMBNAIL}", count: 2, wait: 15
+  end
+
+  # One image has nothing to navigate between, so the viewer must not offer it —
+  # while every other control the plan names still has to work.
+  test "a one-image viewer hides navigation and still zooms, downloads, and opens the original" do
+    post_annotation_with_attachment("Only one image")
+
+    assert_selector "#{GALLERY} #{THUMBNAIL}", count: 1, wait: 15
+    find(THUMBNAIL, match: :first).click
+    assert_selector "#{VIEWER}[open]", wait: 10
+
+    assert_selector "#{VIEWER_NEXT}[hidden]", visible: :all
+    assert_selector '[data-testid="attachment-viewer-previous"][hidden]', visible: :all
+
+    before = viewer_image_width
+    find('[data-testid="attachment-viewer-zoom-in"]').click
+    assert_operator viewer_image_width, :>, before, "zooming in must enlarge the image"
+
+    download = find("[data-testid='attachment-viewer-download']")
+    original = find("[data-testid='attachment-viewer-open-original']")
+    assert_match %r{/media/image_attachments/\d+/download\z}, download["href"]
+    assert_match %r{/media/image_attachments/\d+/original\z}, original["href"]
+    assert download["download"]
+    assert_equal "_blank", original["target"]
+    capture_evidence("single-image-viewer", facts: gallery_facts)
+
+    find(VIEWER_CLOSE).click
+    assert_no_selector "#{VIEWER}[open]", wait: 10
+  end
+
   test "an unreadable file reports a specific error and can be removed" do
     open_root_composer
     attach_file_to_composer(Rails.root.join("test/fixtures/files/test_invalid.png").to_s)
@@ -484,6 +615,33 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
     capture_evidence("composer-light-sidebar-context-narrow", facts: { context: "light" })
   end
 
+  # The viewer dialog lives inside its gallery and matches a rule that declares
+  # the same variables, and a declaration on an element always beats an
+  # inherited value. Without the stylesheet re-applying the context to the
+  # nested viewer, an explicitly dark gallery would open a light viewer unless
+  # the operating system happened to prefer dark.
+  test "an explicitly dark gallery opens an explicitly dark viewer" do
+    post_annotation_with_attachment("Dark context viewer")
+    assert_selector "#{GALLERY}.image-attachment-context--light", wait: 15
+
+    light_surface = viewer_surface_variable
+    assert_equal "#ffffff", light_surface
+
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        document.querySelector(`#{GALLERY}`).classList.replace(
+          "image-attachment-context--light", "image-attachment-context--dark"
+        )
+      JS
+    end
+
+    assert_equal "#14161c", viewer_surface_variable,
+      "an explicit dark context must reach the nested viewer without an OS preference"
+    find(THUMBNAIL, match: :first).click
+    assert_selector "#{VIEWER}[open]", wait: 10
+    capture_evidence("viewer-dark-context", facts: { context: "dark", surface: viewer_surface_variable })
+  end
+
   # Rendering never processes an image, so a posted gallery shows a neutral
   # placeholder until the post-claim warming job has run. Both halves matter:
   # the placeholder is what a reader sees first, and the responsive thumbnail is
@@ -607,6 +765,43 @@ class ImageAttachmentsTest < ApplicationSystemTestCase
   def attach_file_to_composer(path, within: nil)
     scope = within || page
     scope.find(FILE_INPUT, visible: :all, match: :first).set(path)
+  end
+
+  # Puts one synthesized PNG on the real clipboard and pastes it into the
+  # element the composer owns, so the browser produces a trusted paste rather
+  # than a synthetic event the page dispatched at itself.
+  def paste_image_into(selector, name: "pasted.png")
+    with_playwright_page do |pw_page|
+      pw_page.context.grant_permissions(%w[clipboard-read clipboard-write])
+      pw_page.evaluate(<<~JS)
+        (async () => {
+          #{IMAGE_FILE_HELPER}
+          const file = await screenoteTestImageFile("#{name}")
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": file })])
+        })()
+      JS
+      pw_page.locator(selector).click
+      pw_page.keyboard.press("ControlOrMeta+V")
+    end
+  end
+
+  # Reads the component variable the whole viewer is coloured from, which is
+  # the value the cascade actually resolved rather than a class name.
+  def viewer_surface_variable
+    with_playwright_page do |pw_page|
+      pw_page.evaluate(<<~JS)
+        getComputedStyle(document.querySelector(`#{VIEWER}`))
+          .getPropertyValue("--attachment-surface").trim()
+      JS
+    end
+  end
+
+  def viewer_image_width
+    with_playwright_page { |pw_page| pw_page.locator(VIEWER_IMAGE).bounding_box["width"] }
+  end
+
+  def submit_disabled?(selector)
+    with_playwright_page { |pw_page| pw_page.locator(selector).evaluate("button => button.disabled") }
   end
 
   # Files can only be synthesized in the page, so drag payloads are built there

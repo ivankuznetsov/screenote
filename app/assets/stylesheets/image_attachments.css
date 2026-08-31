@@ -39,6 +39,30 @@
   display: none !important;
 }
 
+/* The viewer dialog lives inside its gallery, so it matches the base rule above
+   and declares its own variables — which shadows the context the gallery set,
+   because a declaration on the element always beats an inherited value. These
+   two rules re-apply the explicit context to the nested viewer, so an explicitly
+   dark gallery opens an explicitly dark viewer regardless of OS preference. */
+.image-attachment-context--light .image-attachment-viewer {
+  --attachment-surface: #ffffff;
+  --attachment-surface-muted: #f9fafb;
+  --attachment-text: #1f2937;
+  --attachment-text-muted: #6b7280;
+  --attachment-border: #d1d5db;
+  --attachment-danger: #dc2626;
+}
+
+.image-attachment-context--dark .image-attachment-viewer {
+  --attachment-surface: #14161c;
+  --attachment-surface-muted: #1d2029;
+  --attachment-text: #e8e8ed;
+  --attachment-text-muted: #9aa0b0;
+  --attachment-border: #333846;
+  --attachment-danger: #f87171;
+}
+
+/* Only a viewer with no explicit context follows the operating system. */
 @media (prefers-color-scheme: dark) {
   .image-attachment-viewer {
     --attachment-surface: #14161c;

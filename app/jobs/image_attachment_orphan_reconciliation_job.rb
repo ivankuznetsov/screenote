@@ -11,6 +11,9 @@
 # placeholder until the process restarts.
 class ImageAttachmentOrphanReconciliationJob < ApplicationJob
   BATCH_LIMIT = 500
+  # An upload stages its blob before it attaches it, so a freshly created
+  # unattached blob may simply be mid-request.
+  UNATTACHED_GRACE = 6.hours
 
   queue_as :default
 
@@ -21,11 +24,12 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
   def perform(limit: BATCH_LIMIT)
     purged = purge_orphans(limit)
     rewarmed = rewarm_variants(limit)
+    reclaimed = reclaim_unattached_blobs(limit)
 
-    if purged.positive? || rewarmed.positive?
+    if purged.positive? || rewarmed.positive? || reclaimed.positive?
       Screenote::Monitoring.notify(
         "Image attachments reconciled",
-        context: { purged: purged, rewarmed: rewarmed }
+        context: { purged: purged, rewarmed: rewarmed, reclaimed: reclaimed }
       )
     end
 
@@ -72,24 +76,17 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
     enqueued
   end
 
-  # The former Ruby-side `find_each` walked every submitted attachment on each
-  # hourly pass once most rows were warm. Select only blobs missing one of the
-  # two named variation digests and cap the candidate IDs in SQL, then preload
-  # exactly those rows for the final generation-aware recheck.
+  # A JOIN plus GROUP BY has to build every group before the LIMIT can drop any
+  # of them, so the previous query still touched every submitted attachment ever
+  # posted on each hourly pass. `NOT EXISTS` per digest is a per-row predicate
+  # instead: the planner walks `image_attachments` in ID order, probes the
+  # variant-record index, and stops as soon as `limit` candidates are found.
   def unwarmed_candidates(limit)
-    digests = thumbnail_variant_digests
     ids = ImageAttachment
       .submitted
       .state_ready
       .joins(:image_blob)
-      .left_joins(image_blob: :variant_records)
-      .group("image_attachments.id")
-      .having(<<~SQL.squish, digests, digests.length)
-        COUNT(DISTINCT CASE
-          WHEN active_storage_variant_records.variation_digest IN (?)
-          THEN active_storage_variant_records.variation_digest
-        END) < ?
-      SQL
+      .where(missing_any_variant)
       .order(:id)
       .limit(limit)
       .pluck(:id)
@@ -97,10 +94,35 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
     ImageAttachment.where(id: ids).includes(ImageAttachment::RENDER_PRELOAD).order(:id)
   end
 
+  def missing_any_variant
+    thumbnail_variant_digests
+      .map { |digest| ActiveStorage::VariantRecord.where(blob_id: ActiveStorage::Blob.arel_table[:id], variation_digest: digest).arel.exists.not }
+      .reduce(:or)
+  end
+
   def thumbnail_variant_digests
     ImageAttachment.attachment_reflections.fetch("image").named_variants
       .values
       .map { |variant| ActiveStorage::Variation.wrap(variant.transformations).digest }
+  end
+
+  # Where a provider delete failed, the blob row is deliberately left behind so
+  # the key stays durable. Retrying it is this pass's job. Only blobs this
+  # feature staged are considered — the server generates their names — and only
+  # once they are old enough that no in-flight upload can still be about to
+  # attach them.
+  def reclaim_unattached_blobs(limit)
+    reclaimed = 0
+
+    ActiveStorage::Blob
+      .unattached
+      .where("active_storage_blobs.filename LIKE ?", "image-attachment-%")
+      .where(created_at: ...UNATTACHED_GRACE.ago)
+      .order(:id)
+      .limit(limit)
+      .each { |blob| reclaimed += 1 if ImageAttachments::PurgeBlob.call(blob) }
+
+    reclaimed
   end
 
   def orphan_ids(limit)

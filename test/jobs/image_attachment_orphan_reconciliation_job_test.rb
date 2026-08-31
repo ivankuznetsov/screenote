@@ -84,6 +84,40 @@ class ImageAttachmentOrphanReconciliationJobTest < ActiveSupport::TestCase
     assert_enqueued_jobs 1, only: ImageAttachmentThumbnailJob
   end
 
+  # A provider delete that failed deliberately leaves the blob row behind so the
+  # key stays durable. Retrying it is this pass's job.
+  test "retries an unattached blob a failed provider delete left behind" do
+    attachment = submitted_attachment
+    blob = attachment.image.blob
+    attachment.image.detach
+    blob.update_columns(created_at: (ImageAttachmentOrphanReconciliationJob::UNATTACHED_GRACE + 1.hour).ago)
+
+    ImageAttachmentOrphanReconciliationJob.perform_now
+
+    assert_not ActiveStorage::Blob.exists?(blob.id)
+  end
+
+  test "never reclaims a blob an in-flight upload may still be about to attach" do
+    attachment = submitted_attachment
+    blob = attachment.image.blob
+    attachment.image.detach
+
+    ImageAttachmentOrphanReconciliationJob.perform_now
+
+    assert ActiveStorage::Blob.exists?(blob.id)
+  end
+
+  test "never reclaims an unattached blob that belongs to another subsystem" do
+    blob = ActiveStorage::Blob.create_and_upload!(
+      io: StringIO.new(image_bytes), filename: "screenshot.png", content_type: "image/png"
+    )
+    blob.update_columns(created_at: (ImageAttachmentOrphanReconciliationJob::UNATTACHED_GRACE + 1.hour).ago)
+
+    ImageAttachmentOrphanReconciliationJob.perform_now
+
+    assert ActiveStorage::Blob.exists?(blob.id)
+  end
+
   private
 
   # Foreign keys make this unreachable through the application, which is the

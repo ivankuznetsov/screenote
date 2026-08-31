@@ -93,6 +93,82 @@ module ImageAttachmentDrafts
       assert_equal batch.public_id, response.parsed_body["batch_id"]
     end
 
+    # A create whose response is lost has to be retryable. Without an
+    # idempotency key each retry spent one more of the six batches an account is
+    # allowed, so a flaky connection could lock a person out of uploading.
+    test "a repeated create with the same client key returns the same batch" do
+      post image_attachment_draft_batches_path,
+        params: { project_id: @project.id, client_key: "composer-abc123" }, as: :json
+      assert_response :created
+      first = response.parsed_body["batch_id"]
+
+      assert_no_difference -> { ImageAttachmentBatch.count } do
+        post image_attachment_draft_batches_path,
+          params: { project_id: @project.id, client_key: "composer-abc123" }, as: :json
+      end
+
+      assert_response :success
+      assert_equal first, response.parsed_body["batch_id"]
+    end
+
+    test "different client keys still open separate batches" do
+      post image_attachment_draft_batches_path,
+        params: { project_id: @project.id, client_key: "composer-aaaaaa" }, as: :json
+      first = response.parsed_body["batch_id"]
+
+      post image_attachment_draft_batches_path,
+        params: { project_id: @project.id, client_key: "composer-bbbbbb" }, as: :json
+
+      assert_response :created
+      assert_not_equal first, response.parsed_body["batch_id"]
+    end
+
+    test "a client key whose batch expired opens a usable replacement" do
+      post image_attachment_draft_batches_path,
+        params: { project_id: @project.id, client_key: "composer-expired" }, as: :json
+      stale = ImageAttachmentBatch.find_by!(public_id: response.parsed_body["batch_id"])
+      stale.update_columns(last_activity_at: 30.hours.ago, expires_at: 1.minute.ago)
+
+      post image_attachment_draft_batches_path,
+        params: { project_id: @project.id, client_key: "composer-expired" }, as: :json
+
+      assert_response :created
+      assert_not ImageAttachmentBatch.exists?(stale.id)
+      assert_predicate ImageAttachmentBatch.find_by!(public_id: response.parsed_body["batch_id"]), :usable?
+    end
+
+    test "a malformed client key is rejected" do
+      post image_attachment_draft_batches_path,
+        params: { project_id: @project.id, client_key: "no" }, as: :json
+
+      assert_response :unprocessable_entity
+      assert_equal "invalid_client_key", response.parsed_body.dig("error", "code")
+    end
+
+    # Media, upload, and claim all reject an expired batch, so answering resume
+    # with 200 and its ready rows would only re-enable a post that is certain to
+    # fail with `batch_unusable`.
+    test "an expired batch cannot be resumed" do
+      batch = build_batch(user: @user, project: @project)
+      ingest_image(batch: batch)
+      batch.update_columns(last_activity_at: 30.hours.ago, expires_at: 1.minute.ago)
+
+      get image_attachment_draft_batch_path(batch.public_id), as: :json
+
+      assert_response :unprocessable_entity
+      assert_equal "batch_unusable", response.parsed_body.dig("error", "code")
+    end
+
+    test "a claimed batch cannot be resumed" do
+      batch = build_batch(user: @user, project: @project)
+      batch.update!(state: :claimed, claimed_annotation: annotations(:point_annotation))
+
+      get image_attachment_draft_batch_path(batch.public_id), as: :json
+
+      assert_response :unprocessable_entity
+      assert_equal "batch_unusable", response.parsed_body.dig("error", "code")
+    end
+
     test "another member cannot resume a guessed batch" do
       batch = build_batch(user: @user, project: @project)
       @project.project_memberships.find_or_create_by!(user: users(:bob)) { |m| m.role = :member }
