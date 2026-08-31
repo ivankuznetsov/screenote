@@ -29,6 +29,7 @@ threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
 threads threads_count, threads_count
 
 self_hosted = ENV["SCREENOTE_EDITION"] == "self_hosted"
+production = (ENV["RAILS_ENV"] || ENV["RACK_ENV"]) == "production"
 
 # The supported self-hosted topology is one Puma process. Solid Queue starts
 # from the Puma plugin and supervises its single configured worker process.
@@ -42,7 +43,7 @@ plugin :tmp_restart
 
 # Run the Solid Queue supervisor inside Puma for the one-container deployment.
 # SaaS retains the existing explicit opt-in used by its deployment topology.
-plugin :solid_queue if self_hosted || ENV["SOLID_QUEUE_IN_PUMA"]
+plugin :solid_queue if production && (self_hosted || ENV["SOLID_QUEUE_IN_PUMA"])
 
 # Specify the PID file. Defaults to tmp/pids/server.pid in development.
 # In other environments, only set the PID file if requested.

@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  SCREENOTE_CLI_REF: 8486dc2ba6a9c4100d851bf8869000a77b2c0f52
+
 jobs:
   ruby-security:
     name: ruby-security
@@ -137,8 +140,6 @@ jobs:
     name: public-cli
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      SCREENOTE_CLI_REF: 2e8853f90eb2ad902c2a8ac9349f7319d60c2f60
     steps:
       - name: Checkout service
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -170,6 +171,10 @@ jobs:
       - name: Test the exact public CLI candidate source
         working-directory: tmp/screenote-cli
         run: go test ./...
+      - name: Run the exact public CLI against the Rails source contract
+        env:
+          SCREENOTE_PUBLIC_CLI_SOURCE: ${{ github.workspace }}/tmp/screenote-cli
+        run: script/release_test_matrix public-cli-source
       - name: Test repository Go compatibility helpers
         run: env GOFLAGS=-mod=mod go test ./...
       - name: Record release applicability
@@ -199,12 +204,24 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Checkout exact public CLI candidate revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ivankuznetsov/screenote-cli
+          ref: ${{ env.SCREENOTE_CLI_REF }}
+          path: tmp/screenote-cli
+          persist-credentials: false
       - name: Install runtime packages
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
       - name: Set up Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1 (2026-07-22)
         with:
           bundler-cache: true
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: tmp/screenote-cli/go.sum
       - name: Start immutable MinIO compatibility target
         run: |
           docker run --detach --name screenote-minio \
@@ -221,6 +238,14 @@ jobs:
           exit 1
       - name: Run real MinIO operation and outage contract
         run: script/release_test_matrix s3
+      - name: Run the exact public CLI against the MinIO-backed source contract
+        env:
+          SCREENOTE_PUBLIC_CLI_SOURCE: ${{ github.workspace }}/tmp/screenote-cli
+          SCREENOTE_EDITION: self_hosted
+          SCREENOTE_STORAGE: s3
+          SCREENOTE_TEST_ACTIVE_STORAGE_SERVICE: self_hosted_s3
+          SCREENOTE_EXPECT_ACTIVE_STORAGE_SERVICE: self_hosted_s3
+        run: script/release_test_matrix public-cli-source
       - name: Verify final image contains the selected S3 and image runtimes
         run: |
           docker build --tag "screenote-s3-ci:${{ github.sha }}" .

@@ -16,6 +16,10 @@ class DatabaseConstraintContractTest < ActiveSupport::TestCase
     ],
     api_keys: %w[api_keys_active_requires_issuer],
     annotations: %w[annotations_exactly_one_actor annotations_resolution_actor_state],
+    annotation_comments: %w[
+      annotation_comments_exactly_one_actor annotation_comments_idempotency_pair
+      annotation_comments_idempotency_format
+    ],
     oauth_access_tokens: %w[oauth_access_tokens_valid_principal oauth_access_tokens_hashed_token],
     authentication_tokens: %w[
       authentication_tokens_exact_subject authentication_tokens_recovery_issuer
@@ -146,6 +150,38 @@ class DatabaseConstraintContractTest < ActiveSupport::TestCase
     end
   end
 
+  test "image comment receipts are complete formatted and unique at the database boundary" do
+    now = Time.current
+    annotation = annotations(:point_annotation)
+    user = users(:alice)
+    fingerprint = Digest::SHA256.hexdigest("database receipt fingerprint")
+    request_digest = Digest::SHA256.hexdigest("database receipt request")
+
+    assert_rejected do
+      insert(:annotation_comments,
+        annotation_id: annotation.id, user_id: user.id, body: "Missing request digest", action: 0,
+        idempotency_fingerprint: fingerprint, request_digest: nil, created_at: now, updated_at: now)
+    end
+
+    assert_rejected do
+      insert(:annotation_comments,
+        annotation_id: annotation.id, user_id: user.id, body: "Uppercase digest", action: 0,
+        idempotency_fingerprint: fingerprint.upcase, request_digest: request_digest,
+        created_at: now, updated_at: now)
+    end
+
+    insert(:annotation_comments,
+      annotation_id: annotation.id, user_id: user.id, body: "First receipt", action: 0,
+      idempotency_fingerprint: fingerprint, request_digest: request_digest,
+      created_at: now, updated_at: now)
+    assert_rejected do
+      insert(:annotation_comments,
+        annotation_id: annotation.id, user_id: user.id, body: "Duplicate receipt", action: 0,
+        idempotency_fingerprint: fingerprint, request_digest: request_digest,
+        created_at: now, updated_at: now)
+    end
+  end
+
   test "principal action table agrees with registered MCP tools and REST routes" do
     assert PrincipalActionContract.validate!
 
@@ -165,11 +201,8 @@ class DatabaseConstraintContractTest < ActiveSupport::TestCase
     assert_not PrincipalActionContract.supported?(:create_point, :rest)
     assert_not PrincipalActionContract.supported?(:create_area, :public_cli)
     assert PrincipalActionContract.supported?(:reopen, :mcp)
-    assert PrincipalActionContract.supported?(:attach_image, :browser)
-    %i[rest public_cli mcp].each do |surface|
-      assert_not PrincipalActionContract.supported?(:attach_image, surface),
-        "attaching an image must stay a session-only capability"
-    end
+    %i[browser rest public_cli].each { |surface| assert PrincipalActionContract.supported?(:attach_image, surface) }
+    assert_not PrincipalActionContract.supported?(:attach_image, :mcp)
   end
 
   private

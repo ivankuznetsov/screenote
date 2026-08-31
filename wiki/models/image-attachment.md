@@ -52,17 +52,18 @@ policy. `ALT_TEXT_FALLBACK` is the exact string `Attached image`.
 
 ## Accepted bytes
 
-`ImageAttachments::Ingest` derives the media type from the bytes, requires any
-declared type and filename extension to agree with them, and fully decodes the
-file through the bounded `ImageDecoding::Guard`.
+`ImageAttachments::PrepareUpload` derives the media type from the bytes,
+requires any declared type and filename extension to agree with them, and fully
+decodes the file through the bounded `ImageDecoding::Guard`. Both browser
+ingest and the atomic API image-comment writer use this service.
 
 A decode alone is not enough. libvips stops at the end of the picture, so a
 valid PNG, JPEG, or WebP carrying an appended archive, script, or second file
 decodes cleanly, and the original and download routes would then serve those
-bytes back verbatim. Ingest therefore walks the container and requires its
-declared end to be the end of the file: PNG chunks to `IEND`, the RIFF declared
-length, and the JPEG segment and entropy stream — respecting byte stuffing and
-restart markers — to `EOI`. Anything trailing is `invalid_image`.
+bytes back verbatim. Preparation therefore walks the container and requires
+its declared end to be the end of the file: PNG chunks to `IEND`, the RIFF
+declared length, and the JPEG segment and entropy stream — respecting byte
+stuffing and restart markers — to `EOI`. Anything trailing is `invalid_image`.
 
 ## Delivery
 

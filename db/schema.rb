@@ -53,14 +53,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.integer "api_key_id"
     t.text "body", null: false
     t.datetime "created_at", null: false
+    t.string "idempotency_fingerprint", limit: 64
     t.datetime "notified_at"
+    t.string "request_digest", limit: 64
     t.datetime "updated_at", null: false
     t.integer "user_id"
     t.index ["action", "notified_at"], name: "index_annotation_comments_on_action_notified_at"
     t.index ["annotation_id", "created_at"], name: "index_annotation_comments_on_annotation_id_and_created_at"
     t.index ["annotation_id"], name: "index_annotation_comments_on_annotation_id"
     t.index ["api_key_id"], name: "index_annotation_comments_on_api_key_id"
+    t.index ["idempotency_fingerprint"], name: "index_annotation_comments_on_idempotency_fingerprint", unique: true, where: "idempotency_fingerprint IS NOT NULL"
     t.index ["user_id"], name: "index_annotation_comments_on_user_id"
+    t.check_constraint "(\"idempotency_fingerprint\" IS NULL AND \"request_digest\" IS NULL) OR (length(\"idempotency_fingerprint\") = 64 AND replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(\"idempotency_fingerprint\", '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '') = '' AND length(\"request_digest\") = 64 AND replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(\"request_digest\", '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '') = '')", name: "annotation_comments_idempotency_format"
+    t.check_constraint "(idempotency_fingerprint IS NULL AND request_digest IS NULL) OR (idempotency_fingerprint IS NOT NULL AND request_digest IS NOT NULL)", name: "annotation_comments_idempotency_pair"
     t.check_constraint "(user_id IS NOT NULL AND api_key_id IS NULL) OR (user_id IS NULL AND api_key_id IS NOT NULL)", name: "annotation_comments_exactly_one_actor"
   end
 

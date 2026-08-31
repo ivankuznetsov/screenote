@@ -19,6 +19,7 @@ require "rails/test_unit/railtie"
 Bundler.require(*Rails.groups)
 
 require_relative "../lib/screenote/deployment"
+require_relative "../lib/screenote/image_comment_request_limit"
 require_relative "../lib/screenote/monitoring"
 require_relative "../lib/screenote/rate_limit_store"
 require_relative "../lib/screenote/trusted_proxy_headers"
@@ -47,6 +48,7 @@ module ScreenoteTmp
       forwarded_proxy_host: Screenote::Deployment.current.forwarded_proxy_host,
       canonical_scheme: Screenote::Deployment.current.protocol
     config.middleware.insert_before 0, Screenote::RateLimitFailureMiddleware
+    config.middleware.insert_before 0, Screenote::ImageCommentRequestLimit
 
     # Configuration for the application, engines, and railties goes here.
     #

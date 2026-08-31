@@ -20,6 +20,7 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
     @screenshot = screenshots(:alice_screenshot)
     @highest_blob_id = ActiveStorage::Blob.maximum(:id).to_i
     @highest_annotation_id = Annotation.maximum(:id).to_i
+    @highest_annotation_comment_id = AnnotationComment.maximum(:id).to_i
     @batch = build_batch
   end
 
@@ -32,6 +33,7 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
 
     ImageAttachment.delete_all
     ImageAttachmentBatch.delete_all
+    AnnotationComment.where("id > ?", @highest_annotation_comment_id).delete_all
     Annotation.where("id > ?", @highest_annotation_id).delete_all
     ActiveStorage::Blob.where("id > ?", @highest_blob_id).find_each(&:purge)
   end
@@ -224,6 +226,39 @@ class ImageAttachmentConcurrencyTest < ActiveSupport::TestCase
       assert_equal bytes.bytesize * 2,
         ImageAttachmentBatch.outstanding_draft_bytes(@user.id)
     end
+  end
+
+  test "concurrent image comment retries converge on one complete pair" do
+    bytes = image_bytes
+    principal = AuthenticatedPrincipal.for_user(@user)
+    operation = lambda do
+      ImageAttachments::CreateApiComment.call(
+        annotation: annotations(:point_annotation),
+        project: @project,
+        principal:,
+        body: "Use this reference",
+        io: StringIO.new(bytes),
+        idempotency_key: "concurrent_image_comment_key_1234",
+        expected_sha256: Digest::SHA256.hexdigest(bytes),
+        declared_content_type: "image/png",
+        declared_length: bytes.bytesize,
+        filename: "upload.png"
+      )
+    end
+
+    outcomes = with_one_shot_instance_method_barrier(
+      ImageAttachments::PrepareUpload::Result, :stage!, predicate: ->(_record, **) { true }
+    ) do |entered, release|
+      run_settled_race(entered:, release:, first: operation, second: operation)
+    end
+
+    assert_no_concurrency_exceptions(outcomes)
+    assert_equal %w[created replayed], outcomes.map(&:operation).sort
+    assert_equal 1, outcomes.map { |result| result.comment.id }.uniq.size
+    assert_equal 1, outcomes.map { |result| result.attachment.id }.uniq.size
+    assert_equal 1, AnnotationComment.where("id > ?", @highest_annotation_comment_id).count
+    assert_equal 1, ImageAttachment.where(annotation_comment_id: outcomes.first.comment.id).count
+    assert_equal 1, ActiveStorage::Blob.where("id > ?", @highest_blob_id).count
   end
 
   test "a cleanup pass overlapping a submission cannot take bytes away from the message" do

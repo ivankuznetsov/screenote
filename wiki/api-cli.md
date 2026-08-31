@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-08-29
+updated: 2026-08-30
 tags: [cli, api, rest, agents, self-hosting, once]
 ---
 
@@ -84,9 +84,9 @@ screenote page list --project ID
 screenote screenshot list --project ID [--page ID] [--status pending|ready|failed] [--limit N] [--offset N]
 screenote screenshot create --project ID --title TITLE [--page ID_OR_NAME] [--file PATH|-]
 screenote annotation list --project ID [--screenshot ID] [--status open|resolved] [--viewport desktop|tablet|mobile]
-screenote annotation get --project ID --annotation ID [--crop-file PATH]
+screenote annotation get --project ID --annotation ID [--crop-file PATH] [--attachments-dir DIR]
 screenote annotation resolve --project ID --annotation ID [--comment TEXT]
-screenote comment add --project ID --annotation ID --body TEXT
+screenote comment add --project ID --annotation ID --body TEXT [--image PATH|-]
 screenote snapshot --project ID --manifest PATH
 ```
 
@@ -164,8 +164,23 @@ decoded and re-encoded by `annotation list` keeps the key absent: an empty
 array there would assert "this message has no images" about a message whose
 images are only reported on a detail read.
 
-The CLI cannot author attachments. Uploading an image is a browser session
-capability; agents read what people attached and reply with text.
+`comment add --image PATH|-` authors exactly one PNG, JPEG, or WebP attachment
+with the required text body through the distinct, idempotent
+`image-comments-v1` route. The CLI privately spools and hashes at most 20 MiB,
+uses one idempotency key for the invocation, and reconstructs the same multipart
+request for one bounded transport/gateway retry. A second ambiguous result is
+reported as `comment_result_unknown`; a later command invocation is not claimed
+to deduplicate it. A server without the capability receives no fallback call to
+the text-only route, so it cannot silently create only the body.
+
+`annotation get --attachments-dir DIR` validates, downloads, and byte-verifies
+every root and reply attachment through the caller's bearer credential and the
+five-minute purpose token. It stages all files privately, publishes stable
+`attachment-<id>.<ext>` names without overwrite, preserves unknown response
+fields, replaces token URLs with absolute `local_path` values, and composes with
+`--crop-file` in one JSON document. Annotation-detail responses that contain
+those short-lived URLs are `private, no-store`. No-flag behavior remains the
+raw service response.
 
 ## Deferred
 

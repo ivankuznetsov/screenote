@@ -182,6 +182,10 @@ qualification honest — and they skip on SQLite.
 `script/attachment_server_database_qualification` boots an ephemeral server
 database, exports `SCREENOTE_SERVER_DATABASE_QUALIFICATION=1`, and reruns the
 gate, so that half is reproducible outside CI rather than only inside it.
+The same lifecycle list includes a barrier-driven concurrent image-comment
+retry: PostgreSQL must return one `created` and one `replayed` result pointing
+at the same comment, attachment, and blob, rather than merely producing the
+right final row count by sequential execution.
 
 The `s3` gate carries the delivery half of the same contract.
 `test/integration/image_attachment_s3_delivery_contract_test.rb` points the
@@ -197,6 +201,27 @@ through `SCREENOTE_S3_ENDPOINT` and its companions for a run against the hosted
 provider. The gate exports `SCREENOTE_REQUIRE_S3=1`, which turns the suite's
 "no store configured" skip into a failure, so a qualification run cannot pass
 by not running.
+The S3 suite also creates and replays an API image comment, streams those exact
+provider bytes through the bearer media route, and injects a database failure
+after staging to prove the unowned provider object is removed and no comment,
+attachment, or blob row remains.
+
+The required `public-cli` job pins an exact public CLI commit and runs
+`script/release_test_matrix public-cli-source` against a real Rails test server.
+That gate builds the checked-out CLI, proves unchanged body-only comments,
+path and stdin image authoring, a same-key retry after a proxy reports failure
+after the backend commits, and root plus reply attachment materialization with
+exact bytes, private modes, and no token URLs. It also proves revoked and
+expired credentials fail privately, and that an old server receives exactly
+one unsupported image-route request with no text-only fallback. It owns a
+scratch test database lifecycle and cleans its created comments, attachments,
+and blobs so later tests do not inherit state. The `container-s3` job reruns
+that same exact-CLI gate against MinIO, checks the selected Active Storage
+service, and verifies the provider-backed bytes. The real test server keeps the
+self-hosted storage configuration but does not start the production-only Solid
+Queue Puma supervisor. This is source compatibility evidence; the tagged
+HTTP/HTTPS and release-image CLI qualification remains a separate release-only
+gate.
 
 The source workflow has one adapter-neutral `test` job for the Rails suite and
 the self-hosted-only smoke tests. It replaces separate SQLite and PostgreSQL

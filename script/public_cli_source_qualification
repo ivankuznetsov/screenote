@@ -1,0 +1,367 @@
+#!/usr/bin/env bash
+
+# Runs the exact checked-out public CLI against a real Rails test server. This
+# is source qualification, not release evidence: release qualification still
+# binds an immutable CLI tag and candidate image over both HTTP and HTTPS.
+
+set -Eeuo pipefail
+umask 077
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+fail() {
+  printf 'public CLI source qualification: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ -n "${SCREENOTE_PUBLIC_CLI_SOURCE-}" ]] || fail "SCREENOTE_PUBLIC_CLI_SOURCE is required"
+[[ -d "${SCREENOTE_PUBLIC_CLI_SOURCE}" ]] || fail "public CLI source directory is missing"
+[[ -f "${SCREENOTE_PUBLIC_CLI_SOURCE}/go.mod" ]] || fail "public CLI source has no go.mod"
+command -v go >/dev/null 2>&1 || fail "go is required"
+command -v curl >/dev/null 2>&1 || fail "curl is required"
+
+qualification_root="$(mktemp -d "${TMPDIR:-/tmp}/screenote-public-cli-source.XXXXXX")"
+server_pid=""
+server_log="${qualification_root}/server.log"
+auxiliary_pids=()
+
+cleanup_test_data() {
+  env RAILS_ENV=test bin/rails runner '
+    ImageAttachment.find_each do |attachment|
+      attachment.image.purge if attachment.image.attached?
+      attachment.delete
+    end
+    ActiveStorage::Attachment.where(record_type: "ImageAttachment").delete_all
+    ActiveStorage::Blob.unattached.find_each(&:purge)
+    AnnotationComment.where("body LIKE ?", "Source qualification%").delete_all
+  '
+}
+
+cleanup() {
+  local exit_status=$?
+  trap - EXIT
+  if [[ -n "${server_pid}" ]]; then
+    kill "${server_pid}" >/dev/null 2>&1 || true
+    wait "${server_pid}" >/dev/null 2>&1 || true
+  fi
+  for auxiliary_pid in "${auxiliary_pids[@]}"; do
+    kill "${auxiliary_pid}" >/dev/null 2>&1 || true
+    wait "${auxiliary_pid}" >/dev/null 2>&1 || true
+  done
+  cleanup_test_data >/dev/null 2>&1 || true
+  if (( exit_status != 0 )) && [[ -f "${server_log}" ]]; then
+    sed -n '1,240p' "${server_log}" >&2
+  fi
+  rm -rf -- "${qualification_root}"
+  exit "${exit_status}"
+}
+trap cleanup EXIT
+
+wait_for_file() {
+  local path="$1"
+  local process_id="$2"
+  local attempt
+
+  for attempt in $(seq 1 80); do
+    [[ -s "${path}" ]] && return 0
+    kill -0 "${process_id}" >/dev/null 2>&1 || return 1
+    sleep 0.1
+  done
+
+  return 1
+}
+
+cd "${REPOSITORY_ROOT}"
+
+cleanup_test_data
+env RAILS_ENV=test bin/rails db:test:prepare db:fixtures:load
+
+project_id="$(env RAILS_ENV=test bin/rails runner 'puts ActiveRecord::FixtureSet.identify(:alice_project)')"
+annotation_id="$(env RAILS_ENV=test bin/rails runner 'puts ActiveRecord::FixtureSet.identify(:point_annotation)')"
+[[ "${project_id}" =~ ^[0-9]+$ && "${annotation_id}" =~ ^[0-9]+$ ]] ||
+  fail "fixture identities are invalid"
+
+port="$(ruby -rsocket -e 'server = TCPServer.new("127.0.0.1", 0); puts server.addr[1]; server.close')"
+origin="http://127.0.0.1:${port}"
+token="sk_proj_test_alice_key_000000000000000000000000"
+
+env RAILS_ENV=test SCREENOTE_BASE_URL="${origin}" SCREENOTE_TEST_MEMORY_CACHE=1 \
+  bin/rails server --binding 127.0.0.1 --port "${port}" \
+  --environment test --pid "${qualification_root}/server.pid" >"${server_log}" 2>&1 &
+server_pid=$!
+
+ready=false
+for _attempt in $(seq 1 80); do
+  if curl --fail --silent --output /dev/null \
+    --header "Authorization: Bearer ${token}" "${origin}/api/v1/projects"; then
+    ready=true
+    break
+  fi
+  kill -0 "${server_pid}" >/dev/null 2>&1 || break
+  sleep 0.25
+done
+[[ "${ready}" == true ]] || fail "Rails test server did not become ready"
+
+(cd "${SCREENOTE_PUBLIC_CLI_SOURCE}" && go build -o "${qualification_root}/screenote" ./cmd/screenote)
+cli=(
+  "${qualification_root}/screenote"
+  --config "${qualification_root}/config.toml"
+  --base-url "${origin}"
+  --token "${token}"
+  --project "${project_id}"
+)
+
+"${cli[@]}" comment add --annotation "${annotation_id}" \
+  --body "Source qualification body-only comment" >"${qualification_root}/body-only.json"
+BODY_ONLY="${qualification_root}/body-only.json" ruby -rjson -e '
+  payload = JSON.parse(File.binread(ENV.fetch("BODY_ONLY")))
+  abort "body-only comment contract failed" unless payload["success"] == true && payload.dig("comment", "id")
+'
+
+image_path="${REPOSITORY_ROOT}/test/fixtures/files/desktop_screenshot.png"
+"${cli[@]}" comment add --annotation "${annotation_id}" \
+  --body "Source qualification image comment" --image "${image_path}" \
+  >"${qualification_root}/image-comment.json"
+image_attachment_id="$(IMAGE_COMMENT="${qualification_root}/image-comment.json" ruby -rjson -e '
+  payload = JSON.parse(File.binread(ENV.fetch("IMAGE_COMMENT")))
+  abort "image comment contract failed" unless payload["success"] == true &&
+    payload["operation"] == "created" && payload.dig("comment", "id") &&
+    payload.dig("attachment", "id") && !payload.fetch("attachment").key?("url")
+  puts payload.dig("attachment", "id")
+')"
+
+"${cli[@]}" comment add --annotation "${annotation_id}" \
+  --body "Source qualification stdin image comment" --image - \
+  <"${image_path}" >"${qualification_root}/stdin-image-comment.json"
+stdin_attachment_id="$(STDIN_IMAGE_COMMENT="${qualification_root}/stdin-image-comment.json" ruby -rjson -e '
+  payload = JSON.parse(File.binread(ENV.fetch("STDIN_IMAGE_COMMENT")))
+  abort "stdin image comment contract failed" unless payload["success"] == true &&
+    payload["operation"] == "created" && payload.dig("comment", "id") &&
+    payload.dig("attachment", "id") && !payload.fetch("attachment").key?("url")
+  puts payload.dig("attachment", "id")
+')"
+
+read -r root_attachment_id reply_attachment_id < <(
+  SOURCE_ATTACHMENT_ID="${image_attachment_id}" ANNOTATION_ID="${annotation_id}" \
+    env RAILS_ENV=test bin/rails runner '
+      source = ImageAttachment.find(Integer(ENV.fetch("SOURCE_ATTACHMENT_ID"), 10))
+      annotation = Annotation.find(Integer(ENV.fetch("ANNOTATION_ID"), 10))
+      attributes = {
+        user: source.user,
+        project: source.project,
+        state: :ready,
+        media_type: source.media_type,
+        width: source.width,
+        height: source.height,
+        byte_size: source.byte_size
+      }
+      root = ImageAttachment.create!(
+        **attributes,
+        annotation: annotation,
+        client_key: "source-qualification-root-#{source.id}"
+      )
+      root.image.attach(source.image.blob)
+      reply = annotation.annotation_comments.create!(
+        user: source.user,
+        body: "Source qualification browser-domain reply"
+      )
+      reply_attachment = ImageAttachment.create!(
+        **attributes,
+        annotation_comment: reply,
+        client_key: "source-qualification-reply-#{source.id}"
+      )
+      reply_attachment.image.attach(source.image.blob)
+      puts [root.id, reply_attachment.id].join(" ")
+    '
+)
+[[ "${root_attachment_id}" =~ ^[0-9]+$ && "${reply_attachment_id}" =~ ^[0-9]+$ ]] ||
+  fail "seeded attachment identities are invalid"
+
+if [[ -n "${SCREENOTE_EXPECT_ACTIVE_STORAGE_SERVICE-}" ]]; then
+  ATTACHMENT_ID="${image_attachment_id}" EXPECTED_SERVICE="${SCREENOTE_EXPECT_ACTIVE_STORAGE_SERVICE}" \
+    env RAILS_ENV=test bin/rails runner '
+      service = ImageAttachment.find(Integer(ENV.fetch("ATTACHMENT_ID"), 10)).image.blob.service_name
+      abort "unexpected Active Storage service #{service.inspect}" unless service == ENV.fetch("EXPECTED_SERVICE")
+    '
+fi
+
+"${cli[@]}" annotation get --annotation "${annotation_id}" \
+  --attachments-dir "${qualification_root}/attachments" >"${qualification_root}/detail.json"
+DETAIL="${qualification_root}/detail.json" \
+  ROOT_ATTACHMENT_ID="${root_attachment_id}" \
+  IMAGE_ATTACHMENT_ID="${image_attachment_id}" \
+  STDIN_ATTACHMENT_ID="${stdin_attachment_id}" \
+  REPLY_ATTACHMENT_ID="${reply_attachment_id}" \
+  ruby -rjson -e '
+  payload = JSON.parse(File.binread(ENV.fetch("DETAIL")))
+  roots = payload.fetch("attachments")
+  replies = payload.fetch("comments").flat_map { |item| item.fetch("attachments") }
+  expected_roots = [Integer(ENV.fetch("ROOT_ATTACHMENT_ID"), 10)]
+  expected_replies = %w[IMAGE_ATTACHMENT_ID STDIN_ATTACHMENT_ID REPLY_ATTACHMENT_ID]
+    .map { |name| Integer(ENV.fetch(name), 10) }.sort
+  abort "root attachment materialization contract failed" unless roots.map { |item| item.fetch("id") } == expected_roots
+  abort "reply attachment materialization contract failed" unless replies.map { |item| item.fetch("id") }.sort == expected_replies
+
+  (roots + replies).each do |attachment|
+    abort "purpose-token fields leaked" if attachment.key?("url") || attachment.key?("url_expires_at")
+    local_path = attachment.fetch("local_path")
+    abort "local attachment path is not absolute" unless local_path.start_with?(File::SEPARATOR)
+    puts [attachment.fetch("id"), local_path].join("\t")
+  end
+' >"${qualification_root}/downloaded-paths"
+while IFS=$'\t' read -r downloaded_id downloaded_path; do
+  [[ "${downloaded_id}" =~ ^[0-9]+$ ]] || fail "downloaded attachment ID is invalid"
+  cmp --silent "${image_path}" "${downloaded_path}" || fail "downloaded attachment bytes differ"
+  [[ "$(stat --format=%a "${downloaded_path}")" == "600" ]] || fail "downloaded attachment is not private"
+done <"${qualification_root}/downloaded-paths"
+
+raw_detail="${qualification_root}/raw-detail.json"
+curl --fail-with-body --silent --show-error \
+  --header "Authorization: Bearer ${token}" \
+  "${origin}/api/v1/annotations/${annotation_id}?project_id=${project_id}" >"${raw_detail}"
+media_url="$(DETAIL="${raw_detail}" ATTACHMENT_ID="${image_attachment_id}" ruby -rjson -e '
+  payload = JSON.parse(File.binread(ENV.fetch("DETAIL")))
+  attachments = payload.fetch("attachments") + payload.fetch("comments").flat_map { |item| item.fetch("attachments") }
+  puts attachments.find { |item| item.fetch("id") == Integer(ENV.fetch("ATTACHMENT_ID"), 10) }.fetch("url")
+')"
+revoked_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header 'Authorization: Bearer sk_proj_test_alice_revoked_00000000000000000000' "${media_url}")"
+[[ "${revoked_status}" == "401" ]] || fail "revoked credential did not fail closed"
+
+expired_token="$(ATTACHMENT_ID="${image_attachment_id}" env RAILS_ENV=test bin/rails runner '
+  require "active_support/testing/time_helpers"
+  include ActiveSupport::Testing::TimeHelpers
+  attachment = ImageAttachment.find(Integer(ENV.fetch("ATTACHMENT_ID"), 10))
+  travel_to((ImageAttachment::MEDIA_TOKEN_EXPIRY + 1.minute).ago) do
+    puts attachment.generate_token_for(ImageAttachment::MEDIA_TOKEN_PURPOSE)
+  end
+')"
+expired_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --header "Authorization: Bearer ${token}" \
+  "${origin}/api/media/image_attachments/${image_attachment_id}?token=${expired_token}")"
+[[ "${expired_status}" == "404" ]] || fail "expired purpose token did not fail closed"
+
+proxy_port_file="${qualification_root}/retry-proxy.port"
+PROXY_ORIGIN="${origin}" PROXY_ROOT="${qualification_root}" PROXY_PORT_FILE="${proxy_port_file}" bundle exec ruby <<'RUBY' &
+require "json"
+require "net/http"
+require "uri"
+require "webrick"
+
+origin = URI(ENV.fetch("PROXY_ORIGIN"))
+root = ENV.fetch("PROXY_ROOT")
+count = 0
+server = WEBrick::HTTPServer.new(
+  BindAddress: "127.0.0.1",
+  Port: 0,
+  Logger: WEBrick::Log.new(File::NULL, WEBrick::Log::FATAL),
+  AccessLog: []
+)
+File.write(ENV.fetch("PROXY_PORT_FILE"), server.listeners.first.addr[1].to_s)
+server.mount_proc("/") do |request, response|
+  count += 1
+  backend_request = Net::HTTP::Post.new(request.request_uri)
+  %w[authorization content-type idempotency-key screenote-image-sha256].each do |header|
+    backend_request[header] = request[header] if request[header]
+  end
+  backend_request.body = request.body
+  backend_response = Net::HTTP.start(origin.host, origin.port) do |http|
+    http.request(backend_request)
+  end
+  File.binwrite(File.join(root, "retry-backend-#{count}.json"), backend_response.body)
+  File.open(File.join(root, "retry-keys"), "a", 0o600) { |file| file.puts(request["idempotency-key"]) }
+
+  if count == 1
+    response.status = 503
+    response["Content-Type"] = "application/json"
+    response.body = JSON.generate(error: "upstream response was lost", code: "gateway_unavailable")
+  else
+    response.status = backend_response.code.to_i
+    response["Content-Type"] = backend_response["content-type"]
+    response["Screenote-API-Capability"] = backend_response["screenote-api-capability"]
+    response.body = backend_response.body
+    Thread.new { sleep 0.05; server.shutdown }
+  end
+end
+server.start
+RUBY
+retry_proxy_pid=$!
+auxiliary_pids+=("${retry_proxy_pid}")
+wait_for_file "${proxy_port_file}" "${retry_proxy_pid}" || fail "retry proxy did not become ready"
+retry_origin="http://127.0.0.1:$(<"${proxy_port_file}")"
+retry_cli=(
+  "${qualification_root}/screenote"
+  --config "${qualification_root}/retry-config.toml"
+  --base-url "${retry_origin}"
+  --token "${token}"
+  --project "${project_id}"
+)
+"${retry_cli[@]}" comment add --annotation "${annotation_id}" \
+  --body "Source qualification lost response replay" --image "${image_path}" \
+  >"${qualification_root}/retry-result.json"
+wait "${retry_proxy_pid}"
+RETRY_RESULT="${qualification_root}/retry-result.json" \
+  RETRY_FIRST="${qualification_root}/retry-backend-1.json" \
+  RETRY_SECOND="${qualification_root}/retry-backend-2.json" \
+  ruby -rjson -e '
+    result = JSON.parse(File.binread(ENV.fetch("RETRY_RESULT")))
+    first = JSON.parse(File.binread(ENV.fetch("RETRY_FIRST")))
+    second = JSON.parse(File.binread(ENV.fetch("RETRY_SECOND")))
+    abort "CLI lost-response replay contract failed" unless result["operation"] == "replayed" &&
+      first["operation"] == "created" && second["operation"] == "replayed" &&
+      first.dig("comment", "id") == second.dig("comment", "id") &&
+      first.dig("attachment", "id") == second.dig("attachment", "id")
+  '
+mapfile -t retry_keys <"${qualification_root}/retry-keys"
+[[ "${#retry_keys[@]}" == 2 && -n "${retry_keys[0]}" && "${retry_keys[0]}" == "${retry_keys[1]}" ]] ||
+  fail "CLI retry did not preserve one idempotency key"
+
+old_server_port_file="${qualification_root}/old-server.port"
+OLD_SERVER_LOG="${qualification_root}/old-server.requests" \
+  OLD_SERVER_PORT_FILE="${old_server_port_file}" bundle exec ruby <<'RUBY' &
+require "json"
+require "webrick"
+
+server = WEBrick::HTTPServer.new(
+  BindAddress: "127.0.0.1",
+  Port: 0,
+  Logger: WEBrick::Log.new(File::NULL, WEBrick::Log::FATAL),
+  AccessLog: []
+)
+File.write(ENV.fetch("OLD_SERVER_PORT_FILE"), server.listeners.first.addr[1].to_s)
+server.mount_proc("/") do |request, response|
+  File.open(ENV.fetch("OLD_SERVER_LOG"), "a", 0o600) { |file| file.puts([request.request_method, request.path].join(" ")) }
+  response.status = 404
+  response["Content-Type"] = "application/json"
+  response.body = JSON.generate(error: "Not found", code: "not_found")
+  Thread.new { sleep 0.05; server.shutdown }
+end
+server.start
+RUBY
+old_server_pid=$!
+auxiliary_pids+=("${old_server_pid}")
+wait_for_file "${old_server_port_file}" "${old_server_pid}" || fail "old-server stub did not become ready"
+old_server_origin="http://127.0.0.1:$(<"${old_server_port_file}")"
+set +e
+"${qualification_root}/screenote" \
+  --config "${qualification_root}/old-server-config.toml" \
+  --base-url "${old_server_origin}" \
+  --token "${token}" \
+  --project "${project_id}" \
+  comment add --annotation "${annotation_id}" \
+  --body "Source qualification old server refusal" --image "${image_path}" \
+  >"${qualification_root}/old-server.stdout" 2>"${qualification_root}/old-server.stderr"
+old_server_status=$?
+set -e
+wait "${old_server_pid}"
+(( old_server_status != 0 )) || fail "old server image comment unexpectedly succeeded"
+OLD_SERVER_ERROR="${qualification_root}/old-server.stderr" ruby -rjson -e '
+  payload = JSON.parse(File.binread(ENV.fetch("OLD_SERVER_ERROR")))
+  abort "old server refusal code changed" unless payload["code"] == "image_comments_unsupported"
+'
+mapfile -t old_server_requests <"${qualification_root}/old-server.requests"
+[[ "${#old_server_requests[@]}" == 1 && "${old_server_requests[0]}" == \
+  "POST /api/v1/annotations/${annotation_id}/image_comments" ]] ||
+  fail "old server refusal attempted a legacy text-only fallback"
+
+printf 'public CLI source qualification: passed\n'

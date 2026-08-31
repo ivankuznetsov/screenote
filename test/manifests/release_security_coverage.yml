@@ -8,6 +8,7 @@ discovery:
   - app/services/api/bearer_authenticator.rb
   - app/services/api/v1/project_scope.rb
   - app/services/authentication_links/*.rb
+  - app/services/image_attachments/create_api_comment.rb
   - app/services/installations/*.rb
   - app/services/instance_accounts/*.rb
   - app/services/instance_administration/*.rb
@@ -16,6 +17,7 @@ discovery:
   - app/services/project_memberships/remove.rb
   - app/services/{admission_lock,authenticated_principal,authority_lock,database_retry}.rb
   - lib/screenote/deployment*.rb
+  - lib/screenote/image_comment_request_limit.rb
 
 domains:
   deployment:
@@ -52,6 +54,7 @@ domains:
     - app/controllers/api/v1/annotation_comments_controller.rb
     - app/controllers/api/v1/annotation_resolutions_controller.rb
     - app/controllers/api/v1/annotations_controller.rb
+    - app/controllers/api/v1/image_comments_controller.rb
     - app/controllers/api/v1/pages_controller.rb
     - app/controllers/api/v1/projects_controller.rb
     - app/controllers/api/v1/screenshot_images_controller.rb
@@ -60,6 +63,7 @@ domains:
     - app/controllers/api_keys_controller.rb
     - app/controllers/application_controller.rb
     - app/controllers/collaborator_suggestions_controller.rb
+    - app/controllers/concerns/api/image_upload_rate_limiting.rb
     - app/controllers/concerns/blob_streaming.rb
     - app/controllers/concerns/image_attachment_submission.rb
     - app/controllers/concerns/page_workspace_navigation.rb
@@ -87,7 +91,9 @@ domains:
     - app/services/api/v1/project_scope.rb
     - app/services/authenticated_principal.rb
     - app/services/authority_lock.rb
+    - app/services/image_attachments/create_api_comment.rb
     - app/services/oauth/principal_binding.rb
+    - lib/screenote/image_comment_request_limit.rb
   suspension:
     - app/controllers/instance/accounts_controller.rb
     - app/models/user.rb

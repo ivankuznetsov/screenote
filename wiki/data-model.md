@@ -11,7 +11,7 @@ tags: [database, schema, models, relationships]
 
 TLDR: Screenote has 18 domain tables plus 3 Active Storage and 4 OAuth tables. The core hierarchy is User -> Project -> Page -> Screenshot -> ScreenshotImage, with Snapshot grouping screenshots captured during a `/snapshot` run and annotations scoped to a screenshot viewport. Collaboration is via ProjectMembership and ProjectInvitation. Billing is via Subscription and StripeWebhookEvent. API access is via ApiKey and OAuth. Installation persists the one deployment/storage/ownership identity, authentication-link credentials are digest-only rows, and AdmissionLock stores only one-way email keys for adapter-neutral admission serialization.
 
-Source: `db/schema.rb` (schema version `2026_08_09_120000`)
+Source: `db/schema.rb` (schema version `2026_08_30_170000`)
 
 ## ER Diagram
 
@@ -83,7 +83,7 @@ erDiagram
 | `screenshots` | Logical capture/version under a page | title, page_id, snapshot_id, optional manifest_entry_digest, derived status, legacy width/height during migration |
 | `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), content_sha256, expected_content_type, width, height |
 | `annotations` | Feedback pinned to screenshot regions | x_percent, y_percent, width_percent, height_percent, viewport, comment, status (enum), screenshot_id, user_id |
-| `annotation_comments` | Threaded comments on annotations | body, action (enum), annotation_id, user_id, api_key_id, notified_at |
+| `annotation_comments` | Threaded comments and durable API image-comment idempotency receipts | body, action (enum), annotation_id, user_id, api_key_id, nullable idempotency_fingerprint/request_digest, notified_at |
 | `image_attachment_batches` | Server-owned composer draft container and one-use submission key | public_id, client_key, user_id, project_id, state (enum), claimed_annotation_id, claimed_annotation_comment_id, last_activity_at, expires_at |
 | `image_attachments` | One image on a native browser message | image_attachment_batch_id, annotation_id, annotation_comment_id, user_id, project_id, state (enum), client_key, alt_text, media_type, width, height, byte_size, failure_code |
 
@@ -159,6 +159,7 @@ erDiagram
 - `annotations.(screenshot_id, viewport)` -- composite for per-viewport annotation views
 - `annotation_comments.(annotation_id, created_at)` -- composite for ordered threads
 - `annotation_comments.(action, notified_at)` -- for digest notification queries
+- `annotation_comments.idempotency_fingerprint` -- partial unique receipt identity for one authenticated principal, annotation, and image-comment key; paired format checks require both 64-character lowercase digests or neither
 - `image_attachment_batches.public_id` -- unique unguessable browser-facing handle and one-use submission key
 - `image_attachment_batches.(state, expires_at)` -- bounded candidate scan for draft cleanup
 - `image_attachments.(image_attachment_batch_id, client_key)` -- partial unique index making an upload retry reuse its slot rather than open a new one

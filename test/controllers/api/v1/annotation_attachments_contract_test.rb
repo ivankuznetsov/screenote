@@ -23,6 +23,7 @@ module Api
         get_detail
 
         assert_response :success
+        assert_equal "private, no-store", response.headers.fetch("Cache-Control")
         body = response.parsed_body
         assert_equal [ root.id ], body.fetch("attachments").map { |item| item["id"] }
         assert_equal "The disabled save button", body.dig("attachments", 0, "alt_text")
