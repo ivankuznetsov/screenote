@@ -24,8 +24,10 @@ module Screenote
     # a readiness probe that demanded it from the first second would stop the
     # deployment it gates from ever coming up.
     test "a booting process is registered before a supervisor could have appeared" do
-      with_supervisor_tables do
-        assert Screenote::RecurringTasks.registered?(environment: "production")
+      during_startup_grace do
+        with_supervisor_tables do
+          assert Screenote::RecurringTasks.registered?(environment: "production")
+        end
       end
     end
 
@@ -83,10 +85,18 @@ module Screenote
 
     private
 
+    def during_startup_grace(&)
+      with_booted_at(Process.clock_gettime(Process::CLOCK_MONOTONIC), &)
+    end
+
     def after_startup_grace
+      booted_at = Process.clock_gettime(Process::CLOCK_MONOTONIC) - Screenote::RecurringTasks::STARTUP_GRACE - 60
+      with_booted_at(booted_at) { yield }
+    end
+
+    def with_booted_at(booted_at)
       original = Screenote::RecurringTasks.booted_at
-      Screenote::RecurringTasks.booted_at =
-        original - Screenote::RecurringTasks::STARTUP_GRACE - 60
+      Screenote::RecurringTasks.booted_at = booted_at
       yield
     ensure
       Screenote::RecurringTasks.booted_at = original
