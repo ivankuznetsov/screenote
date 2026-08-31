@@ -69,12 +69,4 @@ module ImageAttachmentSubmission
       ready_attachment_ids: ready_attachment_ids(batch)
     }.merge(submitted_form_fields)
   end
-
-  # The editable half of the composer. A rejected post must be able to put the
-  # message text — and, for the root overlay, the region that was selected —
-  # back after a remount, so every controller that submits attachments answers
-  # with the fields it accepted rather than only with batch metadata.
-  def submitted_form_fields
-    {}
-  end
 end
