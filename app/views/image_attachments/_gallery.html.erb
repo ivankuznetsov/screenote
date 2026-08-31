@@ -1,0 +1,77 @@
+<% attachments = attachments.to_a %>
+<% if attachments.any? %>
+  <% context = local_assigns.fetch(:context, "light") %>
+  <div class="image-attachment-gallery image-attachment-context--<%= context %>"
+       data-controller="image-attachment-viewer"
+       data-testid="image-attachment-gallery">
+    <ul class="image-attachment-gallery__items">
+      <% attachments.each_with_index do |attachment, index| %>
+        <li class="image-attachment-gallery__item">
+          <button type="button"
+                  class="image-attachment-gallery__trigger"
+                  data-action="image-attachment-viewer#open"
+                  data-image-attachment-viewer-target="trigger"
+                  data-index="<%= index %>"
+                  data-original-url="<%= image_attachment_media_path(attachment, :original) %>"
+                  data-download-url="<%= image_attachment_media_path(attachment, :download) %>"
+                  data-alt="<%= attachment.display_alt_text %>"
+                  data-testid="attachment-thumbnail">
+            <% if attachment.thumbnails_renderable? %>
+              <img class="image-attachment-gallery__image"
+                   src="<%= image_attachment_media_path(attachment, :attachment_thumb_1x) %>"
+                   srcset="<%= image_attachment_media_path(attachment, :attachment_thumb_1x) %> 1x, <%= image_attachment_media_path(attachment, :attachment_thumb_2x) %> 2x"
+                   alt="<%= attachment.display_alt_text %>"
+                   loading="lazy"
+                   decoding="async">
+            <% else %>
+              <span class="image-attachment-gallery__placeholder" data-testid="attachment-placeholder">
+                <span class="image-attachment-gallery__placeholder-label"><%= attachment.display_alt_text %></span>
+              </span>
+            <% end %>
+          </button>
+        </li>
+      <% end %>
+    </ul>
+
+    <dialog class="image-attachment-viewer"
+            aria-label="Attached image viewer"
+            data-image-attachment-viewer-target="dialog"
+            data-testid="attachment-viewer">
+      <div class="image-attachment-viewer__frame">
+        <%# The dialog opens focus onto its content, so the image itself has to
+            be programmatically focusable. %>
+        <img class="image-attachment-viewer__image"
+             alt=""
+             tabindex="-1"
+             data-image-attachment-viewer-target="image"
+             data-testid="attachment-viewer-image">
+      </div>
+      <div class="image-attachment-viewer__bar">
+        <button type="button" class="btn btn--small btn--secondary"
+                data-action="image-attachment-viewer#previous"
+                data-image-attachment-viewer-target="previous"
+                data-testid="attachment-viewer-previous">Previous</button>
+        <button type="button" class="btn btn--small btn--secondary"
+                data-action="image-attachment-viewer#next"
+                data-image-attachment-viewer-target="next"
+                data-testid="attachment-viewer-next">Next</button>
+        <button type="button" class="btn btn--small btn--secondary"
+                data-action="image-attachment-viewer#zoomOut">Zoom out</button>
+        <button type="button" class="btn btn--small btn--secondary"
+                data-action="image-attachment-viewer#zoomIn"
+                data-testid="attachment-viewer-zoom-in">Zoom in</button>
+        <a class="btn btn--small btn--secondary"
+           data-image-attachment-viewer-target="download"
+           data-testid="attachment-viewer-download"
+           download>Download</a>
+        <a class="btn btn--small btn--secondary"
+           target="_blank" rel="noopener"
+           data-image-attachment-viewer-target="openOriginal"
+           data-testid="attachment-viewer-open-original">Open original</a>
+        <button type="button" class="btn btn--small btn--secondary"
+                data-action="image-attachment-viewer#close"
+                data-testid="attachment-viewer-close">Close</button>
+      </div>
+    </dialog>
+  </div>
+<% end %>

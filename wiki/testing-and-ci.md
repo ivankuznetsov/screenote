@@ -3,7 +3,7 @@ title: Testing and CI
 type: operations
 source: test/, bin/ci, config/ci.rb, .github/workflows/ci.yml, .github/workflows/release-qualification.yml
 created: 2026-07-28
-updated: 2026-08-08
+updated: 2026-08-31
 tags: [testing, ci, minitest, capybara, playwright]
 ---
 
@@ -27,6 +27,11 @@ BUNDLE_PATH=vendor/bundle PARALLEL_WORKERS=1 bundle exec bin/rails test \
 Image-processing tests require libvips. The helper `require_vips!` skips those
 tests explicitly when the system dependency is absent instead of hiding a
 processing failure.
+
+Stale parallel test databases cause misleading `SQLite3::BusyException`
+failures spread across unrelated tests. If a run reports many lock errors in
+fixture loading, remove `storage/test.sqlite3*` and re-run
+`bin/rails db:test:prepare` before investigating the code.
 
 Every CI job that boots Rails must install libvips before `ruby/setup-ruby`
 hands control to the test command. The application loads the Vips initializer
@@ -74,6 +79,48 @@ invalidates an existing browser session, restoration requires a fresh sign-in,
 and a private recovery link resets credentials once in a separate session while
 rejecting replay and the former password.
 
+`test/system/image_attachments_test.rb` is the browser contract for image
+attachments. Every input path is proved all the way to a posted message rather
+than only to an attachment: root, reply, and unresolve each post several images
+collected through the picker, composer-scoped drop, and a real clipboard paste.
+It also covers mixed clipboard input, per-file progress, alt text, removal, a
+failed upload holding the submit control closed until a retry finishes it, 422
+rehydration, the gallery placeholder warming into responsive thumbnails, the
+modal viewer for one image and for several — navigation hidden when there is
+nothing to navigate to, zoom, download, open-original, focus handling — narrow
+layout, the explicit light and dark component contexts for both the composer
+and the nested viewer, and the composer's polite live region. Two geometry contracts sit side by side: against the full-size
+`desktop_screenshot.png` fixture the clamped overlay must leave the selected
+region completely uncovered, and against a thumbnail-sized capture it must at
+least stay one compact rail inside the image.
+
+`SCREENOTE_EVIDENCE_DIR` turns any browser run into a recorded one. Each test
+writes a Playwright trace (`<test>.trace.zip`), and `capture_evidence` writes a
+named frame plus the page facts a picture cannot show — resolved media paths,
+srcset candidates, component context, measured geometry.
+`script/attachment_browser_evidence` runs the attachment suite that way,
+extracts each trace into an ordered filmstrip, and encodes that filmstrip into
+a watchable `<test>.webm`.
+
+Both halves fail closed. A trace that cannot be started or cannot be written
+fails its test rather than printing a note, and the script refuses a non-empty
+output directory and requires one trace per declared test in the suite, so a
+stale directory or a run that stopped early cannot satisfy the gate.
+
+The video is encoded from the trace screencast, not recorded by the browser.
+Playwright's own `record_video_dir` cannot be used here: `reset!` in
+`capybara-playwright-driver` asks the page for its video path while the page is
+still open, and `Playwright::Video#path` blocks on a future that the page-close
+event rejects, so a run that sets the option hangs and leaves a zero-byte file.
+The trace screencast carries the same picture — roughly 20 frames a second for
+the whole length of a test — and each frame keeps the millisecond it was
+captured at in its name, so the concat encode reproduces the run's real timing
+rather than a nominal frame rate. Frames must be ordered by that numeric tail
+read from the bare file name; the enclosing path contains hyphens of its own.
+Anything read from the live browser must happen in `before_teardown`, because
+Capybara closes the context in `after_teardown`, ahead of ordinary teardown
+callbacks.
+
 `DEVICE_SCALE_FACTOR` configures the Playwright context for responsive-image
 proof. Run `test/system/pages_test.rb` at both `1` and `2`; its responsive card
 test verifies `currentSrc` selects the 480w and 960w candidates respectively
@@ -99,11 +146,57 @@ model, and Rake task tests.
 ## Full gate
 
 `bin/ci` installs missing dependencies and runs formatting/whitespace checks,
-security scans, Rails tests, seed validation, and any configured Go tests. Set
+security scans, Rails tests, seed validation, and the Go tests as
+`env GOFLAGS=-mod=mod go test ./...` — the module flag is required because the
+repository's top-level `vendor/` directory belongs to Ruby, and a bare
+`go test` reads it as an inconsistent Go vendor tree and refuses to run. Set
 `REQUIRE_COVERAGE=true` to enforce the SimpleCov line and branch thresholds;
 coverage mode forces one Rails worker for stable accounting. System tests are
 currently commented out as optional in `config/ci.rb`, so run the Playwright
 command above separately when browser behavior changes.
+
+One adapter-specific workflow sits outside that boundary. `concurrency-qualification.yml`
+runs `script/release_test_matrix attachment-lifecycle` against a PostgreSQL
+server database so real row locks exercise lock ordering, atomic claim,
+aggregate races, and the cleanup/remove/submit races that SQLite can only assert
+by outcome. It is a required status check on the default branch, and
+`bin/release-validate` asserts both that requirement and the workflow's own
+shape, so the branch cannot merge with that evidence unproven. It is a separate workflow precisely so `ci.yml` stays free of
+adapter-specific content and the portability contract keeps passing. The
+ephemeral, runner-local PostgreSQL service uses trust authentication and a
+credential-free loopback URL, so the workflow does not carry a reusable test
+password in its published source.
+
+Every race in that suite proves real overlap before it asserts an outcome: the
+helper starts the second operation, confirms it is blocked on the transaction
+the first one is parked inside, and only then releases. Serial execution cannot
+pass. The aggregate race runs against the real 50 MB message ceiling — the
+batch is seeded with recorded byte sizes up to exactly one more file's worth of
+room — rather than a stubbed limit.
+
+The gate names one list of suites and runs it against whatever database is
+configured, so the SQLite and server-database halves cannot drift apart. Two
+cases in that list only mean something on a server database — the account
+byte-ceiling serialization race and the adapter assertion that keeps the
+qualification honest — and they skip on SQLite.
+`script/attachment_server_database_qualification` boots an ephemeral server
+database, exports `SCREENOTE_SERVER_DATABASE_QUALIFICATION=1`, and reruns the
+gate, so that half is reproducible outside CI rather than only inside it.
+
+The `s3` gate carries the delivery half of the same contract.
+`test/integration/image_attachment_s3_delivery_contract_test.rb` points the
+whole application at the configured object store and drives the protected
+session and bearer routes through it, which is the only way to prove the
+application streams the bytes itself: a Disk service has no presigned URL to
+leak and no remote host to redirect to.
+`script/attachment_object_store_qualification` supplies that store the same way
+the database script supplies a database — an ephemeral MinIO container on the
+same immutable image `container-s3` uses — and reruns the gate, so the delivery
+half is reproducible outside CI too. It accepts an operator's own endpoint
+through `SCREENOTE_S3_ENDPOINT` and its companions for a run against the hosted
+provider. The gate exports `SCREENOTE_REQUIRE_S3=1`, which turns the suite's
+"no store configured" skip into a failure, so a qualification run cannot pass
+by not running.
 
 The source workflow has one adapter-neutral `test` job for the Rails suite and
 the self-hosted-only smoke tests. It replaces separate SQLite and PostgreSQL

@@ -47,6 +47,7 @@ domains:
     - app/controllers/annotation_comments_controller.rb
     - app/controllers/annotations_controller.rb
     - app/controllers/api/base_controller.rb
+    - app/controllers/api/image_attachment_media_controller.rb
     - app/controllers/api/screenshot_uploads_controller.rb
     - app/controllers/api/v1/annotation_comments_controller.rb
     - app/controllers/api/v1/annotation_resolutions_controller.rb
@@ -59,9 +60,15 @@ domains:
     - app/controllers/api_keys_controller.rb
     - app/controllers/application_controller.rb
     - app/controllers/collaborator_suggestions_controller.rb
+    - app/controllers/concerns/blob_streaming.rb
+    - app/controllers/concerns/image_attachment_submission.rb
     - app/controllers/concerns/page_workspace_navigation.rb
     - app/controllers/concerns/project_authorization.rb
     - app/controllers/concerns/screenote_session_management.rb
+    - app/controllers/image_attachment_drafts/attachments_controller.rb
+    - app/controllers/image_attachment_drafts/base_controller.rb
+    - app/controllers/image_attachment_drafts/batches_controller.rb
+    - app/controllers/image_attachment_media_controller.rb
     - app/controllers/media_controller.rb
     - app/controllers/oauth/authorizations_controller.rb
     - app/controllers/oauth/device_authorization_requests_controller.rb

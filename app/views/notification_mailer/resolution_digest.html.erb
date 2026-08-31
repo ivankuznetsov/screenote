@@ -32,13 +32,28 @@
                 <p style="margin: 0 0 6px 0; font-size: 14px; color: #b0b0c0; line-height: 1.6;">
                   <strong style="color: #8888a0;">Your annotation:</strong> <%= truncate(item[:annotation_text], length: 200) %>
                 </p>
+                <% if item[:annotation_attachments].any? %>
+                  <p style="margin: 0 0 6px 0; font-size: 13px; color: #8888a0; line-height: 1.6;">
+                    <%= pluralize(item[:annotation_attachments].size, "image") %> attached:
+                    <%= item[:annotation_attachments].map { |a| a[:alt_text] }.join(", ") %>
+                  </p>
+                <% end %>
                 <% if item[:reply_text] %>
                   <p style="margin: 0 0 6px 0; font-size: 14px; color: #b0b0c0; line-height: 1.6;">
                     <strong style="color: #8888a0;">Reply:</strong> <%= truncate(item[:reply_text], length: 500) %>
                   </p>
                 <% end %>
-                <p style="margin: 0; font-size: 12px; color: #5a5a6e;">
+                <% if item[:reply_attachments].any? %>
+                  <p style="margin: 0 0 6px 0; font-size: 13px; color: #8888a0; line-height: 1.6;">
+                    Reply attached <%= pluralize(item[:reply_attachments].size, "image") %>:
+                    <%= item[:reply_attachments].map { |a| a[:alt_text] }.join(", ") %>
+                  </p>
+                <% end %>
+                <p style="margin: 0 0 6px 0; font-size: 12px; color: #5a5a6e;">
                   Resolved by <%= item[:resolver] %>
+                </p>
+                <p style="margin: 0; font-size: 13px;">
+                  <a href="<%= item[:url] %>" style="color: #e5a31e;">Open this annotation</a>
                 </p>
               </td>
             </tr>

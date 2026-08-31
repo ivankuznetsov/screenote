@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-10
+updated: 2026-08-31
 tags: [gaps, documentation, todo, deployment, once, release]
 ---
 
@@ -142,6 +142,50 @@ The following gaps from the original bootstrap have been partially or fully addr
 
 - ~~Where do MCP tool classes live?~~ Confirmed: `app/tools/` with `ApplicationTool` base class.
 - Plans and todos now documented in [[plans-and-initiatives]], [[technical-debt]], and [[roadmap]].
+
+## Image attachments
+
+- Attachment delivery now has an object-store contract of its own.
+  `test/integration/image_attachment_s3_delivery_contract_test.rb` points the
+  whole application at a real S3-compatible service and drives the protected
+  session and bearer routes through it, asserting provider-stored bytes, no
+  `Location`, no provider host in any header, application-served byte ranges,
+  the five-minute purpose token expiring, and revoked membership losing access.
+  It runs in the existing `script/release_test_matrix s3` gate against MinIO,
+  and `script/attachment_object_store_qualification` supplies that store on any
+  machine with a container engine, so the run no longer waits on an operator.
+  Running it against the production Rabata endpoint specifically still needs
+  operator-supplied credentials, which the same script accepts through
+  `SCREENOTE_S3_ENDPOINT` and its companions.
+- The clamped Annotorious overlay is now verified to leave the selected region
+  completely uncovered against a full-size 1440x900 page capture
+  (`test/fixtures/files/desktop_screenshot.png`), which is the geometry the
+  claim is about. On a screenshot small enough that no placement can avoid the
+  form — a 300px-tall image with a thumbnail row present — the algorithm still
+  only minimizes overlap, and the older compact-rail assertion covers that case.
+- Browser evidence is a watchable video per test plus named frames.
+  `SCREENOTE_EVIDENCE_DIR` writes `<frame>.png`, `<frame>.json`, and
+  `<test>.trace.zip`, and `script/attachment_browser_evidence` encodes each
+  trace's screencast into `<test>.webm` at the run's own pace. Playwright's own
+  `record_video_dir` is not used: `capybara-playwright-driver` asks the page for
+  its video path while the page is open, and that path blocks on a future the
+  page-close event rejects, so a run that sets the option hangs and leaves a
+  zero-byte file.
+- Readiness now requires live supervisor proof — a Solid Queue scheduler
+  heartbeat plus the recurring tasks registered in the queue database — but only
+  after a bounded startup grace. Inside that window a supervised environment
+  still reports ready on the checked-in schedule alone, because a probe that
+  demanded proof from the first second would stop the deployment it gates from
+  coming up. The window's length is a judgement, not a measurement.
+- Polyglot rejection walks each accepted container to its declared end. That
+  covers appended payloads, the case the OWASP guidance names, and it is not a
+  general malformed-input proof: a file whose declared structure is internally
+  consistent but semantically hostile is still only caught by the full libvips
+  decode that runs alongside it.
+- Live-region announcements are asserted from the DOM: the composer's
+  `role="status"` region, its polite politeness, and the exact uploaded,
+  removed, and failed text it carries. A listen-through with a real screen
+  reader is still a manual step nothing in the suite can stand in for.
 
 ## Questions to Resolve
 

@@ -15,7 +15,8 @@
 
   <div class="screenshot-workspace"
        data-controller="annotorious review-fullscreen"
-       data-action="annotorious:saved-marker-selected->review-fullscreen#showComments"
+       data-action="annotorious:saved-marker-selected->review-fullscreen#showComments
+                     image-attachment-composer:changed->annotorious#repositionForm"
        data-testid="screenshot-workspace">
     <div class="screenshot-canvas" data-annotorious-target="canvas">
       <button type="button"
@@ -93,11 +94,11 @@
 
       <div class="annotation-sidebar__list">
         <template data-annotorious-target="formTemplate">
-          <%= render "annotations/form", screenshot: @screenshot, active_viewport: @active_viewport %>
+          <%= render "annotations/form", screenshot: @screenshot, active_viewport: @active_viewport, project: @project %>
         </template>
 
         <% @annotations.each.with_index(1) do |annotation, index| %>
-          <%= render "annotations/annotation", annotation: annotation, index: index %>
+          <%= render "annotations/annotation", annotation: annotation, index: index, project: @project %>
         <% end %>
 
         <% if @annotations.empty? %>

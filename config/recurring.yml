@@ -26,6 +26,16 @@ production:
     class: ReconcileScreenshotProcessingJob
     schedule: every 5 minutes
 
+  # Abandoned composer drafts expire 24 hours after their last activity. A
+  # quarter-hour sweep keeps the reclaim window short without scanning hot.
+  clear_expired_image_attachment_drafts:
+    class: ImageAttachmentDraftCleanupJob
+    schedule: every 15 minutes
+
+  reconcile_image_attachments:
+    class: ImageAttachmentOrphanReconciliationJob
+    schedule: every hour at minute 41
+
 <% if Screenote::Deployment.current.mail? %>
   send_digest_notifications:
     class: SendDigestNotificationsJob

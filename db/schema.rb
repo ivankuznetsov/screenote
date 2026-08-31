@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_09_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -141,6 +141,59 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120000) do
     t.check_constraint "length(\"token_digest\") = 64 AND replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(\"token_digest\", '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''), 'a', ''), 'b', ''), 'c', ''), 'd', ''), 'e', ''), 'f', '') = ''", name: "authentication_tokens_digest_length"
     t.check_constraint "purpose IN (0, 1, 2, 3, 4)", name: "authentication_tokens_valid_purpose"
     t.check_constraint "state IN (0, 1, 2, 3)", name: "authentication_tokens_valid_state"
+  end
+
+  create_table "image_attachment_batches", force: :cascade do |t|
+    t.integer "claimed_annotation_comment_id"
+    t.integer "claimed_annotation_id"
+    t.string "client_key", limit: 64
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "last_activity_at", null: false
+    t.integer "project_id", null: false
+    t.string "public_id", limit: 43, null: false
+    t.integer "state", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.index ["claimed_annotation_comment_id"], name: "idx_on_claimed_annotation_comment_id_9629c6e9ac"
+    t.index ["claimed_annotation_id"], name: "index_image_attachment_batches_on_claimed_annotation_id"
+    t.index ["project_id"], name: "index_image_attachment_batches_on_project_id"
+    t.index ["public_id"], name: "index_image_attachment_batches_on_public_id", unique: true
+    t.index ["state", "expires_at"], name: "index_image_attachment_batches_on_state_and_expires_at"
+    t.index ["user_id", "client_key"], name: "index_image_attachment_batches_on_user_and_client_key", unique: true, where: "client_key IS NOT NULL AND state = 0"
+    t.index ["user_id", "state"], name: "index_image_attachment_batches_on_user_id_and_state"
+    t.index ["user_id"], name: "index_image_attachment_batches_on_user_id"
+    t.check_constraint "(state = 0 AND claimed_annotation_id IS NULL AND claimed_annotation_comment_id IS NULL) OR (state = 1 AND claimed_annotation_id IS NOT NULL AND claimed_annotation_comment_id IS NULL) OR (state = 1 AND claimed_annotation_id IS NULL AND claimed_annotation_comment_id IS NOT NULL)", name: "image_attachment_batches_claim_state"
+    t.check_constraint "expires_at > last_activity_at", name: "image_attachment_batches_future_expiry"
+    t.check_constraint "state IN (0, 1)", name: "image_attachment_batches_valid_state"
+  end
+
+  create_table "image_attachments", force: :cascade do |t|
+    t.string "alt_text", limit: 1000
+    t.integer "annotation_comment_id"
+    t.integer "annotation_id"
+    t.bigint "byte_size"
+    t.string "client_key", limit: 64, null: false
+    t.datetime "created_at", null: false
+    t.string "failure_code", limit: 64
+    t.integer "height"
+    t.integer "image_attachment_batch_id"
+    t.string "media_type", limit: 40
+    t.integer "project_id", null: false
+    t.integer "state", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "user_id", null: false
+    t.integer "width"
+    t.index ["annotation_comment_id"], name: "index_image_attachments_on_annotation_comment_id"
+    t.index ["annotation_id"], name: "index_image_attachments_on_annotation_id"
+    t.index ["image_attachment_batch_id", "client_key"], name: "index_image_attachments_on_batch_client_key", unique: true, where: "image_attachment_batch_id IS NOT NULL"
+    t.index ["image_attachment_batch_id"], name: "index_image_attachments_on_image_attachment_batch_id"
+    t.index ["project_id"], name: "index_image_attachments_on_project_id"
+    t.index ["user_id"], name: "index_image_attachments_on_user_id"
+    t.check_constraint "(image_attachment_batch_id IS NOT NULL AND annotation_id IS NULL AND annotation_comment_id IS NULL) OR (image_attachment_batch_id IS NULL AND annotation_id IS NOT NULL AND annotation_comment_id IS NULL) OR (image_attachment_batch_id IS NULL AND annotation_id IS NULL AND annotation_comment_id IS NOT NULL)", name: "image_attachments_exclusive_parent"
+    t.check_constraint "byte_size IS NULL OR byte_size >= 0", name: "image_attachments_nonnegative_bytes"
+    t.check_constraint "image_attachment_batch_id IS NOT NULL OR (state = 1 AND media_type IS NOT NULL AND width IS NOT NULL AND height IS NOT NULL AND byte_size IS NOT NULL)", name: "image_attachments_submitted_ready"
+    t.check_constraint "state IN (0, 1, 2)", name: "image_attachments_valid_state"
   end
 
   create_table "installation_audit_events", force: :cascade do |t|
@@ -410,6 +463,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_120000) do
   add_foreign_key "authentication_tokens", "project_invitations"
   add_foreign_key "authentication_tokens", "users"
   add_foreign_key "authentication_tokens", "users", column: "issued_by_user_id"
+  add_foreign_key "image_attachment_batches", "annotation_comments", column: "claimed_annotation_comment_id"
+  add_foreign_key "image_attachment_batches", "annotations", column: "claimed_annotation_id"
+  add_foreign_key "image_attachment_batches", "projects"
+  add_foreign_key "image_attachment_batches", "users", on_delete: :restrict
+  add_foreign_key "image_attachments", "annotation_comments"
+  add_foreign_key "image_attachments", "annotations"
+  add_foreign_key "image_attachments", "image_attachment_batches"
+  add_foreign_key "image_attachments", "projects"
+  add_foreign_key "image_attachments", "users", on_delete: :restrict
   add_foreign_key "installation_audit_events", "installations"
   add_foreign_key "installation_audit_events", "users", column: "actor_user_id"
   add_foreign_key "installation_audit_events", "users", column: "target_user_id"

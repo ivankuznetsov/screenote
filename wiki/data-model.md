@@ -3,7 +3,7 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-08-10
+updated: 2026-08-31
 tags: [database, schema, models, relationships]
 ---
 
@@ -84,6 +84,8 @@ erDiagram
 | `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), content_sha256, expected_content_type, width, height |
 | `annotations` | Feedback pinned to screenshot regions | x_percent, y_percent, width_percent, height_percent, viewport, comment, status (enum), screenshot_id, user_id |
 | `annotation_comments` | Threaded comments on annotations | body, action (enum), annotation_id, user_id, api_key_id, notified_at |
+| `image_attachment_batches` | Server-owned composer draft container and one-use submission key | public_id, client_key, user_id, project_id, state (enum), claimed_annotation_id, claimed_annotation_comment_id, last_activity_at, expires_at |
+| `image_attachments` | One image on a native browser message | image_attachment_batch_id, annotation_id, annotation_comment_id, user_id, project_id, state (enum), client_key, alt_text, media_type, width, height, byte_size, failure_code |
 
 ### Collaboration
 
@@ -157,16 +159,24 @@ erDiagram
 - `annotations.(screenshot_id, viewport)` -- composite for per-viewport annotation views
 - `annotation_comments.(annotation_id, created_at)` -- composite for ordered threads
 - `annotation_comments.(action, notified_at)` -- for digest notification queries
+- `image_attachment_batches.public_id` -- unique unguessable browser-facing handle and one-use submission key
+- `image_attachment_batches.(state, expires_at)` -- bounded candidate scan for draft cleanup
+- `image_attachments.(image_attachment_batch_id, client_key)` -- partial unique index making an upload retry reuse its slot rather than open a new one
+- `image_attachment_batches.(user_id, client_key)` -- partial unique index over open batches, making a batch-create retry after a lost response resume the batch that key already opened
 
 ## Foreign Key Cascade Rules
 
 - `annotation_comments -> annotations`: ON DELETE CASCADE
+- `image_attachments -> users`: ON DELETE RESTRICT. Account deletion locks the account row ahead of its dependent batch destruction, which is the order ingest also takes, so the two paths cannot deadlock.
 - Annotation and comment actor foreign keys are restrictive because their database checks require exactly one durable user or API-key actor.
 - `oauth_access_grants/tokens -> oauth_applications`: ON DELETE CASCADE
 - `oauth_access_grants/tokens/device_grants -> projects`: ON DELETE CASCADE so project credentials are revoked rather than widened to account authority
 - `oauth_device_grants -> oauth_applications/users`: ON DELETE CASCADE so ephemeral grants cannot outlive their client or resource owner
 - `screenshots -> snapshots`: ON DELETE SET NULL
 - `screenshot_images -> screenshots`: no database cascade; Rails `dependent: :destroy` preserves Active Storage purge callbacks
+- `image_attachments -> annotations/annotation_comments`: no database cascade; Rails `dependent: :destroy` preserves Active Storage purge callbacks, and `ImageAttachmentOrphanReconciliationJob` is the backstop for any delete that bypasses them
+- `image_attachments/image_attachment_batches -> users`: ON DELETE RESTRICT. Deleting an account destroys its own annotations and drafts first; a submitted attachment still living on another member's message rejects the deletion rather than orphaning the uploader identity
+- A CHECK keeps an attachment on exactly one owner: a draft batch, an annotation, or an annotation comment. There is no polymorphic parent, so no future message type can silently acquire attachments
 - Duplicate snapshots for the same `(project_id, git_commit)` are allowed because repeated `/snapshot` captures of one commit can be useful at different times; `taken_at` distinguishes the runs.
 
-See also: [[schema-evolution]], [[models/user]], [[models/project]], [[models/snapshot]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]]
+See also: [[schema-evolution]], [[models/user]], [[models/project]], [[models/snapshot]], [[models/screenshot]], [[models/screenshot-image]], [[models/annotation]], [[models/image-attachment]], [[models/image-attachment-batch]]

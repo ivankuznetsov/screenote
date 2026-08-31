@@ -2,7 +2,9 @@
 
 class GetAnnotationTool < ApplicationTool
   tool_name "get_annotation"
-  description "Get annotation details with a cropped image of the annotated region (base64-encoded PNG)."
+  description "Get annotation details with a cropped image of the annotated region (base64-encoded PNG), " \
+    "plus the images attached to the annotation and to each of its comments: alt text, media type, " \
+    "dimensions, size, and a short-lived URL that must be fetched with the same bearer credential."
   mcp_action scope: :mcp_read, read_only: true, destructive: false, idempotent: true, open_world: false
 
   arguments do
@@ -15,7 +17,7 @@ class GetAnnotationTool < ApplicationTool
     return error if error
 
     with_error_handling do
-      annotation = project_annotations(current_project).find(annotation_id)
+      annotation = project_annotation_details(current_project).find(annotation_id)
 
       screenshot = annotation.screenshot
       cropped_base64 = begin
@@ -29,21 +31,12 @@ class GetAnnotationTool < ApplicationTool
         nil
       end
 
-      comments = annotation.annotation_comments.includes(:user, :api_key).order(:created_at).map do |ac|
-        {
-          id: ac.id,
-          action: ac.action,
-          body: ac.body,
-          author: ac.user&.email || ac.api_key&.name || "Unknown",
-          created_at: ac.created_at.iso8601
-        }
-      end
-
-      serialize_annotation(annotation).merge(
-        screenshot_status: screenshot.status,
-        cropped_image_base64: cropped_base64,
-        mime_type: "image/png",
-        comments: comments
+      # REST is canonical for the attachment object, but the shipped MCP
+      # envelope keeps every key it already had, in the same place.
+      Api::V1::ContractSerializer.annotation_detail(
+        annotation,
+        cropped_base64: cropped_base64,
+        url_options: Screenote::Deployment.current.url_options
       ).to_json
     end
   end

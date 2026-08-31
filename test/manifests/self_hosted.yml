@@ -70,6 +70,7 @@ capabilities:
 
 specialized:
   s3:
+    - test/integration/image_attachment_s3_delivery_contract_test.rb
     - test/integration/self_hosted_s3_contract_test.rb
   system_claimed:
     - test/system/instance_administration_test.rb

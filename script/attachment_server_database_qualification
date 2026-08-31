@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+# Runs the image attachment lifecycle gate against a real server database.
+#
+# SQLite proves the constraint contracts and the deterministic interleavings,
+# but the aggregate races, the fixed lock order, and the atomic claim only have
+# production semantics under real row locks. The concurrency-qualification
+# workflow supplies that database as a CI service; this script supplies the same
+# thing on a developer or agent machine so the server-database half of the
+# lifecycle claim can be executed anywhere, not only in CI.
+#
+#   script/attachment_server_database_qualification
+#
+# Set SCREENOTE_SERVER_DATABASE_URL to qualify against a database you already
+# run; otherwise an ephemeral container is started and removed.
+
+set -Eeuo pipefail
+umask 077
+
+readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly CONTAINER_ENGINE="${SCREENOTE_CONTAINER_ENGINE:-docker}"
+readonly SERVER_IMAGE="${SCREENOTE_SERVER_DATABASE_IMAGE:-postgres:17}"
+readonly CONTAINER_NAME="screenote-attachment-qualification-$$"
+readonly DATABASE_USER="screenote"
+readonly DATABASE_NAME="screenote_test"
+
+started_container=false
+host_port=""
+
+fail() {
+  printf 'attachment server database qualification: %s\n' "$*" >&2
+  exit 1
+}
+
+cleanup() {
+  local exit_status=$?
+
+  if [[ "${started_container}" == true ]]; then
+    if (( exit_status != 0 )); then
+      "${CONTAINER_ENGINE}" logs "${CONTAINER_NAME}" >&2 2>&1 || true
+    fi
+    "${CONTAINER_ENGINE}" rm --force "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+start_server_database() {
+  command -v "${CONTAINER_ENGINE}" >/dev/null 2>&1 ||
+    fail "${CONTAINER_ENGINE} is required, or set SCREENOTE_SERVER_DATABASE_URL"
+
+  # An ephemeral host port keeps a qualification run from colliding with a
+  # database the machine already publishes.
+  "${CONTAINER_ENGINE}" run --detach --name "${CONTAINER_NAME}" \
+    --publish "127.0.0.1::5432" \
+    --env "POSTGRES_USER=${DATABASE_USER}" \
+    --env "POSTGRES_DB=${DATABASE_NAME}" \
+    --env POSTGRES_HOST_AUTH_METHOD=trust \
+    "${SERVER_IMAGE}" >/dev/null
+  started_container=true
+  host_port="$("${CONTAINER_ENGINE}" port "${CONTAINER_NAME}" 5432/tcp | head -1 | sed 's/.*://')"
+  [[ -n "${host_port}" ]] || fail "the server database published no host port"
+
+  local attempt
+  for attempt in $(seq 1 60); do
+    if "${CONTAINER_ENGINE}" exec "${CONTAINER_NAME}" \
+      pg_isready --username "${DATABASE_USER}" --dbname "${DATABASE_NAME}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  fail "the server database did not become ready"
+}
+
+cd "${REPOSITORY_ROOT}"
+
+if [[ -n "${SCREENOTE_SERVER_DATABASE_URL-}" ]]; then
+  database_url="${SCREENOTE_SERVER_DATABASE_URL}"
+else
+  start_server_database
+  database_url="postgresql://${DATABASE_USER}@127.0.0.1:${host_port}/${DATABASE_NAME}"
+fi
+
+# SCREENOTE_SERVER_DATABASE_QUALIFICATION makes the suite assert the adapter it
+# claims to exercise, so this run cannot silently pass on SQLite behavior.
+env DATABASE_URL="${database_url}" \
+  SCREENOTE_SERVER_DATABASE_QUALIFICATION=1 \
+  script/release_test_matrix attachment-lifecycle

@@ -5,6 +5,18 @@ Rails.application.routes.draw do
     as: :screenshot_image_media,
     constraints: { variant: /original|page_card_1x|page_card_2x|project_strip/ }
 
+  get "media/image_attachments/:id/:variant", to: "image_attachment_media#show",
+    as: :image_attachment_media,
+    constraints: { variant: /original|download|attachment_thumb_1x|attachment_thumb_2x/ }
+
+  scope module: :image_attachment_drafts, path: "image-attachment-drafts", as: :image_attachment_draft do
+    resources :batches, only: %i[create show destroy], param: :public_id do
+      resources :attachments, only: %i[create update destroy] do
+        delete :discard, on: :collection
+      end
+    end
+  end
+
   if Screenote::Deployment.current.self_hosted?
     resource :bootstrap, only: %i[show create], controller: "bootstrap"
   end
@@ -104,6 +116,7 @@ Rails.application.routes.draw do
 
   namespace :api do
     put "screenshots/:id/upload", to: "screenshot_uploads#update", as: :screenshot_upload
+    get "media/image_attachments/:id", to: "image_attachment_media#show", as: :image_attachment_media
     namespace :v1 do
       resources :projects, only: [ :index, :create ] do
         resources :pages, only: [ :index ]

@@ -15,7 +15,12 @@ module PrincipalActionContract
     reply: { browser: true, rest: true, public_cli: true, mcp: true },
     resolve: { browser: true, rest: true, public_cli: true, mcp: true },
     reopen: { browser: true, rest: false, public_cli: false, mcp: true },
-    invite_collaborator: { browser: true, rest: false, public_cli: false, mcp: true }
+    invite_collaborator: { browser: true, rest: false, public_cli: false, mcp: true },
+    # Attaching an image is a session-only capability. Every other surface can
+    # read the resulting bytes, but only over an authenticated media request —
+    # MCP hands an agent the URL, it does not stream the image itself.
+    attach_image: { browser: true, rest: false, public_cli: false, mcp: false },
+    read_attachment_media: { browser: true, rest: true, public_cli: true, mcp: false }
   }.transform_values(&:freeze).freeze
 
   MCP_TOOLS = {
@@ -35,7 +40,8 @@ module PrincipalActionContract
     list_annotations: [ "GET", %r{\A/api/v1/screenshots/:screenshot_id/annotations(?:\(.:format\))?\z} ],
     get_annotation: [ "GET", %r{\A/api/v1/annotations/:id(?:\(.:format\))?\z} ],
     reply: [ "POST", %r{\A/api/v1/annotations/:annotation_id/comments(?:\(.:format\))?\z} ],
-    resolve: [ "POST", %r{\A/api/v1/annotations/:annotation_id/resolve(?:\(.:format\))?\z} ]
+    resolve: [ "POST", %r{\A/api/v1/annotations/:annotation_id/resolve(?:\(.:format\))?\z} ],
+    read_attachment_media: [ "GET", %r{\A/api/media/image_attachments/:id(?:\(.:format\))?\z} ]
   }.freeze
 
   def self.supported?(action, surface)

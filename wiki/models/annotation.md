@@ -3,7 +3,7 @@ title: Annotation
 type: model
 source: app/models/annotation.rb
 created: 2026-04-10
-updated: 2026-08-05
+updated: 2026-08-29
 tags: [model, annotation, feedback, core]
 ---
 
@@ -38,6 +38,7 @@ Source: `app/models/annotation.rb`
 | Association | Type | Target |
 |-------------|------|--------|
 | screenshot | belongs_to | [[screenshot]] |
+| image_attachments | has_many (dependent: destroy) | [[image-attachment]] — images posted with the root comment |
 | user | belongs_to | [[user]] (optional creator) |
 | api_key | belongs_to | [[api-key]] (optional automation creator) |
 | resolved_by_user | belongs_to | [[user]] (optional) |

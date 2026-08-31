@@ -26,6 +26,11 @@ class User < ApplicationRecord
   has_many :project_memberships, dependent: :destroy
   has_many :projects, through: :project_memberships
   has_many :annotations, dependent: :destroy
+  # Drafts are disposable, but a submitted attachment is part of another
+  # person's message history. Deleting the account must fail loudly rather
+  # than orphan the uploader identity those rows record.
+  has_many :image_attachment_batches, dependent: :destroy
+  has_many :image_attachments, dependent: :restrict_with_error
   has_one :subscription, dependent: :destroy
   has_many :authentication_tokens, dependent: :destroy
   has_many :installation_audit_events_as_actor,
@@ -38,6 +43,12 @@ class User < ApplicationRecord
     foreign_key: :target_user_id,
     inverse_of: :target_user,
     dependent: :restrict_with_exception
+
+  # Attachment ingest locks the account row before the batch row, so account
+  # deletion has to take the same order: `dependent: :destroy` above would
+  # otherwise lock batches first and deadlock against a concurrent upload.
+  # Prepending puts this ahead of every dependent-destroy callback.
+  before_destroy :lock_account_before_dependent_attachments, prepend: true
 
   enum :access_status, { active: 0, suspended: 1 }, validate: true
 
@@ -167,6 +178,10 @@ class User < ApplicationRecord
   end
 
   private
+
+  def lock_account_before_dependent_attachments
+    self.class.lock.find(id)
+  end
 
   def oauth_identity_present?
     oauth_provider.present? || oauth_uid.present?

@@ -32,6 +32,7 @@ Source: `app/models/annotation_comment.rb`
 | Association | Type | Target |
 |-------------|------|--------|
 | annotation | belongs_to | [[annotation]] |
+| image_attachments | has_many (dependent: destroy) | [[image-attachment]] — images posted with this reply or reopen |
 | user | belongs_to | [[user]] (optional) |
 | api_key | belongs_to | [[api-key]] (optional) |
 

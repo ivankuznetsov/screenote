@@ -29,7 +29,7 @@ module Api
         project = require_current_project!(params[:project_id])
         return unless project
 
-        annotation = project_annotations(project).find(params[:id])
+        annotation = annotation_details(project).find(params[:id])
         cropped_base64 = begin
           annotation.crop
         rescue => e
@@ -41,13 +41,19 @@ module Api
           nil
         end
 
-        render json: Api::V1::ContractSerializer.annotation_detail(annotation, cropped_base64: cropped_base64)
+        render json: Api::V1::ContractSerializer.annotation_detail(
+          annotation, cropped_base64: cropped_base64, url_options: serializer_url_options
+        )
       end
 
       private
 
       def project_annotations(project)
         Api::V1::ProjectScope.annotations(project)
+      end
+
+      def annotation_details(project)
+        Api::V1::ProjectScope.annotation_details(project)
       end
 
       def serialize(annotation)

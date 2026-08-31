@@ -23,10 +23,13 @@
         rows: 3,
         data: { annotorious_target: "comment" } %>
 
+    <%# The overlay is clamped inside the image, so the rail joins the existing
+        action row and only grows the form once an image is actually attached. %>
     <div class="annotation-form__actions">
       <%= f.submit "Save", class: "btn btn--primary btn--small", data: { testid: "save-annotation-button" } %>
       <button type="button" class="btn btn--secondary btn--small"
               data-action="click->annotorious#cancelForm" data-testid="cancel-button">Cancel</button>
+      <%= render "image_attachments/composer", project: project, layout: "rail" %>
     </div>
   </div>
 <% end %>

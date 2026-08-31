@@ -29,7 +29,8 @@ module Screenote
     end
 
     def ready?
-      role_schemas_ready? && storage_volume_writable? && configured_storage_ready?
+      role_schemas_ready? && storage_volume_writable? && configured_storage_ready? &&
+        recurring_cleanup_registered?
     rescue StandardError
       false
     end
@@ -66,6 +67,12 @@ module Screenote
     def configured_storage_ready?
       storage_services.fetch(deployment.active_storage_service)
       true
+    end
+
+    # Bounded attachment cleanup only bounds anything when the recurring
+    # supervisor actually runs it.
+    def recurring_cleanup_registered?
+      Screenote::RecurringTasks.registered?(environment: Rails.env)
     end
   end
 end

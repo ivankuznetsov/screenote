@@ -6,6 +6,7 @@ class Project < ApplicationRecord
   has_many :members, through: :project_memberships, source: :user
   has_many :project_invitations, dependent: :destroy
   has_many :pages, dependent: :destroy
+  has_many :image_attachment_batches, dependent: :destroy
   has_many :screenshots, through: :pages
   has_many :snapshots, dependent: :destroy
   has_many :api_keys, dependent: :destroy

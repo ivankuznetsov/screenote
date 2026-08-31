@@ -7,6 +7,14 @@ class Annotation < ApplicationRecord
   belongs_to :resolved_by_user, class_name: "User", optional: true
   belongs_to :resolved_by_api_key, class_name: "ApiKey", optional: true
   has_many :annotation_comments, -> { order(:created_at) }, dependent: :destroy
+  has_many :image_attachments, -> { ordered }, dependent: :destroy, inverse_of: :annotation
+  # The claim receipt that made this annotation exists only to answer a
+  # replayed submission. It has no meaning once the message is gone.
+  has_many :claimed_image_attachment_batches,
+    class_name: "ImageAttachmentBatch",
+    foreign_key: :claimed_annotation_id,
+    inverse_of: :claimed_annotation,
+    dependent: :destroy
 
   enum :status, { open: 0, resolved: 1 }, default: :open
   enum :viewport, { desktop: 0, tablet: 1, mobile: 2 }, default: :desktop, prefix: :viewport
