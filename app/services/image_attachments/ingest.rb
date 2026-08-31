@@ -129,9 +129,15 @@ module ImageAttachments
           height: prepared.height,
           byte_size: prepared.byte_size
         )
+        # The expiry bump belongs to the same locked transition. Renewing it
+        # after the lock is released leaves a window in which cleanup can take
+        # the batch lock, observe the old expiry, and destroy a draft that has
+        # just become ready.
+        batch.touch_activity!
       end
+      # Only a committed transaction owns the blob. Adopting it inside the
+      # block would skip cleanup if COMMIT itself raises and rolls the row back.
       prepared.adopt_blob!
-      batch.touch_activity!
       attachment
     end
 
@@ -175,25 +181,27 @@ module ImageAttachments
       invalid!("draft_storage_exhausted")
     end
 
+    # A timed-out or aborted attempt shares its slot with the retry that
+    # supersedes it, and with a removal that may have tombstoned it. Once the
+    # row is ready the upload it names has already succeeded, so a late failure
+    # from the disconnected attempt must not un-ready it and block the post with
+    # `attachments_not_ready`.
+    #
+    # Reading the state and then writing it are two statements, so the retry can
+    # commit `ready` between them. The write is therefore conditional on the row
+    # still being an uploading draft: the database decides, and a stale attempt
+    # that loses simply updates nothing.
     def record_failure(attachment, error)
       return unless attachment&.persisted?
 
-      attachment.reload
-      return unless attachment.draft?
-      return if attachment.removal_tombstone?
-      # A timed-out or aborted attempt shares its slot with the retry that
-      # supersedes it. Once the row is ready the upload it names has already
-      # succeeded, so a late failure from the disconnected attempt must not
-      # un-ready it and block the post with `attachments_not_ready`.
-      return if attachment.state_ready?
-
-      attachment.update_columns(
-        state: ImageAttachment.states[:failed],
-        failure_code: error.code,
-        updated_at: Time.current
-      )
-    rescue ActiveRecord::RecordNotFound
-      nil
+      ImageAttachment
+        .where(id: attachment.id, state: ImageAttachment.states[:uploading])
+        .where.not(image_attachment_batch_id: nil)
+        .update_all(
+          state: ImageAttachment.states[:failed],
+          failure_code: error.code,
+          updated_at: Time.current
+        )
     end
 
     def invalid!(code, message = nil)

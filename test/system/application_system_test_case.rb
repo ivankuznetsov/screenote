@@ -91,22 +91,22 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   # driver asks the page for its video path while the page is still open, and
   # `Playwright::Video#path` blocks on a future that the page-close event
   # rejects, so a run that sets the option hangs and leaves a zero-byte file.
+  # An evidence run exists to produce the trace, so a trace that cannot be
+  # started or cannot be saved fails the run. Swallowing either would let a
+  # green suite stand in for a recording nobody can watch.
   def start_evidence_trace
     @evidence_frame_number = 0
     return unless evidence_capture?
 
     page.driver.start_tracing(name: name, screenshots: true, snapshots: true)
-  rescue StandardError => error
-    puts "[evidence] could not start the trace for #{name}: #{error.message}"
   end
 
   def save_evidence_trace
     return unless evidence_capture?
 
-    page.driver.stop_tracing(path: evidence_directory.join("#{name.parameterize}.trace.zip").to_s)
-  rescue StandardError => error
-    # Evidence collection must never decide whether a test passed.
-    puts "[evidence] could not save the trace for #{name}: #{error.message}"
+    path = evidence_directory.join("#{name.parameterize}.trace.zip")
+    page.driver.stop_tracing(path: path.to_s)
+    raise "the trace for #{name} was not written to #{path}" unless path.exist? && path.size.positive?
   end
 
   # Writes one named frame plus the page facts behind it. A screenshot alone

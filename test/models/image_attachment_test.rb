@@ -140,6 +140,40 @@ class ImageAttachmentTest < ActiveSupport::TestCase
     assert_not ActiveStorage::Blob.exists?(blob.id)
   end
 
+  # Active Storage's own `:purge_later` is the only release path and it runs
+  # after the destroy has committed. An enqueue failure there would leave an
+  # unattached blob that nothing row-based can rediscover, so the purge falls
+  # back to running inline.
+  test "a purge enqueue failure still releases the bytes" do
+    attachment = ingest_image(batch: @batch)
+    blob = attachment.image.blob
+    key = blob.key
+
+    ActiveStorage::PurgeJob.define_singleton_method(:perform_later) { |*| raise "the queue refused the job" }
+    begin
+      attachment.destroy!
+    ensure
+      ActiveStorage::PurgeJob.singleton_class.remove_method(:perform_later)
+    end
+
+    assert_not ActiveStorage::Blob.exists?(blob.id)
+    assert_not ActiveStorage::Blob.service.exist?(key)
+  end
+
+  # Deleting the bytes before the row that names them is what makes a provider
+  # failure retryable: the blob stays discoverable instead of becoming an
+  # untracked key.
+  test "a failed provider delete leaves the blob row behind to retry" do
+    attachment = ingest_image(batch: @batch)
+    blob = attachment.image.blob
+
+    blob.define_singleton_method(:delete) { raise "the storage service is unavailable" }
+
+    assert_not ImageAttachments::PurgeBlob.call(blob)
+
+    assert ActiveStorage::Blob.exists?(blob.id)
+  end
+
   test "deleting a user with attachments on another member's message is rejected" do
     require_vips!
     projects(:alice_project).project_memberships.find_or_create_by!(user: users(:bob)) { |m| m.role = :member }

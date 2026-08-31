@@ -20,11 +20,12 @@ module ImageAttachments
       end
     end
 
-    def initialize(batch:, user:, project:, parent_type:)
+    def initialize(batch:, user:, project:, parent_type:, parent_matcher: nil)
       @batch = batch
       @user = user
       @project = project
       @parent_type = parent_type
+      @parent_matcher = parent_matcher
     end
 
     def call(&parent_builder)
@@ -38,7 +39,7 @@ module ImageAttachments
 
     private
 
-    attr_reader :batch, :user, :project, :parent_type
+    attr_reader :batch, :user, :project, :parent_type, :parent_matcher
 
     def claim(&parent_builder)
       ImageAttachment.transaction do
@@ -60,12 +61,17 @@ module ImageAttachments
       end
     end
 
-    # A batch is claimed by exactly one composer. Replaying its public ID
-    # against the other endpoint is an ordinary rejection, not a parent of the
-    # wrong class handed back to a caller that cannot use it.
+    # A batch is claimed by exactly one composer. The parent class alone does
+    # not identify that composer: two reply disclosures on different threads,
+    # and the reply and reopen disclosures on one thread, all produce an
+    # AnnotationComment. Replay therefore also asks the caller whether this
+    # parent is the one its own composer created, so a public ID replayed from
+    # anywhere else is an ordinary rejection rather than somebody else's
+    # message handed back as if it had just been posted.
     def replay
       parent = batch.claimed_parent
       invalid!("batch_not_owned") unless parent.is_a?(parent_type)
+      invalid!("batch_not_owned") if parent_matcher && !parent_matcher.call(parent)
 
       Result.new(parent: parent, attachments: parent.image_attachments.ordered.to_a, replayed: true)
     end

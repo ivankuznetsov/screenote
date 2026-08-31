@@ -105,6 +105,21 @@ class AnnotationsController < ApplicationController
     @annotation = @screenshot.annotations.find(params[:id])
   end
 
+  # Everything the still-mounted overlay needs to put itself back exactly as the
+  # person left it: the message, the selected region, and the viewport it was
+  # drawn on.
+  def submitted_form_fields
+    submitted = params.fetch(:annotation, {})
+    {
+      body: submitted[:comment].to_s,
+      x_percent: submitted[:x_percent],
+      y_percent: submitted[:y_percent],
+      width_percent: submitted[:width_percent],
+      height_percent: submitted[:height_percent],
+      viewport: submitted[:viewport].presence
+    }
+  end
+
   def annotation_params
     permitted_params = params.require(:annotation).permit(
       :x_percent, :y_percent, :width_percent, :height_percent, :comment, :viewport

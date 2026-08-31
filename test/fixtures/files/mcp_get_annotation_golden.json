@@ -1,0 +1,62 @@
+{
+  "_comment": "The complete MCP get_annotation response. Every shipped key, value, and nesting level is recorded here: only database identifiers, wall-clock stamps, the freshly encoded crop, and the per-read media URL are placeholders, and the test asserts those separately. Nothing in this file may be renamed, dropped, re-nested, or given a different value.",
+  "id": "<annotation_id>",
+  "screenshot_id": "<screenshot_id>",
+  "viewport": "desktop",
+  "type": "point",
+  "coordinates": {
+    "x_percent": 50.0,
+    "y_percent": 30.0,
+    "width_percent": null,
+    "height_percent": null
+  },
+  "comment": "Button text too small",
+  "status": "open",
+  "author": "alice@example.com",
+  "comments_count": 2,
+  "created_at": "<timestamp>",
+  "screenshot_status": "ready",
+  "cropped_image_base64": "<cropped-png-base64>",
+  "mime_type": "image/png",
+  "attachments": [
+    {
+      "id": "<root_attachment_id>",
+      "alt_text": "The disabled save button",
+      "media_type": "image/png",
+      "width": 8,
+      "height": 8,
+      "size": 287,
+      "url": "<media-url>",
+      "url_expires_at": "<url-expiry>"
+    }
+  ],
+  "comments": [
+    {
+      "id": "<reply_comment_id>",
+      "action": "comment",
+      "body": "And here",
+      "author": "alice@example.com",
+      "created_at": "<timestamp>",
+      "attachments": [
+        {
+          "id": "<reply_attachment_id>",
+          "alt_text": null,
+          "media_type": "image/png",
+          "width": 8,
+          "height": 8,
+          "size": 287,
+          "url": "<media-url>",
+          "url_expires_at": "<url-expiry>"
+        }
+      ]
+    },
+    {
+      "id": "<resolution_comment_id>",
+      "action": "resolved",
+      "body": "Fixed",
+      "author": "alice@example.com",
+      "created_at": "<timestamp>",
+      "attachments": []
+    }
+  ]
+}

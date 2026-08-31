@@ -55,13 +55,34 @@ module ImageAttachments
       return unless client_key
 
       validate_client_key!
-      batch.image_attachments.create!(
+      created = batch.image_attachments.create!(
         user_id: batch.user_id,
         project_id: batch.project_id,
         client_key: client_key,
         state: :failed,
         failure_code: ImageAttachment::REMOVAL_TOMBSTONE
       )
+      prune_tombstones!(created)
+      created
+    end
+
+    # A tombstone exists to beat an upload that is already in flight for the
+    # same client key, so only the recent ones can still do any work. Without a
+    # bound, a client that invents a new key per DELETE could park unbounded
+    # rows on one open batch and make every later claim, removal, and cleanup
+    # pass lock more of them. The window is kept to the number of files a
+    # message may carry, and the oldest markers — the ones no live upload can
+    # still be racing — are dropped to make room.
+    def prune_tombstones!(created)
+      tombstones = batch.image_attachments
+        .where(failure_code: ImageAttachment::REMOVAL_TOMBSTONE)
+        .order(:id)
+        .lock
+        .to_a
+      surplus = tombstones.size - ImageAttachment::MAX_FILES
+      return unless surplus.positive?
+
+      tombstones.first(surplus).each { |marker| marker.destroy! unless marker.id == created.id }
     end
 
     # The marker is committed before storage is touched, so a failed purge can
@@ -70,7 +91,14 @@ module ImageAttachments
     def purge_removed_image(attachment)
       return unless attachment&.persisted?
 
-      attachment.image.purge if attachment.image.attached?
+      if attachment.image.attached?
+        # Detach first, then delete the bytes before the row that names them:
+        # a provider failure leaves a discoverable unattached blob rather than
+        # an untracked key.
+        blob = attachment.image.blob
+        attachment.image.detach
+        PurgeBlob.call(blob)
+      end
 
       ImageAttachment.transaction do
         batch.lock!

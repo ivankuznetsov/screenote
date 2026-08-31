@@ -9,6 +9,10 @@ module ImageAttachments
   # either adopts the staged blob or cleans the result up.
   class PrepareUpload
     CHUNK_SIZE = 64.kilobytes
+    PNG_SIGNATURE = "\x89PNG\r\n\x1A\n".b.freeze
+    JPEG_SIGNATURE = "\xFF\xD8".b.freeze
+    JPEG_START_OF_SCAN = 0xDA
+    JPEG_END_OF_IMAGE = 0xD9
 
     class Result
       attr_reader :tempfile, :media_type, :byte_size, :width, :height, :sha256, :blob
@@ -83,9 +87,7 @@ module ImageAttachments
       def discard_unadopted_blob
         return unless blob
 
-        blob.purge
-      rescue StandardError => error
-        Rails.logger.error("Failed to discard an unattached image attachment blob (#{error.class})")
+        PurgeBlob.call(blob)
       ensure
         @blob = nil unless @blob_adopted
       end
@@ -122,6 +124,7 @@ module ImageAttachments
       byte_size, sha256 = stream_to!(tempfile)
       media_type = detect_media_type!(tempfile)
       validate_declared_identity!(media_type)
+      validate_complete_stream!(tempfile, media_type)
       width, height = decode!(tempfile)
       tempfile.rewind
 
@@ -169,6 +172,112 @@ module ImageAttachments
       return if ImageAttachment::ALLOWED_EXTENSIONS.fetch(media_type, []).include?(extension)
 
       invalid!("extension_mismatch")
+    end
+
+    # libvips validates the decoded picture but stops at the container's end
+    # marker. Walk the container too so bytes appended after a valid image are
+    # never stored and served back through the original/download routes.
+    def validate_complete_stream!(tempfile, media_type)
+      complete = case media_type
+      when "image/png" then png_ends_at_eof?(tempfile)
+      when "image/jpeg" then jpeg_ends_at_eof?(tempfile)
+      when "image/webp" then webp_ends_at_eof?(tempfile)
+      else false
+      end
+      return if complete
+
+      invalid!("invalid_image")
+    end
+
+    def png_ends_at_eof?(file)
+      size = file.size
+      return false unless read_at(file, 0, 8) == PNG_SIGNATURE
+
+      offset = 8
+      while offset + 8 <= size
+        header = read_at(file, offset, 8)
+        return false unless header && header.bytesize == 8
+        return false unless header.byteslice(4, 4).match?(/\A[A-Za-z]{4}\z/)
+
+        offset += 12 + header.unpack1("N")
+        return offset == size if header.byteslice(4, 4) == "IEND"
+      end
+
+      false
+    end
+
+    def webp_ends_at_eof?(file)
+      size = file.size
+      header = read_at(file, 0, 12)
+      return false unless header && header.bytesize == 12
+      return false unless header.byteslice(0, 4) == "RIFF" && header.byteslice(8, 4) == "WEBP"
+
+      declared = header.byteslice(4, 4).unpack1("V")
+      declared + 8 == size || (declared.odd? && declared + 9 == size)
+    end
+
+    def jpeg_ends_at_eof?(file)
+      size = file.size
+      return false unless read_at(file, 0, 2) == JPEG_SIGNATURE
+
+      offset = 2
+      while offset + 2 <= size
+        marker = read_at(file, offset, 2)
+        return false unless marker && marker.getbyte(0) == 0xFF
+
+        code = marker.getbyte(1)
+        offset += 2
+        next if code == 0xFF || code == 0x01 || (0xD0..0xD7).cover?(code)
+        return offset == size if code == JPEG_END_OF_IMAGE
+
+        length = read_at(file, offset, 2)&.unpack1("n")
+        return false if length.nil? || length < 2
+
+        offset += length
+        return false if offset > size
+
+        if code == JPEG_START_OF_SCAN
+          offset = jpeg_entropy_end(file, offset, size)
+          return false unless offset
+        end
+      end
+
+      false
+    end
+
+    def jpeg_entropy_end(file, offset, size)
+      while offset < size
+        chunk = read_at(file, offset, CHUNK_SIZE)
+        return nil if chunk.nil? || chunk.empty?
+
+        index = 0
+        loop do
+          found = chunk.index("\xFF".b, index)
+          if found.nil?
+            offset += chunk.bytesize
+            break
+          end
+
+          following = chunk.getbyte(found + 1)
+          if following.nil?
+            return nil if offset + found + 1 >= size
+
+            offset += found
+            break
+          end
+          return offset + found unless following.zero? || following == 0xFF ||
+            (0xD0..0xD7).cover?(following)
+
+          index = found + (following == 0xFF ? 1 : 2)
+        end
+      end
+
+      nil
+    end
+
+    def read_at(file, offset, length)
+      file.seek(offset)
+      file.read(length)
     end
 
     def decode!(tempfile)

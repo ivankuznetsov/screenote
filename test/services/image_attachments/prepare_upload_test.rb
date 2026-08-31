@@ -79,6 +79,18 @@ module ImageAttachments
       assert_equal "invalid_image", malformed.code
     end
 
+    test "rejects trailing payloads in every accepted container" do
+      { "png" => "image/png", "jpg" => "image/jpeg", "webp" => "image/webp" }.each do |format, media_type|
+        bytes = image_bytes(format: format) + "appended payload"
+
+        error = assert_raises(ImageAttachments::Error) do
+          prepare(bytes:, declared_content_type: media_type, filename: "upload.#{format}")
+        end
+
+        assert_equal "invalid_image", error.code, "a #{media_type} payload was accepted"
+      end
+    end
+
     private
 
     def prepare(bytes: @bytes, declared_content_type: "image/png", filename: "upload.png")

@@ -3,7 +3,7 @@ title: ImageAttachmentBatch
 type: model
 source: app/models/image_attachment_batch.rb
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-08-31
 tags: [model, attachment, draft, lifecycle]
 ---
 
@@ -21,6 +21,7 @@ Source: `app/models/image_attachment_batch.rb`
 |--------|------|-------|
 | id | integer | PK |
 | public_id | string(43) | NOT NULL, unique. URL-safe random, the browser-facing handle |
+| client_key | string(64) | Nullable. The mounted composer's own idempotency handle, unique per user while the batch is open |
 | user_id | integer | NOT NULL, FK to users with `ON DELETE RESTRICT` |
 | project_id | integer | NOT NULL, FK to projects |
 | state | integer | Enum: open(0), claimed(1). Prefix `state` |
@@ -46,7 +47,11 @@ account park unbounded bytes.
 
 Both caps live on the model. `ImageAttachmentBatch.open_for!` applies them to
 every draft that is opened, locking the account row so the check and the insert
-are one step and two composers cannot each read the same room. `Ingest` takes
+are one step and two composers cannot each read the same room. It also accepts
+the composer's `client_key`: a create whose response was lost is retried with
+the same key and resumes the batch it already opened rather than spending
+another of the six, and a key whose batch has expired is reclaimed under the
+same lock so the composer is handed something it can actually upload to. `Ingest` takes
 that same account lock before its batch lock and rechecks the byte ceiling at
 commit, so uploads into different open batches cannot each observe the same
 remaining room. Expired batches that cleanup has not yet reclaimed still hold
@@ -59,9 +64,12 @@ revalidates ownership, expiry, the 5-file and 50 MB limits, creates the message
 inside the same transaction, moves each row onto exactly one parent FK, and
 records the claimed parent. Replaying the same public ID returns the message
 that was already created instead of posting twice. The caller declares the
-parent class it can accept, so a batch claimed by the root composer replayed
-against the reply endpoint — or the reverse — is refused with `batch_not_owned`
-rather than handed back a parent the responder cannot describe.
+parent class it can accept plus a matcher for its own composer, so a batch
+claimed by the root composer replayed against the reply endpoint — or a reply
+batch replayed from another thread or from the reopen disclosure — is refused
+with `batch_not_owned` rather than handed back a parent the responder cannot
+describe. Class alone is not enough: every reply composer in a project produces
+an `AnnotationComment`.
 
 The 5-file limit counts active drafts on both sides. A removal tombstone is not
 an active draft, so removing an image and attaching a replacement stays inside
@@ -76,12 +84,16 @@ replaces its blob. `ImageAttachments::WriteAltText` and
 `ImageAttachments::RemoveAttachment` both take the batch lock first, so a
 description or a removal racing a claim resolves as not-found rather than
 touching submitted metadata. Removal retains a bounded client-key tombstone
-inside the draft. It is hidden from resume and discarded at claim, but it stops
+inside the draft, capped at the five-file window and pruned oldest-first so a
+client inventing keys cannot park unbounded rows on one open batch. It is hidden from resume and discarded at claim, but it stops
 an in-flight POST that had not created its row yet from bringing the removed
 image back. The commit re-resolves its own row under that same lock and answers
-`attachment_removed` for a tombstone. A failure recorded by a superseded
-attempt never un-readies a row another attempt finished or overwrites the
-tombstone. A tombstone keeps its byte count in the account ceiling until its
+`attachment_removed` for a tombstone. A failure recorded by a superseded attempt never un-readies a row another
+attempt finished or overwrites the tombstone: the write is conditional on the
+row still being an uploading draft, so the database decides the race rather
+than a stale in-memory snapshot. The ready transition renews the batch expiry
+inside the same locked transaction, so cleanup cannot destroy a draft in the
+window between the two. A tombstone keeps its byte count in the account ceiling until its
 blob purge succeeds, then clears the stored metadata; storage failure therefore
 cannot make the scheduler-independent cap optimistic.
 
@@ -110,4 +122,15 @@ its 24 hour recovery window. This is what makes the open-batch ceiling's
 `ImageAttachmentDraftCleanupJob` runs every 15 minutes in production, scans a
 bounded set of expired open batches, locks and rechecks each one, and destroys
 it together with its blobs. `Screenote::RecurringTasks` fails readiness closed
-when a supervised environment does not schedule it.
+when a supervised environment does not schedule it — and also when it is
+scheduled only on paper: readiness reads the queue database for a live Solid
+Queue scheduler heartbeat and for the required recurring tasks registered
+there, so a stopped supervisor, a rejected schedule, or a dead heartbeat all
+report unhealthy.
+
+## Resume
+
+`GET /image-attachment-drafts/batches/:public_id` re-reads server state for a
+reconnecting composer, and it answers `batch_unusable` for a batch that has
+expired or already been claimed. Restoring those rows as ready would only
+re-enable a post that upload, media, and claim are all certain to reject.

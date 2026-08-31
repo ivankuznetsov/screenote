@@ -15,12 +15,59 @@ module Screenote
     # jobs inline or on demand, so there is no schedule for them to be missing
     # from.
     SUPERVISED_ENVIRONMENTS = %w[production].freeze
+    # Solid Queue supervisors heartbeat once a minute by default. Three missed
+    # beats is a stopped supervisor, not a slow one.
+    HEARTBEAT_GRACE = 5.minutes
+    # A scheduler cannot have registered its tasks or written a heartbeat before
+    # the process that supervises it has finished booting. Readiness gates the
+    # deployment, so demanding live proof from the first second would stop the
+    # deployment from ever coming up. After this window the proof is required.
+    STARTUP_GRACE = 5.minutes
 
     class << self
-      def registered?(environment: Rails.env, required: REQUIRED_TASKS)
-        return true unless supervised?(environment)
+      # Assigned once when the class loads, which under eager loading is process
+      # boot. Tests move it to exercise the post-boot requirement.
+      attr_accessor :booted_at
 
-        missing(environment: environment, required: required).empty?
+      # The schedule file only records what a deployment intends to run.
+      # Readiness has to answer whether it is actually running: a supervisor
+      # that never booted, a scheduler that rejected the recurring entries, or
+      # one whose heartbeat has died all leave bounded cleanup unexecuted while
+      # the checked-in YAML still parses. Both halves are therefore required,
+      # and anything that cannot be established reports unhealthy.
+      def registered?(environment: Rails.env, required: REQUIRED_TASKS, now: Time.current)
+        return true unless supervised?(environment)
+        return false unless missing(environment: environment, required: required).empty?
+        return true if supervising?(required: required, now: now)
+
+        booting?
+      end
+
+      def booting?
+        Process.clock_gettime(Process::CLOCK_MONOTONIC) - booted_at < STARTUP_GRACE
+      end
+
+      # Reads the live supervisor state Solid Queue keeps in the queue database:
+      # each booted scheduler registers its static recurring entries and every
+      # running process heartbeats.
+      def supervising?(required: REQUIRED_TASKS, now: Time.current)
+        return false unless defined?(SolidQueue::Process) && defined?(SolidQueue::RecurringTask)
+
+        scheduler_alive?(now: now) && (required - registered_task_keys).empty?
+      rescue StandardError => error
+        Screenote::Monitoring.notify(error, context: { check: "recurring_task_supervisor" })
+        false
+      end
+
+      def scheduler_alive?(now: Time.current)
+        SolidQueue::Process
+          .where(kind: "Scheduler")
+          .where(last_heartbeat_at: (now - HEARTBEAT_GRACE)..)
+          .exists?
+      end
+
+      def registered_task_keys
+        SolidQueue::RecurringTask.where(static: true).pluck(:key).map(&:to_s)
       end
 
       def supervised?(environment)
@@ -58,5 +105,7 @@ module Screenote
         loaded.fetch(environment, nil) || {}
       end
     end
+
+    self.booted_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
   end
 end

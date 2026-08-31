@@ -38,6 +38,11 @@ class ReleaseValidation
     --auto-update=false
   ].freeze
   IMAGE_REFERENCE_PATTERN = %r{#{Regexp.escape(EXPECTED_IMAGE_REPOSITORY)}:[^\s"'`\\]+}
+  # A server-database job, deliberately outside the database-agnostic CI matrix.
+  # The lifecycle claims it proves — real row locks, aggregate races, lock
+  # ordering, atomic claim — cannot be established on SQLite, so it is required
+  # on the default branch in its own right.
+  CONCURRENCY_QUALIFICATION_CHECK = "concurrency-qualification / image-attachment-lifecycle"
   REQUIRED_CHECKS = %w[
     ruby-security
     lint
@@ -93,6 +98,7 @@ class ReleaseValidation
     .github/workflows/secrets.yml
     .github/workflows/release.yml
     .github/workflows/release-qualification.yml
+    .github/workflows/concurrency-qualification.yml
     .github/rulesets/main.json
     .github/rulesets/release-tags.json
     .github/rulesets/immutable-release-tags.json
@@ -454,6 +460,16 @@ class ReleaseValidation
     error("release workflow must isolate Syft from discovered configuration") unless
       release.include?('--config "$RUNNER_TEMP/syft-release.yaml"')
 
+    concurrency = read(".github/workflows/concurrency-qualification.yml")
+    error("concurrency workflow must gate pull requests and the default branch") unless
+      concurrency.include?("pull_request:") && concurrency.match?(/branches:\s*\[\s*main\s*\]/)
+    error("concurrency workflow must fail closed when it lands on SQLite") unless
+      concurrency.include?("SCREENOTE_SERVER_DATABASE_QUALIFICATION")
+    error("concurrency workflow must run against a PostgreSQL service") unless
+      concurrency.match?(/image:\s*postgres/) && concurrency.include?("DATABASE_URL: postgresql://")
+    error("concurrency workflow must run the attachment lifecycle matrix") unless
+      concurrency.include?("script/release_test_matrix attachment-lifecycle")
+
     qualification = read(".github/workflows/release-qualification.yml")
     error("qualification workflow must not infer release qualification from pull-request CI") if
       qualification.include?("pull_request:") || qualification.include?("workflow_run:")
@@ -501,6 +517,9 @@ class ReleaseValidation
         statuses.select { |check| expected_product_contexts.include?(check["context"]) }.all? do |check|
           check["integration_id"] == 15_368
         end
+    lifecycle = statuses.find { |check| check["context"] == CONCURRENCY_QUALIFICATION_CHECK }
+    error("main ruleset must require the server-database image attachment lifecycle job") unless
+      lifecycle&.fetch("integration_id", nil) == 15_368
     error("main ruleset must bind the GitGuardian App check to an integration placeholder") unless gitguardian&.fetch("integration_id", nil) == 0
     error("main ruleset must require the metadata-only incident check from GitHub Actions") unless incidents&.fetch("integration_id", nil) == 15_368
 

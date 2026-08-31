@@ -3,7 +3,7 @@ title: Testing and CI
 type: operations
 source: test/, bin/ci, config/ci.rb, .github/workflows/ci.yml, .github/workflows/release-qualification.yml
 created: 2026-07-28
-updated: 2026-08-30
+updated: 2026-08-31
 tags: [testing, ci, minitest, capybara, playwright]
 ---
 
@@ -80,12 +80,16 @@ and a private recovery link resets credentials once in a separate session while
 rejecting replay and the former password.
 
 `test/system/image_attachments_test.rb` is the browser contract for image
-attachments. It covers the picker, composer-scoped drop and paste, mixed
-clipboard input, per-file progress, retry, removal, alt text, blocked submit,
-422 rehydration, the root/reply/unresolve composers, the gallery placeholder
-warming into responsive thumbnails, the modal viewer, narrow layout, the
-explicit light and dark component contexts, and the composer's polite live
-region. Two geometry contracts sit side by side: against the full-size
+attachments. Every input path is proved all the way to a posted message rather
+than only to an attachment: root, reply, and unresolve each post several images
+collected through the picker, composer-scoped drop, and a real clipboard paste.
+It also covers mixed clipboard input, per-file progress, alt text, removal, a
+failed upload holding the submit control closed until a retry finishes it, 422
+rehydration, the gallery placeholder warming into responsive thumbnails, the
+modal viewer for one image and for several — navigation hidden when there is
+nothing to navigate to, zoom, download, open-original, focus handling — narrow
+layout, the explicit light and dark component contexts for both the composer
+and the nested viewer, and the composer's polite live region. Two geometry contracts sit side by side: against the full-size
 `desktop_screenshot.png` fixture the clamped overlay must leave the selected
 region completely uncovered, and against a thumbnail-sized capture it must at
 least stay one compact rail inside the image.
@@ -97,6 +101,11 @@ srcset candidates, component context, measured geometry.
 `script/attachment_browser_evidence` runs the attachment suite that way,
 extracts each trace into an ordered filmstrip, and encodes that filmstrip into
 a watchable `<test>.webm`.
+
+Both halves fail closed. A trace that cannot be started or cannot be written
+fails its test rather than printing a note, and the script refuses a non-empty
+output directory and requires one trace per declared test in the suite, so a
+stale directory or a run that stopped early cannot satisfy the gate.
 
 The video is encoded from the trace screencast, not recorded by the browser.
 Playwright's own `record_video_dir` cannot be used here: `reset!` in
@@ -150,11 +159,20 @@ One adapter-specific workflow sits outside that boundary. `concurrency-qualifica
 runs `script/release_test_matrix attachment-lifecycle` against a PostgreSQL
 server database so real row locks exercise lock ordering, atomic claim,
 aggregate races, and the cleanup/remove/submit races that SQLite can only assert
-by outcome. It is a separate workflow precisely so `ci.yml` stays free of
+by outcome. It is a required status check on the default branch, and
+`bin/release-validate` asserts both that requirement and the workflow's own
+shape, so the branch cannot merge with that evidence unproven. It is a separate workflow precisely so `ci.yml` stays free of
 adapter-specific content and the portability contract keeps passing. The
 ephemeral, runner-local PostgreSQL service uses trust authentication and a
 credential-free loopback URL, so the workflow does not carry a reusable test
 password in its published source.
+
+Every race in that suite proves real overlap before it asserts an outcome: the
+helper starts the second operation, confirms it is blocked on the transaction
+the first one is parked inside, and only then releases. Serial execution cannot
+pass. The aggregate race runs against the real 50 MB message ceiling — the
+batch is seeded with recorded byte sizes up to exactly one more file's worth of
+room — rather than a stubbed limit.
 
 The gate names one list of suites and runs it against whatever database is
 configured, so the SQLite and server-database halves cannot drift apart. Two

@@ -34,7 +34,10 @@ export default class extends Controller {
     this.disconnected = false
     this.items = new Map()
     this.pendingBatchRequest = null
+    // One key per mounted composer, stable across retries of the create call.
+    this.batchClientKey ||= `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
     this.submitting = false
+    this.navigating = false
     this.resuming = false
     this.resumeFailed = false
     this.form = this.element.closest("form")
@@ -92,6 +95,8 @@ export default class extends Controller {
       this.releasePreview(item)
     })
     clearTimeout(this.resumeTimer)
+    // Anything still in flight belongs to the connection being torn down.
+    this.pendingBatchRequest = null
     this.connectionToken += 1
     // A disconnect is only a client going away. Committed drafts stay on the
     // server until their 24 hour expiry.
@@ -165,7 +170,15 @@ export default class extends Controller {
   }
 
   imageFilesFrom(transfer) {
-    return Array.from(transfer?.files || []).filter(file => this.acceptedTypesValue.includes(file.type))
+    return Array.from(transfer?.files || []).filter(file => this.acceptedFile(file))
+  }
+
+  // An extensionless PNG, JPEG, or WebP reaches the page with an empty
+  // `File.type`: the browser derives that string from the name, not the bytes.
+  // Refusing it here would reject a file the server accepts, so an undeclared
+  // type is passed through and the byte sniffing on the other end decides.
+  acceptedFile(file) {
+    return !file.type || this.acceptedTypesValue.includes(file.type)
   }
 
   async enqueue(files) {
@@ -184,7 +197,7 @@ export default class extends Controller {
       return
     }
 
-    const images = files.filter(file => this.acceptedTypesValue.includes(file.type))
+    const images = files.filter(file => this.acceptedFile(file))
     if (images.length < files.length) {
       this.showError(this.unsupportedTypeMessage)
     }
@@ -302,6 +315,13 @@ export default class extends Controller {
       const response = await this.request(this.batchUrls.batchUrl)
       const payload = await response.json().catch(() => ({}))
       if (!this.connectedFor(connectionToken)) return
+      // The server refuses to resume a batch it has expired or already claimed.
+      // Those drafts are gone, not broken: the composer drops the stale handle
+      // and carries on with an empty rail rather than blocking the post.
+      if (response.status === 404 || payload.error?.code === "batch_unusable") {
+        this.discardStaleBatch()
+        return
+      }
       if (!response.ok) throw new Error(payload.error?.message || "The upload session could not be restored.")
 
       this.items.forEach(item => this.releasePreview(item))
@@ -332,6 +352,19 @@ export default class extends Controller {
       this.showError(error.message || "The upload session could not be restored.")
       this.refreshSubmitState()
     }
+  }
+
+  discardStaleBatch() {
+    this.items.forEach(item => this.releasePreview(item))
+    this.items.clear()
+    this.itemsTarget.replaceChildren()
+    this.batchId = null
+    this.batchUrls = null
+    if (this.batchField) this.batchField.value = ""
+    this.resuming = false
+    this.resumeFailed = false
+    this.refreshSubmitState()
+    this.notifyLayoutChanged()
   }
 
   connectedFor(connectionToken) {
@@ -449,7 +482,7 @@ export default class extends Controller {
     if (this.batchUrls) return this.batchUrls
     if (this.disconnected) throw new Error("Uploads are unavailable right now.")
 
-    this.pendingBatchRequest ||= this.requestBatch()
+    this.pendingBatchRequest ||= this.requestBatch(this.connectionToken)
     try {
       return await this.pendingBatchRequest
     } finally {
@@ -457,11 +490,19 @@ export default class extends Controller {
     }
   }
 
-  async requestBatch() {
+  // The batch this controller opens belongs to this connection. A response that
+  // arrives after a disconnect and reconnect describes a controller that no
+  // longer exists, so it must not overwrite the reconnected one's batch and
+  // send its uploads somewhere the rail cannot show them.
+  async requestBatch(connectionToken) {
     const response = await this.request(this.batchesUrlValue, {
       method: "POST",
-      body: JSON.stringify({ project_id: this.projectIdValue })
+      // The composer's own idempotency key. A create whose response is lost is
+      // retried with the same key and resumes the batch it already opened
+      // rather than spending another of the account's open-batch allowance.
+      body: JSON.stringify({ project_id: this.projectIdValue, client_key: this.batchClientKey })
     })
+    if (!this.connectedFor(connectionToken)) throw new Error("Uploads are unavailable right now.")
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
       throw this.requestError(
@@ -469,6 +510,8 @@ export default class extends Controller {
         typeof payload.error?.retryable === "boolean" ? payload.error.retryable : response.status >= 500
       )
     }
+
+    if (!this.connectedFor(connectionToken)) throw new Error("Uploads are unavailable right now.")
 
     this.batchId = payload.batch_id
     this.batchField.value = payload.batch_id
@@ -580,7 +623,7 @@ export default class extends Controller {
 
   async onSubmit(event) {
     event.preventDefault()
-    if (this.submitting) return
+    if (this.submitting || this.navigating) return
     if (!this.readyToSubmit()) {
       this.showError("Wait for every image to finish uploading.")
       return
@@ -590,8 +633,6 @@ export default class extends Controller {
     this.refreshSubmitState()
     this.clearError()
 
-    const body = new FormData(this.form)
-    if (this.batchId) body.set("image_attachment_batch_id", this.batchId)
     // Cancelling the overlay mid-post tears the form out from under us, so the
     // navigation target is captured while it is still attached.
     const frame = this.form.closest("turbo-frame")
@@ -603,6 +644,13 @@ export default class extends Controller {
       // rows off the batch and every later write is a 404 against them.
       if (!(await this.flushAltText())) return
 
+      // The fields are read after that wait, not before it. A description write
+      // can take a while, the textarea and the coordinate inputs stay editable
+      // throughout, and a snapshot taken first would post an older message than
+      // the one still visible on screen.
+      const body = new FormData(this.form)
+      if (this.batchId) body.set("image_attachment_batch_id", this.batchId)
+
       const response = await fetch(this.form.action, {
         method: this.form.method || "POST",
         body,
@@ -613,9 +661,12 @@ export default class extends Controller {
       const payload = await response.json().catch(() => ({}))
 
       if (response.ok) {
-        this.batchId = null
-        this.batchUrls = null
-        if (this.batchField) this.batchField.value = ""
+        // Turbo navigation is asynchronous and this form is still mounted while
+        // it runs. Clearing the batch and re-enabling submit here would let a
+        // second click post the same message again — this time with no batch at
+        // all, so the duplicate would carry no images. The composer therefore
+        // stays locked until the page it is on has been replaced.
+        this.navigating = true
         this.navigateAfterSubmit(payload.redirect_url, frame)
         return
       }
@@ -625,8 +676,10 @@ export default class extends Controller {
       this.showError("The message could not be posted. Try again.")
     } finally {
       clearTimeout(timer)
-      this.submitting = false
-      this.refreshSubmitState()
+      if (!this.navigating) {
+        this.submitting = false
+        this.refreshSubmitState()
+      }
     }
   }
 
@@ -667,12 +720,23 @@ export default class extends Controller {
   // A rejected post keeps the composer mounted: the body, the coordinates, the
   // batch, and every ready row stay exactly where the person left them.
   restoreFrom(payload) {
-    const batchId = payload.form?.image_attachment_batch_id
+    const form = payload.form || {}
+    const batchId = form.image_attachment_batch_id
     if (batchId) {
       this.batchId = batchId
       this.batchUrls ||= this.urlsForBatch(batchId)
       if (this.batchField) this.batchField.value = batchId
     }
+
+    // The server echoes the editable half of what it rejected, so a composer
+    // that was remounted between the post and its answer still comes back with
+    // the message and, for the overlay, the region that was selected.
+    this.restoreField("textarea", form.body)
+    this.restoreField('[name="annotation[x_percent]"]', form.x_percent)
+    this.restoreField('[name="annotation[y_percent]"]', form.y_percent)
+    this.restoreField('[name="annotation[width_percent]"]', form.width_percent)
+    this.restoreField('[name="annotation[height_percent]"]', form.height_percent)
+    this.restoreField('[name="annotation[viewport]"]', form.viewport)
 
     const readyIds = payload.form?.ready_attachment_ids || []
     this.items.forEach(item => {
@@ -687,6 +751,13 @@ export default class extends Controller {
     // happened at all.
     const message = (payload.errors || [payload.error?.message]).filter(Boolean).join(" ")
     this.showError(message || "The message could not be posted. Try again.")
+  }
+
+  restoreField(selector, value) {
+    if (value === undefined || value === null) return
+
+    const field = this.form?.querySelector(selector)
+    if (field && !field.value) field.value = value
   }
 
   request(url, options = {}) {
@@ -769,7 +840,7 @@ export default class extends Controller {
   }
 
   refreshSubmitState() {
-    const blocked = this.submitting || !this.readyToSubmit()
+    const blocked = this.submitting || this.navigating || !this.readyToSubmit()
     this.form?.querySelectorAll("input[type=submit], button[type=submit]").forEach(button => {
       button.disabled = blocked
     })

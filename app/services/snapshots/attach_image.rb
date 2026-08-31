@@ -210,8 +210,13 @@ module Snapshots
       end
     end
 
+    # `ActiveStorage::Blob#purge` destroys the tracking row before it asks the
+    # service to delete, so a provider failure there throws away the only
+    # durable record of the key. Deleting first keeps a failed delete
+    # retryable: the row survives as a discoverable unattached blob.
     def discard_staged_blob!(blob)
-      blob.purge
+      blob.delete
+      blob.destroy
     end
 
     def discard_staged_blob_after_error(blob)

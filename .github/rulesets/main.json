@@ -39,6 +39,7 @@
           { "context": "CI / container-s3", "integration_id": 15368 },
           { "context": "CI / backup-restore", "integration_id": 15368 },
           { "context": "CI / release-artifact", "integration_id": 15368 },
+          { "context": "concurrency-qualification / image-attachment-lifecycle", "integration_id": 15368 },
           { "context": "Secrets / GitGuardian repository incidents", "integration_id": 15368 },
           { "context": "GitGuardian Security Checks", "integration_id": 0 }
         ]

@@ -33,6 +33,27 @@ class GetAnnotationToolTest < ActiveSupport::TestCase
     end
   end
 
+  # A key allowlist proves that nothing was renamed; it proves nothing about
+  # the values a shipped agent already reads. This compares the whole response
+  # — every key, every literal value, and the exact nesting — against a
+  # recorded golden. Only genuinely per-read values are replaced with named
+  # placeholders, and each of those is asserted for shape on its own.
+  test "the whole get_annotation payload matches the recorded golden" do
+    scenario = golden_scenario
+    payload = call_tool
+
+    golden = JSON.parse(file_fixture("mcp_get_annotation_golden.json").read).except("_comment")
+
+    assert_equal golden, normalize_golden(payload, scenario)
+
+    assert_match(/\AiVBORw0KGgo/, payload.fetch("cropped_image_base64"))
+    (payload.fetch("attachments") + payload.fetch("comments").flat_map { |c| c.fetch("attachments") }).each do |item|
+      assert_match %r{\Ahttps?://[^?]+/api/media/image_attachments/\d+\?token=.+\z}, item.fetch("url")
+      assert_in_delta ImageAttachment::MEDIA_TOKEN_EXPIRY.from_now,
+        Time.zone.parse(item.fetch("url_expires_at")), 5
+    end
+  end
+
   test "attachments are an empty array when a message has none" do
     payload = call_tool
 
@@ -71,6 +92,65 @@ class GetAnnotationToolTest < ActiveSupport::TestCase
   end
 
   private
+
+  # One annotation carrying every part of the envelope at once: a real cropped
+  # region, a root image with author alt text, and two comments — an ordinary
+  # reply that also carries an image, and a resolution that carries none.
+  def golden_scenario
+    attach_screenshot_image
+    root = attach_to(@annotation, alt_text: "The disabled save button")
+    reply = @annotation.annotation_comments.create!(user: @user, body: "And here", action: :comment)
+    reply_attachment = attach_to(reply)
+    resolution = @annotation.annotation_comments.create!(user: @user, body: "Fixed", action: :resolved)
+
+    {
+      "<annotation_id>" => @annotation.id,
+      "<screenshot_id>" => @annotation.screenshot_id,
+      "<reply_comment_id>" => reply.id,
+      "<resolution_comment_id>" => resolution.id,
+      "<root_attachment_id>" => root.id,
+      "<reply_attachment_id>" => reply_attachment.id
+    }
+  end
+
+  def attach_screenshot_image
+    image = @annotation.screenshot.image_for(@annotation.viewport)
+    image.image.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/desktop_screenshot.png")),
+      filename: "screenshot.png",
+      content_type: "image/png"
+    )
+    image.update!(status: :ready, width: 1440, height: 900)
+  end
+
+  # Replaces exactly what cannot be recorded: primary keys, wall-clock stamps,
+  # the freshly encoded crop, and the media URL minted for this read. Everything
+  # else has to match the golden byte for byte.
+  #
+  # Substitution is keyed on the field, never on the value. Keying on the value
+  # would rewrite any number that happened to equal a row ID — `comments_count`,
+  # a width, a byte size — and quietly stop asserting it.
+  IDENTIFIER_KEYS = %w[id screenshot_id annotation_id].freeze
+
+  def normalize_golden(value, scenario)
+    identifiers = scenario.to_h { |placeholder, id| [ id, placeholder ] }
+
+    case value
+    when Hash
+      value.to_h do |key, nested|
+        case key
+        when "created_at" then [ key, "<timestamp>" ]
+        when "cropped_image_base64" then [ key, "<cropped-png-base64>" ]
+        when "url" then [ key, "<media-url>" ]
+        when "url_expires_at" then [ key, "<url-expiry>" ]
+        when *IDENTIFIER_KEYS then [ key, identifiers.fetch(nested, nested) ]
+        else [ key, normalize_golden(nested, scenario) ]
+        end
+      end
+    when Array then value.map { |item| normalize_golden(item, scenario) }
+    else value
+    end
+  end
 
   def call_tool
     JSON.parse(GetAnnotationTool.new.call(project_id: @project.id, annotation_id: @annotation.id))

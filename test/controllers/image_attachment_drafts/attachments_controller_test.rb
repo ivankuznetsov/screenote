@@ -127,6 +127,38 @@ module ImageAttachmentDrafts
       assert_not @batch.image_attachments.sole.image.attached?
     end
 
+    # A tombstone only has work to do while an upload for the same key might
+    # still be in flight, so the window is bounded. Without that bound, one open
+    # batch could accumulate rows forever and make every later claim, removal,
+    # and cleanup pass lock more of them.
+    test "retained removal tombstones stay bounded on one open batch" do
+      keys = 20.times.map { |index| "invented-#{index}" }
+      keys.each do |client_key|
+        delete discard_image_attachment_draft_batch_attachments_path(@batch.public_id),
+          params: { client_key: client_key }, as: :json
+        assert_response :success
+      end
+
+      tombstones = @batch.image_attachments.where(failure_code: ImageAttachment::REMOVAL_TOMBSTONE)
+
+      assert_equal ImageAttachment::MAX_FILES, tombstones.count
+      assert_equal keys.last(ImageAttachment::MAX_FILES), tombstones.order(:id).pluck(:client_key)
+    end
+
+    # Pruning may only drop markers; a ready draft is never a tombstone and must
+    # survive however many removals go past it.
+    test "bounding tombstones never touches a ready draft" do
+      post_upload("keeper.png", client_key: "keeper")
+      keeper = response.parsed_body.dig("attachment", "id")
+
+      10.times do |index|
+        delete discard_image_attachment_draft_batch_attachments_path(@batch.public_id),
+          params: { client_key: "churn-#{index}" }, as: :json
+      end
+
+      assert_predicate ImageAttachment.find(keeper), :state_ready?
+    end
+
     test "a collaborator cannot upload into another member's draft" do
       @project.project_memberships.find_or_create_by!(user: users(:bob)) { |m| m.role = :member }
       delete session_path

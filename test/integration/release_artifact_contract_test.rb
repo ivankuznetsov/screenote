@@ -1501,6 +1501,16 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
 
     assert_equal ReleaseValidation::REQUIRED_CHECKS.map { |name| "CI / #{name}" }.sort,
       contexts.sort
+
+    # The PostgreSQL lifecycle job is not part of the database-agnostic CI
+    # matrix, so it is required on its own. Without it the branch could merge
+    # with the row-lock, aggregate-race, and atomic-claim evidence unproven.
+    lifecycle = checks.find do |check|
+      check.fetch("context") == ReleaseValidation::CONCURRENCY_QUALIFICATION_CHECK
+    end
+
+    assert_not_nil lifecycle, "the server-database lifecycle job must be a required check"
+    assert_equal 15_368, lifecycle.fetch("integration_id")
   end
 
   test "self-hosted coverage is an explicit positive manifest with fail-closed drift detection" do

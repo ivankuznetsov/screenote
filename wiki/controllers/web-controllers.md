@@ -3,7 +3,7 @@ title: Web Controllers
 type: controller
 source: app/controllers/
 created: 2026-04-10
-updated: 2026-08-13
+updated: 2026-08-31
 tags: [controller, web, ui, auth]
 ---
 
@@ -160,6 +160,20 @@ Source: `app/controllers/annotation_comments_controller.rb`
 - Handles two paths: (1) reopen annotation if `reopen=1`, (2) regular comment
 - Scoped via screenshot -> annotation -> project membership check
 - Permits: `body`, `reopen`
+- The reopen state guard runs inside the claim's parent builder, not in front of
+  it. A retry of a reopen whose response was lost arrives against an annotation
+  its own first attempt already opened, so it has to reach the claimed batch and
+  replay the comment that reopen created rather than be rejected for the state
+  it caused.
+- The claim is given a matcher for this exact disclosure — same thread, same
+  action — because parent class alone cannot tell two reply composers apart.
+- Success answers with `annotation_comment_id`, which for a replayed post is the
+  comment the first attempt created.
+
+Both create endpoints share `ImageAttachmentSubmission`. Every ordinary 422
+answers with the editable form state the still-mounted composer needs to restore
+itself — the message body, and for the root overlay the selected coordinates and
+viewport — alongside the batch public ID and the ready attachment IDs.
 
 ---
 
