@@ -42,7 +42,7 @@ The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and 
 | `list_screenshots` | `app/tools/list_screenshots_tool.rb` | List screenshots/versions with annotation counts and pagination |
 | `create_screenshot` | `app/tools/create_screenshot_tool.rb` | Upload one base64 PNG/JPEG screenshot directly through MCP |
 | `create_screenshot_upload` | `app/tools/create_screenshot_upload_tool.rb` | Create one desktop `ScreenshotImage` and return a credential-free URL plus one-time upload bearer |
-| `create_multi_viewport_screenshot` | `app/tools/create_multi_viewport_screenshot_tool.rb` | Create one screenshot with 1-3 viewport variants and per-variant URL/bearer pairs |
+| `create_multi_viewport_screenshot` | `app/tools/create_multi_viewport_screenshot_tool.rb` | Create one Page version with 1-3 viewport variants and per-variant URL/bearer pairs |
 | `list_annotations` | `app/tools/list_annotations_tool.rb` | List annotations with status, screenshot, viewport, limit, and offset filters |
 | `get_annotation` | `app/tools/get_annotation_tool.rb` | Return annotation details, comments, cropped image data, and attachment metadata |
 | `create_annotation` | `app/tools/create_annotation_tool.rb` | Create point or region annotation; viewport is required for multi-variant screenshots |
@@ -73,7 +73,7 @@ tool: authoring is a browser session capability.
 
 `create_multi_viewport_screenshot` creates a parent [[screenshot]] plus one [[models/screenshot-image]] per requested viewport inside a transaction. Upload URLs are per `ScreenshotImage`, but the endpoint remains `/api/screenshots/:id/upload` for URL shape stability.
 
-For full-project capture runs, `create_snapshot` returns a `snapshot_id`; callers pass that id to each `create_multi_viewport_screenshot` call. Both tools enforce the current project boundary, and the screenshot response echoes the associated `snapshot_id`. Git commits are trimmed and normalized to lowercase before validation. A supplied `taken_at` must be an ISO 8601 timestamp ending in `Z` or an explicit `+/-HH:MM` offset so agent output is independent of the server timezone.
+For full-project capture runs, `create_snapshot` returns a `snapshot_id`; callers pass that id to each `create_multi_viewport_screenshot` call. One Snapshot accepts one Screenshot version per Page. A different screen needs a different Page, while the next capture of that screen needs a new Snapshot. The tool description and `snapshot_id` schema metadata expose this rule to agents. Both tools enforce the current project boundary, and the screenshot response echoes the associated `snapshot_id`. A Snapshot deleted after the project-scoped precheck returns the same `invalid_arguments` envelope as an initially missing Snapshot. Git commits are trimmed and normalized to lowercase before validation. A supplied `taken_at` must be an ISO 8601 timestamp ending in `Z` or an explicit `+/-HH:MM` offset so agent output is independent of the server timezone.
 
 Annotations are scoped by `Annotation#viewport`. `CreateAnnotationTool` defaults only when a screenshot has exactly one available viewport; otherwise it returns an argument error requiring an explicit viewport.
 

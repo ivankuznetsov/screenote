@@ -3,7 +3,7 @@ title: Snapshot
 type: model
 source: app/models/snapshot.rb
 created: 2026-05-14
-updated: 2026-08-08
+updated: 2026-09-04
 tags: [model, snapshot, project, screenshot]
 ---
 
@@ -61,6 +61,11 @@ Source: `app/models/snapshot.rb`
 - `screenshots.snapshot_id` is nullable. Existing and ad-hoc screenshots remain outside snapshots.
 - Deleting a snapshot nullifies linked screenshots instead of deleting them.
 - Duplicate `(project_id, git_commit)` rows are allowed: repeated captures of the same commit at different times are distinct snapshot runs.
+- Within one run, each case-insensitive Page identity maps to exactly one
+  Screenshot version. Its desktop, tablet, and mobile images are
+  ScreenshotImage children. The service rejects new manifests that reuse one
+  Page for multiple titles, while an exact replay of an already-stored legacy
+  manifest remains resumable.
 - A partial unique index on `(project_id, manifest_digest)` deduplicates only manifest-backed runs; legacy duplicate commit snapshots remain valid.
 - MCP `taken_at` input must include `Z` or an explicit `+/-HH:MM` offset; offset-less timestamps are rejected instead of being interpreted in the server timezone.
 - The project page can filter strictly to pages that have screenshots in one selected snapshot. When filtered, each page card's thumbnail switches from the page's `latest_screenshot` to the newest ready screenshot belonging to that snapshot, so the user sees the snapshot-time look (not whatever was uploaded afterward).

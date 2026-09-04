@@ -3,7 +3,7 @@ title: Page
 type: model
 source: app/models/page.rb
 created: 2026-04-10
-updated: 2026-08-03
+updated: 2026-09-04
 tags: [model, page, hierarchy]
 ---
 
@@ -61,6 +61,10 @@ Source: `app/models/page.rb`
 - `/pages/:id` opens the newest screenshot version directly. Older screenshot
   versions are selectable from the workspace sidebar via page-scoped
   `version_id`; these versions may or may not belong to a capture `Snapshot`.
+- A Page identifies one stable logical screen, normally a normalized route.
+  One capture Snapshot may contribute at most one Screenshot version to that
+  Page; a later Snapshot contributes the next version. Distinct screens or
+  states in one run require distinct Page names.
 - Project cards keep the exact selected screenshot id in their page-workspace
   href, including snapshot-filtered cards; they do not route through the
   compatibility screenshot URL.

@@ -3,7 +3,7 @@ title: Screenshot
 type: model
 source: app/models/screenshot.rb
 created: 2026-04-10
-updated: 2026-07-10
+updated: 2026-09-04
 tags: [model, screenshot, image, active-storage]
 ---
 
@@ -49,6 +49,11 @@ Source: `app/models/screenshot.rb`
 - `width`, `height`: integer > 0 (allow nil for pending uploads)
 - legacy `image`: content type must be PNG or JPEG, max 20MB when attached
 - `snapshot_belongs_to_same_project`: when `snapshot_id` is set, the snapshot's `project_id` must match the page's `project_id`. Defense-in-depth at the AR layer; raw SQL updates bypass it (the DB FK doesn't constrain cross-project pairings, only existence).
+- A new or reassigned snapshot-backed Screenshot is invalid when that Snapshot
+  already has a Screenshot for the same Page. The validation locks the Snapshot
+  while checking application writes, preserving Page as screen identity and
+  Snapshot as run identity. Unchanged malformed historical rows remain readable
+  and editable.
 - `manifest_entry_digest`: normalized SHA-256 hex, required and unique within a manifest-backed snapshot, and rejected on legacy/ad-hoc capture rows.
 
 ## Callbacks
@@ -77,7 +82,10 @@ Source: `app/models/screenshot.rb`
 
 - The two-step upload flow now creates a ScreenshotImage first, returns an upload URL + token, and attaches the binary to that child image in `Api::ScreenshotUploadsController`.
 - Single-image uploads still create a desktop ScreenshotImage so old callers keep working with the new reader path.
-- Snapshot runs create one [[models/snapshot]] and pass its id into every multi-viewport screenshot upload for that run. Single-page/ad-hoc uploads omit `snapshot_id`.
+- Snapshot runs create one [[models/snapshot]] and pass its id into every
+  multi-viewport screenshot upload for that run. Each Page receives one
+  Screenshot with viewport children; later runs add later Page versions.
+  Single-page/ad-hoc uploads omit `snapshot_id`.
 - The partial unique `(snapshot_id, manifest_entry_digest)` index prevents duplicate prepared entries while leaving existing nullable rows unchanged.
 
 See also: [[page]], [[models/snapshot]], [[annotation]], [[models/screenshot-image]], [[services/annotation-crop-service]]

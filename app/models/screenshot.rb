@@ -19,6 +19,7 @@ class Screenshot < ApplicationRecord
   scope :recent_first, -> { order(created_at: :desc, id: :desc) }
 
   before_validation :normalize_manifest_entry_digest
+  before_validation :lock_snapshot_for_page_identity, if: :snapshot_page_identity_changed?
 
   generates_token_for :upload, expires_in: 5.minutes do
     image.attached?.to_s
@@ -30,6 +31,9 @@ class Screenshot < ApplicationRecord
     format: { with: Snapshot::SHA256_FORMAT, message: Snapshot::SHA256_ERROR_MESSAGE },
     uniqueness: { scope: :snapshot_id },
     allow_nil: true
+  validates :page_id,
+    uniqueness: { scope: :snapshot_id, message: "can only have one version per snapshot" },
+    if: :snapshot_page_identity_changed?
   validate :acceptable_image
   validate :snapshot_belongs_to_same_project, if: :snapshot_id?
   validate :manifest_identity_matches_snapshot
@@ -143,5 +147,13 @@ class Screenshot < ApplicationRecord
     return if page && snapshot.project_id == page.project_id
 
     errors.add(:snapshot, "must belong to the same project as the page")
+  end
+
+  def lock_snapshot_for_page_identity
+    snapshot&.lock!
+  end
+
+  def snapshot_page_identity_changed?
+    snapshot_id? && (new_record? || will_save_change_to_snapshot_id? || will_save_change_to_page_id?)
   end
 end

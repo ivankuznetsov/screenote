@@ -3,7 +3,7 @@ title: API CLI
 type: architecture
 source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
 created: 2026-07-08
-updated: 2026-08-30
+updated: 2026-09-04
 tags: [cli, api, rest, agents, self-hosting, once]
 ---
 
@@ -125,9 +125,9 @@ Exit codes:
 
 ## Snapshot REST Foundation
 
-The private service now exposes project-scoped prepare and show resources for a manifest-driven public CLI. Preparation accepts normalized page/title/viewport entries, expected PNG/JPEG types, image content SHA-256 values, and opaque relative-file reference hashes. The server verifies the aggregate manifest identity before creating the complete Snapshot -> Screenshot -> ScreenshotImage graph in one transaction.
+The private service now exposes project-scoped prepare and show resources for a manifest-driven public CLI. Preparation accepts normalized page/title/viewport entries, expected PNG/JPEG types, image content SHA-256 values, and opaque relative-file reference hashes. The server verifies the aggregate manifest identity and requires every case-insensitive Page identity to name exactly one Screenshot group before creating the complete Snapshot -> Screenshot -> ScreenshotImage graph in one transaction. It verifies the rule again after resolving Page rows so database-specific `LOWER()` behavior cannot collapse two groups into one Page. Distinct screens in one run therefore require distinct Page values; repeated viewports of one screen share the same Page and title.
 
-An identical request resumes the same graph and returns image-level `awaiting_upload`, `processing`, `failed`, or `ready` state plus a snapshot-filtered project review URL. Replay also ensures every attached pending image has dimension processing scheduled, recovering when attachment commit succeeded but the original queue enqueue failed. Overlapping jobs for the same attachment blob generation are discarded by the production queue; a replacement blob receives a distinct generation, and stale analysis cannot update it. A changed contract gets a different manifest identity; a stored graph that no longer matches its identity returns `manifest_conflict`. Readable client file paths never enter the REST request or response.
+An identical request resumes the same graph and returns image-level `awaiting_upload`, `processing`, `failed`, or `ready` state plus a snapshot-filtered project review URL. Exact replay is checked before the new Page-identity rule so legacy malformed snapshots remain resumable but cannot establish new malformed graphs. Replay also ensures every attached pending image has dimension processing scheduled, recovering when attachment commit succeeded but the original queue enqueue failed. Overlapping jobs for the same attachment blob generation are discarded by the production queue; a replacement blob receives a distinct generation, and stale analysis cannot update it. A changed contract gets a different manifest identity; a stored graph that no longer matches its identity returns `manifest_conflict`. Readable client file paths never enter the REST request or response.
 
 Prepared image bytes upload through a separate bearer-authenticated raw-body route. It uses bounded disk-backed streaming, verifies actual PNG/JPEG bytes against the declared and prepared type, verifies SHA-256 content identity, and treats an identical retry as success. Failed dimension processing can be retried without creating another blob. The older MCP upload route likewise keeps its short-lived purpose-specific bearer out of the URL by returning the upload URL, token, and content type as separate fields.
 

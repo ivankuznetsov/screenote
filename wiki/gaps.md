@@ -3,7 +3,7 @@ title: Gaps
 type: gap
 source: wiki analysis, plans/, todos/
 created: 2026-04-10
-updated: 2026-08-31
+updated: 2026-09-04
 tags: [gaps, documentation, todo, deployment, once, release]
 ---
 
@@ -133,6 +133,16 @@ Areas where documentation is missing or incomplete. Updated from current source,
   associations are preloaded only after filtering, but every page row is still
   materialized. If projects grow large enough for this to become measurable,
   add an indexed canonical path column and backfill it from `Page.display_path`.
+
+### Snapshot Page Identity
+
+- New manifests, MCP writes, and ordinary Active Record creates or identity
+  reassignments reject a second Screenshot for the same Page and Snapshot.
+  Application writes serialize on the Snapshot, and unchanged malformed
+  historical snapshots remain readable. Raw SQL can still bypass the model and
+  there is no database uniqueness constraint. Production rows must be audited
+  and repaired into stable Page identities before adding a partial unique index
+  on `(snapshot_id, page_id)`.
 
 ### Admin Features
 - Admin dashboard only has 3 stats. If there are admin-only features beyond the dashboard, they are not documented.

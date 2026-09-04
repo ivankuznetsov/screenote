@@ -104,6 +104,83 @@ class ScreenshotTest < ActiveSupport::TestCase
     assert_includes snapshot.screenshots, screenshot
   end
 
+  test "snapshot accepts only one screenshot version per page" do
+    snapshot = snapshots(:latest)
+    page = pages(:alice_page)
+    snapshot.screenshots.create!(title: "First capture", page: page)
+    duplicate = snapshot.screenshots.build(title: "Different screen", page: page)
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:page_id], "can only have one version per snapshot"
+  end
+
+  test "the same page can have versions in different snapshots" do
+    page = pages(:alice_page)
+    first = snapshots(:latest).screenshots.build(title: "First run", page: page)
+    second = snapshots(:earlier).screenshots.build(title: "Earlier run", page: page)
+
+    assert first.valid?
+    assert second.valid?
+  end
+
+  test "assigning a snapshot cannot introduce a second version for its page" do
+    snapshot = snapshots(:latest)
+    page = pages(:alice_page)
+    snapshot.screenshots.create!(title: "Snapshot version", page: page)
+    ad_hoc = page.screenshots.create!(title: "Ad-hoc version")
+
+    assert_not ad_hoc.update(snapshot: snapshot)
+    assert_includes ad_hoc.errors[:page_id], "can only have one version per snapshot"
+    assert_nil ad_hoc.reload.snapshot_id
+  end
+
+  test "reassigning a page cannot introduce a second version in its snapshot" do
+    project = projects(:alice_project)
+    snapshot = snapshots(:latest)
+    first_page = project.pages.create!(name: "First reassignment page")
+    second_page = project.pages.create!(name: "Second reassignment page")
+    first = snapshot.screenshots.create!(title: "First page version", page: first_page)
+    snapshot.screenshots.create!(title: "Second page version", page: second_page)
+
+    assert_not first.update(page: second_page)
+    assert_includes first.errors[:page_id], "can only have one version per snapshot"
+    assert_equal first_page, first.reload.page
+  end
+
+  test "concurrent creates serialize page identity within a snapshot" do
+    snapshot = snapshots(:latest)
+    page = pages(:alice_page)
+    ready = Queue.new
+    start = Queue.new
+    outcomes = Queue.new
+    errors = Queue.new
+
+    threads = 2.times.map do |index|
+      Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          ready << true
+          start.pop
+          Screenshot.create!(title: "Concurrent #{index}", snapshot_id: snapshot.id, page_id: page.id)
+          outcomes << :created
+        rescue ActiveRecord::RecordInvalid
+          outcomes << :rejected
+        rescue StandardError => error
+          errors << error
+        end
+      end
+    end
+    2.times { ready.pop }
+    2.times { start << true }
+    threads.each(&:join)
+
+    assert errors.empty?, errors.size.times.map { errors.pop.full_message }.join("\n")
+    assert_equal 2, outcomes.size
+    assert_equal %i[created rejected], 2.times.map { outcomes.pop }.sort
+    assert_equal 1, Screenshot.where(snapshot: snapshot, page: page).count
+  ensure
+    Screenshot.where(snapshot: snapshot, page: page).destroy_all if snapshot && page
+  end
+
   test "invalid when snapshot belongs to a different project than the page" do
     # Defense-in-depth against direct ActiveRecord writes that bypass the
     # MCP tool's `current_project.snapshots.find_by` scoping.
