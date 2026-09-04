@@ -136,6 +136,69 @@ module Snapshots
       projects(:alice_project).pages.where(name: "Concurrent Public CLI").destroy_all
     end
 
+    test "rejects multiple screenshot groups for one page in a new snapshot" do
+      payload = snapshot_manifest_payload(entries: [
+        snapshot_entry(page: "Hive Web", title: "Task board", viewport: :desktop, seed: "task-board"),
+        snapshot_entry(page: "hive web", title: "Agent status", viewport: :desktop, seed: "agent-status")
+      ])
+
+      assert_no_difference [ "Snapshot.count", "Screenshot.count", "ScreenshotImage.count", "Page.count" ] do
+        error = assert_raises(PrepareUpload::InvalidContract) do
+          PrepareUpload.call(project: projects(:alice_project), payload: payload)
+        end
+
+        assert_equal "each page must identify exactly one screenshot per snapshot", error.message
+      end
+    end
+
+    test "uses lowercase rather than Unicode case folding for page identity" do
+      payload = snapshot_manifest_payload(entries: [
+        snapshot_entry(page: "Straße", title: "German street", viewport: :desktop, seed: "german-street"),
+        snapshot_entry(page: "STRASSE", title: "Capital street", viewport: :desktop, seed: "capital-street")
+      ])
+
+      assert_difference({ "Snapshot.count" => 1, "Screenshot.count" => 2, "Page.count" => 2 }) do
+        result = PrepareUpload.call(project: projects(:alice_project), payload: payload)
+
+        assert result.created
+      end
+    end
+
+    test "rejects page groups that the database resolves to the same Page" do
+      payload = snapshot_manifest_payload(entries: [
+        snapshot_entry(page: "Straße", title: "German street", viewport: :desktop, seed: "db-german-street"),
+        snapshot_entry(page: "STRASSE", title: "Capital street", viewport: :desktop, seed: "db-capital-street")
+      ])
+      resolved_page = projects(:alice_project).pages.create!(name: "Database identity")
+      service = PrepareUpload.new(project: projects(:alice_project), payload: payload)
+      service.define_singleton_method(:find_or_create_page!) { |_name| resolved_page }
+
+      assert_no_difference [ "Snapshot.count", "Screenshot.count", "ScreenshotImage.count", "Page.count" ] do
+        error = assert_raises(PrepareUpload::InvalidContract) do
+          service.call
+        end
+
+        assert_equal "invalid_manifest", error.code
+        assert_equal "each page must identify exactly one screenshot per snapshot", error.message
+      end
+    end
+
+    test "resumes an existing legacy manifest with multiple screenshot groups for one page" do
+      payload = snapshot_manifest_payload(entries: [
+        snapshot_entry(page: "Legacy Hive Web", title: "Task board", viewport: :desktop, seed: "legacy-task-board"),
+        snapshot_entry(page: "legacy hive web", title: "Agent status", viewport: :desktop, seed: "legacy-agent-status")
+      ])
+      contract = PrepareUpload.new(project: projects(:alice_project), payload: payload).send(:normalize_contract)
+      snapshot = create_legacy_snapshot_graph(contract)
+
+      assert_no_difference [ "Snapshot.count", "Screenshot.count", "ScreenshotImage.count", "Page.count" ] do
+        replay = PrepareUpload.call(project: projects(:alice_project), payload: payload)
+
+        assert_not replay.created
+        assert_equal snapshot.id, replay.snapshot.id
+      end
+    end
+
     test "invalid contracts create no rows" do
       invalid_payloads = [
         snapshot_manifest_payload.merge(version: 2),
@@ -182,6 +245,52 @@ module Snapshots
         PrepareUpload.call(project: projects(:alice_project), payload: payload)
       end
       assert_equal "manifest_conflict", error.code
+    end
+
+    test "replay uses the same lowercase Page identity as new manifests" do
+      payload = snapshot_manifest_payload(entries: [
+        snapshot_entry(page: "Straße", title: "German street", viewport: :desktop, seed: "replay-german-street"),
+        snapshot_entry(page: "STRASSE", title: "Capital street", viewport: :desktop, seed: "replay-capital-street")
+      ])
+      contract = PrepareUpload.new(project: projects(:alice_project), payload: payload).send(:normalize_contract)
+      snapshot = create_legacy_snapshot_graph(contract)
+      german_group, capital_group = contract.groups
+      capital_page = snapshot.screenshots.find_by!(manifest_entry_digest: capital_group.digest).page
+      snapshot.screenshots.find_by!(manifest_entry_digest: german_group.digest).update_columns(page_id: capital_page.id)
+
+      error = assert_raises(PrepareUpload::Conflict) do
+        PrepareUpload.call(project: projects(:alice_project), payload: payload)
+      end
+
+      assert_equal "manifest_conflict", error.code
+      assert_equal "stored screenshot metadata does not match the manifest", error.message
+    end
+
+    private
+
+    def create_legacy_snapshot_graph(contract)
+      project = projects(:alice_project)
+      snapshot = project.snapshots.create!(
+        git_commit: contract.git_commit,
+        taken_at: contract.taken_at,
+        manifest_digest: contract.manifest_digest
+      )
+      contract.groups.each do |group|
+        screenshot = snapshot.screenshots.build(
+          page: Page.find_or_create_by_name!(project, group.page),
+          title: group.title,
+          manifest_entry_digest: group.digest
+        )
+        screenshot.save!(validate: false)
+        group.entries.each do |entry|
+          screenshot.screenshot_images.create!(
+            viewport: entry.viewport,
+            content_sha256: entry.content_sha256,
+            expected_content_type: entry.mime_type
+          )
+        end
+      end
+      snapshot
     end
   end
 end

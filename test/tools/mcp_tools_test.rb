@@ -338,6 +338,25 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal snapshot.id, result["snapshot_id"]
   end
 
+  test "create_multi_viewport_screenshot rejects a second screen for the same page and snapshot" do
+    snapshot = snapshots(:latest)
+    page = @project.pages.create!(name: "One screen per snapshot")
+    snapshot.screenshots.create!(title: "First screen", page: page)
+
+    assert_no_difference "Screenshot.count" do
+      result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
+        project_id: @project.id,
+        page_name: page.name,
+        title: "Different screen",
+        snapshot_id: snapshot.id,
+        viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+      ))
+
+      assert_equal "validation_failed", result["error"]
+      assert_includes result["details"], "Page can only have one version per snapshot"
+    end
+  end
+
   test "create_multi_viewport_screenshot without snapshot_id creates ad-hoc screenshot" do
     result = JSON.parse(CreateMultiViewportScreenshotTool.new.call(
       project_id: @project.id,
@@ -367,6 +386,38 @@ class McpToolsTest < ActiveSupport::TestCase
       assert_equal "invalid_arguments", result["error"]
       assert_match(/snapshot not found/, result["message"])
     end
+  end
+
+  test "create_multi_viewport_screenshot handles a snapshot deleted after its precheck" do
+    page = @project.pages.create!(name: "Deleted snapshot race")
+    snapshot = @project.snapshots.create!(git_commit: "abc1234", taken_at: Time.current)
+    tool = CreateMultiViewportScreenshotTool.new
+    persist = CreateMultiViewportScreenshotTool.instance_method(:create_screenshot_with_uploads!)
+    tool.define_singleton_method(:create_screenshot_with_uploads!) do |**arguments|
+      Snapshot.where(id: arguments.fetch(:snapshot).id).delete_all
+      persist.bind_call(self, **arguments)
+    end
+
+    assert_no_difference "Screenshot.count" do
+      result = JSON.parse(tool.call(
+        project_id: @project.id,
+        page_name: page.name,
+        title: "Deleted snapshot version",
+        snapshot_id: snapshot.id,
+        viewports: [ { viewport: "desktop", mime_type: "image/png" } ]
+      ))
+
+      assert_equal "invalid_arguments", result["error"]
+      assert_equal "snapshot not found in project", result["message"]
+    end
+  end
+
+  test "create_multi_viewport_screenshot describes Page and Snapshot identity to agents" do
+    schema = CreateMultiViewportScreenshotTool.input_schema_to_json
+
+    assert_includes CreateMultiViewportScreenshotTool.description, "one Page version"
+    assert_includes CreateMultiViewportScreenshotTool.description, "one Screenshot per Page"
+    assert_includes schema.dig(:properties, :snapshot_id, :description), "one Screenshot per Page"
   end
 
   test "create_multi_viewport_screenshot with only one entry creates a single variant" do

@@ -3,7 +3,7 @@ title: Data Model
 type: architecture
 source: db/schema.rb
 created: 2026-04-10
-updated: 2026-08-31
+updated: 2026-09-04
 tags: [database, schema, models, relationships]
 ---
 
@@ -78,9 +78,9 @@ erDiagram
 |-------|---------|-------------|
 | `users` | User accounts with auth and checked activity state | email, password_digest, confirmed_at, oauth_provider, oauth_uid, access_status |
 | `projects` | Top-level container | name, description, user_id (creator) |
-| `pages` | Groups screenshots within a project | name, project_id |
+| `pages` | Stable logical screen identity grouping versions across capture runs | name, project_id |
 | `snapshots` | Capture-run records for a project | project_id, git_commit, taken_at, optional manifest_digest |
-| `screenshots` | Logical capture/version under a page | title, page_id, snapshot_id, optional manifest_entry_digest, derived status, legacy width/height during migration |
+| `screenshots` | Logical capture/version under a page; at most one per page in a new snapshot run | title, page_id, snapshot_id, optional manifest_entry_digest, derived status, legacy width/height during migration |
 | `screenshot_images` | Per-viewport image variant | screenshot_id, viewport (enum), status (enum), content_sha256, expected_content_type, width, height |
 | `annotations` | Feedback pinned to screenshot regions | x_percent, y_percent, width_percent, height_percent, viewport, comment, status (enum), screenshot_id, user_id |
 | `annotation_comments` | Threaded comments and durable API image-comment idempotency receipts | body, action (enum), annotation_id, user_id, api_key_id, nullable idempotency_fingerprint/request_digest, notified_at |

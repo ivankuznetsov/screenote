@@ -239,7 +239,7 @@ class SnapshotTest < ActiveSupport::TestCase
     end
   end
 
-  test "thumbnails load only the newest ready screenshot per page" do
+  test "thumbnails tolerate legacy snapshots with multiple versions per page" do
     project = users(:alice).owned_projects.create!(name: "Snapshot thumbnails")
     snapshot = project.snapshots.create!(git_commit: "abc1234")
     first_page = project.pages.create!(name: "First")
@@ -250,12 +250,13 @@ class SnapshotTest < ActiveSupport::TestCase
       status: :ready,
       created_at: 2.hours.ago
     )
-    newest = first_page.screenshots.create!(
+    newest = first_page.screenshots.build(
       title: "Newest",
       snapshot: snapshot,
       status: :ready,
       created_at: 1.hour.ago
     )
+    newest.save!(validate: false)
     tied_at = 30.minutes.ago.change(usec: 0)
     second_page.screenshots.create!(
       title: "Lower id",
@@ -263,12 +264,13 @@ class SnapshotTest < ActiveSupport::TestCase
       status: :ready,
       created_at: tied_at
     )
-    higher_id = second_page.screenshots.create!(
+    higher_id = second_page.screenshots.build(
       title: "Higher id",
       snapshot: snapshot,
       status: :ready,
       created_at: tied_at
     )
+    higher_id.save!(validate: false)
 
     instantiated_screenshots = 0
     callback = lambda do |*, payload|

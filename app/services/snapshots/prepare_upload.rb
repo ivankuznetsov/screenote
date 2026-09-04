@@ -60,6 +60,7 @@ module Snapshots
       existing = project.snapshots.find_by(manifest_digest: contract.manifest_digest)
       return resume_existing(existing, contract) if existing
 
+      validate_page_identity!(contract)
       Result.new(snapshot: create_graph!(contract), created: true)
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
       existing = project.snapshots.find_by(manifest_digest: contract&.manifest_digest)
@@ -192,16 +193,29 @@ module Snapshots
       end
     end
 
+    def validate_page_identity!(contract)
+      duplicate_page = contract.groups
+        .group_by { |group| page_identity_key(group.page) }
+        .any? { |_page, groups| groups.many? }
+      invalid!("each page must identify exactly one screenshot per snapshot") if duplicate_page
+    end
+
     def create_graph!(contract)
       snapshot = nil
       Snapshot.transaction do
+        resolved_groups = contract.groups.map do |group|
+          [ group, find_or_create_page!(group.page) ]
+        end
+        if resolved_groups.map { |_group, page| page.id }.uniq.length != resolved_groups.length
+          invalid!("each page must identify exactly one screenshot per snapshot")
+        end
+
         snapshot = project.snapshots.create!(
           git_commit: contract.git_commit,
           taken_at: contract.taken_at,
           manifest_digest: contract.manifest_digest
         )
-        contract.groups.each do |group|
-          page = Page.find_or_create_by_name!(project, group.page)
+        resolved_groups.each do |group, page|
           screenshot = snapshot.screenshots.create!(
             page: page,
             title: group.title,
@@ -232,7 +246,8 @@ module Snapshots
         screenshot = screenshots[group.digest]
         conflict!("stored screenshot membership does not match the manifest") unless screenshot
         conflict!("stored screenshot metadata does not match the manifest") unless
-          screenshot.title == group.title && screenshot.page.name.casecmp?(group.page)
+          screenshot.title == group.title &&
+            page_identity_key(screenshot.page.name) == page_identity_key(group.page)
 
         images = screenshot.screenshot_images.index_by(&:viewport)
         conflict!("stored viewport membership does not match the manifest") unless images.length == group.entries.length
@@ -244,6 +259,14 @@ module Snapshots
       end
 
       snapshot
+    end
+
+    def page_identity_key(value)
+      value.downcase
+    end
+
+    def find_or_create_page!(name)
+      Page.find_or_create_by_name!(project, name)
     end
 
     def invalid!(message)
