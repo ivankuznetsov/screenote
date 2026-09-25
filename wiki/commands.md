@@ -41,8 +41,8 @@ Implemented command groups:
 | `screenote annotation resolve` | Idempotently resolve an annotation with an optional final comment |
 | `screenote comment add` | Add an annotation comment |
 
-Annotation reopening remains available in the web review UI and is not yet a
-CLI command.
+Annotation reopening is available in the web review UI only; the CLI
+deliberately has no reopen command.
 
 ## Source Files
 
