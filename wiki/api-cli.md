@@ -94,9 +94,9 @@ User-global commands are `project list`, `project create`, `config`, `login`, an
 
 `annotation list` without `--screenshot` lists annotations across all screenshots in the resolved project. The CLI pages through screenshots and per-screenshot annotations, skips screenshots that become inaccessible during aggregation, reports the aggregate total, and applies `--limit`/`--offset` to the aggregate result.
 
-`annotation get --crop-file PATH` fully validates and writes the PNG crop atomically with owner-only permissions, returns the local path in JSON, and omits the base64 field. `annotation resolve --annotation ID --comment TEXT` calls the idempotent project-scoped resolution endpoint and returns its JSON response, so an agent can record the fix while closing the thread. Reopening remains web-only until the CLI exposes it.
+`annotation get --crop-file PATH` fully validates and writes the PNG crop atomically with owner-only permissions, returns the local path in JSON, and omits the base64 field. `annotation resolve --annotation ID --comment TEXT` calls the idempotent project-scoped resolution endpoint and returns its JSON response, so an agent can record the fix while closing the thread. Reopening is web-only by design; the CLI has no reopen command and none is planned.
 
-The public CLI `main` branch implements `annotation resolve`, but an untagged moving branch is not a supported artifact. The first supported Screenote release must name an exact CLI tag that contains the command before this workflow enters the supported release contract.
+`annotation resolve` ships in every tagged public CLI release since `v0.3.0` (current `v0.4.1`).
 
 `screenshot create` reads stdin when `--file` is omitted or set to `-`. When uploading a file, the content type is derived from the file extension; for example, `.png` maps to `image/png`. Stdin uploads fall back to `application/octet-stream` and are re-identified server-side from the bytes.
 
@@ -184,4 +184,4 @@ raw service response.
 
 ## Deferred
 
-Public CLI wiring for `annotation reopen`, snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remains future work. The exact CLI tag named by a Screenote release is authoritative for supported agent workflows.
+Snapshot-scoped feedback retrieval, daemon/watch mode, member management, and required multi-viewport upload remains future work. The exact CLI tag named by a Screenote release is authoritative for supported agent workflows.
