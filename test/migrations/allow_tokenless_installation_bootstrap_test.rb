@@ -4,6 +4,8 @@ require "test_helper"
 require Rails.root.join("db/migrate/20260809120000_allow_tokenless_installation_bootstrap").to_s
 
 class AllowTokenlessInstallationBootstrapTest < ActiveSupport::TestCase
+  include MigrationDatabaseConfigHelper
+
   self.fixture_table_names = []
   self.use_transactional_tests = false
 
@@ -188,9 +190,5 @@ class AllowTokenlessInstallationBootstrapTest < ActiveSupport::TestCase
     %i[installations users].each do |table|
       @connection.drop_table(table, if_exists: true, force: :cascade)
     end
-  end
-
-  def migration_database_config
-    ENV["MIGRATION_TEST_DATABASE_URL"].presence || { adapter: "sqlite3", database: ":memory:" }
   end
 end

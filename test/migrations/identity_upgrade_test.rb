@@ -4,6 +4,8 @@ require "test_helper"
 require Rails.root.join("db/migrate/20260805132000_harden_user_and_invitation_identity").to_s
 
 class IdentityUpgradeTest < ActiveSupport::TestCase
+  include MigrationDatabaseConfigHelper
+
   self.fixture_table_names = []
   self.use_transactional_tests = false
 
@@ -300,9 +302,5 @@ class IdentityUpgradeTest < ActiveSupport::TestCase
       oauth_access_grants api_keys annotation_comments annotations subscriptions
       sessions project_memberships project_invitations projects users
     ].each { |table| @connection.drop_table(table, if_exists: true, force: :cascade) }
-  end
-
-  def migration_database_config
-    ENV["MIGRATION_TEST_DATABASE_URL"].presence || { adapter: "sqlite3", database: ":memory:" }
   end
 end

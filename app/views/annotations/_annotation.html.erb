@@ -15,11 +15,10 @@
   data-author-color="<%= author_color %>"
   >
   <div class="annotation-item__header">
-    <button type="button"
-            class="annotation-author-marker <%= author_color %>"
-            aria-label="Show annotation by <%= annotation_author_name %>"
-            data-author-color="<%= author_color %>"
-            data-testid="annotation-author-marker"><%= author_initials %></button>
+    <span class="annotation-author-marker <%= author_color %>"
+          title="<%= annotation_author_name %>"
+          data-author-color="<%= author_color %>"
+          data-testid="annotation-author-marker"><%= author_initials %></span>
     <span class="annotation-item__author"><%= annotation_author_name %></span>
     <span class="annotation-item__time"><%= time_ago_in_words(annotation.created_at) %> ago</span>
   </div>

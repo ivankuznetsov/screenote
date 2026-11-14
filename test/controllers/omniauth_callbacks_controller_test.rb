@@ -273,14 +273,6 @@ class OmniauthCallbacksControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def with_singleton_method(object, name, implementation)
-    original = object.method(name)
-    object.define_singleton_method(name, implementation)
-    yield
-  ensure
-    object.define_singleton_method(name, original) if original
-  end
-
   def self_hosted_deployment
     Screenote::Deployment.new(
       {

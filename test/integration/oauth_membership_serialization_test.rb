@@ -2,8 +2,10 @@
 
 require "test_helper"
 require "timeout"
+require_relative "../support/deterministic_concurrency_test_helper"
 
 class OauthMembershipSerializationTest < ActionDispatch::IntegrationTest
+  include DeterministicConcurrencyTestHelper
   self.use_transactional_tests = false
 
   REDIRECT_URI = "http://127.0.0.1:9876/callback"
@@ -403,13 +405,5 @@ class OauthMembershipSerializationTest < ActionDispatch::IntegrationTest
   def unique_user_code
     raw = SecureRandom.alphanumeric(10).upcase
     "#{raw.first(5)}-#{raw.last(5)}"
-  end
-
-  def pop_with_timeout(queue)
-    Timeout.timeout(5) { queue.pop }
-  end
-
-  def join_with_timeout(thread)
-    Timeout.timeout(5) { thread.join }
   end
 end

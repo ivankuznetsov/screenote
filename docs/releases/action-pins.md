@@ -11,7 +11,7 @@ These refs were resolved from their official GitHub repositories on 2026-08-06:
 | `actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803` | `actions/checkout` `v6` | Exact source checkout |
 | `ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b` | `ruby/setup-ruby` `v1` branch snapshot, observed 2026-07-22 | Ruby and Bundler setup |
 | `actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830` | `actions/cache` `v4` | RuboCop cache |
-| `actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16` | `actions/setup-go` `v6` | Transitional Go contract |
+| `actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16` | `actions/setup-go` `v6` | Public CLI source contract (`tmp/screenote-cli` checkout) |
 | `actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02` | `actions/upload-artifact` `v4` | Retained candidate, exact qualification/check records, and failed-test output |
 | `actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0` | `actions/download-artifact` `v5` | Exact-run candidate and live artifact-ID qualification retrieval |
 | `docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130` | `docker/setup-qemu-action` `v3.7.0` | ARM64 emulation |

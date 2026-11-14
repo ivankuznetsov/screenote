@@ -4,6 +4,8 @@ require "test_helper"
 require Rails.root.join("db/migrate/20260805131000_harden_oauth_principals_and_token_secrets").to_s
 
 class HardenOauthPrincipalsAndTokenSecretsTest < ActiveSupport::TestCase
+  include MigrationDatabaseConfigHelper
+
   self.fixture_table_names = []
   self.use_transactional_tests = false
 
@@ -263,9 +265,5 @@ class HardenOauthPrincipalsAndTokenSecretsTest < ActiveSupport::TestCase
     %i[oauth_device_grants oauth_access_tokens oauth_access_grants oauth_applications projects users].each do |table|
       @connection.drop_table(table, if_exists: true)
     end
-  end
-
-  def migration_database_config
-    ENV["MIGRATION_TEST_DATABASE_URL"].presence || { adapter: "sqlite3", database: ":memory:" }
   end
 end

@@ -1337,8 +1337,13 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     dockerfile = Rails.root.join("Dockerfile").read
     assert_equal [ BASE_IMAGE, "base", "base" ], dockerfile.scan(/^FROM\s+(\S+)/).flatten
     assert_equal "ruby-3.4.10\n", Rails.root.join(".ruby-version").read
-    %w[/go.mod /go.sum /cmd/ /internal/ /vendor/bundle/].each do |runtime_exclusion|
-      assert_includes Rails.root.join(".dockerignore").read.lines.map(&:strip), runtime_exclusion
+    docker_context_exclusions = Rails.root.join(".dockerignore").read.lines.map(&:strip)
+    %w[/vendor/bundle/ /test/ /wiki/ /todos/ /plans/ /raw/ /.llm-wiki/ /.claude/ /.githooks/].each do |runtime_exclusion|
+      assert_includes docker_context_exclusions, runtime_exclusion
+    end
+    assert_empty docker_context_exclusions.grep(%r{\A/?script}), "host operations run script/ entrypoints in the image"
+    %w[go.mod go.sum cmd internal .goreleaser.yml].each do |retired_go_source|
+      assert_not Rails.root.join(retired_go_source).exist?, "the canonical CLI lives in the public screenote-cli repository"
     end
     %w[source revision version description licenses].each do |label|
       assert_includes dockerfile, "org.opencontainers.image.#{label}"
@@ -1408,18 +1413,23 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
     assert_not_includes backup_smoke, "bootstrap_token"
   end
 
-  test "repository Go checks ignore the Rails vendor directory" do
-    workflow = YAML.safe_load(
-      Rails.root.join(".github/workflows/ci.yml").read,
-      permitted_classes: [],
-      aliases: false
-    )
-    step = workflow.fetch("jobs").fetch("public-cli").fetch("steps").find do |candidate|
-      candidate["name"] == "Test repository Go compatibility helpers"
+  test "Go tests run only against the canonical public CLI checkout" do
+    go_steps = %w[ci.yml cli-contract-main.yml].flat_map do |name|
+      workflow = YAML.safe_load(
+        Rails.root.join(".github/workflows", name).read,
+        permitted_classes: [],
+        aliases: false
+      )
+      workflow.fetch("jobs").values.flat_map { |job| job.fetch("steps") }.select do |step|
+        step.fetch("run", "").include?("go test")
+      end
     end
 
-    assert_not_nil step
-    assert_equal "env GOFLAGS=-mod=mod go test ./...", step.fetch("run")
+    assert_predicate go_steps, :any?
+    go_steps.each do |step|
+      assert_equal "tmp/screenote-cli", step["working-directory"], step["name"]
+    end
+    assert_not_includes Rails.root.join("config/ci.rb").read, "go test"
   end
 
   test "focused Rails CI jobs install the image runtime before Rails boots" do
@@ -1428,8 +1438,18 @@ class ReleaseArtifactContractTest < ActiveSupport::TestCase
       permitted_classes: [],
       aliases: false
     )
-    %w[backup-restore public-cli release-artifact].each do |job|
-      steps = workflow.fetch("jobs").fetch(job).fetch("steps")
+    cli_contract_main = YAML.safe_load(
+      Rails.root.join(".github/workflows/cli-contract-main.yml").read,
+      permitted_classes: [],
+      aliases: false
+    )
+    {
+      "backup-restore" => workflow,
+      "public-cli" => workflow,
+      "release-artifact" => workflow,
+      "cli-contract-main" => cli_contract_main
+    }.each do |job, source|
+      steps = source.fetch("jobs").fetch(job).fetch("steps")
       runtime = steps.find { |step| step.fetch("run", "").include?("libvips") }
       setup = steps.find { |step| step["name"] == "Set up Ruby" }
 

@@ -116,12 +116,6 @@ module Instance
       Rails.application.routes.url_helpers.respond_to?(:instance_administrator_transfer_path)
     end
 
-    def assert_private_headers
-      assert_includes response.headers.fetch("Cache-Control"), "no-store"
-      assert_equal "no-referrer", response.headers["Referrer-Policy"]
-      assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
-    end
-
     def instance_result(status)
       InstanceAdministration::Result.new(status: status)
     end

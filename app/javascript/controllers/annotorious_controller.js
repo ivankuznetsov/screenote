@@ -320,7 +320,7 @@ export default class extends Controller {
     pinContainer.appendChild(clone)
 
     this.updateAnnotationFormCoords(coords)
-    this.formTarget.style.visibility = "hidden"
+    this.formTarget.classList.add("annotation-form--measuring")
     this.formTarget.dataset.needsFocus = "true"
     if (local) this.renderDraftPin(coords)
     this.requestAnnotationFormPosition()
@@ -574,7 +574,7 @@ export default class extends Controller {
 
     form.style.left = `${position.left}px`
     form.style.top = `${position.top}px`
-    form.style.visibility = "visible"
+    form.classList.remove("annotation-form--measuring")
     if (form.dataset.needsFocus === "true") {
       delete form.dataset.needsFocus
       this.commentTarget.focus({ preventScroll: true })

@@ -3,6 +3,8 @@
 module Api
   module V1
     class ContractSerializer
+      NO_ANNOTATIONS = { total: 0, unresolved: 0 }.freeze
+
       class << self
         def project(project, screenshot_count: project.screenshots.count)
           {
@@ -23,17 +25,31 @@ module Api
           }
         end
 
-        def screenshot(screenshot, url_options: {})
+        # Annotation totals for the whole page come from one grouped count.
+        def screenshots(screenshots, url_options: {})
+          screenshots = screenshots.to_a
+          counts = ProjectScope.annotation_counts(screenshots.map(&:id))
+
+          screenshots.map do |screenshot|
+            screenshot(
+              screenshot,
+              annotation_counts: counts.fetch(screenshot.id, NO_ANNOTATIONS),
+              url_options: url_options
+            )
+          end
+        end
+
+        def screenshot(screenshot, annotation_counts:, url_options: {})
           {
             id: screenshot.id,
             title: screenshot.title,
             page_id: screenshot.page_id,
             page_name: screenshot.page.name,
             status: screenshot.status,
-            annotation_count: screenshot.annotations.size,
-            unresolved_count: screenshot.annotations.count(&:open?),
+            annotation_count: annotation_counts.fetch(:total),
+            unresolved_count: annotation_counts.fetch(:unresolved),
             annotate_url: routes.screenshot_url(screenshot, url_options),
-            viewports: screenshot.screenshot_images.sort_by(&:viewport).map { |image| screenshot_image(image) },
+            viewports: viewport_ordered(screenshot.screenshot_images).map { |image| screenshot_image(image) },
             created_at: screenshot.created_at.iso8601
           }
         end
@@ -50,7 +66,7 @@ module Api
 
         def snapshot_upload(snapshot, operation:, url_options: {})
           entries = snapshot.screenshots.sort_by(&:id).flat_map do |screenshot|
-            screenshot.screenshot_images.sort_by { |image| ScreenshotImage.viewports.fetch(image.viewport) }.map do |image|
+            viewport_ordered(screenshot.screenshot_images).map do |image|
               {
                 screenshot_id: screenshot.id,
                 manifest_entry_digest: screenshot.manifest_entry_digest,
@@ -96,8 +112,18 @@ module Api
           }
         end
 
-        def annotation(annotation)
-          annotation.as_api_json
+        def annotation(annotation, **counts)
+          annotation.as_api_json(**counts)
+        end
+
+        # Comment totals for the whole page come from one grouped count.
+        def annotations(annotations)
+          annotations = annotations.to_a
+          counts = ProjectScope.comment_counts(annotations.map(&:id))
+
+          annotations.map do |annotation|
+            annotation(annotation, comments_count: counts.fetch(annotation.id, 0))
+          end
         end
 
         # Detail reads are the only place attachment metadata appears, and
@@ -185,6 +211,12 @@ module Api
             height: image.height,
             attached: image.image.attached?
           }
+        end
+
+        # Enum order (desktop, tablet, mobile), as everywhere else variants
+        # are listed — not the alphabetical order of their labels.
+        def viewport_ordered(images)
+          images.sort_by { |image| ScreenshotImage.viewports.fetch(image.viewport) }
         end
 
         def screenshot_image_state(image)

@@ -40,16 +40,24 @@ class StripeWebhooksController < ActionController::Base
       Rails.logger.info("Stripe webhook: ignoring unhandled event type '#{event.type}'")
     end
 
+    forget_event(event) if response.server_error?
     head :ok unless response.committed? || performed?
   rescue ActiveRecord::RecordInvalid => e
     Screenote::Monitoring.notify(e, context: { event_type: event&.type, event_id: event&.id })
     head :ok # Stop retries for permanent validation failures
   rescue Stripe::StripeError => e
     Screenote::Monitoring.notify(e, context: { event_type: event&.type, event_id: event&.id })
+    forget_event(event)
     head :internal_server_error
   end
 
   private
+
+  # A retryable (5xx) response must not leave the idempotency row behind, or
+  # Stripe's retry would be answered "already processed" and the event lost.
+  def forget_event(event)
+    StripeWebhookEvent.where(stripe_event_id: event.id).delete_all if event
+  end
 
   def require_billing!
     head :not_found unless Screenote::Deployment.current.billing?

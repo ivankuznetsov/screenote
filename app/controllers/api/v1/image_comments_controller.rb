@@ -20,7 +20,7 @@ module Api
       def create
         return unless require_scope!(AuthenticatedPrincipal::WRITE_SCOPE)
 
-        project_id = scalar_param(:project_id)
+        project_id = scalar_param(:project_id, code: "invalid_project", message: "Invalid project")
         return if performed?
         project = require_current_project!(project_id)
         return unless project
@@ -33,7 +33,7 @@ module Api
           return
         end
 
-        body = scalar_param(:body)
+        body = scalar_param(:body, code: "invalid_body", message: "Invalid body")
         return if performed?
         invalid!("invalid_body") if body.blank?
 
@@ -72,16 +72,6 @@ module Api
 
         digest = request.headers["Screenote-Image-SHA256"].to_s
         invalid!("content_digest_mismatch", status: :conflict) if digest.present? && !SHA256.match?(digest)
-      end
-
-      def scalar_param(name)
-        value = params[name]
-        return value if value.is_a?(String) || value.is_a?(Integer)
-        return nil if value.nil?
-
-        code = name == :body ? "invalid_body" : "invalid_project"
-        render_error("Invalid #{name.to_s.humanize.downcase}", code:, status: :unprocessable_entity)
-        nil
       end
 
       def upload_rate_limit_project_id

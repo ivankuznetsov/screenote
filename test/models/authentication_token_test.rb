@@ -61,10 +61,8 @@ class AuthenticationTokenTest < ActiveSupport::TestCase
     token = build_token(purpose: :password_reset, subject: @user)
     token.save!
 
-    assert token.active?
     assert token.transition_to!(:consumed)
     assert token.consumed?
-    assert token.terminal?
     assert token.terminal_at.present?
     assert_not token.transition_to!(:cancelled)
     assert token.reload.consumed?
@@ -77,21 +75,6 @@ class AuthenticationTokenTest < ActiveSupport::TestCase
       build_token(purpose: :email_confirmation, subject: @user).tap(&:save!)
         .transition_to!(:outstanding)
     end
-  end
-
-  test "reports active and expired lifecycle boundaries without accepting a missing expiry" do
-    token = build_token(purpose: :password_reset, subject: @user)
-    assert_not token.expired?
-
-    token.expires_at = 1.second.ago
-    assert token.expired?
-    assert_not token.active?
-
-    token.expires_at = nil
-    assert_not token.expired?
-    assert_not token.active?
-    assert_not token.valid?
-    assert_includes token.errors[:expires_at], "must be present"
   end
 
   test "requires terminal_at to agree with state" do

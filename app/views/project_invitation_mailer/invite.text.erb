@@ -1,0 +1,15 @@
+You've been invited to collaborate
+=================================
+
+<%= @inviter.email %> invited you to the project "<%= @project.name %>" on Screenote.
+
+Accept the invitation:
+<%= @accept_url %>
+
+This link will expire in <%= distance_of_time_in_words(Time.current, @expires_at) %>.
+
+If the link does not work, enter this one-time code on the invitation link page:
+<%= @presentation.manual_code %>
+
+--
+Screenote — Visual feedback for AI agents

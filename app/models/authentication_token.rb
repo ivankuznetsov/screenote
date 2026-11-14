@@ -73,18 +73,6 @@ class AuthenticationToken < ApplicationRecord
     project_invitation_id || user_id
   end
 
-  def active?
-    outstanding? && expires_at&.future? == true
-  end
-
-  def expired?
-    expires_at.present? && expires_at <= Time.current
-  end
-
-  def terminal?
-    !outstanding?
-  end
-
   def transition_to!(terminal_state, at: Time.current)
     value = STATES.fetch(terminal_state.to_sym)
     raise ArgumentError, "outstanding is not a terminal state" if value == STATES.fetch(:outstanding)

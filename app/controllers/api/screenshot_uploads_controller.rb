@@ -13,7 +13,7 @@ module Api
       # browser history, and ordinary request logs never receive it in a URL.
       screenshot_image = ScreenshotImage.find_by_token_for(:upload, upload_token)
       unless screenshot_image && screenshot_image.screenshot_id.to_s == request.path_parameters[:id].to_s
-        render json: { error: "Invalid or expired upload token" }, status: :unauthorized
+        render json: { error: "Invalid or expired upload token", code: "unauthorized" }, status: :unauthorized
         return
       end
       screenshot = screenshot_image.screenshot
@@ -35,9 +35,9 @@ module Api
     rescue Snapshots::AttachImage::Error => e
       render json: { error: e.message, code: e.code }, status: e.status
     rescue ActiveRecord::RecordInvalid => e
-      render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+      render json: { error: e.record.errors.full_messages.join(", "), code: "validation_failed" }, status: :unprocessable_entity
     rescue ActiveRecord::RecordNotUnique
-      render json: { error: "Image already uploaded" }, status: :conflict
+      render json: { error: "Image already uploaded", code: "conflict" }, status: :conflict
     end
 
     private

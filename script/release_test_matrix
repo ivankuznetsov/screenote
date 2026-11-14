@@ -440,10 +440,12 @@ case "${1-}" in
     cat >&2 <<'USAGE'
 Usage: script/release_test_matrix GATE
 
-PR gates:
-  self-hosted saas sqlite-production invariants
-  security-data system-collaboration container-local s3 coverage
+PR gates (run by ci.yml and concurrency-qualification.yml):
+  coverage system-collaboration container-local s3
   attachment-lifecycle public-cli-source
+
+Local/manual gates (no workflow runs them):
+  self-hosted saas sqlite-production invariants security-data
 
 attachment-lifecycle runs against the configured database. Export a server
 DATABASE_URL to rerun the same list against real row locks:

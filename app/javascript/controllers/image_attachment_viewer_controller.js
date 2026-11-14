@@ -5,7 +5,7 @@ import { Controller } from "@hotwired/stimulus"
 // this controller adds arrow navigation, bounded zoom, and the download and
 // open-original links.
 export default class extends Controller {
-  static targets = ["dialog", "image", "previous", "next", "download", "openOriginal", "trigger"]
+  static targets = ["dialog", "frame", "image", "previous", "next", "download", "openOriginal", "trigger"]
 
   static MIN_ZOOM = 1
   static MAX_ZOOM = 4
@@ -85,5 +85,8 @@ export default class extends Controller {
 
   applyZoom() {
     this.imageTarget.style.scale = String(this.zoom)
+    // The image scales from its top-left corner; a centred frame would push
+    // that corner out of the scrollable area (see image_attachments.css).
+    this.frameTarget.classList.toggle("image-attachment-viewer__frame--zoomed", this.zoom > 1)
   }
 }

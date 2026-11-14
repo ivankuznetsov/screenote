@@ -42,6 +42,28 @@ class ProjectMembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".project-members__email", @owner.email
   end
 
+  test "member view loads pending invitations once without their credentials" do
+    sign_in(@member)
+    queries = capture_app_queries { get project_memberships_path(@project) }
+
+    assert_response :success
+    assert_select ".project-members__email", project_invitations(:pending_invitation).email
+    assert_equal 1, queries.grep(/FROM "project_invitations"/i).size, queries.inspect
+    assert_empty queries.grep(/FROM "authentication_tokens"/i)
+  end
+
+  test "owner view loads pending invitations once with their credentials" do
+    issue_invitation_link(project_invitations(:pending_invitation))
+    sign_in(@owner)
+    queries = capture_app_queries { get project_memberships_path(@project) }
+
+    assert_response :success
+    assert_select "[data-testid='invitation-credential']", count: 1
+    assert_equal 1, queries.grep(/FROM "project_invitations"/i).size, queries.inspect
+    assert_equal 1, queries.grep(/FROM "authentication_tokens" WHERE "authentication_tokens"\."project_invitation_id"/i).size,
+      queries.inspect
+  end
+
   test "member does not see invite form" do
     sign_in(@member)
     get project_memberships_path(@project)
@@ -202,14 +224,5 @@ class ProjectMembershipsControllerTest < ActionDispatch::IntegrationTest
 
   def removal_result(status, membership: nil)
     ProjectMemberships::Remove::Result.new(status: status, membership: membership)
-  end
-
-  def with_singleton_method_stub(object, method_name, replacement)
-    singleton = object.singleton_class
-    original = object.method(method_name)
-    singleton.define_method(method_name, replacement)
-    yield
-  ensure
-    singleton&.define_method(method_name, original)
   end
 end

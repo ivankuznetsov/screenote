@@ -2,6 +2,8 @@
 
 module Oauth
   class AuthorizationsController < Doorkeeper::AuthorizationsController
+    include PrincipalSelection
+
     OAUTH_REQUEST_FIELDS = %i[
       client_id
       code_challenge
@@ -17,7 +19,6 @@ module Oauth
 
     def new
       load_principal_projects
-      @selected_principal_project_id = nil
       super
     end
 
@@ -70,22 +71,8 @@ module Oauth
       @server_principal_attributes || { principal_kind: "user", project_id: nil }
     end
 
-    def render_invalid_principal_selection
-      load_principal_projects
-      @selected_principal_project_id = nil
-      @principal_selection_error = "Choose your account or a project you currently belong to."
-      render :new, status: :unprocessable_entity
-    end
-
-    def render_dynamic_client_quota_exceeded(error)
-      load_principal_projects
-      @selected_principal_project_id = nil
-      @principal_selection_error = error.message
-      render :new, status: :unprocessable_entity
-    end
-
-    def load_principal_projects
-      @principal_projects = Current.user.projects.order(:name, :id)
+    def principal_consent_template
+      :new
     end
 
     def after_successful_authorization(context)

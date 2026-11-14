@@ -19,7 +19,7 @@ module ImageAttachments
         assert_equal Digest::SHA256.hexdigest(bytes), prepared.sha256
         assert_equal [ 8, 8 ], [ prepared.width, prepared.height ]
         assert_nil prepared.blob
-        assert_equal bytes, prepared.read
+        assert_equal bytes, File.binread(prepared.tempfile.path)
       ensure
         prepared&.cleanup
       end
@@ -55,7 +55,7 @@ module ImageAttachments
     test "adoption transfers blob ownership while cleanup still closes the tempfile" do
       prepared = prepare
       blob = prepared.stage!(record: projects(:alice_project), filename: "image-attachment-test.png")
-      path = prepared.path
+      path = prepared.tempfile.path
 
       prepared.adopt_blob!
       prepared.cleanup

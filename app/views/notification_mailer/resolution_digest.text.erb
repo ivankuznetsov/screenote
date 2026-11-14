@@ -1,0 +1,29 @@
+Feedback Resolved
+=================
+
+<%= @grouped.sum { |g| g[:items].size } %> annotation<%= @grouped.sum { |g| g[:items].size } == 1 ? ' was' : 's were' %> resolved in your project.
+
+<% @grouped.each do |group| %>
+<%= group[:page_name] %>
+<%= group[:screenshot_title] %>
+
+<% group[:items].each do |item| %>
+Your annotation: <%= truncate(item[:annotation_text], length: 200) %>
+<% if item[:annotation_attachments].any? %>
+<%= pluralize(item[:annotation_attachments].size, "image") %> attached: <%= item[:annotation_attachments].map { |a| a[:alt_text] }.join(", ") %>
+<% end %>
+<% if item[:reply_text] %>
+Reply: <%= truncate(item[:reply_text], length: 500) %>
+<% end %>
+<% if item[:reply_attachments].any? %>
+Reply attached <%= pluralize(item[:reply_attachments].size, "image") %>: <%= item[:reply_attachments].map { |a| a[:alt_text] }.join(", ") %>
+<% end %>
+Resolved by <%= item[:resolver] %>
+Open this annotation: <%= item[:url] %>
+
+<% end %>
+<% end %>
+View in Screenote: <%= root_url %>
+
+--
+Screenote — Visual feedback for AI agents

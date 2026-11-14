@@ -5,19 +5,15 @@ module Oauth
     LIMIT = 10
     WINDOW = 1.hour
 
-    class Unavailable < StandardError; end
+    # The shared store's error, so the registration controller's rescue and
+    # the fail-closed middleware match the same class.
+    Unavailable = Screenote::RateLimitStore::Unavailable
 
     class << self
       def exceeded?(identity:, rate_store: store)
         digest = Digest::SHA256.hexdigest(identity.to_s)
-        count = rate_store.increment("oauth-dcr-rate-limit:#{digest}", 1, expires_in: WINDOW)
-        raise Unavailable, "rate-limit counter unavailable" if count.nil?
-
-        count > LIMIT
-      rescue Unavailable
-        raise
-      rescue StandardError
-        raise Unavailable, "rate-limit counter unavailable"
+        counter = Screenote::RateLimitStore.new(store: -> { rate_store })
+        counter.increment("oauth-dcr-rate-limit:#{digest}", 1, expires_in: WINDOW) > LIMIT
       end
 
       def reset!

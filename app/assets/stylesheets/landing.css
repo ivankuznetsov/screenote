@@ -297,6 +297,14 @@
   85% { opacity: 0; transform: translate(20px, -10px); }
 }
 
+/* The looping annotations are decoration: with reduced motion they stay at
+   their resting opacity of 0. Declared after the numbered rules so it wins. */
+@media (prefers-reduced-motion: reduce) {
+  .hero__anno {
+    animation: none;
+  }
+}
+
 @media (max-width: 768px) {
   .hero__grid,
   .hero__glow,
@@ -529,7 +537,7 @@
   max-width: 540px;
 }
 
-.features__install-command {
+.landing-body .features__install-command {
   display: block;
   margin-top: 1rem;
   overflow-wrap: anywhere;
@@ -642,16 +650,11 @@
 
 /* --- Inline code styling --- */
 .landing-body code {
-  font-family: 'DM Mono', 'SF Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   padding: 0.15em 0.4em;
   background: rgba(229, 163, 30, 0.1);
   border: 1px solid rgba(229, 163, 30, 0.2);
   border-radius: 4px;
   color: var(--landing-accent);
-}
-
-/* --- Landing flash override --- */
-.landing-body .flash {
-  top: 5rem;
 }

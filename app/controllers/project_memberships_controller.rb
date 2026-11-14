@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class ProjectMembershipsController < ApplicationController
+  include PrivateResponseHeaders
   include ProjectAuthorization
 
   before_action :set_project
@@ -9,8 +10,8 @@ class ProjectMembershipsController < ApplicationController
 
   def index
     @memberships = @project.project_memberships.includes(:user).order(:created_at)
-    @pending_invitations = @project.project_invitations.pending.includes(:authentication_tokens).order(:created_at)
     @is_owner = @project.owner?(Current.user)
+    @pending_invitations = pending_invitations
     @pending_invitation_presentations = invitation_presentations if @is_owner
   end
 
@@ -41,11 +42,12 @@ class ProjectMembershipsController < ApplicationController
 
   private
 
-  def set_private_headers
-    response.set_header("Cache-Control", "no-store, max-age=0")
-    response.set_header("Pragma", "no-cache")
-    response.set_header("Referrer-Policy", "no-referrer")
-    response.set_header("X-Robots-Tag", "noindex, nofollow")
+  # Loaded once: the view checks, counts, and iterates it. Only owners see the
+  # invitation credentials, so only they need the tokens preloaded.
+  def pending_invitations
+    invitations = @project.project_invitations.pending.order(:created_at)
+    invitations = invitations.includes(:authentication_tokens) if @is_owner
+    invitations.load
   end
 
   def invitation_presentations

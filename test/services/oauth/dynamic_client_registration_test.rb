@@ -57,7 +57,44 @@ module Oauth
       end
     end
 
+    test "registration below capacity leaves the sweep to the scheduled job" do
+      stale = register("Stale but below capacity")
+      stale.update_columns(created_at: 2.days.ago, last_used_at: 2.days.ago)
+      sweeps = 0
+
+      with_cleanup_counter(-> { sweeps += 1 }) do
+        register("Fresh client")
+      end
+
+      assert_equal 0, sweeps
+      assert Doorkeeper::Application.exists?(stale.id)
+    end
+
+    test "registration at capacity sweeps unused clients before rejecting" do
+      stale = register("Stale at capacity")
+      stale.update_columns(created_at: 2.days.ago, last_used_at: 2.days.ago)
+      limit = Doorkeeper::Application.where(dynamic: true).count
+
+      with_maximum_dynamic_clients(limit) do
+        assert register("Replacement client").persisted?
+      end
+
+      assert_not Doorkeeper::Application.exists?(stale.id)
+    end
+
     private
+
+    def with_cleanup_counter(counter)
+      singleton_class = DynamicClientRegistration.singleton_class
+      original = DynamicClientRegistration.method(:cleanup_unused!)
+      singleton_class.define_method(:cleanup_unused!) do |**options|
+        counter.call
+        original.call(**options)
+      end
+      yield
+    ensure
+      singleton_class&.define_method(:cleanup_unused!, original)
+    end
 
     def register(name)
       DynamicClientRegistration.call(

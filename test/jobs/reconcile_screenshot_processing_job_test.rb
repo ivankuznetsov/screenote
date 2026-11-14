@@ -53,7 +53,39 @@ class ReconcileScreenshotProcessingJobTest < ActiveSupport::TestCase
     assert_equal "queue unavailable", error.message
   end
 
+  test "visits only images that still have processing work" do
+    page = pages(:alice_page)
+    cold = ready_image(page.screenshots.create!(title: "Cold"))
+    warm = ready_image(page.screenshots.create!(title: "Warm"))
+    warm.thumbnail_variants.each do |variant|
+      warm.image.blob.variant_records.create!(variation_digest: variant.variation.digest)
+    end
+
+    visited = []
+    record_visit = lambda do |image:|
+      visited << image.id
+      :skipped
+    end
+    with_class_method_stub(ScreenshotImages::EnsureProcessing, :call, record_visit) do
+      assert_equal 0, ReconcileScreenshotProcessingJob.perform_now
+    end
+
+    assert_includes visited, cold.id
+    assert_not_includes visited, warm.id
+  end
+
   private
+
+  def ready_image(screenshot)
+    image = screenshot.screenshot_images.build(viewport: :desktop, status: :ready, width: 100, height: 100)
+    image.image.attach(
+      io: StringIO.new(file_fixture("test_image.png").binread),
+      filename: "ready.png",
+      content_type: "image/png"
+    )
+    image.save!
+    image
+  end
 
   def with_class_method_stub(target, method_name, replacement)
     original = target.method(method_name)

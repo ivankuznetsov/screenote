@@ -9,8 +9,6 @@ module AuthenticationLinks
   class Presentation
     VERSION = "v1"
     SECRET_BYTES = 32
-    BASE64_LENGTH = 43
-    BASE32_LENGTH = 52
     PURPOSE_PATTERN = /\A[a-z][a-z0-9_]{0,63}\z/
     FRAGMENT_PATTERN = /\Av1\.([A-Za-z0-9_-]{43})\z/
     MANUAL_CODE_PATTERN = /\Av1\.([A-Z2-7]{4}(?:-[A-Z2-7]{4}){12})\z/

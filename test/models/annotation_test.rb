@@ -147,6 +147,37 @@ class AnnotationTest < ActiveSupport::TestCase
     assert_not annotation.valid?, "height_percent should not be zero"
   end
 
+  test "region dimensions must be given together" do
+    attributes = {
+      screenshot: screenshots(:alice_screenshot),
+      user: users(:alice),
+      x_percent: 10.0,
+      y_percent: 20.0,
+      comment: "Half a region"
+    }
+
+    width_only = Annotation.new(**attributes, width_percent: 30.0)
+    assert_not width_only.valid?, "A width without a height is not a croppable region"
+    assert_includes width_only.errors[:height_percent], "is required when width_percent is given"
+
+    height_only = Annotation.new(**attributes, height_percent: 25.0)
+    assert_not height_only.valid?, "A height without a width must not become a point with a stray height"
+    assert_includes height_only.errors[:width_percent], "is required when height_percent is given"
+
+    region = annotations(:region_annotation)
+    region.height_percent = nil
+    assert_not region.valid?, "Clearing one dimension of a saved region is rejected"
+  end
+
+  test "an existing half-specified region can still change status" do
+    annotation = annotations(:point_annotation)
+    annotation.update_columns(width_percent: 30.0)
+
+    annotation.resolve!(user: users(:alice), body: "Fixed")
+
+    assert annotation.reload.resolved?
+  end
+
   test "region must not extend beyond image boundary horizontally" do
     annotation = Annotation.new(
       screenshot: screenshots(:alice_screenshot),

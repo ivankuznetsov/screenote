@@ -3,6 +3,8 @@
 require "digest"
 
 class AccountRecoveriesController < ApplicationController
+  include PrivateResponseHeaders
+
   RATE_LIMIT = 5
   RATE_LIMIT_WINDOW = 15.minutes
   RATE_LIMIT_RETRY_AFTER = 60
@@ -125,12 +127,5 @@ class AccountRecoveriesController < ApplicationController
   def recovery_token_identity
     token_id = recovery_context&.fetch(:token_id, nil)
     Digest::SHA256.hexdigest(token_id.to_s)
-  end
-
-  def set_private_headers
-    response.set_header("Cache-Control", "no-store, max-age=0")
-    response.set_header("Pragma", "no-cache")
-    response.set_header("Referrer-Policy", "no-referrer")
-    response.set_header("X-Robots-Tag", "noindex, nofollow")
   end
 end

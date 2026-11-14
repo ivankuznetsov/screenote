@@ -63,7 +63,7 @@ module UserAuthenticationLinks
           next result(:not_found) unless user
 
           user = AuthorityLock.user!(user)
-          next result(:inactive_user) unless user.access_active?
+          next result(:inactive_user) unless user.active?
           next result(:not_eligible) if purpose == :password_reset && user.unconfirmed?
           if %i[magic_link email_confirmation].include?(purpose) && user.reconfirming?
             next result(:reconfirmation_unsupported)

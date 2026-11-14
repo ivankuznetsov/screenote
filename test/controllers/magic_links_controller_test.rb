@@ -161,28 +161,4 @@ class MagicLinksControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to magic_link_path
     token
   end
-
-  def assert_private_headers
-    assert_includes response.headers.fetch("Cache-Control"), "no-store"
-    assert_equal "no-referrer", response.headers["Referrer-Policy"]
-    assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
-  end
-
-  def mail_disabled_deployment
-    Screenote::Deployment.new(
-      {
-        "SCREENOTE_EDITION" => "self_hosted",
-        "SCREENOTE_BASE_URL" => "http://screenote.internal"
-      },
-      production: false
-    )
-  end
-
-  def with_singleton_method(object, name, implementation)
-    original = object.method(name)
-    object.define_singleton_method(name, implementation)
-    yield
-  ensure
-    object.define_singleton_method(name, original) if original
-  end
 end

@@ -4,6 +4,8 @@ require "test_helper"
 require Rails.root.join("db/migrate/20260805134000_add_account_recovery_provenance_to_authentication_tokens").to_s
 
 class AddAccountRecoveryProvenanceTest < ActiveSupport::TestCase
+  include MigrationDatabaseConfigHelper
+
   self.fixture_table_names = []
   self.use_transactional_tests = false
 
@@ -115,9 +117,5 @@ class AddAccountRecoveryProvenanceTest < ActiveSupport::TestCase
     %i[authentication_tokens users].each do |table|
       @connection.drop_table(table, if_exists: true, force: :cascade)
     end
-  end
-
-  def migration_database_config
-    ENV["MIGRATION_TEST_DATABASE_URL"].presence || { adapter: "sqlite3", database: ":memory:" }
   end
 end

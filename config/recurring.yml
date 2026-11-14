@@ -14,6 +14,10 @@ production:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
 
+  clear_expired_sessions:
+    command: "Session.cleanup_expired!"
+    schedule: every day at 4:17am
+
   clear_expired_oauth_device_grants:
     command: "OauthDeviceGrant.cleanup_expired!"
     schedule: every 15 minutes

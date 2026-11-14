@@ -10,8 +10,8 @@ namespace :stripe do
 
     stats = { ok: 0, diffs: 0, duplicates: 0, orphans: 0, errors: 0 }
 
-    Subscription.where.not(stripe_customer_id: nil).find_each do |sub|
-      user_email = sub.user&.email || "<no user>"
+    Subscription.includes(:user).find_each do |sub|
+      user_email = sub.user.email
 
       begin
         stripe_subs = Stripe::Subscription.list(

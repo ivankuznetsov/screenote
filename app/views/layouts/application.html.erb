@@ -22,8 +22,7 @@
             <% if Current.user.saas_operator? %>
               <%= link_to "Admin", admin_dashboard_path, class: "header__link" %>
             <% end %>
-            <% if Screenote::Deployment.current.self_hosted? &&
-                  Installation.find_by(singleton_key: Installation::SINGLETON_KEY)&.administrator_id == Current.user.id %>
+            <% if instance_administrator? %>
               <%= link_to "Instance administration", instance_accounts_path, class: "header__link" %>
             <% end %>
             <span class="header__email" data-testid="user-email"><%= Current.user.email %></span>

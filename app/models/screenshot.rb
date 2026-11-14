@@ -1,32 +1,42 @@
 # frozen_string_literal: true
 
 class Screenshot < ApplicationRecord
-  # Canonical constants live on ScreenshotImage (the real owner of the blob).
-  # Screenshot re-exposes them for the still-present has_one_attached :image
-  # used by the legacy upload path.
-  ALLOWED_CONTENT_TYPES = ScreenshotImage::ALLOWED_CONTENT_TYPES
-  MAX_FILE_SIZE = ScreenshotImage::MAX_FILE_SIZE
+  # Dimensions live on ScreenshotImage. These columns are dropped by a
+  # follow-up migration once no running release still inserts them.
+  self.ignored_columns += %w[width height]
 
   belongs_to :page
   belongs_to :snapshot, optional: true
   has_one :project, through: :page
   has_many :annotations, dependent: :destroy
   has_many :screenshot_images, dependent: :destroy
-  has_one_attached :image
 
   enum :status, { pending: 0, ready: 1, failed: 2 }, default: :pending
 
   scope :recent_first, -> { order(created_at: :desc, id: :desc) }
+  # The newest ready version of each page, by the same created_at-then-id
+  # order as recent_first. A correlated NOT EXISTS keeps the lookup bounded by
+  # the pages being loaded instead of aggregating every screenshot.
+  scope :latest_ready_per_page, -> {
+    newer = arel_table.alias("newer_screenshots")
+    newer_ready_version = arel_table
+      .project(Arel.sql("1"))
+      .from(newer)
+      .where(newer[:page_id].eq(arel_table[:page_id]))
+      .where(newer[:status].eq(statuses[:ready]))
+      .where(
+        newer[:created_at].gt(arel_table[:created_at]).or(
+          newer[:created_at].eq(arel_table[:created_at]).and(newer[:id].gt(arel_table[:id]))
+        )
+      )
+
+    ready.where(Arel::Nodes::Not.new(newer_ready_version.exists))
+  }
 
   before_validation :normalize_manifest_entry_digest
   before_validation :lock_snapshot_for_page_identity, if: :snapshot_page_identity_changed?
 
-  generates_token_for :upload, expires_in: 5.minutes do
-    image.attached?.to_s
-  end
-
   validates :title, presence: true, length: { maximum: 255 }
-  validates :width, :height, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :manifest_entry_digest,
     format: { with: Snapshot::SHA256_FORMAT, message: Snapshot::SHA256_ERROR_MESSAGE },
     uniqueness: { scope: :snapshot_id },
@@ -34,7 +44,6 @@ class Screenshot < ApplicationRecord
   validates :page_id,
     uniqueness: { scope: :snapshot_id, message: "can only have one version per snapshot" },
     if: :snapshot_page_identity_changed?
-  validate :acceptable_image
   validate :snapshot_belongs_to_same_project, if: :snapshot_id?
   validate :manifest_identity_matches_snapshot
 
@@ -126,18 +135,6 @@ class Screenshot < ApplicationRecord
       errors.add(:manifest_entry_digest, :blank) if manifest_entry_digest.blank?
     elsif manifest_entry_digest.present?
       errors.add(:manifest_entry_digest, "requires a manifest-backed snapshot")
-    end
-  end
-
-  def acceptable_image
-    return unless image.attached?
-
-    unless image.blob.content_type.in?(ALLOWED_CONTENT_TYPES)
-      errors.add(:image, "must be a PNG or JPEG")
-    end
-
-    if image.blob.byte_size > MAX_FILE_SIZE
-      errors.add(:image, "is too large (max #{MAX_FILE_SIZE / 1.megabyte}MB)")
     end
   end
 

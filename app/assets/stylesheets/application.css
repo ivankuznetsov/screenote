@@ -21,7 +21,9 @@
   --color-bg: #ffffff;
   --color-bg-secondary: #f9fafb;
   --color-flash-notice: #dcfce7;
+  --color-flash-notice-text: #166534;
   --color-flash-alert: #fee2e2;
+  --color-flash-alert-text: #991b1b;
   --color-badge-owner-bg: #dbeafe;
   --color-badge-owner-text: #1e40af;
   --color-banner-bg-start: #eff6ff;
@@ -31,7 +33,12 @@
   --color-info-bg: #eff6ff;
   --color-info-border: #bfdbfe;
   --color-info-text: #1e40af;
-  --color-plan-pro-bg: #f0f5ff;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #f59e0b;
+  /* Brand amber and the near-black it sits on in the guide and the Pro plan. */
+  --color-accent: #e5a31e;
+  --color-ink: #0b0f1a;
+  --focus-ring: 0 0 0 2px rgba(37, 99, 235, 0.2);
   --font-mono: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
   --radius: 6px;
   --max-width: 960px;
@@ -126,12 +133,12 @@ a:hover {
 
 .flash--notice {
   background: var(--color-flash-notice);
-  color: #166534;
+  color: var(--color-flash-notice-text);
 }
 
 .flash--alert {
   background: var(--color-flash-alert);
-  color: #991b1b;
+  color: var(--color-flash-alert-text);
 }
 
 /* Main content */
@@ -162,7 +169,7 @@ a:hover {
 
 .btn--primary {
   background: var(--color-primary);
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .btn--primary:hover {
@@ -183,7 +190,7 @@ a:hover {
 
 .btn--danger {
   background: var(--color-danger);
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .btn--danger:hover {
@@ -193,7 +200,7 @@ a:hover {
 
 .btn--warning {
   background: var(--color-warning);
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .btn--warning:hover {
@@ -223,23 +230,7 @@ a:hover {
   color: var(--color-text);
 }
 
-.form__input {
-  display: block;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-
-.form__input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
-}
-
+.form__input,
 .form__textarea {
   display: block;
   width: 100%;
@@ -249,14 +240,18 @@ a:hover {
   border-radius: var(--radius);
   background: var(--color-bg);
   color: var(--color-text);
-  resize: vertical;
-  min-height: 100px;
 }
 
+.form__input:focus,
 .form__textarea:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  box-shadow: var(--focus-ring);
+}
+
+.form__textarea {
+  resize: vertical;
+  min-height: 100px;
 }
 
 .form__actions {
@@ -267,7 +262,7 @@ a:hover {
 
 .form__errors {
   background: var(--color-flash-alert);
-  color: #991b1b;
+  color: var(--color-flash-alert-text);
   padding: 0.75rem 1rem;
   border-radius: var(--radius);
   margin-bottom: 1rem;
@@ -863,7 +858,7 @@ a:hover {
 .viewport-switcher__btn--active,
 .viewport-switcher__btn--active:hover {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-white);
   font-weight: 600;
 }
 
@@ -913,7 +908,7 @@ turbo-frame {
   background: rgba(15, 23, 42, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: var(--radius);
-  color: #ffffff;
+  color: var(--color-white);
   cursor: pointer;
   display: inline-flex;
   height: 2.75rem;
@@ -935,7 +930,7 @@ turbo-frame {
 
 .screenshot-fullscreen-toggle:focus-visible,
 .screenshot-comments-toggle:focus-visible {
-  outline: 2px solid #ffffff;
+  outline: 2px solid var(--color-white);
   outline-offset: 2px;
 }
 
@@ -1083,7 +1078,7 @@ body.review-fullscreen-open {
 
 .annotation-filter--active {
   background: var(--color-primary);
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .annotation-filter--active:hover {
@@ -1170,9 +1165,8 @@ body.review-fullscreen-open {
 .annotation-thread__author-marker {
   align-items: center;
   background: var(--annotation-author-color);
-  border: 0;
   border-radius: 50%;
-  color: #ffffff;
+  color: var(--color-white);
   display: inline-flex;
   flex: 0 0 auto;
   font-weight: 700;
@@ -1181,16 +1175,9 @@ body.review-fullscreen-open {
 }
 
 .annotation-author-marker {
-  cursor: pointer;
   font-size: 0.6875rem;
   height: 1.5rem;
-  padding: 0;
   width: 1.5rem;
-}
-
-.annotation-author-marker:focus-visible {
-  outline: 2px solid var(--annotation-author-color);
-  outline-offset: 2px;
 }
 
 .annotation-thread__author-marker {
@@ -1226,10 +1213,6 @@ body.review-fullscreen-open {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   margin-bottom: 0.5rem;
-}
-
-.annotation-item__status--open {
-  color: var(--color-primary);
 }
 
 .annotation-item__status--resolved {
@@ -1309,18 +1292,24 @@ body.review-fullscreen-open {
   padding-top: 0.5rem;
 }
 
-.annotation-thread__textarea {
+/* Shared by the sidebar reply textarea and the floating annotation form
+   textarea; each sets its own size and spacing below. */
+.annotation-thread__textarea,
+.annotation-form__textarea {
   display: block;
   width: 100%;
-  padding: 0.375rem;
-  font-size: 0.8125rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-bg);
   color: var(--color-text);
   resize: vertical;
-  min-height: 5.5rem;
   font-family: inherit;
+}
+
+.annotation-thread__textarea {
+  padding: 0.375rem;
+  font-size: 0.8125rem;
+  min-height: 5.5rem;
   margin-bottom: 0.375rem;
 }
 
@@ -1357,19 +1346,25 @@ body.review-fullscreen-open {
   z-index: 10;
 }
 
-.annotation-pin--point {
+/* The initials badge: a point pin is one, and a region pin carries one as its
+   corner label. */
+.annotation-pin--point,
+.annotation-pin__label {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 50%;
   background: var(--annotation-author-color);
-  color: #ffffff;
+  color: var(--color-white);
   font-size: 0.75rem;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: translate(-50%, -50%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.annotation-pin--point {
+  transform: translate(-50%, -50%);
 }
 
 .annotation-pin--region {
@@ -1394,30 +1389,19 @@ body.review-fullscreen-open {
 }
 
 .annotation-pin--selected.annotation-pin--point {
-  box-shadow: 0 0 0 3px #ffffff, 0 0 0 6px var(--annotation-author-color), 0 3px 8px rgba(0, 0, 0, 0.36);
+  box-shadow: 0 0 0 3px var(--color-white), 0 0 0 6px var(--annotation-author-color), 0 3px 8px rgba(0, 0, 0, 0.36);
   transform: translate(-50%, -50%) scale(1.12);
 }
 
 .annotation-pin--selected.annotation-pin--region {
   border-width: 3px;
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 5px var(--annotation-author-color);
+  box-shadow: 0 0 0 2px var(--color-white), 0 0 0 5px var(--annotation-author-color);
 }
 
 .annotation-pin__label {
   position: absolute;
   top: -0.75rem;
   left: -0.75rem;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  background: var(--annotation-author-color);
-  color: #ffffff;
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* Author colors are deterministic per identity and shared by canvas markers and threads. */
@@ -1465,25 +1449,22 @@ body.review-fullscreen-open {
   z-index: 25;
 }
 
+/* Laid out but unseen while the controller measures where to place it. */
+.annotation-form--measuring {
+  visibility: hidden;
+}
+
 .annotation-form__textarea {
-  display: block;
-  width: 100%;
   padding: 0.5rem;
   font-size: 0.875rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg);
-  color: var(--color-text);
-  resize: vertical;
   min-height: 60px;
-  font-family: inherit;
   margin-bottom: 0.5rem;
 }
 
 .annotation-form__textarea:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  box-shadow: var(--focus-ring);
 }
 
 .annotation-form__actions {
@@ -1502,8 +1483,8 @@ body.review-fullscreen-open {
 
 /* API Key reveal */
 .api-key-reveal {
-  background: #fef3c7;
-  border: 1px solid #f59e0b;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
   border-radius: var(--radius);
   padding: 1rem;
   margin-bottom: 1.5rem;
@@ -1537,10 +1518,22 @@ body.review-fullscreen-open {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 1rem;
+}
+
+/* A long key name wraps inside the card instead of pushing the Revoke button
+   out of it. */
+.api-key-item__info {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.api-key-item__actions {
+  flex-shrink: 0;
 }
 
 .api-key-item--revoked {
@@ -1717,6 +1710,12 @@ body.review-fullscreen-open {
 }
 
 /* CLI Banner */
+/* The flex display below would otherwise override the hidden attribute and
+   flash the banner before the dismissible controller removes it. */
+.cli-banner[hidden] {
+  display: none;
+}
+
 .cli-banner {
   display: flex;
   align-items: center;
@@ -1739,7 +1738,7 @@ body.review-fullscreen-open {
   width: 2.5rem;
   height: 2.5rem;
   background: var(--color-primary);
-  color: #ffffff;
+  color: var(--color-white);
   border-radius: var(--radius);
   display: flex;
   align-items: center;
@@ -1829,8 +1828,8 @@ body.review-fullscreen-open {
   flex-shrink: 0;
   width: 2.25rem;
   height: 2.25rem;
-  background: #0b0f1a;
-  color: #e5a31e;
+  background: var(--color-ink);
+  color: var(--color-accent);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1860,7 +1859,7 @@ body.review-fullscreen-open {
 
 /* Terminal block */
 .guide__terminal {
-  background: #0b0f1a;
+  background: var(--color-ink);
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #1e1e2a;
@@ -1906,7 +1905,7 @@ body.review-fullscreen-open {
 }
 
 .guide__terminal-prompt {
-  color: #e5a31e;
+  color: var(--color-accent);
   font-weight: 600;
   user-select: none;
 }
@@ -1949,7 +1948,7 @@ body.review-fullscreen-open {
 }
 
 .guide__workflow-icon {
-  color: #e5a31e;
+  color: var(--color-accent);
   margin-bottom: 0.75rem;
 }
 
@@ -2163,14 +2162,14 @@ body.review-fullscreen-open {
 }
 
 .billing-plan--pro {
-  background: #0b0f1a;
+  background: var(--color-ink);
   border-color: #1e293b;
   color: #e2e8f0;
 }
 
 .billing-plan--pro.billing-plan--current {
-  border-color: #e5a31e;
-  box-shadow: 0 0 0 1px #e5a31e;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .billing-plan__header {
@@ -2198,14 +2197,14 @@ body.review-fullscreen-open {
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-white);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .billing-plan--pro .billing-plan__badge {
-  background: #e5a31e;
-  color: #0b0f1a;
+  background: var(--color-accent);
+  color: var(--color-ink);
 }
 
 .billing-plan__pricing {
@@ -2220,7 +2219,7 @@ body.review-fullscreen-open {
 }
 
 .billing-plan--pro .billing-plan__amount {
-  color: #fff;
+  color: var(--color-white);
 }
 
 .billing-plan__period {
@@ -2270,7 +2269,7 @@ body.review-fullscreen-open {
 }
 
 .billing-plan--pro .billing-plan__features li::before {
-  color: #e5a31e;
+  color: var(--color-accent);
 }
 
 .billing-plan__features li.billing-plan__features-intro {
@@ -2298,8 +2297,8 @@ body.review-fullscreen-open {
   padding: 0.75rem 1rem;
   border: none;
   border-radius: 8px;
-  background: #e5a31e;
-  color: #0b0f1a;
+  background: var(--color-accent);
+  color: var(--color-ink);
   font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
@@ -2552,6 +2551,37 @@ body.review-fullscreen-open {
 .recovery-reveal__feedback {
   color: var(--color-info-text);
   font-size: 0.8125rem;
+}
+
+/* Invitation acceptance: a public page rendered in the application layout,
+   so it takes the light card look rather than the dark auth shell. */
+.invitation-acceptance {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 1rem auto 0;
+  max-width: 28rem;
+  padding: 2rem;
+}
+
+.invitation-acceptance__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.invitation-acceptance__alert {
+  background: var(--color-flash-alert);
+  border-radius: var(--radius);
+  color: var(--color-flash-alert-text);
+  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+}
+
+.invitation-acceptance__button {
+  width: 100%;
 }
 
 @media (max-width: 720px) {

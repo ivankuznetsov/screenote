@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 class RegistrationsController < ApplicationController
+  include FailClosedRateLimiting
+
   RATE_LIMIT = 5
   RATE_LIMIT_WINDOW = 1.hour
-  RATE_LIMITER_RETRY_AFTER = 60
   REGISTRATION_RATE_LIMIT_STORE = Screenote::RateLimitStore.new(store: -> { cache_store })
 
   skip_before_action :require_authentication
@@ -13,8 +14,6 @@ class RegistrationsController < ApplicationController
   rate_limit to: RATE_LIMIT, within: RATE_LIMIT_WINDOW, by: -> { client_ip }, only: :create,
     with: -> { redirect_to sign_up_path, alert: "Too many sign up attempts. Please try again later." },
     store: REGISTRATION_RATE_LIMIT_STORE
-
-  rescue_from Screenote::RateLimitStore::Unavailable, with: :render_rate_limiter_unavailable
 
   def new
     return redirect_to dashboard_path if user_signed_in?
@@ -49,13 +48,6 @@ class RegistrationsController < ApplicationController
 
   def require_saas
     head :not_found unless Screenote::Deployment.current.saas?
-  end
-
-  def render_rate_limiter_unavailable(_error)
-    response.set_header("Retry-After", RATE_LIMITER_RETRY_AFTER.to_s)
-    response.set_header("Cache-Control", "no-store")
-    response.set_header("Pragma", "no-cache")
-    head :service_unavailable
   end
 
   def registration_params

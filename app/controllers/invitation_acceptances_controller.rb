@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class InvitationAcceptancesController < ApplicationController
+  include InvitationLinkStatus
+
   skip_before_action :require_authentication
   skip_before_action :preload_subscription
 
@@ -23,7 +25,7 @@ class InvitationAcceptancesController < ApplicationController
       return
     end
 
-    clear_authentication_link_context if terminal_status?(result.status)
+    clear_authentication_link_context if terminal_invitation_status?(result.status)
     @acceptance_status = result.status
     @invitation = result.invitation
     @result_errors = result.errors
@@ -49,7 +51,7 @@ class InvitationAcceptancesController < ApplicationController
     )
     @acceptance_status = resolution.status
     @invitation = resolution.token&.project_invitation
-    clear_authentication_link_context if terminal_status?(@acceptance_status)
+    clear_authentication_link_context if terminal_invitation_status?(@acceptance_status)
     prepare_invitation_state
   end
 
@@ -63,7 +65,7 @@ class InvitationAcceptancesController < ApplicationController
   end
 
   def recover_invitation_state
-    return if @invitation || terminal_status?(@acceptance_status)
+    return if @invitation || terminal_invitation_status?(@acceptance_status)
 
     resolution = resolver.revalidate(
       token_id: @context.fetch(:token_id),
@@ -96,10 +98,6 @@ class InvitationAcceptancesController < ApplicationController
 
   def resolver
     @resolver ||= AuthenticationLinks::Resolver.new(keyring: AuthenticationLinks::Runtime.keyring)
-  end
-
-  def terminal_status?(status)
-    %i[invalid expired cancelled already_used superseded issuer_revoked].include?(status)
   end
 
   def response_status(status)

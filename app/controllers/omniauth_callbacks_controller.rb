@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 class OmniauthCallbacksController < ApplicationController
-  INVITATION_TERMINAL_STATUSES = %i[
-    invalid expired cancelled already_used superseded issuer_revoked
-  ].freeze
+  include InvitationLinkStatus
 
   skip_before_action :require_authentication
   skip_before_action :preload_subscription
@@ -53,7 +51,7 @@ class OmniauthCallbacksController < ApplicationController
     )
     display_name = RailsSimpleAuth.configuration.oauth_provider_display_name(provider)
 
-    unless user&.persisted? && user.access_active?
+    unless user&.persisted? && user.active?
       redirect_to new_session_path, alert: "Could not authenticate with #{display_name}."
       return
     end
@@ -78,7 +76,7 @@ class OmniauthCallbacksController < ApplicationController
       return
     end
 
-    clear_authentication_link_context if INVITATION_TERMINAL_STATUSES.include?(result.status)
+    clear_authentication_link_context if terminal_invitation_status?(result.status)
     redirect_to invitation_acceptance_path, alert: invitation_error(result.status)
   end
 

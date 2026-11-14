@@ -6,7 +6,10 @@ require "fileutils"
 require "json"
 require "uri"
 
-# System tests run against the dev server on port 3005 (must be running: bin/dev).
+# System tests run in one of two modes:
+#   - Default: against an already-running dev server on port 3005 (start it with bin/dev),
+#     or APP_HOST if set.
+#   - CAPYBARA_RUN_SERVER=true: Capybara boots the app server itself for the run.
 # Uses Capybara with the Playwright driver for real browser automation.
 #
 # API guidelines:

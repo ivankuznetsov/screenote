@@ -19,7 +19,7 @@ class RemoveProjectMemberTool < ApplicationTool
       result = ProjectMemberships::Remove.call(
         project: current_project,
         membership_id: membership_id,
-        actor: current_user
+        principal: current_principal
       )
 
       case result.status

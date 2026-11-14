@@ -107,8 +107,8 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
       ENV["STRIPE_PRO_PRICE_ID"] = "price_test_123"
       post checkout_subscription_path
       assert_redirected_to "https://checkout.stripe.com/test"
-      assert_equal "http://localhost:3000/subscription?status=success", captured_arguments.fetch(:success_url)
-      assert_equal "http://localhost:3000/subscription?status=canceled", captured_arguments.fetch(:cancel_url)
+      assert_equal "http://localhost:3005/subscription?status=success", captured_arguments.fetch(:success_url)
+      assert_equal "http://localhost:3005/subscription?status=canceled", captured_arguments.fetch(:cancel_url)
     ensure
       ENV.delete("STRIPE_PRO_PRICE_ID")
       Stripe::Checkout::Session.define_singleton_method(:create, original_create)
@@ -157,7 +157,7 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     begin
       post portal_subscription_path
       assert_redirected_to "https://billing.stripe.com/test"
-      assert_equal "http://localhost:3000/subscription", captured_arguments.fetch(:return_url)
+      assert_equal "http://localhost:3005/subscription", captured_arguments.fetch(:return_url)
     ensure
       Stripe::BillingPortal::Session.define_singleton_method(:create, original_create)
     end

@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "160"
 tags: [code-review, stripe, webhook, ux, billing]

@@ -10,34 +10,34 @@ class ListProjectsTool < ApplicationTool
 
   def call
     with_error_handling do
+      roles = visible_project_roles
+      screenshot_counts = Api::V1::ProjectScope.screenshot_counts(roles.map { |project, _role| project.id })
+
       {
-        projects: visible_projects.filter_map { |project| serialize_visible_project(project) }
+        projects: roles.map do |project, role|
+          Api::V1::ContractSerializer.project(
+            project,
+            screenshot_count: screenshot_counts.fetch(project.id, 0)
+          ).merge(role: role)
+        end
       }.to_json
     end
   end
 
   private
 
-  def visible_projects
-    return current_user.projects.order(:name) unless current_principal.project_principal?
-    return Project.where(id: current_project.id) if current_principal.api_key?
+  # [project, role] pairs ordered by project name.
+  def visible_project_roles
+    if current_principal.api_key?
+      return Project.where(id: current_project.id).map { |project| [ project, "api_key" ] }
+    end
 
     # The principal's project object was resolved during bearer authentication.
-    # Query through memberships again so a concurrently removed OAuth member
-    # cannot list a project from that stale object.
-    current_user.projects.where(id: current_project.id)
-  end
-
-  def serialize_visible_project(project)
-    role = current_principal.api_key? ? "api_key" : project.role_for(current_user)&.to_s
-    return if role.blank?
-
-    {
-      id: project.id,
-      name: project.name,
-      role: role,
-      screenshot_count: project.screenshots.count,
-      created_at: project.created_at.iso8601
-    }
+    # Roles come from a fresh membership query so a concurrently removed OAuth
+    # member cannot list a project from that stale object.
+    Api::V1::ProjectScope.memberships(current_principal)
+      .joins(:project)
+      .merge(Project.order(:name))
+      .map { |membership| [ membership.project, membership.role ] }
   end
 end

@@ -15,7 +15,7 @@ class ListProjectMembersTool < ApplicationTool
 
     with_error_handling do
       memberships = current_project.project_memberships.includes(:user).order(:created_at)
-      pending_invitations = current_project.project_invitations.pending.order(:created_at)
+      pending_invitations = current_project.project_invitations.pending.includes(:inviter).order(:created_at)
 
       {
         members: memberships.map do |m|

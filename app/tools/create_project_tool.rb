@@ -18,12 +18,7 @@ class CreateProjectTool < ApplicationTool
       )
 
       {
-        project: {
-          id: project.id,
-          name: project.name,
-          role: "owner",
-          created_at: project.created_at.iso8601
-        }
+        project: Api::V1::ContractSerializer.project(project, screenshot_count: 0).merge(role: "owner")
       }.to_json
     end
   end

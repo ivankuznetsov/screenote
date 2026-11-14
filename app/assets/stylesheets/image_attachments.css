@@ -14,7 +14,14 @@
   --attachment-danger: var(--color-danger);
 }
 
-.image-attachment-context--light {
+/* Every composer and gallery carries an explicit context; nothing follows the
+   operating system's colour scheme. The viewer dialog lives inside its gallery,
+   so it matches the base rule above and declares its own variables — which
+   shadows the context the gallery set, because a declaration on the element
+   always beats an inherited value. Each palette is therefore re-applied to a
+   nested viewer, so an explicitly dark gallery opens an explicitly dark viewer. */
+.image-attachment-context--light,
+.image-attachment-context--light .image-attachment-viewer {
   --attachment-surface: #ffffff;
   --attachment-surface-muted: #f9fafb;
   --attachment-text: #1f2937;
@@ -23,7 +30,8 @@
   --attachment-danger: #dc2626;
 }
 
-.image-attachment-context--dark {
+.image-attachment-context--dark,
+.image-attachment-context--dark .image-attachment-viewer {
   --attachment-surface: #14161c;
   --attachment-surface-muted: #1d2029;
   --attachment-text: #e8e8ed;
@@ -37,40 +45,6 @@
 .image-attachment-composer [hidden],
 .image-attachment-viewer [hidden] {
   display: none !important;
-}
-
-/* The viewer dialog lives inside its gallery, so it matches the base rule above
-   and declares its own variables — which shadows the context the gallery set,
-   because a declaration on the element always beats an inherited value. These
-   two rules re-apply the explicit context to the nested viewer, so an explicitly
-   dark gallery opens an explicitly dark viewer regardless of OS preference. */
-.image-attachment-context--light .image-attachment-viewer {
-  --attachment-surface: #ffffff;
-  --attachment-surface-muted: #f9fafb;
-  --attachment-text: #1f2937;
-  --attachment-text-muted: #6b7280;
-  --attachment-border: #d1d5db;
-  --attachment-danger: #dc2626;
-}
-
-.image-attachment-context--dark .image-attachment-viewer {
-  --attachment-surface: #14161c;
-  --attachment-surface-muted: #1d2029;
-  --attachment-text: #e8e8ed;
-  --attachment-text-muted: #9aa0b0;
-  --attachment-border: #333846;
-  --attachment-danger: #f87171;
-}
-
-/* Only a viewer with no explicit context follows the operating system. */
-@media (prefers-color-scheme: dark) {
-  .image-attachment-viewer {
-    --attachment-surface: #14161c;
-    --attachment-surface-muted: #1d2029;
-    --attachment-text: #e8e8ed;
-    --attachment-text-muted: #9aa0b0;
-    --attachment-border: #333846;
-  }
 }
 
 .image-attachment-composer {
@@ -94,7 +68,10 @@
   margin: 0;
 }
 
-.image-attachment-composer--dropping {
+/* Set on the composer's form while files are dragged over it. The form, not
+   the composer, carries it: the rail composer is display: contents and has no
+   box to outline. */
+.image-attachment-dropzone--active {
   outline: 2px dashed var(--color-primary);
   outline-offset: 2px;
 }
@@ -331,9 +308,17 @@
   overflow: auto;
 }
 
+/* Zoom scales the image without changing layout, and a scroll container only
+   reaches overflow to the right and below. So the image grows from its
+   top-left corner and the frame stops centring it while zoomed; otherwise its
+   top and left edges could never be scrolled into view. */
+.image-attachment-viewer__frame--zoomed {
+  justify-content: flex-start;
+}
+
 .image-attachment-viewer__image {
   max-width: 100%;
-  transform-origin: center center;
+  transform-origin: 0 0;
 }
 
 .image-attachment-viewer__bar {

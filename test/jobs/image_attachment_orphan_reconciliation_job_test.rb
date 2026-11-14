@@ -84,6 +84,18 @@ class ImageAttachmentOrphanReconciliationJobTest < ActiveSupport::TestCase
     assert_enqueued_jobs 1, only: ImageAttachmentThumbnailJob
   end
 
+  test "variant reconciliation skips warmed rows in SQL so later missing rows are reached" do
+    warmed = submitted_attachment
+    perform_enqueued_jobs(only: ImageAttachmentThumbnailJob)
+    assert warmed.reload.thumbnail_variants_warmed?
+    missing = submitted_attachment
+    clear_enqueued_jobs
+
+    ImageAttachmentOrphanReconciliationJob.perform_now(limit: 1)
+
+    assert_enqueued_with(job: ImageAttachmentThumbnailJob, args: [ missing, missing.image.blob.id ])
+  end
+
   # A provider delete that failed deliberately leaves the blob row behind so the
   # key stays durable. Retrying it is this pass's job.
   test "retries an unattached blob a failed provider delete left behind" do

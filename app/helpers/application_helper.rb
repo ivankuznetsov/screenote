@@ -32,4 +32,12 @@ module ApplicationHelper
     digest = Digest::SHA256.hexdigest(author.email.downcase)
     "annotation-author-color--#{digest.first(8).to_i(16) % ANNOTATION_AUTHOR_COLOR_COUNT}"
   end
+
+  def instance_administrator?
+    return @instance_administrator if defined?(@instance_administrator)
+
+    @instance_administrator = Current.user.present? &&
+      Screenote::Deployment.current.self_hosted? &&
+      Installation.current&.administrator_id == Current.user.id
+  end
 end

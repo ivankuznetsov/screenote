@@ -43,7 +43,7 @@ project API key is the only authorization model.
 
 - `config/initializers/rails_simple_auth.rb` — auth configuration
 - `config/initializers/omniauth.rb` — OAuth providers
-- `app/models/user.rb` — includes Authenticatable, Confirmable, MagicLinkable, OAuthConnectable
+- `app/models/user.rb` — includes Authenticatable and Confirmable (magic links and OAuth sign-in live in app services, not gem concerns)
 - `app/models/session.rb` — database-backed sessions with expiry
 - `app/models/current.rb` — delegates to RailsSimpleAuth::Current
 
@@ -75,7 +75,7 @@ bin/rubocop
 bin/rubocop -a
 
 # Security scan
-brakeman -q
+bin/brakeman -q
 ```
 
 ## Test Credentials
@@ -95,7 +95,7 @@ SCREENOTE_EDITION=self_hosted
 SCREENOTE_BASE_URL=https://screenote.example.com
 
 # Optional auth and email providers
-MAILER_FROM=noreply@screenote.app
+MAILER_FROM=noreply@screenote.ai
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GITHUB_CLIENT_ID=...
@@ -157,7 +157,7 @@ Write code that would make DHH proud and pass code review at 37signals. Always c
 Run before each commit:
 ```bash
 bin/rubocop              # Linting
-brakeman -q              # Security scan
+bin/brakeman -q          # Security scan
 bin/rails test           # All tests pass
 ```
 

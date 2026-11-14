@@ -1,14 +1,9 @@
 # frozen_string_literal: true
 
-# One rendered image variant of a Screenshot, scoped to a viewport (desktop /
-# tablet / mobile). A Screenshot can have 1..3 of these — single-viewport
-# captures still work by having a single ScreenshotImage with viewport: :desktop.
-# See plans/multi-viewport-screenshots.md.
+# One rendered image of a Screenshot, scoped to a viewport (desktop / tablet /
+# mobile). A Screenshot can have 1..3 of these — single-viewport captures have
+# a single ScreenshotImage with viewport: :desktop. It owns the uploaded blob.
 class ScreenshotImage < ApplicationRecord
-  # ScreenshotImage owns the blob post-PR-2. Screenshot references these
-  # constants via the reverse direction during the transition (see PR-1's
-  # original direction). Can be simplified further once Screenshot's legacy
-  # has_one_attached :image is dropped (todo 172).
   ALLOWED_CONTENT_TYPES = %w[image/png image/jpeg].freeze
   MAX_FILE_SIZE = 20.megabytes
   MAX_DIMENSION = 32_768
@@ -25,8 +20,6 @@ class ScreenshotImage < ApplicationRecord
     }
   }.freeze
 
-  BackfillResult = Struct.new(:already_backfilled, :backfilled, :no_image, :errors, keyword_init: true)
-  RollbackResult = Struct.new(:already_rolled_back, :rolled_back, :no_image, :errors, keyword_init: true)
   ThumbnailWarmResult = Struct.new(:candidates, :skipped, :processed, :failed, keyword_init: true)
 
   belongs_to :screenshot
@@ -55,85 +48,67 @@ class ScreenshotImage < ApplicationRecord
   validate :manifest_content_identity
 
   after_create_commit :ensure_dimension_processing
-  # Keep Screenshot#status in sync with children so queries like
-  # `Page.screenshots.where(status: :ready)` and readers like
-  # `Screenshot#status` reflect the actual analysis state of the image
-  # variants. Without this, Screenshot#status is stuck at :pending forever
-  # after PR-2.
+  # Screenshot#status is derived from its images so queries like
+  # `Page.screenshots.where(status: :ready)` reflect their analysis state.
   after_save :sync_parent_status, if: :saved_change_to_status?
   after_destroy :sync_parent_status
 
-  # Move every attached Screenshot#image blob onto a new ScreenshotImage(:desktop).
-  # Idempotent. Screenshots without an attached image are left alone.
-  # Logger receives one line per record (prefix `+` migrated, `x` error). Pass
-  # a logger that prints via `say` when running from a migration, or $stdout
-  # for the Rake task. Completes even if individual records error — caller
-  # decides how to react to `result.errors`.
-  def self.backfill_from_screenshots!(apply: false, logger: $stdout)
-    stats = { already_backfilled: 0, backfilled: 0, no_image: 0, errors: 0 }
+  # The images ScreenshotImages::EnsureProcessing would act on: attached and
+  # still awaiting dimensions, or the ready primary image of a ready Screenshot
+  # whose blob lacks a thumbnail variant. EnsureProcessing stays the
+  # authoritative per-row check; this keeps reconciliation off finished work.
+  def self.needing_processing
+    attached = joins(:image_attachment)
 
-    Screenshot.find_each do |screenshot|
-      existing = screenshot.screenshot_images.find_by(viewport: :desktop)
-
-      if existing&.image&.attached?
-        stats[:already_backfilled] += 1
-        next
-      end
-
-      unless screenshot.image.attached?
-        stats[:no_image] += 1
-        next
-      end
-
-      logger.puts "+ Screenshot##{screenshot.id} (#{screenshot.title.truncate(40)}): migrating blob #{screenshot.image.blob.id}"
-      next unless apply
-
-      begin
-        move_blob_from_screenshot!(screenshot, existing)
-        stats[:backfilled] += 1
-      rescue StandardError => e
-        logger.puts "x Screenshot##{screenshot.id}: #{e.class}: #{e.message}"
-        stats[:errors] += 1
-      end
-    end
-
-    BackfillResult.new(**stats)
+    attached.status_pending.or(
+      attached.status_ready
+        .where(screenshot_id: Screenshot.ready.select(:id))
+        .where(primary_viewport)
+        .where(missing_thumbnail_variant)
+    )
   end
 
-  # Inverse of backfill_from_screenshots! — moves ScreenshotImage(:desktop)
-  # blobs back onto Screenshot and destroys the ScreenshotImage. Use before
-  # rolling back the multi-viewport feature to avoid orphaning blobs (AS
-  # attachments are polymorphic, no FK cascade).
-  def self.rollback_to_screenshots!(apply: false, logger: $stdout)
-    stats = { already_rolled_back: 0, rolled_back: 0, no_image: 0, errors: 0 }
-
-    where(viewport: :desktop).find_each do |screenshot_image|
-      screenshot = screenshot_image.screenshot
-
-      if screenshot.image.attached?
-        stats[:already_rolled_back] += 1
-        next
-      end
-
-      unless screenshot_image.image.attached?
-        stats[:no_image] += 1
-        next
-      end
-
-      logger.puts "- ScreenshotImage##{screenshot_image.id} (Screenshot##{screenshot.id}): restoring blob"
-      next unless apply
-
-      begin
-        move_blob_to_screenshot!(screenshot, screenshot_image)
-        stats[:rolled_back] += 1
-      rescue StandardError => e
-        logger.puts "x Screenshot##{screenshot.id}: #{e.class}: #{e.message}"
-        stats[:errors] += 1
-      end
+  # Active Storage folds the blob's format into every variant digest, and the
+  # format follows the upload's filename extension, which clients choose. List
+  # each named thumbnail's digest for every spelling an allowed content type
+  # can resolve to; a blob named some other way only costs EnsureProcessing one
+  # redundant check per reconciliation pass.
+  def self.thumbnail_variant_digests
+    blobs = ALLOWED_CONTENT_TYPES.flat_map do |content_type|
+      Marcel::Magic.new(content_type).extensions
+        .flat_map { |extension| [ extension, extension.upcase ] }
+        .map { |extension| ActiveStorage::Blob.new(filename: "image.#{extension}", content_type:) }
     end
+    named_variants = attachment_reflections.fetch("image").named_variants
 
-    RollbackResult.new(**stats)
+    THUMBNAIL_VARIANT_NAMES.index_with do |name|
+      transformations = named_variants.fetch(name).transformations
+      blobs.map { |blob| blob.variant(transformations).variation.digest }.uniq
+    end
   end
+
+  # Desktop when present, else the lowest viewport: Screenshot#primary_image.
+  def self.primary_viewport
+    siblings = arel_table.alias("sibling_images")
+    lower_sibling = arel_table
+      .project(Arel.sql("1"))
+      .from(siblings)
+      .where(siblings[:screenshot_id].eq(arel_table[:screenshot_id]))
+      .where(siblings[:viewport].lt(arel_table[:viewport]))
+
+    Arel::Nodes::Not.new(lower_sibling.exists)
+  end
+  private_class_method :primary_viewport
+
+  def self.missing_thumbnail_variant
+    variant_records = ActiveStorage::VariantRecord.arel_table
+    same_blob = variant_records[:blob_id].eq(ActiveStorage::Attachment.arel_table[:blob_id])
+
+    thumbnail_variant_digests.values
+      .map { |digests| ActiveStorage::VariantRecord.where(same_blob).where(variation_digest: digests).arel.exists.not }
+      .reduce(:or)
+  end
+  private_class_method :missing_thumbnail_variant
 
   # Warms the named overview variants for every current, ready primary image.
   # Dry-run is the default: eligible records are counted as candidates but no
@@ -165,56 +140,10 @@ class ScreenshotImage < ApplicationRecord
     ThumbnailWarmResult.new(**stats)
   end
 
-  def self.move_blob_from_screenshot!(screenshot, existing)
-    Screenshot.transaction do
-      blob = screenshot.image.blob
-      screenshot.image.detach
-      target = existing || screenshot.screenshot_images.create!(
-        viewport: :desktop,
-        status: screenshot.status,
-        width: screenshot.width,
-        height: screenshot.height
-      )
-      target.image.attach(blob)
-    end
-  end
-  private_class_method :move_blob_from_screenshot!
-
-  # Rolls a variant back onto the parent Screenshot for pre-rollback data
-  # restoration. Critical detail: Screenshot's status/width/height columns
-  # must be set AFTER destroy! so the after_destroy :sync_parent_status
-  # callback (which recomputes status from surviving children = :pending when
-  # the last variant disappears) doesn't wipe the restored values. The legacy
-  # code path this rollback enables — readers that predate PR-2 — reads
-  # width/height/status off Screenshot directly.
-  def self.move_blob_to_screenshot!(screenshot, screenshot_image)
-    Screenshot.transaction do
-      blob = screenshot_image.image.blob
-      width = screenshot_image.width
-      height = screenshot_image.height
-      status_key = screenshot_image.status
-
-      screenshot_image.image.detach
-      screenshot.image.attach(blob)
-      screenshot_image.destroy! # fires sync_parent_status → parent becomes :pending
-
-      screenshot.update_columns(
-        width: width,
-        height: height,
-        status: Screenshot.statuses[status_key]
-      )
-    end
-  end
-  private_class_method :move_blob_to_screenshot!
-
-  # Only enqueue dimension extraction when there's something to analyze AND
-  # the record isn't already :ready:
-  #   - The signed-upload flow creates a blank ScreenshotImage first and the
-  #     agent PUTs the blob later. Without this guard, the create-time
-  #     callback enqueues a useless job that only logs a warning and exits,
-  #     and the upload controller enqueues a second (real) job after attach.
-  #   - The backfill Rake task copies width/height/status=:ready from the
-  #     parent; those records don't need re-analysis.
+  # Only enqueue dimension extraction when there's something to analyze and
+  # the record isn't already :ready. The signed-upload flow creates a blank
+  # ScreenshotImage first and the agent PUTs the blob later; the upload path
+  # schedules processing once the blob is attached.
   def ensure_dimension_processing
     return unless image.attached?
     return if status_ready?

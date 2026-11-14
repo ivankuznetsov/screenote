@@ -15,14 +15,16 @@ class ListAnnotationsTool < ApplicationTool
   end
 
   def call(project_id:, screenshot_id: nil, status: nil, viewport: nil, limit: 50, offset: 0)
-    error = require_project(project_id)
+    error = require_project(project_id) ||
+      invalid_enum_filter("status", status, Annotation.statuses) ||
+      invalid_enum_filter("viewport", viewport, Annotation.viewports)
     return error if error
 
     with_error_handling do
       limit = limit.to_i.clamp(1, 100)
       offset = [ offset.to_i, 0 ].max
 
-      annotations = project_annotations(current_project).order(:created_at)
+      annotations = Api::V1::ProjectScope.annotation_list(current_project).order(:created_at)
       annotations = annotations.where(screenshot_id: screenshot_id) if screenshot_id
       annotations = annotations.where(status: status) if status.present?
       annotations = annotations.where(viewport: viewport) if viewport.present?
@@ -31,7 +33,7 @@ class ListAnnotationsTool < ApplicationTool
       annotations = annotations.limit(limit).offset(offset)
 
       {
-        annotations: annotations.map { |a| serialize_annotation(a) },
+        annotations: Api::V1::ContractSerializer.annotations(annotations),
         pagination: { total: total, limit: limit, offset: offset }
       }.to_json
     end

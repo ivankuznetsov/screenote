@@ -21,13 +21,13 @@ module DeploymentModeHelper
     end
   end
 
-  def require_file_backed_sqlite!
-    connection = ActiveRecord::Base.connection
-    assert_equal "SQLite", connection.adapter_name
-
-    database = connection.pool.db_config.database.to_s
-    assert_not_equal ":memory:", database,
-      "concurrency and persistence coverage requires file-backed SQLite"
-    assert File.file?(database), "expected a file-backed SQLite database at #{database.inspect}"
+  def mail_disabled_deployment
+    Screenote::Deployment.new(
+      {
+        "SCREENOTE_EDITION" => "self_hosted",
+        "SCREENOTE_BASE_URL" => "http://screenote.internal"
+      },
+      production: false
+    )
   end
 end

@@ -34,6 +34,7 @@ module Instance
 
       assert_response :success
       assert_private_headers
+      assert_select "a.header__link[href='#{instance_accounts_path}']", text: "Instance administration"
       assert_select "h1", text: "Instance administration"
       assert_select "[data-testid='instance-account']", minimum: User.count
       assert_select ".instance-account__email", text: @target.email
@@ -53,6 +54,7 @@ module Instance
       assert_equal "text/vnd.turbo-stream.html", response.media_type
       assert_select "turbo-stream[action='replace'][target='recovery-reveal-container']"
       assert_private_headers
+      assert_select "[data-testid='flash-notice'][data-turbo-temporary]", count: 1, text: /Recovery link created/
       assert_select "[data-testid='recovery-reveal'][data-turbo-temporary]"
       assert_select "[data-testid='recovery-link']", count: 1
       assert_select "[data-controller='clipboard'] [data-action='clipboard#copy']", text: "Copy recovery link"
@@ -75,6 +77,7 @@ module Instance
       assert_response :success
       assert_equal "text/html", response.media_type
       assert_private_headers
+      assert_select "[data-testid='flash-notice']", count: 1, text: /Recovery link created/
       assert_select "[data-testid='recovery-link']", count: 1
     end
 
@@ -289,12 +292,6 @@ module Instance
 
     def instance_routes_drawn?
       Rails.application.routes.url_helpers.respond_to?(:instance_accounts_path)
-    end
-
-    def assert_private_headers
-      assert_includes response.headers.fetch("Cache-Control"), "no-store"
-      assert_equal "no-referrer", response.headers["Referrer-Policy"]
-      assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
     end
 
     def instance_result(status)

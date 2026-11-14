@@ -15,11 +15,13 @@ class ReconcileScreenshotProcessingJob < ApplicationJob
     job
   end
 
+  # Runs every five minutes, so it only visits images that still have
+  # dimension or thumbnail work; finished images cost nothing per pass.
   def perform
     processed = 0
 
     ScreenshotImages::EnsureProcessing.inline do
-      ScreenshotImage.joins(:image_attachment).find_each do |image|
+      ScreenshotImage.needing_processing.find_each do |image|
         result = ScreenshotImages::EnsureProcessing.call(image:)
         processed += 1 if result == :processed
       rescue StandardError => error

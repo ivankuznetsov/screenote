@@ -9,12 +9,7 @@
     <meta name="twitter:title" content="Screenote CLI — Visual feedback for AI agents">
     <meta name="twitter:description" content="Publish screenshots from the terminal, point at what is wrong, and let your AI agent retrieve precise visual feedback.">
 
-    <% if Screenote::Deployment.current.saas? %>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-    <% end %>
-    <%= stylesheet_link_tag "landing", "data-turbo-track": "reload" %>
+    <%= render "layouts/fonts" %>
   </head>
 
   <body class="landing-body">

@@ -17,7 +17,6 @@ class OauthDeviceGrant < ApplicationRecord
   validate :principal_binding_is_consistent
   validate :approved_principal_is_immutable, on: :update
 
-  scope :expired, -> { where(expires_at: ..Time.current) }
   scope :stale, -> { where(expires_at: ..EXPIRED_RETENTION_PERIOD.ago) }
 
   class << self

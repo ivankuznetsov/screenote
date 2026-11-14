@@ -18,7 +18,7 @@ class NotificationMailerAttachmentsTest < ActionMailer::TestCase
     attach_to(latest_reply, alt_text: "Current evidence")
     resolution = create_resolution(at: 1.hour.ago)
 
-    body = deliver(resolution).body.to_s
+    body = deliver(resolution).html_part.body.to_s
 
     assert_includes body, "The broken header"
     assert_includes body, "Current evidence"
@@ -32,7 +32,7 @@ class NotificationMailerAttachmentsTest < ActionMailer::TestCase
     later = create_reply("After", at: 30.minutes.ago)
     attach_to(later, alt_text: "After evidence")
 
-    body = deliver(resolution).body.to_s
+    body = deliver(resolution).html_part.body.to_s
 
     assert_includes body, "Before evidence"
     assert_not_includes body, "After evidence"
@@ -42,7 +42,7 @@ class NotificationMailerAttachmentsTest < ActionMailer::TestCase
     attachment = attach_to(@annotation)
     resolution = create_resolution(at: 1.hour.ago)
 
-    body = deliver(resolution).body.to_s
+    body = deliver(resolution).html_part.body.to_s
 
     assert_includes body, "/pages/#{@annotation.screenshot.page_id}"
     assert_includes body, "version_id=#{@annotation.screenshot_id}"
@@ -55,7 +55,7 @@ class NotificationMailerAttachmentsTest < ActionMailer::TestCase
   test "a message without attachments describes none" do
     resolution = create_resolution(at: 1.hour.ago)
 
-    body = deliver(resolution).body.to_s
+    body = deliver(resolution).html_part.body.to_s
 
     assert_not_includes body, "images attached"
   end

@@ -40,7 +40,6 @@ module ScreenoteTmp
     # Common ones are `templates`, `generators`, or `middleware`, for example.
     config.autoload_lib(ignore: %w[assets tasks])
 
-    config.x.screenote.deployment = Screenote::Deployment.current
     config.middleware.insert_before 0,
       Screenote::TrustedProxyHeaders,
       trusted_proxies: Screenote::Deployment.current.trusted_proxies,

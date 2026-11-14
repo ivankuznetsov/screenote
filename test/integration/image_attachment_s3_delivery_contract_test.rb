@@ -192,15 +192,6 @@ class ImageAttachmentS3DeliveryContractTest < ActionDispatch::IntegrationTest
     @client.list_objects_v2(bucket: bucket, prefix: prefix).contents.map(&:key).sort
   end
 
-  def with_singleton_method_stub(object, method_name, replacement)
-    singleton = object.singleton_class
-    original = object.method(method_name)
-    singleton.define_method(method_name, replacement)
-    yield
-  ensure
-    singleton&.define_method(method_name, original)
-  end
-
   # Without this the suite could pass against the Disk service it exists to
   # replace, so the object has to be readable through the provider client.
   def assert_stored_on_provider(attachment)

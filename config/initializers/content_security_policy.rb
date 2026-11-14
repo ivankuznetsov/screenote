@@ -15,7 +15,6 @@ Rails.application.configure do
     policy.object_src  :none
 
     script_sources = [ :self ]
-    script_sources << "https://cdn.jsdelivr.net" if deployment.saas?
     script_sources << "https://js.honeybadger.io" if deployment.saas? && deployment.monitoring?
     policy.script_src(*script_sources)
 
@@ -24,7 +23,7 @@ Rails.application.configure do
     policy.style_src(*style_sources)
 
     connect_sources = [ :self ]
-    connect_sources << "https://cdn.jsdelivr.net" if deployment.saas?
+    connect_sources << "https://api.honeybadger.io" if deployment.saas? && deployment.monitoring?
     policy.connect_src(*connect_sources)
     policy.frame_src :none
   end

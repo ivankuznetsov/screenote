@@ -1,29 +1,29 @@
 alice:
   email: alice@example.com
-  password_digest: <%= BCrypt::Password.create("password123") %>
+  password_digest: <%= BCrypt::Password.create("password123", cost: BCrypt::Engine::MIN_COST) %>
   confirmed_at: <%= Time.current %>
 
 bob:
   email: bob@example.com
-  password_digest: <%= BCrypt::Password.create("password123") %>
+  password_digest: <%= BCrypt::Password.create("password123", cost: BCrypt::Engine::MIN_COST) %>
   confirmed_at: <%= Time.current %>
 
 unconfirmed:
   email: unconfirmed@example.com
-  password_digest: <%= BCrypt::Password.create("password123") %>
+  password_digest: <%= BCrypt::Password.create("password123", cost: BCrypt::Engine::MIN_COST) %>
   confirmed_at: null
 
 admin:
   email: admin@example.com
-  password_digest: <%= BCrypt::Password.create("password123") %>
+  password_digest: <%= BCrypt::Password.create("password123", cost: BCrypt::Engine::MIN_COST) %>
   confirmed_at: <%= Time.current %>
 
 test_user:
   email: test@screenote.app
-  password_digest: <%= BCrypt::Password.create("password") %>
+  password_digest: <%= BCrypt::Password.create("password", cost: BCrypt::Engine::MIN_COST) %>
   confirmed_at: <%= Time.current %>
 
 free_user:
   email: free@screenote.app
-  password_digest: <%= BCrypt::Password.create("password") %>
+  password_digest: <%= BCrypt::Password.create("password", cost: BCrypt::Engine::MIN_COST) %>
   confirmed_at: <%= Time.current %>

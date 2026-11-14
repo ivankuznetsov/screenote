@@ -25,16 +25,13 @@ class UserTest < ActiveSupport::TestCase
     assert_equal "test@example.com", user.email
   end
 
-  test "new users are active and suspension changes the shared activity predicate" do
+  test "new users are active and suspension deactivates them" do
     user = User.create!(email: "activity@example.com", password: "password123")
     assert user.active?
-    assert user.access_active?
-    assert user.active_for_authentication?
 
     user.update!(access_status: :suspended)
     assert user.suspended?
-    assert_not user.access_active?
-    assert_not user.active_for_authentication?
+    assert_not user.active?
   end
 
   test "OAuth provider identity is normalized paired and unique" do
@@ -85,17 +82,6 @@ class UserTest < ActiveSupport::TestCase
     assert_difference "Project.count", -user.projects.count do
       user.destroy
     end
-  end
-
-  test "assign_oauth_attributes stores provider and uid" do
-    user = User.new(email: "oauth@example.com", password: "password123")
-    user.assign_oauth_attributes({
-      "provider" => "google_oauth2",
-      "uid" => "12345",
-      "info" => { "email" => "oauth@example.com" }
-    })
-    assert_equal "google_oauth2", user.oauth_provider
-    assert_equal "12345", user.oauth_uid
   end
 
   test "find_by_oauth finds user by provider and uid" do

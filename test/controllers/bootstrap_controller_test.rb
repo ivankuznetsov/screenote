@@ -251,15 +251,6 @@ class BootstrapControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def with_singleton_method_stub(object, method_name, replacement)
-    singleton = object.singleton_class
-    original = object.method(method_name)
-    singleton.define_method(method_name, replacement)
-    yield
-  ensure
-    singleton&.define_method(method_name, original)
-  end
-
   def clean_bootstrap_records
     InstallationAuditEvent.delete_all
     Installation.delete_all

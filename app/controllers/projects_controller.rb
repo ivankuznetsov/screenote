@@ -8,7 +8,7 @@ class ProjectsController < ApplicationController
   before_action :require_project_quota!, only: :new
 
   def index
-    @memberships_by_project = Current.user.project_memberships.includes(:project).index_by(&:project_id)
+    @memberships_by_project = Current.user.project_memberships.index_by(&:project_id)
     @projects = Current.user.projects.order(updated_at: :desc)
                   .includes(
                     pages: {

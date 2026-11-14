@@ -198,6 +198,26 @@ module Oauth
       assert_nil grant_for(codes).reload.approved_at
     end
 
+    test "quota rejection keeps the submitted project selected" do
+      codes = initiate_device_authorization
+      sign_in(@user)
+      project = @user.projects.first!
+      exceeded = ->(**) { raise DynamicClientAuthorizationQuota::Exceeded, "Revoke an unused client first." }
+
+      with_singleton_method(DynamicClientAuthorizationQuota, :authorize, exceeded) do
+        post "/oauth/device", params: {
+          user_code: codes["user_code"],
+          decision: "approve",
+          principal_project_id: project.id
+        }
+      end
+
+      assert_response :unprocessable_entity
+      assert_select "[data-testid='device-principal-error']", text: "Revoke an unused client first."
+      assert_select "select[data-testid='device-principal-select'] option[selected][value='#{project.id}']"
+      assert_nil grant_for(codes).reload.approved_at
+    end
+
     test "denial rejects a grant consumed between lookup and row lock" do
       codes = initiate_device_authorization
       sign_in(@user)
@@ -228,14 +248,6 @@ module Oauth
 
     def grant_for(codes)
       OauthDeviceGrant.find_by_plaintext_device_code(codes["device_code"])
-    end
-
-    def with_singleton_method(object, name, implementation)
-      original = object.method(name)
-      object.define_singleton_method(name, implementation)
-      yield
-    ensure
-      object.define_singleton_method(name, original) if original
     end
   end
 end

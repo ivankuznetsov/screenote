@@ -68,7 +68,7 @@ module UserAuthenticationLinks
 
           resolution = resolver.revalidate(token_id: token.id, expected_purpose: purpose)
           next result(resolution.status) unless resolution.valid?
-          next result(:inactive_user) unless user.access_active?
+          next result(:inactive_user) unless user.active?
           if %i[magic_link email_confirmation].include?(purpose) && reconfirmation_checker.call(user)
             unless token.transition_to!(:cancelled, at: clock.call)
               raise LostRace, "authentication link changed during reconfirmation rejection"

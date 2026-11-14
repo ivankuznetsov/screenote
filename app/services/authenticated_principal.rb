@@ -96,19 +96,11 @@ class AuthenticatedPrincipal
     oauth_token.present?
   end
 
-  def browser?
-    !api_key? && !oauth?
-  end
-
   def scope?(scope)
     scopes.include?(scope.to_s)
   end
 
   alias_method :allows_scope?, :scope?
-
-  def read?
-    scope?(READ_SCOPE)
-  end
 
   def write?
     scope?(WRITE_SCOPE)
@@ -140,10 +132,6 @@ class AuthenticatedPrincipal
 
   def can_create_project?
     user_principal? && user.present? && write?
-  end
-
-  def can_invite_to?(candidate)
-    !api_key? && user.present? && write? && project_access?(candidate) && candidate.owner?(user)
   end
 
   def annotation_actor_attributes

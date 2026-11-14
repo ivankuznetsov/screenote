@@ -29,6 +29,51 @@ module Api
         assert_equal 1, body["pagination"]["total"]
       end
 
+      test "rejects a status filter that is not a known value" do
+        get api_v1_project_screenshots_path(@project, status: "done"), headers: auth_header(ALICE_TOKEN)
+
+        assert_response :unprocessable_entity
+        assert_equal "validation_failed", response.parsed_body["code"]
+        assert_equal [ "Status must be one of: pending, ready, failed" ], response.parsed_body["details"]
+      end
+
+      test "lists annotation counts and viewports in variant order" do
+        screenshot = screenshots(:alice_screenshot)
+        screenshot.screenshot_images.create!(viewport: :mobile)
+        screenshot.screenshot_images.create!(viewport: :tablet)
+
+        get api_v1_project_screenshots_path(@project), headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        listed = response.parsed_body["screenshots"].find { |item| item["id"] == screenshot.id }
+        assert_equal %w[desktop tablet mobile], listed["viewports"].map { |image| image["viewport"] }
+        assert_equal screenshot.annotations.count, listed["annotation_count"]
+        assert_equal screenshot.annotations.open.count, listed["unresolved_count"]
+        assert_operator listed["annotation_count"], :>, listed["unresolved_count"],
+          "Fixtures must include a resolved annotation"
+
+        empty = response.parsed_body["screenshots"].find { |item| item["id"] == screenshots(:alice_screenshot_pending).id }
+        assert_equal [ 0, 0 ], empty.values_at("annotation_count", "unresolved_count")
+      end
+
+      # Measured against itself so an N+1 that only appears at scale fails.
+      test "list reads do not scale queries with screenshots, variants, or annotations" do
+        get_list
+        baseline = capture_app_queries { get_list }.size
+
+        2.times do |index|
+          screenshot = pages(:alice_page).screenshots.create!(title: "Version #{index}")
+          screenshot.screenshot_images.create!(viewport: :desktop)
+          screenshot.screenshot_images.create!(viewport: :mobile)
+          2.times do
+            screenshot.annotations.create!(user: users(:alice), x_percent: 1.0, y_percent: 1.0, comment: "Note")
+          end
+        end
+
+        assert_equal baseline, capture_app_queries { get_list }.size,
+          "screenshot list reads must not scale queries with rows"
+      end
+
       test "does not list screenshots outside the key project" do
         get api_v1_project_screenshots_path(projects(:bob_project)),
           headers: auth_header(ALICE_TOKEN)
@@ -245,6 +290,11 @@ module Api
       end
 
       private
+
+      def get_list
+        get api_v1_project_screenshots_path(@project), headers: auth_header(ALICE_TOKEN)
+        assert_response :success
+      end
 
       def auth_header(token)
         { "Authorization" => "Bearer #{token}" }

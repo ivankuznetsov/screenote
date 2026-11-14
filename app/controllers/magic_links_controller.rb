@@ -3,14 +3,16 @@
 require "digest"
 
 class MagicLinksController < ApplicationController
+  include FailClosedRateLimiting
+  include MailDeliveryRequired
+  include PrivateResponseHeaders
+
   RATE_LIMIT = 3
   RATE_LIMIT_WINDOW = 10.minutes
-  RATE_LIMITER_RETRY_AFTER = 60
   RATE_LIMIT_DOMAIN = "screenote:magic-link-request:v1\0"
   MAGIC_LINK_RATE_LIMIT_STORE = Screenote::RateLimitStore.new(store: -> { cache_store })
 
   skip_before_action :require_authentication
-  before_action :require_mail
   before_action :set_private_headers, only: :show
   layout "auth"
 
@@ -18,8 +20,6 @@ class MagicLinksController < ApplicationController
     by: -> { self.class.rate_limit_identity(params[:email]) }, only: :create,
     with: -> { redirect_to magic_link_form_path, alert: "Too many magic link requests. Please try again later." },
     store: MAGIC_LINK_RATE_LIMIT_STORE
-
-  rescue_from Screenote::RateLimitStore::Unavailable, with: :render_rate_limiter_unavailable
 
   def self.rate_limit_identity(email)
     Digest::SHA256.hexdigest("#{RATE_LIMIT_DOMAIN}#{email.to_s.strip.downcase}")
@@ -65,22 +65,5 @@ class MagicLinksController < ApplicationController
 
   def invalid_link
     redirect_to new_session_path, alert: "Invalid or expired magic link."
-  end
-
-  def render_rate_limiter_unavailable(_error)
-    response.set_header("Retry-After", RATE_LIMITER_RETRY_AFTER.to_s)
-    response.set_header("Cache-Control", "no-store")
-    response.set_header("Pragma", "no-cache")
-    head :service_unavailable
-  end
-
-  def require_mail
-    head :not_found unless Screenote::Deployment.current.mail?
-  end
-
-  def set_private_headers
-    response.headers["Cache-Control"] = "no-store, max-age=0"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["X-Robots-Tag"] = "noindex, nofollow"
   end
 end

@@ -2,6 +2,8 @@
 
 module Instance
   class AdministratorsController < ApplicationController
+    include PrivateResponseHeaders
+
     before_action :set_private_headers
 
     def transfer
@@ -26,15 +28,6 @@ module Instance
       else
         redirect_to instance_accounts_path, alert: "Administration could not be transferred."
       end
-    end
-
-    private
-
-    def set_private_headers
-      response.set_header("Cache-Control", "no-store, max-age=0")
-      response.set_header("Pragma", "no-cache")
-      response.set_header("Referrer-Policy", "no-referrer")
-      response.set_header("X-Robots-Tag", "noindex, nofollow")
     end
   end
 end

@@ -65,12 +65,6 @@ class User < ApplicationRecord
     subscription&.active_pro?
   end
 
-  def access_active?
-    active?
-  end
-
-  alias_method :active_for_authentication?, :access_active?
-
   def can_create_project?(deployment: Screenote::Deployment.current)
     return true unless deployment.billing?
 
@@ -86,11 +80,6 @@ class User < ApplicationRecord
 
   def saas_operator?(deployment: Screenote::Deployment.current)
     deployment.saas? && email == deployment.saas_operator_email
-  end
-
-  def assign_oauth_attributes(auth_hash)
-    self.oauth_provider = auth_hash["provider"]
-    self.oauth_uid = auth_hash["uid"]
   end
 
   class << self
@@ -119,7 +108,7 @@ class User < ApplicationRecord
       return unless identity
 
       exact = find_by_oauth(identity.provider, identity.uid)
-      return exact if exact&.access_active? && exact.email == identity.email
+      return exact if exact&.active? && exact.email == identity.email
       return unless allow_create
 
       create_verified_oauth_user(identity)
@@ -137,7 +126,7 @@ class User < ApplicationRecord
           oauth_user = locked[oauth_user.id] if oauth_user
 
           if oauth_user
-            next oauth_user if oauth_user.access_active? && oauth_user.email == normalized_email
+            next oauth_user if oauth_user.active? && oauth_user.email == normalized_email
 
             next nil
           end
@@ -155,7 +144,7 @@ class User < ApplicationRecord
       end
     rescue DatabaseRetry::Exhausted, ActiveRecord::ActiveRecordError
       exact = find_by_oauth(identity.provider, identity.uid)
-      exact if exact&.access_active? && exact.email == identity.email
+      exact if exact&.active? && exact.email == identity.email
     end
 
     def github_verified_primary_email?(auth_hash, email)

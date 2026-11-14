@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p3
 issue_id: "163"
 tags: [code-review, stripe, webhook, performance, polish]

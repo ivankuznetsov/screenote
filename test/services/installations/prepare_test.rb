@@ -60,14 +60,5 @@ module Installations
         production: true
       )
     end
-
-    def with_singleton_method_stub(object, method_name, replacement)
-      singleton = object.singleton_class
-      original = object.method(method_name)
-      singleton.define_method(method_name, replacement)
-      yield
-    ensure
-      singleton&.define_method(method_name, original)
-    end
   end
 end

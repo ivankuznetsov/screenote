@@ -185,6 +185,28 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
     assert_response :service_unavailable
   end
 
+  test "a retryable failure is processed again when Stripe redelivers the event" do
+    event = build_event("customer.subscription.deleted", {
+      id: @subscription.stripe_subscription_id,
+      customer: "cus_not_yet_known"
+    })
+
+    post_webhook(event)
+    assert_response :service_unavailable
+    assert_not StripeWebhookEvent.exists?(stripe_event_id: event[:id])
+
+    connection_error = Stripe::APIConnectionError.new("unavailable")
+    checkout = build_event("checkout.session.completed", {
+      customer: @subscription.stripe_customer_id,
+      subscription: "sub-unavailable"
+    })
+    with_singleton_method(Screenote::Monitoring, :notify, ->(*, **) { }) do
+      with_singleton_method(Stripe::Subscription, :retrieve, ->(*) { raise connection_error }) { post_webhook(checkout) }
+    end
+    assert_response :internal_server_error
+    assert_not StripeWebhookEvent.exists?(stripe_event_id: checkout[:id])
+  end
+
   test "customer.subscription.updated with missing subscription record returns service_unavailable" do
     event = build_event("customer.subscription.updated", {
       id: "sub_orphan",
@@ -515,14 +537,6 @@ class StripeWebhooksControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def with_singleton_method(receiver, name, replacement)
-    original = receiver.method(name)
-    receiver.define_singleton_method(name, replacement)
-    yield
-  ensure
-    receiver.define_singleton_method(name, original) if original
-  end
 
   def upgrade_bob_to_pro!
     @subscription.update_columns(

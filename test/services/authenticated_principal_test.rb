@@ -17,12 +17,10 @@ class AuthenticatedPrincipalTest < ActiveSupport::TestCase
     assert_equal issuer, principal.issuer
     assert_equal projects(:alice_project), principal.project
     assert_equal %w[mcp_read mcp_write], principal.scopes
-    assert principal.read?
     assert principal.write?
     assert principal.project_access?(projects(:alice_project))
     assert_not principal.project_access?(projects(:bob_project))
     assert_not principal.can_create_project?
-    assert_not principal.can_invite_to?(projects(:alice_project))
     assert_raises(FrozenError) { principal.scopes << "extra" }
   end
 
@@ -45,14 +43,13 @@ class AuthenticatedPrincipalTest < ActiveSupport::TestCase
     assert_equal users(:alice), principal.issuer
     assert_nil principal.project
     assert_equal [ "mcp_read" ], principal.scopes
-    assert principal.read?
     assert_not principal.write?
     assert principal.project_access?(projects(:alice_project))
     assert_not principal.project_access?(projects(:bob_project))
     assert_not principal.can_create_project?
   end
 
-  test "write-only project oauth stays bound and can invite only as its bound owner" do
+  test "write-only project oauth stays bound to its project" do
     token = oauth_token_for(
       user: users(:alice),
       project: projects(:alice_project),
@@ -64,11 +61,11 @@ class AuthenticatedPrincipalTest < ActiveSupport::TestCase
 
     assert_predicate principal, :project_principal?
     assert_equal projects(:alice_project), principal.project
-    assert_not principal.read?
+    assert_equal [ "mcp_write" ], principal.scopes
     assert principal.write?
     assert_not principal.can_create_project?
-    assert principal.can_invite_to?(projects(:alice_project))
-    assert_not principal.can_invite_to?(projects(:bob_project))
+    assert principal.project_access?(projects(:alice_project))
+    assert_not principal.project_access?(projects(:bob_project))
   end
 
   test "project oauth is rejected when its user is not a current member" do
@@ -114,9 +111,9 @@ class AuthenticatedPrincipalTest < ActiveSupport::TestCase
     principal = AuthenticatedPrincipal.for_user(users(:alice))
 
     assert_predicate principal, :user_principal?
-    assert_predicate principal, :browser?
-    assert principal.read?
-    assert principal.write?
+    assert_not principal.api_key?
+    assert_not principal.oauth?
+    assert_equal %w[mcp_read mcp_write], principal.scopes
     assert principal.can_create_project?
   end
 

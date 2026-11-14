@@ -25,14 +25,7 @@ class AddAnnotationCommentTool < ApplicationTool
 
       {
         success: true,
-        comment: {
-          id: comment.id,
-          annotation_id: annotation.id,
-          action: comment.action,
-          body: comment.body,
-          author: current_user&.email || current_principal.api_key&.name,
-          created_at: comment.created_at.iso8601
-        }
+        comment: Api::V1::ContractSerializer.annotation_comment(comment, annotation: annotation)
       }.to_json
     end
   end

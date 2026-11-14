@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "041"
 tags: [code-review, javascript, race-condition, frontend]

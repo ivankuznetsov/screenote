@@ -23,7 +23,6 @@ module Api
       assert_equal screenshot.id, body["screenshot_id"]
       assert body["annotate_url"].present?
       assert si.reload.image.attached?, "Image should be attached to the ScreenshotImage"
-      assert_not screenshot.reload.image.attached?, "Screenshot itself should NOT hold the image"
     end
 
     test "defaults a missing content type to PNG" do

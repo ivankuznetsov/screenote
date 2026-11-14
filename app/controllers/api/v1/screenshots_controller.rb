@@ -4,27 +4,30 @@ module Api
   module V1
     class ScreenshotsController < Api::BaseController
       def index
-        return unless require_scope!("mcp_read")
+        return unless require_scope!(AuthenticatedPrincipal::READ_SCOPE)
 
         project = require_current_project!(params[:project_id])
         return unless project
 
+        status = enum_filter_param(:status, Screenshot.statuses)
+        return if performed?
+
         limit, offset = pagination_params
         screenshots = Api::V1::ProjectScope.screenshots(project)
         screenshots = screenshots.where(page_id: params[:page_id]) if params[:page_id].present?
-        screenshots = screenshots.where(status: params[:status]) if params[:status].present?
+        screenshots = screenshots.where(status: status) if status
 
         total = screenshots.count
         screenshots = screenshots.limit(limit).offset(offset)
 
         render json: {
-          screenshots: screenshots.map { |screenshot| Api::V1::ContractSerializer.screenshot(screenshot, url_options: serializer_url_options) },
+          screenshots: Api::V1::ContractSerializer.screenshots(screenshots, url_options: serializer_url_options),
           pagination: { total: total, limit: limit, offset: offset }
         }
       end
 
       def create
-        return unless require_scope!("mcp_write")
+        return unless require_scope!(AuthenticatedPrincipal::WRITE_SCOPE)
 
         project = require_current_project!(params[:project_id])
         return unless project

@@ -34,7 +34,6 @@ module AuthenticationLinks
         Base64.urlsafe_encode64(result.secret_bytes, padding: false)
       assert_equal "0d0386383aec4abaf86ea177344054107dc2d3417d99fd3a6770f5bbd95f2d9c", result.digest
       assert_equal result.digest, result.token_digest
-      assert @deriver.matches_digest?(expected_digest: result.digest, **METADATA)
 
       epoch_result = @deriver.derive(**METADATA.merge(expires_at: METADATA.fetch(:expires_at).to_i))
       assert_equal result.secret_bytes, epoch_result.secret_bytes
@@ -79,8 +78,6 @@ module AuthenticationLinks
 
       assert_not_equal current.secret_bytes, prior.secret_bytes
       assert_equal prior_key_id, prior.key_id
-      assert deriver.matches_digest?(expected_digest: prior.digest, **METADATA, key_id: prior_key_id)
-      assert_not deriver.matches_digest?(expected_digest: current.digest, **METADATA, key_id: prior_key_id)
     end
 
     test "fails closed when a retained key has been removed" do
@@ -101,13 +98,6 @@ module AuthenticationLinks
 
       invalid_metadata.each do |metadata|
         assert_raises(Deriver::InvalidMetadata) { @deriver.derive(**metadata) }
-      end
-
-      assert_raises(Deriver::InvalidDigest) do
-        @deriver.matches_digest?(expected_digest: "A" * 64, **METADATA)
-      end
-      assert_raises(Deriver::InvalidDigest) do
-        @deriver.matches_digest?(expected_digest: ("\xFF" * 64).b, **METADATA)
       end
     end
 

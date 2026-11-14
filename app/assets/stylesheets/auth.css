@@ -171,6 +171,12 @@
   text-decoration: none;
 }
 
+/* A flex box sizes the span to its glyph, so the icon centres in the button
+   instead of sitting on a text baseline with descender space beneath it. */
+.auth-card__oauth-icon {
+  display: inline-flex;
+}
+
 .auth-card__oauth-icon--google_oauth2::before {
   content: "G";
   display: inline-flex;
@@ -269,6 +275,13 @@
   color: #fca5a5;
 }
 
+/* Neutral guidance under a field: same scale as a field error, without the
+   error colour. */
+.auth-card__hint {
+  font-size: 0.8125rem;
+  color: var(--dark-text-dim);
+}
+
 /* --- Submit button --- */
 .auth-card__actions {
   margin-top: 0.5rem;
@@ -346,6 +359,20 @@
 /* ============================================================
    OAUTH CONSENT
    ============================================================ */
+
+/* Supporting copy under the subtitle and under the principal select. It
+   carries the device code to confirm, so it stays muted rather than dim. */
+.oauth-consent__explanation {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--dark-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+/* Inside a field the column gap already spaces it from the select. */
+.auth-card__field .oauth-consent__explanation {
+  margin-bottom: 0;
+}
 
 .oauth-consent__scopes {
   margin-bottom: 1.5rem;
