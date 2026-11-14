@@ -14,7 +14,7 @@
 
 <!-- Expiry note -->
 <p style="margin: 0 0 20px 0; font-size: 13px; color: #5a5a6e; line-height: 1.6;">
-  This link will expire in 7 days.
+  This link will expire in <%= distance_of_time_in_words(Time.current, @expires_at) %>.
 </p>
 
 <%= render "user_mailer/email_fallback_url", url: @accept_url %>

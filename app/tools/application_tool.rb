@@ -63,7 +63,9 @@ class ApplicationTool < FastMcp::Tool
   rescue Projects::Create::LimitReached => e
     { error: "project_limit_reached", message: e.message }.to_json
   rescue ActiveRecord::RecordNotFound => e
-    { error: "not_found", message: e.message }.to_json
+    # Finder errors embed the SQL scope in their message; only hand-raised
+    # ones (no model) carry text written for the agent.
+    { error: "not_found", message: e.model.present? ? "#{e.model} not found" : e.message }.to_json
   rescue ActiveRecord::RecordInvalid => e
     { error: "validation_failed", message: e.message, details: e.record.errors.full_messages }.to_json
   rescue StandardError => e
@@ -75,6 +77,18 @@ class ApplicationTool < FastMcp::Tool
   # tool returns the same envelope to the agent.
   def invalid(message)
     { error: "invalid_arguments", message: message }.to_json
+  end
+
+  # An unknown enum label would otherwise reach `where` and silently match
+  # nothing. Returns the error envelope, or nil when absent or known.
+  def invalid_enum_filter(name, value, values)
+    return if value.blank? || values.key?(value)
+
+    invalid("#{name} must be one of #{values.keys.join(', ')}")
+  end
+
+  def serializer_url_options
+    Screenote::Deployment.current.url_options
   end
 
   def project_annotations(project)

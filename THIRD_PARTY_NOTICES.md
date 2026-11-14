@@ -26,7 +26,7 @@ The following entries are generated from `Gemfile.lock` with Bundler's declared 
 
 ### Apache-2.0
 
-`addressable` 2.9.0, `aws-eventstream` 1.4.0, `aws-partitions` 1.1213.0, `aws-sdk-core` 3.242.0, `aws-sdk-kms` 1.121.0, `aws-sdk-s3` 1.213.0, `aws-sigv4` 1.12.1, `jmespath` 1.6.2, `msgpack` 1.8.3, `websocket-driver` 0.8.2, `websocket-extensions` 0.1.5.
+`addressable` 2.9.2, `aws-eventstream` 1.4.0, `aws-partitions` 1.1213.0, `aws-sdk-core` 3.242.0, `aws-sdk-kms` 1.121.0, `aws-sdk-s3` 1.213.0, `aws-sigv4` 1.12.1, `jmespath` 1.6.2, `msgpack` 1.8.3, `websocket-driver` 0.8.2, `websocket-extensions` 0.1.5.
 
 ### BSD-2-Clause
 
@@ -38,11 +38,11 @@ The following entries are generated from `Gemfile.lock` with Bundler's declared 
 
 ### BSD-3-Clause
 
-`ffi` 1.17.3, `puma` 8.0.2, `sqlite3` 2.9.5.
+`ffi` 1.17.3, `puma` 8.0.2, `sqlite3` 2.10.2.
 
 ### MIT
 
-`action_text-trix` 2.1.19, `actioncable` 8.1.3.1, `actionmailbox` 8.1.3.1, `actionmailer` 8.1.3.1, `actionpack` 8.1.3.1, `actiontext` 8.1.3.1, `actionview` 8.1.3.1, `activejob` 8.1.3.1, `activemodel` 8.1.3.1, `activerecord` 8.1.3.1, `activestorage` 8.1.3.1, `activesupport` 8.1.3.1, `anonymous_loader` 0.1.2, `auth-sanitizer` 0.2.2, `bcrypt` 3.1.22, `bcrypt_pbkdf` 1.1.2, `bootsnap` 1.22.0, `builder` 3.3.0, `bundler` 2.7.2, `concurrent-ruby` 1.3.7, `connection_pool` 3.0.2, `crass` 1.0.7, `doorkeeper` 5.8.2, `dotenv` 3.2.0, `dry-configurable` 1.3.0, `dry-core` 1.2.0, `dry-inflector` 1.3.1, `dry-initializer` 3.2.0, `dry-logic` 1.6.0, `dry-schema` 1.15.0, `dry-types` 1.9.1, `ed25519` 1.4.0, `erubi` 1.13.1, `et-orbi` 1.4.0, `faraday` 2.14.3, `faraday-net_http` 3.4.4, `fast-mcp` 1.6.0, `fugit` 1.12.1, `globalid` 1.4.0, `hashie` 5.1.0, `honeybadger` 6.3.0, `httparty` 0.24.2, `i18n` 1.15.2, `image_processing` 1.14.0, `importmap-rails` 2.2.3, `jwt` 3.2.0, `kamal` 2.10.1, `loofah` 2.25.2, `mail` 2.9.1, `mime-types` 3.7.0, `mime-types-data` 3.2026.0701, `mini_magick` 5.3.1, `mini_mime` 1.1.5, `minitest` 6.0.6, `multi_xml` 0.9.1, `net-scp` 4.1.0, `net-sftp` 4.0.0, `net-ssh` 7.3.0, `nokogiri` 1.19.4, `oauth2` 2.0.24, `omniauth` 2.1.4, `omniauth-github` 2.0.1, `omniauth-google-oauth2` 1.2.1, `omniauth-oauth2` 1.9.0, `prism` 1.9.0, `propshaft` 1.3.1, `public_suffix` 7.0.5, `raabro` 1.4.0, `rack` 3.2.6, `rack-protection` 4.2.1, `rack-session` 2.1.2, `rack-test` 2.2.0, `rackup` 2.3.1, `rails` 8.1.3.1, `rails-dom-testing` 2.3.0, `rails-html-sanitizer` 1.7.1, `rails_simple_auth` 1.1.0, `railties` 8.1.3.1, `rake` 13.4.2, `resend` 1.0.0, `ruby-vips` 2.3.0, `snaky_hash` 2.0.6, `solid_cable` 3.0.12, `solid_cache` 1.0.10, `solid_queue` 1.3.1, `sshkit` 1.25.0, `stimulus-rails` 1.3.4, `stripe` 18.3.1, `thor` 1.5.0, `thruster` 0.1.23, `turbo-rails` 2.0.23, `tzinfo` 2.0.6, `useragent` 0.16.11, `version_gem` 1.1.13, `zeitwerk` 2.8.2.
+`action_text-trix` 2.1.19, `actioncable` 8.1.4.1, `actionmailbox` 8.1.4.1, `actionmailer` 8.1.4.1, `actionpack` 8.1.4.1, `actiontext` 8.1.4.1, `actionview` 8.1.4.1, `activejob` 8.1.4.1, `activemodel` 8.1.4.1, `activerecord` 8.1.4.1, `activestorage` 8.1.4.1, `activesupport` 8.1.4.1, `anonymous_loader` 0.1.2, `auth-sanitizer` 0.2.2, `bcrypt` 3.1.22, `bcrypt_pbkdf` 1.1.2, `bootsnap` 1.22.0, `builder` 3.3.0, `bundler` 2.7.2, `concurrent-ruby` 1.3.7, `connection_pool` 3.0.2, `crass` 1.0.8, `doorkeeper` 5.8.2, `dotenv` 3.2.0, `dry-configurable` 1.3.0, `dry-core` 1.2.0, `dry-inflector` 1.3.1, `dry-initializer` 3.2.0, `dry-logic` 1.6.0, `dry-schema` 1.15.0, `dry-types` 1.9.1, `ed25519` 1.4.0, `erubi` 1.13.1, `et-orbi` 1.4.0, `faraday` 2.14.3, `faraday-net_http` 3.4.4, `fast-mcp` 1.6.0, `fugit` 1.12.1, `globalid` 1.4.0, `hashie` 5.1.0, `honeybadger` 6.3.0, `httparty` 0.24.2, `i18n` 1.15.2, `image_processing` 1.14.0, `importmap-rails` 2.2.3, `jwt` 3.2.0, `kamal` 2.10.1, `loofah` 2.25.3, `mail` 2.9.1, `mime-types` 3.7.0, `mime-types-data` 3.2026.0701, `mini_magick` 5.3.1, `mini_mime` 1.1.5, `minitest` 6.0.6, `multi_xml` 0.9.1, `net-scp` 4.1.0, `net-sftp` 4.0.0, `net-ssh` 7.3.8, `nokogiri` 1.19.7, `oauth2` 2.0.24, `omniauth` 2.4.0, `omniauth-github` 2.0.1, `omniauth-google-oauth2` 1.2.1, `omniauth-oauth2` 1.9.0, `prism` 1.9.0, `propshaft` 1.3.1, `public_suffix` 7.0.5, `raabro` 1.4.0, `rack` 3.2.8, `rack-protection` 4.2.1, `rack-session` 2.1.2, `rack-test` 2.2.0, `rackup` 2.3.1, `rails` 8.1.4.1, `rails-dom-testing` 2.3.0, `rails-html-sanitizer` 1.7.2, `rails_simple_auth` 1.1.0, `railties` 8.1.4.1, `rake` 13.4.2, `resend` 1.0.0, `ruby-vips` 2.3.0, `snaky_hash` 2.0.6, `solid_cable` 3.0.12, `solid_cache` 1.0.10, `solid_queue` 1.3.1, `sshkit` 1.25.0, `stimulus-rails` 1.3.4, `stripe` 18.3.1, `thor` 1.5.0, `thruster` 0.1.23, `turbo-rails` 2.0.23, `tzinfo` 2.0.6, `useragent` 0.16.11, `version_gem` 1.1.13, `zeitwerk` 2.8.2.
 
 ### MIT OR Apache-2.0
 
@@ -54,7 +54,7 @@ The following entries are generated from `Gemfile.lock` with Bundler's declared 
 
 ### Ruby
 
-`json` 2.20.0, `reline` 0.6.3.
+`json` 2.21.2, `reline` 0.6.3.
 
 ### Ruby OR BSD-2-Clause
 
@@ -63,10 +63,6 @@ The following entries are generated from `Gemfile.lock` with Bundler's declared 
 ### Ruby OR GPL-2.0-only
 
 `rdoc` 8.0.0.
-
-## Transitional Go client source
-
-The in-repository Go client is transitional and is not a supported release artifact. Its locked modules are: `BurntSushi/toml` 1.5.0 (MIT), `cpuguy83/go-md2man/v2` 2.0.6 (MIT), `inconshreveable/mousetrap` 1.1.0 (Apache-2.0), `russross/blackfriday/v2` 2.1.0 (BSD-2-Clause), `spf13/cobra` 1.10.1 (Apache-2.0), `spf13/pflag` 1.0.9 (BSD-3-Clause), `gopkg.in/check.v1` revision `20d25e280405` (BSD-2-Clause), and `gopkg.in/yaml.v3` 3.0.1 (MIT and Apache-2.0 dual notice).
 
 ## Container operating-system packages
 

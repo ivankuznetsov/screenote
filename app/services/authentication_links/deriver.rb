@@ -10,11 +10,9 @@ module AuthenticationLinks
     PURPOSE_PATTERN = /\A[a-z][a-z0-9_]{0,63}\z/
     SUBJECT_TYPE_PATTERN = /\A[A-Z][A-Za-z0-9]*(?:::[A-Z][A-Za-z0-9]*)*\z/
     DERIVATION_ID_PATTERN = /\A[0-9a-f]{64}\z/
-    DIGEST_PATTERN = /\A[0-9a-f]{64}\z/
 
     class Error < StandardError; end
     class InvalidMetadata < Error; end
-    class InvalidDigest < Error; end
 
     class Result
       attr_reader :key_id, :digest
@@ -66,15 +64,6 @@ module AuthenticationLinks
         key_id: selected_key_id,
         secret_bytes: @keyring.sign(payload, key_id: selected_key_id)
       )
-    end
-
-    def matches_digest?(expected_digest:, **metadata)
-      unless expected_digest.is_a?(String) && expected_digest.ascii_only? && expected_digest.match?(DIGEST_PATTERN)
-        raise InvalidDigest, "authentication-link digest must be 64 lowercase hexadecimal characters"
-      end
-
-      actual_digest = derive(**metadata).digest
-      OpenSSL.fixed_length_secure_compare(actual_digest, expected_digest)
     end
 
     def inspect

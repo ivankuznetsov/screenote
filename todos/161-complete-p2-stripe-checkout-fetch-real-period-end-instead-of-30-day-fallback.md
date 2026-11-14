@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "161"
 tags: [code-review, stripe, webhook, reliability]

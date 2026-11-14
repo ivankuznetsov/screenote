@@ -236,18 +236,4 @@ class AccountRecoveriesControllerTest < ActionDispatch::IntegrationTest
     post exchange_authentication_link_path(:account_recovery), params: { token: @issued.presentation.fragment }
     assert_redirected_to account_recovery_path
   end
-
-  def with_singleton_method(object, name, implementation)
-    original = object.method(name)
-    object.define_singleton_method(name, implementation)
-    yield
-  ensure
-    object.define_singleton_method(name, original) if original
-  end
-
-  def assert_private_headers
-    assert_includes response.headers.fetch("Cache-Control"), "no-store"
-    assert_equal "no-referrer", response.headers["Referrer-Policy"]
-    assert_equal "noindex, nofollow", response.headers["X-Robots-Tag"]
-  end
 end

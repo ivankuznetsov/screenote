@@ -27,7 +27,7 @@ module ScreenoteSessionManagement
       .active
       .find_by(id: session_token)
 
-    if session_record&.user&.access_active?
+    if session_record&.user&.active?
       RailsSimpleAuth::Current.user = session_record.user
       RailsSimpleAuth::Current.session = session_record
     else
@@ -41,7 +41,7 @@ module ScreenoteSessionManagement
     issuance = lambda do
       User.transaction do
         locked_user = AuthorityLock.user!(user)
-        raise InactiveUser, "inactive users cannot create browser sessions" unless locked_user.access_active?
+        raise InactiveUser, "inactive users cannot create browser sessions" unless locked_user.active?
 
         session_record = locked_user.sessions.create!(
           ip_address: client_ip,

@@ -54,9 +54,8 @@ Legacy raw signed-token helpers are explicitly undefined. App-owned authenticati
 - `can_create_project?(deployment:)` -- Unlimited without a query in self-hosted mode; SaaS Pro users are unlimited and free users retain `Subscription::FREE_PROJECT_LIMIT`
 - `can_invite_member?(project, deployment:)` -- Unlimited without a query in self-hosted mode; SaaS Pro users are unlimited and free users retain `Subscription::FREE_MEMBER_LIMIT`
 - `saas_operator?(deployment:)` -- True only in SaaS mode when the normalized email matches the boot-validated `SCREENOTE_SAAS_OPERATOR_EMAIL`; there is no generic `admin?` compatibility alias
-- `assign_oauth_attributes(auth_hash)` -- Sets oauth_provider and oauth_uid from OmniAuth hash
 - `self.find_by_oauth(provider, uid)` -- Finds user by OAuth provider + UID
-- `access_active?` / `active_for_authentication?` -- Shared active-account predicate; false for suspended users
+- `active?` (status enum predicate) -- the single active-account check; false for suspended users. The former `access_active?` / `active_for_authentication?` aliases were removed.
 
 ## Validations
 

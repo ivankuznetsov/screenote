@@ -341,7 +341,7 @@ class ReleaseValidation
 
   def docker_context
     contents = read(".dockerignore")
-    %w[/config/master.key /config/credentials/*.key /config/credentials*.yml.enc /config/credentials/**/*.yml.enc /.env* /secrets/ /go.mod /go.sum /cmd/ /internal/ /vendor/bundle/].each do |entry|
+    %w[/config/master.key /config/credentials/*.key /config/credentials*.yml.enc /config/credentials/**/*.yml.enc /.env* /secrets/ /vendor/bundle/ /test/].each do |entry|
       error(".dockerignore is missing #{entry}") unless contents.lines.map(&:strip).include?(entry)
     end
 
@@ -542,7 +542,7 @@ class ReleaseValidation
     config = YAML.safe_load(read(".github/dependabot.yml"), permitted_classes: [], aliases: false)
     updates = config.is_a?(Hash) ? config["updates"] : nil
     ecosystems = Array(updates).map { |update| update["package-ecosystem"] }
-    %w[bundler gomod docker github-actions].each do |ecosystem|
+    %w[bundler docker github-actions].each do |ecosystem|
       error("Dependabot is missing #{ecosystem}") unless ecosystems.include?(ecosystem)
     end
   rescue Psych::Exception => error_object

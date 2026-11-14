@@ -1,21 +1,21 @@
 # frozen_string_literal: true
 
 class ConfirmationsController < ApplicationController
+  include FailClosedRateLimiting
+  include MailDeliveryRequired
+  include PrivateResponseHeaders
+
   RATE_LIMIT = 3
   RATE_LIMIT_WINDOW = 1.hour
-  RATE_LIMITER_RETRY_AFTER = 60
   CONFIRMATION_RATE_LIMIT_STORE = Screenote::RateLimitStore.new(store: -> { cache_store })
 
   skip_before_action :require_authentication
-  before_action :require_mail
   before_action :set_private_headers, only: :show
   layout "auth"
 
   rate_limit to: RATE_LIMIT, within: RATE_LIMIT_WINDOW, by: -> { client_ip }, only: :create,
     with: -> { redirect_to new_confirmation_path, alert: "Too many confirmation requests. Please try again later." },
     store: CONFIRMATION_RATE_LIMIT_STORE
-
-  rescue_from Screenote::RateLimitStore::Unavailable, with: :render_rate_limiter_unavailable
 
   def new
   end
@@ -55,22 +55,5 @@ class ConfirmationsController < ApplicationController
 
   def invalid_link
     redirect_to new_confirmation_path, alert: "Invalid or expired confirmation link."
-  end
-
-  def render_rate_limiter_unavailable(_error)
-    response.set_header("Retry-After", RATE_LIMITER_RETRY_AFTER.to_s)
-    response.set_header("Cache-Control", "no-store")
-    response.set_header("Pragma", "no-cache")
-    head :service_unavailable
-  end
-
-  def require_mail
-    head :not_found unless Screenote::Deployment.current.mail?
-  end
-
-  def set_private_headers
-    response.headers["Cache-Control"] = "no-store, max-age=0"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["X-Robots-Tag"] = "noindex, nofollow"
   end
 end

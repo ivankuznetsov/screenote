@@ -4,16 +4,19 @@ module Api
   module V1
     class AnnotationCommentsController < Api::BaseController
       def create
-        return unless require_scope!("mcp_write")
+        return unless require_scope!(AuthenticatedPrincipal::WRITE_SCOPE)
 
         project = require_current_project!(params[:project_id])
         return unless project
 
         annotation = Api::V1::ProjectScope.annotations(project).find(params[:annotation_id])
+        body = scalar_param(:body)
+        return if performed?
+
         comment = annotation.annotation_comments.create!(
           api_key: current_api_key,
           user: current_user,
-          body: params[:body],
+          body: body,
           action: :comment
         )
 

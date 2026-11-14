@@ -5,16 +5,10 @@ require "uri"
 class Page < ApplicationRecord
   belongs_to :project
   has_many :screenshots, dependent: :destroy
-  has_one :latest_screenshot, -> {
-    where(status: :ready)
-      .where(id: Screenshot.where(status: :ready).select("MAX(id)").group(:page_id))
-      .order(id: :desc)
-  }, class_name: "Screenshot"
+  has_one :latest_screenshot, -> { latest_ready_per_page }, class_name: "Screenshot"
 
   validates :name, presence: true, length: { maximum: 255 }
   validates :name, uniqueness: { scope: :project_id, case_sensitive: false }
-
-  scope :ordered, -> { order(:created_at) }
 
   def self.display_path_for(value)
     raw_value = value.to_s
@@ -60,7 +54,9 @@ class Page < ApplicationRecord
     project.pages.where("LOWER(name) = LOWER(?)", name).first || transaction(requires_new: true) {
       project.pages.create!(name: name)
     }
-  rescue ActiveRecord::RecordNotUnique
-    project.pages.where("LOWER(name) = LOWER(?)", name).first!
+  rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => error
+    # A concurrent create can lose to either the unique index or, once the
+    # winner has committed, the uniqueness validation.
+    project.pages.where("LOWER(name) = LOWER(?)", name).first || raise(error)
   end
 end

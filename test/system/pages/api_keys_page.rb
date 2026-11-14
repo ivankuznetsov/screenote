@@ -7,8 +7,6 @@ module Pages
     API_KEY_FORM = '[data-testid="api-key-form"]'
     API_KEY_TOKEN_REVEAL = '[data-testid="api-key-token-reveal"]'
     API_KEY_ITEM = '[data-testid="api-key-item"]'
-    API_KEY_NAME = '[data-testid="api-key-name"]'
-    API_KEY_LIST = '[data-testid="api-key-list"]'
     CREATE_API_KEY_BUTTON = '[data-testid="create-api-key-button"]'
     REVOKE_API_KEY_BUTTON = '[data-testid="revoke-api-key-button"]'
 
@@ -46,13 +44,5 @@ module Pages
     end
 
     # --- Assertions ---
-
-    def assert_api_key_listed(name)
-      assert_selector API_KEY_NAME, text: name, wait: 10
-    end
-
-    def assert_api_key_token_revealed
-      assert_selector API_KEY_TOKEN_REVEAL, wait: 10
-    end
   end
 end

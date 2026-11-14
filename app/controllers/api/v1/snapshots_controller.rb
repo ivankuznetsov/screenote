@@ -19,7 +19,7 @@ module Api
       end
 
       def create
-        return unless require_scope!("mcp_write")
+        return unless require_scope!(AuthenticatedPrincipal::WRITE_SCOPE)
 
         project = require_current_project!(params[:project_id])
         return unless project
@@ -34,7 +34,7 @@ module Api
       end
 
       def show
-        return unless require_scope!("mcp_read")
+        return unless require_scope!(AuthenticatedPrincipal::READ_SCOPE)
 
         project = require_current_project!(params[:project_id])
         return unless project

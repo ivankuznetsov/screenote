@@ -17,14 +17,8 @@ RailsSimpleAuth.configure do |config|
   config.confirmation_expiry = 24.hours
   config.session_expiry = 30.days
 
-  # Rate Limiting
-  config.rate_limits = {
-    sign_in: { limit: 5, period: 15.minutes },
-    sign_up: { limit: 5, period: 1.hour },
-    magic_link: { limit: 3, period: 10.minutes },
-    password_reset: { limit: 3, period: 1.hour },
-    confirmation: { limit: 3, period: 1.hour }
-  }
+  # Rate limits live on the app's own auth controllers; the gem never reads
+  # config.rate_limits.
 
   # Paths
   config.after_sign_in_path = :dashboard_path

@@ -91,10 +91,6 @@ module Screenote
         cache.fetch(key) { cache[key] = load_schedule(key) }
       end
 
-      def reset_schedule_cache!
-        @schedules = {}
-      end
-
       private
 
       def load_schedule(environment)

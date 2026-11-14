@@ -26,6 +26,7 @@ class Annotation < ApplicationRecord
     numericality: { greater_than: 0.0, less_than_or_equal_to: 100.0 }, allow_nil: true
   validate :has_exactly_one_actor
   validate :resolution_actor_matches_status
+  validate :region_dimensions_paired, if: :region_dimensions_changing?
   validate :region_within_bounds
 
   def point?
@@ -42,7 +43,9 @@ class Annotation < ApplicationRecord
     AnnotationCropService.crop(target, self)
   end
 
-  def as_api_json
+  # List reads pass `comments_count` from one grouped count for the whole
+  # page (Api::V1::ProjectScope.comment_counts) instead of loading comments.
+  def as_api_json(comments_count: annotation_comments.size)
     {
       id: id,
       screenshot_id: screenshot_id,
@@ -57,15 +60,15 @@ class Annotation < ApplicationRecord
       comment: comment,
       status: status,
       author: user&.email || api_key&.name,
-      comments_count: annotation_comments.size,
+      comments_count: comments_count,
       created_at: created_at.iso8601
     }
   end
 
   def reopen!(user: nil, api_key: nil, body:)
-    raise ActiveRecord::RecordNotFound, "Annotation is not resolved" unless resolved?
+    with_lock do
+      raise ActiveRecord::RecordNotFound, "Annotation is not resolved" unless resolved?
 
-    transaction do
       update!(status: :open, resolved_by_user: nil, resolved_by_api_key: nil)
       annotation_comments.create!(user: user, api_key: api_key, body: body, action: :reopened)
     end
@@ -117,6 +120,20 @@ class Annotation < ApplicationRecord
     end
 
     errors.add(:base, "resolved annotation must have exactly one resolution actor") unless resolvers.one?
+  end
+
+  # A region needs both dimensions; one alone is neither a point nor a
+  # croppable region. Checked whenever a dimension is written, so an older
+  # half-specified row can still be resolved or reopened.
+  def region_dimensions_paired
+    return if width_percent.nil? == height_percent.nil?
+
+    missing, given = width_percent.nil? ? %w[width_percent height_percent] : %w[height_percent width_percent]
+    errors.add(missing, "is required when #{given} is given")
+  end
+
+  def region_dimensions_changing?
+    new_record? || will_save_change_to_width_percent? || will_save_change_to_height_percent?
   end
 
   def region_within_bounds

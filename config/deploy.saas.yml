@@ -18,7 +18,6 @@ registry:
 env:
   secret:
     - SECRET_KEY_BASE
-    - POSTGRES_PASSWORD
     - DATABASE_URL
     - QUEUE_DATABASE_URL
     - CACHE_DATABASE_URL
@@ -41,8 +40,6 @@ env:
     JOB_CONCURRENCY: 3
     WEB_CONCURRENCY: 2
     RAILS_ENV: production
-    RAILS_SERVE_STATIC_FILES: true
-    RAILS_LOG_TO_STDOUT: true
     SCREENOTE_EDITION: saas
     SCREENOTE_BASE_URL: https://screenote.ai
     SCREENOTE_FORWARDED_CLIENT_HOPS: 2

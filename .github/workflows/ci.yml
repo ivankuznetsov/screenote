@@ -175,8 +175,6 @@ jobs:
         env:
           SCREENOTE_PUBLIC_CLI_SOURCE: ${{ github.workspace }}/tmp/screenote-cli
         run: script/release_test_matrix public-cli-source
-      - name: Test repository Go compatibility helpers
-        run: env GOFLAGS=-mod=mod go test ./...
       - name: Record release applicability
         run: echo "::notice::The tagged HTTP/HTTPS end-to-end CLI gate remains release-only and fail-closed until SCREENOTE_PUBLIC_CLI_TAG exists."
 

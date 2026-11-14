@@ -16,7 +16,7 @@ tags: [self-hosting, once, docker, deployment, storage, release, kamal-saas]
 - Future Spin Ltd will publish Screenote under the O'Saasy license.
 - One public repository will carry the shared core and an explicitly enabled SaaS capability.
 - Tagged releases will provide a prebuilt container image after quality, security, migration, and self-hosted smoke gates pass.
-- The production image starts from a digest-pinned Ruby 3.4.10 Alpine 3.24 multi-architecture index. Transitional Go CLI sources are not copied into the Rails runtime image, so its SBOM and vulnerability gate describe shipped runtime software rather than separately tested source.
+- The production image starts from a digest-pinned Ruby 3.4.10 Alpine 3.24 multi-architecture index. The repository no longer carries Go CLI sources, and `test/`, `wiki/`, `todos/`, `plans/`, and agent tooling directories are excluded from the build context, so the image SBOM and vulnerability gate describe shipped runtime software only.
 - Public language should use “source-available and self-hostable” because O'Saasy restricts directly competing hosted services.
 
 ## Public Onboarding

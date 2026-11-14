@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class AuthenticationLinksController < ApplicationController
+  include PrivateResponseHeaders
+
   RATE_LIMIT = 10
   RATE_LIMIT_WINDOW = 15.minutes
   RATE_LIMITER_RETRY_AFTER = 60
@@ -13,7 +15,6 @@ class AuthenticationLinksController < ApplicationController
     "account_recovery" => :account_recovery_path
   }.freeze
   PURPOSES = DESTINATION_ROUTES.keys.freeze
-  TERMINAL_STATUSES = %i[invalid expired already_used superseded cancelled].freeze
 
   skip_before_action :require_authentication
   skip_before_action :preload_subscription
@@ -86,12 +87,5 @@ class AuthenticationLinksController < ApplicationController
     response.set_header("Cache-Control", "no-store")
     response.set_header("Pragma", "no-cache")
     head :service_unavailable
-  end
-
-  def set_private_headers
-    response.headers["Cache-Control"] = "no-store, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["X-Robots-Tag"] = "noindex, nofollow"
   end
 end

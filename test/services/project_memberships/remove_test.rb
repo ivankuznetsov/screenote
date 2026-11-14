@@ -132,6 +132,41 @@ module ProjectMemberships
       assert ProjectMembership.exists?(membership.id)
     end
 
+    test "only a user principal with write scope can remove members" do
+      owner = users(:alice)
+      project = projects(:alice_project)
+      membership = project_memberships(:bob_member_of_alice_project)
+      project_bound = AuthenticatedPrincipal.new(
+        kind: :project,
+        user: owner,
+        issuer: owner,
+        project: project,
+        scopes: AuthenticatedPrincipal::API_KEY_SCOPES
+      )
+      read_only = AuthenticatedPrincipal.new(
+        kind: :user,
+        user: owner,
+        issuer: owner,
+        scopes: AuthenticatedPrincipal::READ_SCOPE
+      )
+
+      [ project_bound, read_only, nil ].each do |principal|
+        result = Remove.call(project: project, membership_id: membership.id, principal: principal)
+
+        assert_equal :forbidden, result.status, "#{principal&.kind.inspect} principal must not remove members"
+      end
+      assert ProjectMembership.exists?(membership.id)
+
+      result = Remove.call(
+        project: project,
+        membership_id: membership.id,
+        principal: AuthenticatedPrincipal.for_user(owner)
+      )
+
+      assert_equal :removed, result.status
+      assert_not ProjectMembership.exists?(membership.id)
+    end
+
     test "rejects a target identity that no longer matches the locked membership" do
       original = Remove.method(:target_user_for)
       mismatched_target = users(:unconfirmed)

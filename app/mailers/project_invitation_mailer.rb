@@ -11,6 +11,7 @@ class ProjectInvitationMailer < ApplicationMailer
       keyring: AuthenticationLinks::Runtime.keyring
     ).re_present(token: token)
     @accept_url = @presentation.url
+    @expires_at = token.expires_at
 
     mail to: @invitation.email,
          subject: "#{@inviter.email} invited you to \"#{@project.name}\" on Screenote"

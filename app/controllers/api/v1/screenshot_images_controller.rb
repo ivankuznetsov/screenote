@@ -13,7 +13,7 @@ module Api
       end
 
       def update
-        return unless require_scope!("mcp_write")
+        return unless require_scope!(AuthenticatedPrincipal::WRITE_SCOPE)
 
         path_parameters = request.path_parameters
         project = require_current_project!(path_parameters[:project_id])

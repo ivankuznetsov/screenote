@@ -38,7 +38,7 @@ Source: `app/models/session.rb`
 
 ## Key Methods
 
-- `self.cleanup_expired!` -- Deletes all expired sessions
+- `self.cleanup_expired!` -- Deletes all expired sessions. Scheduled daily in production by the `clear_expired_sessions` entry in `config/recurring.yml`.
 
 ## Notes
 

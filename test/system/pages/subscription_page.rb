@@ -13,8 +13,6 @@ module Pages
     UPGRADE_BTN = '[data-testid="upgrade-btn"]'
     MANAGE_SUBSCRIPTION_BTN = '[data-testid="manage-subscription-btn"]'
     RENEWAL_DATE = '[data-testid="renewal-date"]'
-    CHECKOUT_SUCCESS = '[data-testid="checkout-success"]'
-    CHECKOUT_PENDING = '[data-testid="checkout-pending"]'
     CHECKOUT_CANCELED = '[data-testid="checkout-canceled"]'
     BILLING_LINK = '[data-testid="billing-link"]'
     UPGRADE_BANNER = '[data-testid="upgrade-banner"]'
@@ -29,14 +27,6 @@ module Pages
     def click_billing_link
       find(BILLING_LINK).click
       assert_selector BILLING_TITLE, wait: 10
-    end
-
-    def click_upgrade_to_pro
-      find(UPGRADE_BTN).click
-    end
-
-    def click_manage_subscription
-      find(MANAGE_SUBSCRIPTION_BTN).click
     end
 
     # --- Assertions ---
@@ -72,16 +62,8 @@ module Pages
       assert_selector RENEWAL_DATE
     end
 
-    def assert_checkout_success_message
-      assert_selector CHECKOUT_SUCCESS, wait: 10
-    end
-
     def assert_checkout_canceled_message
       assert_selector CHECKOUT_CANCELED, wait: 10
-    end
-
-    def assert_upgrade_banner_visible
-      assert_selector UPGRADE_BANNER
     end
 
     def assert_no_upgrade_banner

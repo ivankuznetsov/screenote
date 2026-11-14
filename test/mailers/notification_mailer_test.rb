@@ -42,7 +42,7 @@ class NotificationMailerTest < ActionMailer::TestCase
 
   test "email body contains the original annotation text" do
     email = NotificationMailer.resolution_digest(@author, [ @resolution ])
-    assert_includes email.body.to_s, "Button text too small"
+    assert_includes email.html_part.body.to_s, "Button text too small"
   end
 
   test "email body contains the reply comment when present" do
@@ -54,17 +54,17 @@ class NotificationMailerTest < ActionMailer::TestCase
     )
 
     email = NotificationMailer.resolution_digest(@author, [ @resolution ])
-    assert_includes email.body.to_s, "Increased font size to 16px"
+    assert_includes email.html_part.body.to_s, "Increased font size to 16px"
   end
 
   test "email body contains the resolver info" do
     email = NotificationMailer.resolution_digest(@author, [ @resolution ])
-    assert_includes email.body.to_s, @resolver.email
+    assert_includes email.html_part.body.to_s, @resolver.email
   end
 
   test "email body contains page and screenshot info" do
     email = NotificationMailer.resolution_digest(@author, [ @resolution ])
-    body = email.body.to_s
+    body = email.html_part.body.to_s
     assert_includes body, @annotation.screenshot.page.name
     assert_includes body, @annotation.screenshot.title
   end

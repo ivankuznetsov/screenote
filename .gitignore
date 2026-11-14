@@ -46,4 +46,5 @@
 .mcp.json
 .qmd/
 /.llm-wiki/qmd-cache/
+/.llm-wiki/*.log
 /.hive-state/

@@ -14,15 +14,14 @@ class ListScreenshotsTool < ApplicationTool
   end
 
   def call(project_id:, page_id: nil, status: nil, limit: 50, offset: 0)
-    error = require_project(project_id)
+    error = require_project(project_id) || invalid_enum_filter("status", status, Screenshot.statuses)
     return error if error
 
     with_error_handling do
-      project = current_project
       limit = limit.to_i.clamp(1, 100)
       offset = [ offset.to_i, 0 ].max
 
-      screenshots = project.screenshots.includes(:page, :annotations).order(created_at: :desc)
+      screenshots = Api::V1::ProjectScope.screenshots(current_project)
       screenshots = screenshots.where(page_id: page_id) if page_id.present?
       screenshots = screenshots.where(status: status) if status.present?
 
@@ -30,22 +29,7 @@ class ListScreenshotsTool < ApplicationTool
       screenshots = screenshots.limit(limit).offset(offset)
 
       {
-        screenshots: screenshots.map do |s|
-          {
-            id: s.id,
-            title: s.title,
-            page_id: s.page_id,
-            page_name: s.page.name,
-            status: s.status,
-            annotation_count: s.annotations.size,
-            unresolved_count: s.annotations.select(&:open?).size,
-            annotate_url: Rails.application.routes.url_helpers.screenshot_url(
-              s,
-              Screenote::Deployment.current.url_options
-            ),
-            created_at: s.created_at.iso8601
-          }
-        end,
+        screenshots: Api::V1::ContractSerializer.screenshots(screenshots, url_options: serializer_url_options),
         pagination: { total: total, limit: limit, offset: offset }
       }.to_json
     end

@@ -22,7 +22,6 @@ class ApiKey < ApplicationRecord
   validate :issued_by_project_owner, on: :create
 
   scope :active, -> { where(revoked_at: nil) }
-  scope :revoked, -> { where.not(revoked_at: nil) }
 
   before_validation :generate_token, on: :create
 

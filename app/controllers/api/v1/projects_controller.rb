@@ -4,7 +4,7 @@ module Api
   module V1
     class ProjectsController < Api::BaseController
       def index
-        return unless require_scope!("mcp_read")
+        return unless require_scope!(AuthenticatedPrincipal::READ_SCOPE)
 
         if oauth_authenticated?
           memberships = Api::V1::ProjectScope.memberships(current_principal)
@@ -15,9 +15,7 @@ module Api
             memberships = memberships.where(project_id: project.id)
           end
           memberships = memberships.to_a
-          screenshot_counts = Screenshot.joins(:page)
-            .where(pages: { project_id: memberships.map(&:project_id) })
-            .group("pages.project_id").count
+          screenshot_counts = Api::V1::ProjectScope.screenshot_counts(memberships.map(&:project_id))
 
           render json: {
             projects: memberships.map do |membership|
@@ -43,7 +41,7 @@ module Api
           return
         end
 
-        return unless require_scope!("mcp_write")
+        return unless require_scope!(AuthenticatedPrincipal::WRITE_SCOPE)
 
         if current_principal.project_principal?
           render_error("Project-scoped OAuth tokens cannot create projects", code: "forbidden", status: :forbidden)

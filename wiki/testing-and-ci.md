@@ -146,10 +146,9 @@ model, and Rake task tests.
 ## Full gate
 
 `bin/ci` installs missing dependencies and runs formatting/whitespace checks,
-security scans, Rails tests, seed validation, and the Go tests as
-`env GOFLAGS=-mod=mod go test ./...` — the module flag is required because the
-repository's top-level `vendor/` directory belongs to Ruby, and a bare
-`go test` reads it as an inconsistent Go vendor tree and refuses to run. Set
+security scans, Rails tests, and seed validation. The repository no longer
+contains a Go module; Go tests run only against the public CLI checkout in
+`tmp/screenote-cli` in hosted CI. Set
 `REQUIRE_COVERAGE=true` to enforce the SimpleCov line and branch thresholds;
 coverage mode forces one Rails worker for stable accounting. System tests are
 currently commented out as optional in `config/ci.rb`, so run the Playwright

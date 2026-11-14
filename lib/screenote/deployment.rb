@@ -13,8 +13,7 @@ module Screenote
     TRUE_VALUES = %w[1 true yes on].freeze
     FALSE_VALUES = %w[0 false no off].freeze
     DEFAULT_BASE_URLS = {
-      saas: "https://screenote.ai",
-      self_hosted: "http://localhost:3000"
+      saas: "https://screenote.ai"
     }.freeze
     SAAS_REQUIRED_KEYS = %w[
       DATABASE_URL
@@ -201,8 +200,9 @@ module Screenote
       "#{uri.scheme}://#{authority}"
     end
 
+    # Matches the port bin/dev serves on (config/puma.rb).
     def default_base_url
-      "http://localhost:3000"
+      "http://localhost:3005"
     end
 
     def configured_base_url

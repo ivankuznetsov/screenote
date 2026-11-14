@@ -18,10 +18,6 @@ CI.run do
 
   step "Tests: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
 
-  if File.exist?("go.mod")
-    step "Tests: Go", "env GOFLAGS=-mod=mod go test ./..."
-  end
-
   # Optional: Run system tests
   # step "Tests: System", "bin/rails test:system"
 

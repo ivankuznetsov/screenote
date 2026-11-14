@@ -9,7 +9,13 @@ module ProjectMemberships
     end
 
     class << self
-      def call(project:, membership_id:, actor:)
+      # Membership administration is a person's authority, as with issuing and
+      # cancelling invitations: only a user principal with write scope may
+      # remove members. Browser callers pass `actor:` and get that principal.
+      def call(project:, membership_id:, actor: nil, principal: AuthenticatedPrincipal.for_user(actor))
+        return Result.new(status: :forbidden, membership: nil) unless authorized_principal?(principal)
+
+        actor = principal.user
         DatabaseRetry.call do
           target_user = target_user_for(project: project, membership_id: membership_id)
 
@@ -39,6 +45,10 @@ module ProjectMemberships
       end
 
       private
+
+      def authorized_principal?(principal)
+        principal.is_a?(AuthenticatedPrincipal) && principal.user_principal? && principal.write?
+      end
 
       def target_user_for(project:, membership_id:)
         user_id = ProjectMembership.where(project_id: project&.id, id: membership_id).pick(:user_id)

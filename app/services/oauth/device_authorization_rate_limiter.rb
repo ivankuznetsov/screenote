@@ -2,18 +2,14 @@
 
 module Oauth
   class DeviceAuthorizationRateLimiter
-    class Unavailable < StandardError; end
+    # The shared store's error, so the OAuth controllers' rescues and the
+    # fail-closed middleware match the same class.
+    Unavailable = Screenote::RateLimitStore::Unavailable
 
     class << self
       def exceeded?(bucket:, identity:, limit:, within:, rate_store: store)
-        count = rate_store.increment(cache_key(bucket, identity), 1, expires_in: within)
-        raise Unavailable, "rate-limit counter unavailable" if count.nil?
-
-        count > limit
-      rescue Unavailable
-        raise
-      rescue StandardError
-        raise Unavailable, "rate-limit counter unavailable"
+        counter = Screenote::RateLimitStore.new(store: -> { rate_store })
+        counter.increment(cache_key(bucket, identity), 1, expires_in: within) > limit
       end
 
       def reset!

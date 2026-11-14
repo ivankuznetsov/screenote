@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_11_120000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
     t.datetime "created_at", null: false
@@ -60,7 +60,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.integer "user_id"
     t.index ["action", "notified_at"], name: "index_annotation_comments_on_action_notified_at"
     t.index ["annotation_id", "created_at"], name: "index_annotation_comments_on_annotation_id_and_created_at"
-    t.index ["annotation_id"], name: "index_annotation_comments_on_annotation_id"
     t.index ["api_key_id"], name: "index_annotation_comments_on_api_key_id"
     t.index ["idempotency_fingerprint"], name: "index_annotation_comments_on_idempotency_fingerprint", unique: true, where: "idempotency_fingerprint IS NOT NULL"
     t.index ["user_id"], name: "index_annotation_comments_on_user_id"
@@ -71,7 +70,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
 
   create_table "annotations", force: :cascade do |t|
     t.integer "api_key_id"
-    t.text "comment"
+    t.text "comment", null: false
     t.datetime "created_at", null: false
     t.float "height_percent"
     t.integer "resolved_by_api_key_id"
@@ -89,7 +88,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.index ["resolved_by_user_id"], name: "index_annotations_on_resolved_by_user_id"
     t.index ["screenshot_id", "status"], name: "index_annotations_on_screenshot_id_and_status"
     t.index ["screenshot_id", "viewport"], name: "index_annotations_on_screenshot_id_and_viewport"
-    t.index ["screenshot_id"], name: "index_annotations_on_screenshot_id"
     t.index ["user_id"], name: "index_annotations_on_user_id"
     t.check_constraint "(status = 0 AND resolved_by_user_id IS NULL AND resolved_by_api_key_id IS NULL) OR (status = 1 AND ( (resolved_by_user_id IS NOT NULL AND resolved_by_api_key_id IS NULL) OR (resolved_by_user_id IS NULL AND resolved_by_api_key_id IS NOT NULL) ))", name: "annotations_resolution_actor_state"
     t.check_constraint "(user_id IS NOT NULL AND api_key_id IS NULL) OR (user_id IS NULL AND api_key_id IS NOT NULL)", name: "annotations_exactly_one_actor"
@@ -167,7 +165,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.index ["state", "expires_at"], name: "index_image_attachment_batches_on_state_and_expires_at"
     t.index ["user_id", "client_key"], name: "index_image_attachment_batches_on_user_and_client_key", unique: true, where: "client_key IS NOT NULL AND state = 0"
     t.index ["user_id", "state"], name: "index_image_attachment_batches_on_user_id_and_state"
-    t.index ["user_id"], name: "index_image_attachment_batches_on_user_id"
     t.check_constraint "(state = 0 AND claimed_annotation_id IS NULL AND claimed_annotation_comment_id IS NULL) OR (state = 1 AND claimed_annotation_id IS NOT NULL AND claimed_annotation_comment_id IS NULL) OR (state = 1 AND claimed_annotation_id IS NULL AND claimed_annotation_comment_id IS NOT NULL)", name: "image_attachment_batches_claim_state"
     t.check_constraint "expires_at > last_activity_at", name: "image_attachment_batches_future_expiry"
     t.check_constraint "state IN (0, 1)", name: "image_attachment_batches_valid_state"
@@ -326,7 +323,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.integer "project_id", null: false
     t.datetime "updated_at", null: false
     t.index "project_id, LOWER(name)", name: "index_pages_on_project_id_and_lower_name", unique: true
-    t.index ["project_id"], name: "index_pages_on_project_id"
   end
 
   create_table "project_invitations", force: :cascade do |t|
@@ -350,7 +346,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
     t.index ["project_id", "user_id"], name: "index_project_memberships_on_project_id_and_user_id", unique: true
-    t.index ["project_id"], name: "index_project_memberships_on_project_id"
     t.index ["user_id"], name: "index_project_memberships_on_user_id"
   end
 
@@ -374,7 +369,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.integer "viewport", null: false
     t.integer "width"
     t.index ["screenshot_id", "viewport"], name: "index_screenshot_images_on_screenshot_id_and_viewport", unique: true
-    t.index ["screenshot_id"], name: "index_screenshot_images_on_screenshot_id"
   end
 
   create_table "screenshots", force: :cascade do |t|
@@ -387,8 +381,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.integer "width"
-    t.index ["created_at"], name: "index_screenshots_on_project_id_and_created_at"
-    t.index ["page_id"], name: "index_screenshots_on_page_id"
+    t.index ["page_id", "created_at"], name: "index_screenshots_on_page_id_and_created_at"
     t.index ["snapshot_id", "manifest_entry_digest"], name: "idx_screenshots_snapshot_entry_digest", unique: true, where: "manifest_entry_digest IS NOT NULL"
     t.index ["snapshot_id"], name: "index_screenshots_on_snapshot_id"
   end
@@ -412,7 +405,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_120000) do
     t.datetime "updated_at", null: false
     t.index ["project_id", "manifest_digest"], name: "idx_snapshots_project_manifest_digest", unique: true, where: "manifest_digest IS NOT NULL"
     t.index ["project_id", "taken_at"], name: "index_snapshots_on_project_id_and_taken_at"
-    t.index ["project_id"], name: "index_snapshots_on_project_id"
   end
 
   create_table "stripe_webhook_events", force: :cascade do |t|

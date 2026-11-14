@@ -37,6 +37,21 @@ module Api
         assert_equal "validation_failed", response.parsed_body["code"]
       end
 
+      test "rejects a structured comment body with validation code" do
+        [ [ "not", "a", "string" ], { nested: "value" } ].each do |body|
+          assert_no_difference "AnnotationComment.count" do
+            post api_v1_annotation_comments_path(annotations(:point_annotation)),
+              params: { body: body },
+              headers: auth_header(ALICE_TOKEN),
+              as: :json
+          end
+
+          assert_response :unprocessable_entity
+          assert_equal "validation_failed", response.parsed_body["code"]
+          assert_equal [ "Body must be a string" ], response.parsed_body["details"]
+        end
+      end
+
       test "does not comment on annotations outside the key project" do
         assert_no_difference "AnnotationComment.count" do
           post api_v1_annotation_comments_path(annotations(:bob_annotation)),

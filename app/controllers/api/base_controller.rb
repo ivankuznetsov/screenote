@@ -14,7 +14,7 @@ module Api
     end
 
     rescue_from ActiveRecord::RecordNotFound do |e|
-      render_error(e.message, code: "not_found", status: :not_found)
+      render_error("#{e.model.presence || "Record"} not found", code: "not_found", status: :not_found)
     end
 
     private
@@ -87,6 +87,30 @@ module Api
       return default unless value.is_a?(String) || value.is_a?(Integer)
 
       value.to_i
+    end
+
+    # JSON bodies can carry an array or object where text or an id belongs.
+    # Those render a 422 instead of reaching a model setter. Returns the value,
+    # or nil when absent or rejected, so callers check `performed?`.
+    def scalar_param(name, code: "validation_failed", message: "#{name.to_s.humanize} must be a string")
+      value = params[name]
+      return value if value.nil? || value.is_a?(String) || value.is_a?(Integer)
+
+      render_error(message, code: code, status: :unprocessable_entity, details: [ message ])
+      nil
+    end
+
+    # An unknown enum label would otherwise reach `where` and silently match
+    # nothing. Returns the filter value, or nil when absent or rejected, so
+    # callers check `performed?`.
+    def enum_filter_param(name, values)
+      value = params[name]
+      return if value.blank?
+      return value if Array.wrap(value).all? { |label| label.is_a?(String) && values.key?(label) }
+
+      message = "#{name.to_s.humanize} must be one of: #{values.keys.join(", ")}"
+      render_error(message, code: "validation_failed", status: :unprocessable_entity, details: [ message ])
+      nil
     end
 
     def render_error(message, code:, status:, details: nil)

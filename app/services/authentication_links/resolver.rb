@@ -51,8 +51,6 @@ module AuthenticationLinks
       invalid
     end
 
-    alias_method :call, :resolve
-
     def revalidate(token_id:, expected_purpose:)
       purpose = canonical_purpose(expected_purpose)
       return invalid unless purpose && token_id.is_a?(Integer) && token_id.positive?

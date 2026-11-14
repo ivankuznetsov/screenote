@@ -210,7 +210,7 @@ The following gaps from the original bootstrap have been partially or fully addr
 ## Questions to Resolve
 
 1. What is the intended long-term removal plan for the legacy `Screenshot#image`, `width`, `height`, and `status` path after `ScreenshotImage` stabilizes?
-2. Is there a periodic job runner for `Session.cleanup_expired!`?
+2. Resolved 2026-11-11: `Session.cleanup_expired!` runs daily from `config/recurring.yml`. `authentication_tokens` and `stripe_webhook_events` still have no pruning.
 3. How is the digest notification job scheduled? (Solid Queue cron? Rake task?)
 4. **NEW:** Are the todo frontmatter statuses authoritative, or should filenames/source evidence drive closure?
 5. The `add-a-go-cli-for-260708-edec` branch commits inspected during the 2026-07-08 worktree redirects removed `wiki/log.d/` fragments and `wiki/llm-wiki-maintenance.md` from that worktree and later rewrote compiled `wiki/log.md` back to hand-maintained style, while the main checkout refresh instructions still require new `wiki/log.d/` fragments and wrapper-owned compiled `wiki/log.md`. The residual finalizer commit on that branch also removes or simplifies source-confirmed CLI/API details from branch-local wiki pages without changing the CLI/API source files; source inspection still confirms aggregate annotation listing, shared REST pagination coercion, stable CLI usage errors, and numeric `--page` ID behavior. Treat the branch-local deletion/rewrite as unconfirmed until the main refresh automation policy is reconciled.

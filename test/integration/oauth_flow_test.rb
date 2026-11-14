@@ -560,14 +560,6 @@ class OauthFlowTest < ActionDispatch::IntegrationTest
 
   private
 
-  def with_singleton_method(receiver, name, replacement)
-    original = receiver.method(name)
-    receiver.define_singleton_method(name, replacement)
-    yield
-  ensure
-    receiver.define_singleton_method(name, original) if original
-  end
-
   def authorization_request_params(client:, code_challenge:, scope: "mcp_read mcp_write")
     {
       client_id: client.uid,

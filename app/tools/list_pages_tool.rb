@@ -14,25 +14,9 @@ class ListPagesTool < ApplicationTool
     return error if error
 
     with_error_handling do
-      project = current_project
-      pages = project.pages
-        .left_joins(:screenshots)
-        .select("pages.*, COUNT(screenshots.id) AS version_count")
-        .group("pages.id")
-        .order(:created_at)
-
       {
-        pages: pages.map do |page|
-          {
-            id: page.id,
-            name: page.name,
-            version_count: page.version_count,
-            url: Rails.application.routes.url_helpers.page_url(
-              page,
-              Screenote::Deployment.current.url_options
-            ),
-            created_at: page.created_at.iso8601
-          }
+        pages: Api::V1::ProjectScope.pages(current_project).map do |page|
+          Api::V1::ContractSerializer.page(page, url_options: serializer_url_options)
         end
       }.to_json
     end

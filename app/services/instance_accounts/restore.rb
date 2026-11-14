@@ -3,16 +3,15 @@
 module InstanceAccounts
   class Restore
     class << self
-      def call(actor:, target:, channel: "web", clock: -> { Time.current })
-        new(actor: actor, target: target, channel: channel, clock: clock).call
+      def call(actor:, target:, channel: "web")
+        new(actor: actor, target: target, channel: channel).call
       end
     end
 
-    def initialize(actor:, target:, channel: "web", clock: -> { Time.current })
+    def initialize(actor:, target:, channel: "web")
       @actor = actor
       @target = target
       @channel = channel
-      @clock = clock
     end
 
     def call
@@ -45,7 +44,7 @@ module InstanceAccounts
 
     private
 
-    attr_reader :actor, :target, :channel, :clock
+    attr_reader :actor, :target, :channel
 
     def denied(locked, status, reason: status)
       InstanceAdministration::Audit.denied!(

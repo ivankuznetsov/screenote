@@ -105,7 +105,7 @@ module Api
       assert_predicate result, :project_principal?
       assert_equal project, result.project
       assert result.write?
-      assert_not result.read?
+      assert_not result.allows_scope?(AuthenticatedPrincipal::READ_SCOPE)
 
       project.project_memberships.find_by!(user: user).delete
       assert_nil Api::BearerAuthenticator.call(token.token)

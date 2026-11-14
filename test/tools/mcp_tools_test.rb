@@ -57,8 +57,25 @@ class McpToolsTest < ActiveSupport::TestCase
     result = JSON.parse(ListScreenshotsTool.new.call(project_id: @project.id))
     screenshot_data = result["screenshots"].find { |s| s["id"] == @screenshot.id }
 
-    assert screenshot_data["annotation_count"].is_a?(Integer)
-    assert screenshot_data["unresolved_count"].is_a?(Integer)
+    assert_equal @screenshot.annotations.count, screenshot_data["annotation_count"]
+    assert_equal @screenshot.annotations.open.count, screenshot_data["unresolved_count"]
+  end
+
+  test "list_screenshots keeps its keys and adds the REST viewports" do
+    result = JSON.parse(ListScreenshotsTool.new.call(project_id: @project.id))
+    screenshot_data = result["screenshots"].find { |s| s["id"] == @screenshot.id }
+
+    %w[id title page_id page_name status annotation_count unresolved_count annotate_url created_at].each do |key|
+      assert screenshot_data.key?(key), "list_screenshots must keep #{key}"
+    end
+    assert_equal [ "desktop" ], screenshot_data["viewports"].map { |image| image["viewport"] }
+  end
+
+  test "list_screenshots rejects an unknown status" do
+    result = JSON.parse(ListScreenshotsTool.new.call(project_id: @project.id, status: "done"))
+
+    assert_equal "invalid_arguments", result["error"]
+    assert_equal "status must be one of pending, ready, failed", result["message"]
   end
 
   test "list_screenshots respects limit and offset" do
@@ -120,6 +137,25 @@ class McpToolsTest < ActiveSupport::TestCase
     assert result["annotations"].any?, "Should return at least the mobile annotation"
     assert result["annotations"].all? { |a| a["viewport"] == "mobile" },
       "Filter should exclude non-mobile annotations"
+  end
+
+  test "list_annotations rejects unknown status and viewport filters" do
+    status = JSON.parse(ListAnnotationsTool.new.call(project_id: @project.id, status: "closed"))
+    viewport = JSON.parse(ListAnnotationsTool.new.call(project_id: @project.id, viewport: "watch"))
+
+    assert_equal "invalid_arguments", status["error"]
+    assert_equal "status must be one of open, resolved", status["message"]
+    assert_equal "invalid_arguments", viewport["error"]
+    assert_equal "viewport must be one of desktop, tablet, mobile", viewport["message"]
+  end
+
+  test "list_annotations comment counts equal each annotation's comments" do
+    result = JSON.parse(ListAnnotationsTool.new.call(project_id: @project.id))
+
+    listed = result["annotations"].to_h { |a| [ a["id"], a["comments_count"] ] }
+    expected = Annotation.where(id: listed.keys).to_h { |a| [ a.id, a.annotation_comments.count ] }
+    assert_equal expected, listed
+    assert expected.values.any?(&:positive?), "Fixtures must include a commented annotation"
   end
 
   # CreateSnapshotTool
@@ -627,6 +663,21 @@ class McpToolsTest < ActiveSupport::TestCase
     assert_equal "validation_failed", result["error"], "Should return validation error for out-of-range coordinates"
   end
 
+  test "create_annotation returns validation_failed for a half-specified region" do
+    assert_no_difference "Annotation.count" do
+      result = JSON.parse(CreateAnnotationTool.new.call(
+        project_id: @project.id,
+        screenshot_id: @screenshot.id,
+        x_percent: 10.0,
+        y_percent: 20.0,
+        width_percent: 30.0,
+        comment: "Width without height"
+      ))
+
+      assert_equal "validation_failed", result["error"]
+    end
+  end
+
   # CreateScreenshotUploadTool
   test "create_screenshot_upload creates screenshot and returns upload URL" do
     tool = CreateScreenshotUploadTool.new
@@ -643,7 +694,7 @@ class McpToolsTest < ActiveSupport::TestCase
     screenshot = Screenshot.find(result["screenshot_id"])
     assert_equal "Signed Upload", screenshot.title
     assert_equal @project.id, screenshot.project.id, "Screenshot should belong to the project via page"
-    assert_not screenshot.image.attached?, "Image should NOT be attached yet"
+    assert_not screenshot.primary_image.image.attached?, "Image should NOT be attached yet"
   end
 
   test "create_screenshot_upload rejects invalid mime type" do
@@ -708,6 +759,31 @@ class McpToolsTest < ActiveSupport::TestCase
       "The project cached on an authenticated principal must not survive membership removal"
   end
 
+  test "list_projects reports each membership role and screenshot count in name order" do
+    Project.create!(name: "AAA First", creator: @user)
+    projects(:bob_project).project_memberships.create!(user: @user, role: :member)
+
+    result = JSON.parse(ListProjectsTool.new.call)
+
+    names = result["projects"].map { |p| p["name"] }
+    assert_equal names.sort, names
+    roles = result["projects"].to_h { |p| [ p["id"], p["role"] ] }
+    assert_equal "owner", roles.fetch(@project.id)
+    assert_equal "member", roles.fetch(projects(:bob_project).id)
+    counts = result["projects"].to_h { |p| [ p["id"], p["screenshot_count"] ] }
+    assert_equal @project.screenshots.count, counts.fetch(@project.id)
+  end
+
+  test "list_projects uses the same queries however many projects are listed" do
+    JSON.parse(ListProjectsTool.new.call)
+    baseline = capture_app_queries { ListProjectsTool.new.call }.size
+
+    2.times { |index| Project.create!(name: "Extra #{index}", creator: @user) }
+
+    assert_equal baseline, capture_app_queries { ListProjectsTool.new.call }.size,
+      "list_projects must not query per project"
+  end
+
   # CreateProjectTool
   test "create_project creates a new project" do
     result = JSON.parse(CreateProjectTool.new.call(name: "Agent Project"))
@@ -720,6 +796,8 @@ class McpToolsTest < ActiveSupport::TestCase
     project = Project.find(project_data["id"])
     assert_equal @user, project.creator, "User should be the project creator"
     assert project.member?(@user), "User should be a member"
+    assert_equal 0, project_data["screenshot_count"], "Should carry the REST screenshot_count"
+    assert project_data["created_at"].present?
   end
 
   # ListPagesTool
@@ -732,8 +810,9 @@ class McpToolsTest < ActiveSupport::TestCase
 
     page_data = result["pages"].find { |p| p["name"] == pages(:alice_page).name }
     assert page_data["id"].present?, "Should include page ID"
-    assert page_data["version_count"].is_a?(Integer), "Should include version count"
+    assert_equal pages(:alice_page).screenshots.count, page_data["version_count"], "Should include version count"
     assert page_data["url"].present?, "Should include page URL"
+    assert_equal %w[created_at id name url version_count], page_data.keys.sort
   end
 
   # CreateScreenshotTool with page_name
@@ -908,6 +987,24 @@ class McpToolsTest < ActiveSupport::TestCase
     end
 
     assert_equal "forbidden", result["error"], "Non-owner should not be able to remove members"
+  end
+
+  test "remove_project_member rejects a project-scoped OAuth token even for the owner" do
+    token = create_oauth_token(
+      application: create_oauth_application,
+      user: @user,
+      project: @project,
+      scopes: "mcp_read mcp_write"
+    )
+    Current.authenticated_principal = AuthenticatedPrincipal.for_oauth_token(token)
+    membership = project_memberships(:bob_member_of_alice_project)
+
+    result = without_database_retry_guard do
+      JSON.parse(RemoveProjectMemberTool.new.call(project_id: @project.id, membership_id: membership.id))
+    end
+
+    assert_equal "forbidden", result["error"], "Membership administration requires a user principal"
+    assert ProjectMembership.exists?(membership.id)
   end
 
   private

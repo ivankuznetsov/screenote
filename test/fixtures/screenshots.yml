@@ -1,8 +1,6 @@
 alice_screenshot:
   title: "Homepage Design"
   page: alice_page
-  width: 1920
-  height: 1080
   status: 1
 
 alice_screenshot_pending:
@@ -13,6 +11,4 @@ alice_screenshot_pending:
 bob_screenshot:
   title: "Bob's Screenshot"
   page: bob_page
-  width: 1440
-  height: 900
   status: 1

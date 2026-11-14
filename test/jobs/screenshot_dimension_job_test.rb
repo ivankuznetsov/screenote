@@ -21,7 +21,7 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
 
     blob_id = si.image.blob.id
     assert_enqueued_with(job: ScreenshotThumbnailJob, args: [ si, blob_id ]) do
-      ScreenshotDimensionJob.perform_now(si, blob_id)
+      assert_equal :processed, ScreenshotDimensionJob.perform_now(si, blob_id)
     end
 
     si.reload
@@ -109,7 +109,7 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
     si = screenshot_images(:alice_screenshot_desktop)
     original_width = si.width
 
-    ScreenshotDimensionJob.perform_now(si)
+    assert_equal :skipped, ScreenshotDimensionJob.perform_now(si, 123_456)
 
     assert_equal original_width, si.reload.width
   end
@@ -118,32 +118,19 @@ class ScreenshotDimensionJobTest < ActiveSupport::TestCase
     screenshot = @page.screenshots.create!(title: "No image")
     si = screenshot.screenshot_images.create!(viewport: :desktop)
 
-    assert_nothing_raised { ScreenshotDimensionJob.perform_now(si) }
+    assert_equal :skipped, ScreenshotDimensionJob.perform_now(si, 123_456)
     assert si.reload.status_pending?
   end
 
-  test "forwards legacy Screenshot argument to its primary ScreenshotImage" do
-    require_vips!
+  test "leaves a replaced attachment to the job enqueued for its blob" do
+    screenshot = @page.screenshots.create!(title: "Replaced before start")
+    si = screenshot.screenshot_images.create!(viewport: :desktop)
+    attach_test_image(si, filename: "old.png")
+    old_blob_id = si.image.blob.id
+    attach_test_image(si, filename: "new.png")
 
-    si = screenshot_images(:alice_screenshot_desktop)
-    si.image.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test.png", content_type: "image/png"
-    )
-    si.update!(status: :pending, width: nil, height: nil)
-
-    ScreenshotDimensionJob.perform_now(si.screenshot)
-
-    assert si.reload.status_ready?
-  end
-
-  test "raises when Screenshot has no primary_image so Solid Queue retries" do
-    screenshot = @page.screenshots.create!(title: "Orphan")
-
-    error = assert_raises(RuntimeError) do
-      ScreenshotDimensionJob.perform_now(screenshot)
-    end
-    assert_match(/no primary_image/, error.message)
+    assert_equal :skipped, job_with_dimensions.perform(si.reload, old_blob_id)
+    assert si.reload.status_pending?
   end
 
   private

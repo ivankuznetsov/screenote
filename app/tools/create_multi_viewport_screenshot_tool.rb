@@ -20,6 +20,9 @@ class CreateMultiViewportScreenshotTool < ApplicationTool
     return error if error
 
     supported = ScreenshotImage.viewports.keys
+    unless viewports.is_a?(Array) && viewports.all? { |v| v.respond_to?(:symbolize_keys) }
+      return invalid("viewports must be an array of { viewport, mime_type } objects")
+    end
     return invalid("viewports must contain 1..#{supported.size} entries") unless (1..supported.size).cover?(viewports.length)
 
     # FastMcp symbolises top-level hash keys but NOT hashes inside arrays,

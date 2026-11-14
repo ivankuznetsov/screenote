@@ -9,7 +9,7 @@ tags: [model, screenshot, image, viewport, active-storage]
 
 # ScreenshotImage
 
-TLDR: `ScreenshotImage` is the per-viewport image variant for a [[screenshot]]. It owns the Active Storage blob, dimensions, status, upload token, and backfill/rollback helpers for the multi-viewport migration.
+TLDR: `ScreenshotImage` is the per-viewport image variant for a [[screenshot]]. It owns the Active Storage blob, dimensions, status, and upload token.
 
 Source: `app/models/screenshot_image.rb`, `db/migrate/20260421110931_create_screenshot_images.rb`, `db/migrate/20260421114232_backfill_screenshot_images.rb`
 
@@ -86,13 +86,13 @@ cards.
 
 ## Backfill Helpers
 
-- `backfill_from_screenshots!(apply:, logger:)` moves legacy `Screenshot#image` blobs onto `ScreenshotImage(viewport: :desktop)`.
-- `rollback_to_screenshots!(apply:, logger:)` moves desktop blobs back to the legacy parent attachment before rolling back the multi-viewport migration.
+- The backfill/rollback helpers were removed on 2026-11-11; migration `20260421114232` is now a no-op whose `down` is irreversible.
+- `needing_processing` selects attached pending images plus ready primary images missing a thumbnail variant record; the 5-minute reconcile job scans only this scope.
 - Both helpers return struct counters and continue past individual record errors; the migration treats total failure as deploy-blocking.
 
 ## Notes
 
-- `ScreenshotImage` intentionally owns `ALLOWED_CONTENT_TYPES` and `MAX_FILE_SIZE`; [[screenshot]] re-exposes them only for the transitional legacy attachment path.
+- `ScreenshotImage` intentionally owns `ALLOWED_CONTENT_TYPES` and `MAX_FILE_SIZE`.
 - The database index `index_screenshot_images_on_screenshot_id_and_viewport` enforces one image per viewport per screenshot.
 - The FK from screenshot_images to screenshots does not cascade at the database level; parent destroys use Rails `dependent: :destroy` so Active Storage purge callbacks run.
 

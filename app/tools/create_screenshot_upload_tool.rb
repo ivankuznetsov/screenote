@@ -23,11 +23,13 @@ class CreateScreenshotUploadTool < ApplicationTool
     with_error_handling do
       project = current_project
       page = Page.find_or_create_by_name!(project, page_name || title)
-      screenshot = page.screenshots.create!(title: title)
       # Desktop variant ships with every capture — trial user's single-image
       # plugin sees no shape change; the image lands on this variant instead
       # of on Screenshot directly.
-      screenshot_image = screenshot.screenshot_images.create!(viewport: :desktop)
+      screenshot, screenshot_image = ApplicationRecord.transaction do
+        created = page.screenshots.create!(title: title)
+        [ created, created.screenshot_images.create!(viewport: :desktop) ]
+      end
       token = screenshot_image.generate_token_for(:upload)
 
       upload_url = Rails.application.routes.url_helpers.api_screenshot_upload_url(

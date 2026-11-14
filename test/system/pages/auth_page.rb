@@ -4,7 +4,7 @@ module Pages
   module AuthPage
     # --- Selectors ---
 
-    # Selectors target custom auth views (app/views/rails_simple_auth/)
+    # Selectors target custom auth views (app/views/sessions/, registrations/, passwords/, ...)
     SIGN_IN_FORM = ".auth-card"
     SIGN_IN_TITLE = ".auth-card__title"
     SIGN_UP_LINK = 'a[href="/sign_up"]'

@@ -29,6 +29,20 @@ class AddAnnotationCommentToolTest < ActiveSupport::TestCase
     assert_equal "Looking into this issue now", result["comment"]["body"]
     assert_equal @user.email, result["comment"]["author"]
     assert result["comment"]["created_at"].present?, "Should include created_at timestamp"
+    assert_equal [], result["comment"]["attachments"], "Should carry the REST attachments array"
+  end
+
+  test "api key comments are attributed to the key by name" do
+    api_key = api_keys(:alice_key)
+    Current.authenticated_principal = AuthenticatedPrincipal.for_api_key(api_key)
+
+    result = JSON.parse(AddAnnotationCommentTool.new.call(
+      project_id: @project.id,
+      annotation_id: @annotation.id,
+      body: "Automated note"
+    ))
+
+    assert_equal api_key.name, result["comment"]["author"]
   end
 
   test "comment is attributed to the user" do

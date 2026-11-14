@@ -280,7 +280,6 @@ jobs:
 
           application_environment=(
             --env RAILS_ENV=production
-            --env RAILS_SERVE_STATIC_FILES=true
             --env SCREENOTE_EDITION=saas
             --env SCREENOTE_BASE_URL=https://qualification.invalid
             --env SECRET_KEY_BASE=qualification-secret-key-base-0123456789abcdef0123456789abcdef

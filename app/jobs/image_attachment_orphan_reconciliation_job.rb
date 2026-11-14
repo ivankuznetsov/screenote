@@ -94,16 +94,29 @@ class ImageAttachmentOrphanReconciliationJob < ApplicationJob
     ImageAttachment.where(id: ids).includes(ImageAttachment::RENDER_PRELOAD).order(:id)
   end
 
+  # The correlation must be an Arel equality: a hash condition given an Arel
+  # attribute binds it as a value and compiles to `blob_id = NULL`.
   def missing_any_variant
+    same_blob = ActiveStorage::VariantRecord.arel_table[:blob_id].eq(ActiveStorage::Blob.arel_table[:id])
+
     thumbnail_variant_digests
-      .map { |digest| ActiveStorage::VariantRecord.where(blob_id: ActiveStorage::Blob.arel_table[:id], variation_digest: digest).arel.exists.not }
+      .map { |digests| ActiveStorage::VariantRecord.where(same_blob).where(variation_digest: digests).arel.exists.not }
       .reduce(:or)
   end
 
+  # Active Storage folds the blob's format into every variant digest, and the
+  # format follows the blob's filename. Ingestion names each blob after its
+  # media type, so the digests for every allowed extension cover every row.
   def thumbnail_variant_digests
-    ImageAttachment.attachment_reflections.fetch("image").named_variants
-      .values
-      .map { |variant| ActiveStorage::Variation.wrap(variant.transformations).digest }
+    named_variants = ImageAttachment.attachment_reflections.fetch("image").named_variants
+    blobs = ImageAttachment::ALLOWED_EXTENSIONS.flat_map do |content_type, extensions|
+      extensions.map { |extension| ActiveStorage::Blob.new(filename: "image.#{extension}", content_type:) }
+    end
+
+    ImageAttachment::THUMBNAIL_VARIANT_NAMES.map do |name|
+      transformations = named_variants.fetch(name).transformations
+      blobs.map { |blob| blob.variant(transformations).variation.digest }.uniq
+    end
   end
 
   # Where a provider delete failed, the blob row is deliberately left behind so

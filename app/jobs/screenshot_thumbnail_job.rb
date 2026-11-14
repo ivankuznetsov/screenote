@@ -4,6 +4,8 @@ class ScreenshotThumbnailJob < ApplicationJob
   ThumbnailProcessingError = Class.new(StandardError)
 
   retry_on ThumbnailProcessingError, wait: 10.seconds, attempts: 3
+  # The screenshot can be deleted while its job is still queued.
+  discard_on ActiveJob::DeserializationError
 
   limits_concurrency key: ->(screenshot_image, blob_id) {
     "#{screenshot_image.to_global_id}/blob/#{blob_id}"

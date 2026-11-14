@@ -1,7 +1,7 @@
 ---
 title: API CLI
 type: architecture
-source: README.md, cmd/screenote, internal/cli, internal/screenote, app/controllers/api/v1
+source: README.md, github.com/ivankuznetsov/screenote-cli, app/controllers/api/v1
 created: 2026-07-08
 updated: 2026-09-04
 tags: [cli, api, rest, agents, self-hosting, once]
@@ -9,9 +9,9 @@ tags: [cli, api, rest, agents, self-hosting, once]
 
 # API CLI
 
-TLDR: `cmd/screenote` is an installable Go CLI for shell and automation. It talks to REST `api/v1`, emits JSON to stdout by default, emits stable JSON errors to stderr, and signs in through OAuth.
+TLDR: `screenote` (public `screenote-cli` repository) is an installable Go CLI for shell and automation. It talks to REST `api/v1`, emits JSON to stdout by default, emits stable JSON errors to stderr, and signs in through OAuth.
 
-Source: `README.md`, `cmd/screenote`, `internal/cli`, `internal/screenote`, `app/controllers/api/v1`
+Source: `README.md`, the public `github.com/ivankuznetsov/screenote-cli` repository, `app/controllers/api/v1`
 
 ## Role
 
@@ -31,7 +31,7 @@ curl -fsSL https://screenote.ai/install.sh | sh
 Because the Rails repo has a top-level Ruby `vendor/` directory, local Go test/build commands should use:
 
 ```sh
-GOFLAGS=-mod=mod go test ./...
+go test ./...   # in the screenote-cli checkout
 ```
 
 ## Configuration
@@ -131,7 +131,7 @@ An identical request resumes the same graph and returns image-level `awaiting_up
 
 Prepared image bytes upload through a separate bearer-authenticated raw-body route. It uses bounded disk-backed streaming, verifies actual PNG/JPEG bytes against the declared and prepared type, verifies SHA-256 content identity, and treats an identical retry as success. Failed dimension processing can be retried without creating another blob. The older MCP upload route likewise keeps its short-lived purpose-specific bearer out of the URL by returning the upload URL, token, and content type as separate fields.
 
-The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. Its language-neutral digest vectors are executed by both Go and the production Rails digest implementation. Blocking service CI pins exact supported public CLI commits; a scheduled service workflow checks the public CLI `main` branch for forward drift. The private copy remains temporarily present until the separately scoped cleanup removes it after public CLI merge and production verification.
+The CLI source is now canonical in the public `github.com/ivankuznetsov/screenote-cli` repository. Its language-neutral digest vectors are executed by both Go and the production Rails digest implementation. Blocking service CI pins exact supported public CLI commits; a scheduled service workflow checks the public CLI `main` branch for forward drift. The private in-repo copy was removed on 2026-11-11; this repository no longer contains a Go module.
 
 ## Workflow REST Parity
 

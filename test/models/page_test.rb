@@ -60,10 +60,28 @@ class PageTest < ActiveSupport::TestCase
     end
   end
 
-  test "ordered scope sorts by created_at" do
-    project = projects(:alice_project)
-    pages = project.pages.ordered
-    assert_equal pages.sort_by(&:created_at), pages.to_a
+  test "latest screenshot is the newest ready version by created_at then id" do
+    page = pages(:alice_page)
+    newest = page.screenshots.create!(title: "Newest", status: :ready, created_at: 1.minute.from_now)
+    page.screenshots.create!(title: "Higher id, older", status: :ready, created_at: 1.day.ago)
+    page.screenshots.create!(title: "Newer but pending", status: :pending, created_at: 1.hour.from_now)
+
+    assert_equal newest, page.latest_screenshot
+
+    tied = page.screenshots.create!(title: "Same time, higher id", status: :ready, created_at: newest.created_at)
+    assert_equal tied, page.reload.latest_screenshot
+  end
+
+  test "latest screenshot preloads one version per page" do
+    alice_newest = pages(:alice_page).screenshots.create!(title: "Alice newest", status: :ready, created_at: 1.minute.from_now)
+    bob_newest = pages(:bob_page).screenshots.create!(title: "Bob newest", status: :ready, created_at: 1.minute.from_now)
+
+    loaded = Page.where(id: [ pages(:alice_page), pages(:bob_page), pages(:alice_page_pending) ])
+      .includes(:latest_screenshot).index_by(&:id)
+
+    assert_equal alice_newest, loaded[pages(:alice_page).id].latest_screenshot
+    assert_equal bob_newest, loaded[pages(:bob_page).id].latest_screenshot
+    assert_nil loaded[pages(:alice_page_pending).id].latest_screenshot
   end
 
   test "find_or_create_by_name! finds existing page case-insensitively" do

@@ -109,9 +109,11 @@ module Oauth
           )
           return Result.new(application: existing, created: false) if existing
 
-          self.class.cleanup_unused!
-          if Doorkeeper::Application.where(dynamic: true).count >= self.class.maximum_dynamic_clients
-            raise CapacityExceeded, "Dynamic client registration capacity has been reached"
+          # The hourly cleanup job keeps headroom; sweeping inline under these
+          # locks is only worth its cost when capacity is actually exhausted.
+          if at_capacity?
+            self.class.cleanup_unused!
+            raise CapacityExceeded, "Dynamic client registration capacity has been reached" if at_capacity?
           end
 
           application = Doorkeeper::Application.create!(
@@ -136,6 +138,10 @@ module Oauth
     private
 
     attr_reader :client_name, :redirect_uris
+
+    def at_capacity?
+      Doorkeeper::Application.where(dynamic: true).count >= self.class.maximum_dynamic_clients
+    end
 
     def normalize_name(value)
       name = value.to_s.strip.presence || "OAuth Client"

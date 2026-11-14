@@ -65,7 +65,6 @@ class ImageAttachment < ApplicationRecord
   after_destroy_commit :release_image_blob
 
   scope :submitted, -> { where(image_attachment_batch_id: nil) }
-  scope :drafts, -> { where.not(image_attachment_batch_id: nil) }
   scope :active_drafts, -> { where("failure_code IS NULL OR failure_code <> ?", REMOVAL_TOMBSTONE) }
   scope :ordered, -> { order(:id) }
   scope :with_media, -> { includes(image_attachment: :blob) }

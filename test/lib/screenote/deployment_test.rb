@@ -19,7 +19,7 @@ class Screenote::DeploymentTest < ActiveSupport::TestCase
     ipv6 = deployment({ "SCREENOTE_BASE_URL" => "http://[2001:db8::1]:3000" }, production: false)
 
     assert default.saas?
-    assert_equal "http://localhost:3000", default.base_url
+    assert_equal "http://localhost:3005", default.base_url
     assert_equal "http://[2001:db8::1]:3000", ipv6.base_url
     assert_equal "[2001:db8::1]", ipv6.host
     assert_equal "http", ipv6.protocol

@@ -2,6 +2,8 @@
 
 module Oauth
   class DeviceAuthorizationsController < ApplicationController
+    include PrincipalSelection
+
     VERIFICATION_ATTEMPT_LIMIT = 10
     VERIFICATION_ATTEMPT_WINDOW = 15.minutes
     RATE_LIMITER_RETRY_AFTER = 60
@@ -15,7 +17,6 @@ module Oauth
     def show
       if params[:user_code].present?
         load_principal_projects
-        @selected_principal_project_id = nil
       else
         render :enter_code
       end
@@ -114,22 +115,8 @@ module Oauth
       end
     end
 
-    def render_invalid_principal_selection
-      load_principal_projects
-      @selected_principal_project_id = nil
-      @principal_selection_error = "Choose your account or a project you currently belong to."
-      render :show, status: :unprocessable_entity
-    end
-
-    def render_dynamic_client_quota_exceeded(error)
-      load_principal_projects
-      @selected_principal_project_id = nil
-      @principal_selection_error = error.message
-      render :show, status: :unprocessable_entity
-    end
-
-    def load_principal_projects
-      @principal_projects = Current.user.projects.order(:name, :id)
+    def principal_consent_template
+      :show
     end
 
     def enforce_verification_rate_limit

@@ -3,7 +3,6 @@
 class Session < ApplicationRecord
   belongs_to :user
 
-  scope :recent, -> { order(created_at: :desc) }
   scope :active, -> { where(created_at: RailsSimpleAuth.configuration.session_expiry.ago..) }
   scope :expired, -> { where(created_at: ...RailsSimpleAuth.configuration.session_expiry.ago) }
 

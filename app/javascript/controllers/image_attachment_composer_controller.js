@@ -27,6 +27,7 @@ export default class extends Controller {
   static REQUEST_TIMEOUT = 60000
   static RESUME_POLL_INTERVAL = 500
   static RESUME_POLL_LIMIT = 20
+  static DROP_ACTIVE_CLASS = "image-attachment-dropzone--active"
 
   connect() {
     this.connectionToken = (this.connectionToken || 0) + 1
@@ -90,6 +91,7 @@ export default class extends Controller {
     this.form.removeEventListener("drop", this.onDrop)
     this.form.removeEventListener("paste", this.onPaste)
     this.form.removeEventListener("annotorious:form-cancelled", this.onCancelled)
+    this.form.classList.remove(this.constructor.DROP_ACTIVE_CLASS)
     this.items.forEach(item => {
       item.request?.abort()
       this.releasePreview(item)
@@ -120,11 +122,17 @@ export default class extends Controller {
     // Without preventDefault here the browser handles the drop and navigates
     // away to the file.
     event.preventDefault()
-    this.element.classList.add("image-attachment-composer--dropping")
+    // The highlight goes on the form: the rail composer is display: contents
+    // and has no box of its own to outline.
+    this.form.classList.add(this.constructor.DROP_ACTIVE_CLASS)
   }
 
-  onDragLeave() {
-    this.element.classList.remove("image-attachment-composer--dropping")
+  onDragLeave(event) {
+    // Crossing from the form into one of its own children fires dragleave
+    // too; only a pointer that has left the form ends the highlight.
+    if (event.relatedTarget && this.form.contains(event.relatedTarget)) return
+
+    this.form.classList.remove(this.constructor.DROP_ACTIVE_CLASS)
   }
 
   onDrop(event) {
@@ -133,7 +141,7 @@ export default class extends Controller {
     // The composer claimed this drag on dragover, so it owns the drop even
     // when the dropped files turn out to be unusable.
     event.preventDefault()
-    this.element.classList.remove("image-attachment-composer--dropping")
+    this.form.classList.remove(this.constructor.DROP_ACTIVE_CLASS)
 
     const images = this.imageFilesFrom(event.dataTransfer)
     if (images.length === 0) {
@@ -709,12 +717,35 @@ export default class extends Controller {
   // mode untouched.
   navigateAfterSubmit(url, frame) {
     if (frame && url) {
-      frame.src = url
-      frame.reload()
+      this.keepScrollThroughFrameRender(frame)
+      // Assigning a new src already loads the frame; only an unchanged src
+      // needs an explicit reload. Doing both fetched the workspace twice.
+      if (this.frameShows(frame, url)) {
+        frame.reload()
+      } else {
+        frame.src = url
+      }
       return
     }
 
     Turbo.visit(url || window.location.href, { action: "replace" })
+  }
+
+  frameShows(frame, url) {
+    if (!frame.src) return false
+
+    return new URL(frame.src, document.baseURI).href === new URL(url, document.baseURI).href
+  }
+
+  // Swapping the frame's content briefly collapses the page, and the browser
+  // clamps the scroll position to the top. Put it back once the new content is
+  // in. The composer is gone by then, so the listener holds no reference to it.
+  keepScrollThroughFrameRender(frame) {
+    const { scrollX, scrollY } = window
+
+    frame.addEventListener("turbo:frame-render", () => {
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" })
+    }, { once: true })
   }
 
   // A rejected post keeps the composer mounted: the body, the coordinates, the

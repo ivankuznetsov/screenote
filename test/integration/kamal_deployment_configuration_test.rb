@@ -33,6 +33,9 @@ class KamalDeploymentConfigurationTest < ActiveSupport::TestCase
     assert_nil config["volumes"]
     assert_not_includes config.dig("env", "secret"), "SCREENOTE_BOOTSTRAP_TOKEN"
     assert_not_includes config.dig("env", "secret"), "DATABASE_PASSWORD"
+    assert_not_includes config.dig("env", "secret"), "POSTGRES_PASSWORD"
+    assert_includes config.dig("accessories", "db", "env", "secret"), "POSTGRES_PASSWORD"
+    assert_empty config.dig("env", "clear").keys & %w[RAILS_SERVE_STATIC_FILES RAILS_LOG_TO_STDOUT]
   end
 
   test "SaaS wrapper selects its absolute config before forwarded arguments" do

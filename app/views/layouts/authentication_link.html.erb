@@ -7,8 +7,11 @@
     <meta name="referrer" content="no-referrer">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
+    <%# Deliberately not layouts/head: this token-exchange page stays sterile
+        (no monitoring script and no third-party font request), so it shares
+        only the same-origin favicons and falls back to system fonts. %>
+    <%= render "layouts/favicons" %>
     <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
-    <%= stylesheet_link_tag "auth", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
   </head>
 

@@ -47,6 +47,46 @@ module Api
         end
       end
 
+      test "rejects status and viewport filters that are not known values" do
+        get api_v1_screenshot_annotations_path(@screenshot, status: "closed"),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :unprocessable_entity
+        assert_equal "validation_failed", response.parsed_body["code"]
+        assert_equal [ "Status must be one of: open, resolved" ], response.parsed_body["details"]
+
+        get api_v1_screenshot_annotations_path(@screenshot, viewport: "watch"),
+          headers: auth_header(ALICE_TOKEN)
+
+        assert_response :unprocessable_entity
+        assert_equal "validation_failed", response.parsed_body["code"]
+        assert_equal [ "Viewport must be one of: desktop, tablet, mobile" ], response.parsed_body["details"]
+      end
+
+      test "list comment counts equal each annotation's comments" do
+        get api_v1_screenshot_annotations_path(@screenshot), headers: auth_header(ALICE_TOKEN)
+
+        assert_response :success
+        listed = response.parsed_body["annotations"].to_h { |item| [ item["id"], item["comments_count"] ] }
+        expected = Annotation.where(id: listed.keys).to_h { |item| [ item.id, item.annotation_comments.count ] }
+        assert_equal expected, listed
+        assert expected.values.any?(&:positive?), "Fixtures must include a commented annotation"
+      end
+
+      # Measured against itself so an N+1 that only appears at scale fails:
+      # more annotations, authors, and comments must not add a query.
+      test "list reads do not scale queries with annotations or comments" do
+        add_annotation_with_comment(api_key: api_keys(:alice_key))
+        get_list
+        baseline = capture_app_queries { get_list }.size
+
+        2.times { add_annotation_with_comment(user: users(:alice)) }
+        2.times { add_annotation_with_comment(api_key: api_keys(:alice_key)) }
+
+        assert_equal baseline, capture_app_queries { get_list }.size,
+          "annotation list reads must not scale queries with rows"
+      end
+
       test "does not list annotations for another project screenshot" do
         # The screenshot must actually own annotations, otherwise an empty result
         # proves nothing about cross-project scoping.
@@ -182,6 +222,18 @@ module Api
       end
 
       private
+
+      def get_list
+        get api_v1_screenshot_annotations_path(@screenshot), headers: auth_header(ALICE_TOKEN)
+        assert_response :success
+      end
+
+      def add_annotation_with_comment(user: nil, api_key: nil)
+        annotation = @screenshot.annotations.create!(
+          user: user, api_key: api_key, x_percent: 5.0, y_percent: 5.0, comment: "Extra"
+        )
+        annotation.annotation_comments.create!(user: user, api_key: api_key, body: "Reply", action: :comment)
+      end
 
       def auth_header(token)
         { "Authorization" => "Bearer #{token}" }

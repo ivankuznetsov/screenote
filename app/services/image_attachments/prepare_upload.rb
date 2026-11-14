@@ -29,18 +29,6 @@ module ImageAttachments
         @cleaned = false
       end
 
-      def path
-        tempfile.path
-      end
-
-      def read
-        ensure_open!
-        tempfile.rewind
-        tempfile.read
-      ensure
-        tempfile.rewind unless tempfile.closed?
-      end
-
       def stage!(record:, filename:)
         ensure_open!
         raise "prepared upload already has a staged blob" if blob

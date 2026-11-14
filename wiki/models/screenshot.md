@@ -9,7 +9,7 @@ tags: [model, screenshot, image, active-storage]
 
 # Screenshot
 
-TLDR: A `Screenshot` is the logical capture/version under a page. It can optionally belong to a [[models/snapshot]] capture run and can have one or more [[models/screenshot-image]] viewport variants, while retaining transitional legacy image columns and attachment support for the backfill path.
+TLDR: A `Screenshot` is the logical capture/version under a page. It can optionally belong to a [[models/snapshot]] capture run and can have one or more [[models/screenshot-image]] viewport variants, with all image bytes living on the variants. The legacy parent attachment was removed on 2026-11-11; the unused `width`/`height` columns are ignored and scheduled to be dropped in a following release.
 
 Source: `app/models/screenshot.rb`
 
@@ -37,7 +37,6 @@ Source: `app/models/screenshot.rb`
 | project | has_one through | [[project]] (via page) |
 | annotations | has_many | [[annotation]] (dependent: destroy) |
 | screenshot_images | has_many | [[models/screenshot-image]] (dependent: destroy) |
-| image | has_one_attached | Legacy Active Storage attachment used by backfill/rollback paths |
 
 ## Enums
 
@@ -47,7 +46,6 @@ Source: `app/models/screenshot.rb`
 
 - `title`: presence, length max 255
 - `width`, `height`: integer > 0 (allow nil for pending uploads)
-- legacy `image`: content type must be PNG or JPEG, max 20MB when attached
 - `snapshot_belongs_to_same_project`: when `snapshot_id` is set, the snapshot's `project_id` must match the page's `project_id`. Defense-in-depth at the AR layer; raw SQL updates bypass it (the DB FK doesn't constrain cross-project pairings, only existence).
 - A new or reassigned snapshot-backed Screenshot is invalid when that Snapshot
   already has a Screenshot for the same Page. The validation locks the Snapshot
@@ -70,7 +68,6 @@ Source: `app/models/screenshot.rb`
 
 ## Token Generation
 
-- `Screenshot` still declares a legacy 5-minute upload token for the transitional parent attachment path.
 - New signed-upload flows use [[models/screenshot-image]] tokens so each viewport upload is single-use and independent.
 
 ## Constants

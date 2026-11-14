@@ -61,12 +61,6 @@ class ApiKeyTest < ActiveSupport::TestCase
     assert_not_includes active_keys, api_keys(:alice_key_revoked)
   end
 
-  test "revoked scope includes only revoked keys" do
-    revoked_keys = ApiKey.revoked.where(project: @project)
-    assert_includes revoked_keys, api_keys(:alice_key_revoked)
-    assert_not_includes revoked_keys, api_keys(:alice_key)
-  end
-
   test "revoke! sets revoked_at" do
     assert_nil @api_key.revoked_at
     @api_key.revoke!

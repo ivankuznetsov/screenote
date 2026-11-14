@@ -4,6 +4,8 @@ require "test_helper"
 require Rails.root.join("db/migrate/20260712153000_repair_legacy_api_key_token_storage").to_s
 
 class RepairLegacyApiKeyTokenStorageTest < ActiveSupport::TestCase
+  include MigrationDatabaseConfigHelper
+
   self.fixture_table_names = []
   self.use_transactional_tests = false
 
@@ -104,9 +106,5 @@ class RepairLegacyApiKeyTokenStorageTest < ActiveSupport::TestCase
         RepairLegacyApiKeyTokenStorage.new.exec_migration(@connection, :up)
       end
     end
-  end
-
-  def migration_database_config
-    ENV["MIGRATION_TEST_DATABASE_URL"].presence || { adapter: "sqlite3", database: ":memory:" }
   end
 end

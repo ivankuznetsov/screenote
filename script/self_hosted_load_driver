@@ -269,7 +269,6 @@ module ScreenoteLoadDriver
         "--volume", "#{volume}:/rails/storage",
         "--mount", "type=bind,source=#{secret},target=/run/secrets/screenote_secret_key_base,readonly",
         "--env", "RAILS_ENV=production",
-        "--env", "RAILS_SERVE_STATIC_FILES=true",
         "--env", "RAILS_LOG_LEVEL=warn",
         "--env", "DISABLE_SSL=true",
         "--env", "SCREENOTE_EDITION=self_hosted",

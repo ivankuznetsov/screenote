@@ -49,14 +49,19 @@
 # Ignore development files
 /.devcontainer
 
-# The transitional Go CLI is tested separately and is not part of the Rails
-# runtime image. Excluding its module sources keeps the server SBOM and
-# vulnerability scan scoped to software that is actually shipped in the image.
-/go.mod
-/go.sum
-/cmd/
-/internal/
+# Gems are installed in the build stage; a host-local bundle must not ship.
 /vendor/bundle/
+
+# Tests, project knowledge, and agent tooling never run inside the runtime
+# image. Keep script/: host operations run its entrypoints in the image.
+/test/
+/wiki/
+/todos/
+/plans/
+/raw/
+/.llm-wiki/
+/.claude/
+/.githooks/
 
 # Ignore Docker-related files
 /.dockerignore

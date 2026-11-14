@@ -91,6 +91,46 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     assert preloaded.overview_variants_warmed?
   end
 
+  test "thumbnail variant digests cover the formats uploaded filenames resolve to" do
+    image = screenshot_images(:alice_screenshot_desktop)
+    digests = ScreenshotImage.thumbnail_variant_digests
+
+    [
+      [ "Screen Shot.png", "image/png" ], [ "SHOT.PNG", "image/png" ], [ "capture", "image/png" ],
+      [ "photo.jpeg", "image/jpeg" ], [ "IMG_0001.JPG", "image/jpeg" ], [ "mislabelled.png", "image/jpeg" ]
+    ].each do |filename, content_type|
+      image.image.attach(
+        ActiveStorage::Blob.create_and_upload!(io: StringIO.new("x"), filename:, content_type:, identify: false)
+      )
+
+      ScreenshotImage::THUMBNAIL_VARIANT_NAMES.zip(image.thumbnail_variants).each do |name, variant|
+        assert_includes digests.fetch(name), variant.variation.digest, "#{name} for #{filename}"
+      end
+    end
+  end
+
+  test "needing_processing selects only images with dimension or thumbnail work left" do
+    page = pages(:alice_page)
+    pending_upload = attached_image(page.screenshots.create!(title: "Pending"), :desktop, status: :pending)
+    cold = attached_image(page.screenshots.create!(title: "Cold"), :desktop, status: :ready)
+    partly_warm = warm(attached_image(page.screenshots.create!(title: "Partly warm"), :desktop, status: :ready),
+      ScreenshotImage::THUMBNAIL_VARIANT_NAMES.first(2))
+
+    warm_screenshot = page.screenshots.create!(title: "Warm")
+    warm(attached_image(warm_screenshot, :desktop, status: :ready))
+    attached_image(warm_screenshot, :mobile, status: :ready) # never warmed: not the primary image
+
+    processing_screenshot = page.screenshots.create!(title: "Still processing")
+    attached_image(processing_screenshot, :desktop, status: :ready) # parent not ready yet
+    pending_sibling = attached_image(processing_screenshot, :mobile, status: :pending)
+
+    attached_image(page.screenshots.create!(title: "Failed"), :desktop, status: :failed)
+    page.screenshots.create!(title: "Awaiting upload").screenshot_images.create!(viewport: :desktop)
+
+    assert_equal [ pending_upload, cold, partly_warm, pending_sibling ].map(&:id).sort,
+      ScreenshotImage.needing_processing.where(screenshot: page.screenshots).ids.sort
+  end
+
   test "width must be positive integer when present" do
     si = ScreenshotImage.new(screenshot: screenshots(:alice_screenshot), viewport: :tablet, width: -1)
     assert_not si.valid?
@@ -214,27 +254,6 @@ class ScreenshotImageTest < ActiveSupport::TestCase
     end
   end
 
-  test "rollback_to_screenshots! restores Screenshot width/height/status from the variant" do
-    screenshot = screenshots(:alice_screenshot)
-    screenshot.image.purge if screenshot.image.attached?
-    screenshot.update_columns(width: nil, height: nil, status: Screenshot.statuses[:pending])
-    si = screenshot.screenshot_images.find_or_create_by(viewport: :desktop)
-    si.update!(width: 1920, height: 1080, status: :ready)
-    si.image.attach(
-      io: StringIO.new(File.binread(Rails.root.join("test/fixtures/files/test_image.png"))),
-      filename: "d.png", content_type: "image/png"
-    )
-
-    ScreenshotImage.rollback_to_screenshots!(apply: true, logger: StringIO.new)
-
-    screenshot.reload
-    assert screenshot.image.attached?
-    assert_equal 1920, screenshot.width
-    assert_equal 1080, screenshot.height
-    assert_equal "ready", screenshot.status,
-      "Rollback must preserve status — otherwise Page.latest_screenshot (filters by :ready) loses this row"
-  end
-
   test "status change syncs parent Screenshot to :ready when all siblings ready" do
     screenshot = screenshots(:alice_screenshot)
     si = screenshot_images(:alice_screenshot_desktop)
@@ -266,5 +285,26 @@ class ScreenshotImageTest < ActiveSupport::TestCase
 
     assert_equal "pending", screenshot.reload.status,
       "New pending sibling fires after_save status callback and drops parent back to :pending"
+  end
+
+  private
+
+  def attached_image(screenshot, viewport, status:)
+    dimensions = status == :ready ? { width: 100, height: 100 } : {}
+    image = screenshot.screenshot_images.build(viewport:, status:, **dimensions)
+    image.image.attach(
+      io: StringIO.new(file_fixture("test_image.png").binread),
+      filename: "#{viewport}.png",
+      content_type: "image/png"
+    )
+    image.save!
+    image
+  end
+
+  def warm(image, names = ScreenshotImage::THUMBNAIL_VARIANT_NAMES)
+    names.each do |name|
+      image.image.blob.variant_records.create!(variation_digest: image.image.variant(name).variation.digest)
+    end
+    image
   end
 end

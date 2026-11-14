@@ -2,6 +2,8 @@
 
 module Instance
   class AccountsController < ApplicationController
+    include PrivateResponseHeaders
+
     before_action :set_private_headers
 
     def index
@@ -50,7 +52,6 @@ module Instance
       result = InstanceAccounts::List.call(actor: Current.user)
       if result.success?
         @accounts = result.accounts
-        @administrator_id = result.administrator_id
       elsif result.status == :forbidden
         redirect_to dashboard_path, alert: "Not authorized."
       else
@@ -103,13 +104,6 @@ module Instance
         "Instance administration is temporarily unavailable.",
         status: :service_unavailable
       )
-    end
-
-    def set_private_headers
-      response.set_header("Cache-Control", "no-store, max-age=0")
-      response.set_header("Pragma", "no-cache")
-      response.set_header("Referrer-Policy", "no-referrer")
-      response.set_header("X-Robots-Tag", "noindex, nofollow")
     end
   end
 end

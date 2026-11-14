@@ -51,8 +51,7 @@ module ScreenshotImages
 
     def dispatch(job_class, *arguments, stage:)
       if self.class.inline?
-        job_class.perform_now(*arguments)
-        :processed
+        job_class.perform_now(*arguments) == :skipped ? :skipped : :processed
       else
         job = job_class.perform_later(*arguments)
         raise ActiveJob::EnqueueError, "#{stage} job was not enqueued" unless job.successfully_enqueued?

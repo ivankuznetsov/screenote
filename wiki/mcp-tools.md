@@ -52,7 +52,7 @@ The Go CLI in [[api-cli]] does not call MCP. It uses REST `api/v1` so shell and 
 | `list_project_members` | `app/tools/list_project_members_tool.rb` | List project members |
 | `invite_collaborator` | `app/tools/invite_collaborator_tool.rb` | Send a project invitation |
 | `cancel_invitation` | `app/tools/cancel_invitation_tool.rb` | Cancel a pending invitation |
-| `remove_project_member` | `app/tools/remove_project_member_tool.rb` | Remove a member from a project |
+| `remove_project_member` | `app/tools/remove_project_member_tool.rb` | Remove a member from a project. Requires a user-scoped principal with write scope; project-scoped OAuth tokens get `forbidden`. |
 
 ## Attachment Metadata
 
