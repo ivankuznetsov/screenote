@@ -217,6 +217,15 @@ module Api
         assert_includes response.parsed_body["screenshots"].map { |screenshot| screenshot["id"] }, screenshots(:alice_screenshot).id
       end
 
+      test "oauth token without the read scope cannot list screenshots" do
+        token = oauth_token(user: users(:alice), scopes: "mcp_write")
+
+        get api_v1_project_screenshots_path(@project), headers: auth_header(token.token)
+
+        assert_response :forbidden
+        assert_equal "insufficient_scope", response.parsed_body["code"]
+      end
+
       test "oauth read token cannot create screenshots" do
         token = oauth_token(user: users(:alice), scopes: "mcp_read")
 
