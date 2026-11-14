@@ -36,6 +36,7 @@ domains:
     - app/services/installations/claim.rb
     - app/services/installations/prepare.rb
   invitation:
+    - app/controllers/concerns/invitation_link_status.rb
     - app/controllers/invitation_acceptances_controller.rb
     - app/controllers/project_invitations_controller.rb
     - app/controllers/project_memberships_controller.rb
@@ -66,6 +67,7 @@ domains:
     - app/controllers/concerns/api/image_upload_rate_limiting.rb
     - app/controllers/concerns/blob_streaming.rb
     - app/controllers/concerns/image_attachment_submission.rb
+    - app/controllers/concerns/oauth/principal_selection.rb
     - app/controllers/concerns/page_workspace_navigation.rb
     - app/controllers/concerns/project_authorization.rb
     - app/controllers/concerns/screenote_session_management.rb
@@ -106,6 +108,9 @@ domains:
   recovery:
     - app/controllers/account_recoveries_controller.rb
     - app/controllers/authentication_links_controller.rb
+    - app/controllers/concerns/fail_closed_rate_limiting.rb
+    - app/controllers/concerns/mail_delivery_required.rb
+    - app/controllers/concerns/private_response_headers.rb
     - app/controllers/confirmations_controller.rb
     - app/controllers/magic_links_controller.rb
     - app/controllers/passwords_controller.rb

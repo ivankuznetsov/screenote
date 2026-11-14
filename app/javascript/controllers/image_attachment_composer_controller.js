@@ -717,12 +717,35 @@ export default class extends Controller {
   // mode untouched.
   navigateAfterSubmit(url, frame) {
     if (frame && url) {
-      frame.src = url
-      frame.reload()
+      this.keepScrollThroughFrameRender(frame)
+      // Assigning a new src already loads the frame; only an unchanged src
+      // needs an explicit reload. Doing both fetched the workspace twice.
+      if (this.frameShows(frame, url)) {
+        frame.reload()
+      } else {
+        frame.src = url
+      }
       return
     }
 
     Turbo.visit(url || window.location.href, { action: "replace" })
+  }
+
+  frameShows(frame, url) {
+    if (!frame.src) return false
+
+    return new URL(frame.src, document.baseURI).href === new URL(url, document.baseURI).href
+  }
+
+  // Swapping the frame's content briefly collapses the page, and the browser
+  // clamps the scroll position to the top. Put it back once the new content is
+  // in. The composer is gone by then, so the listener holds no reference to it.
+  keepScrollThroughFrameRender(frame) {
+    const { scrollX, scrollY } = window
+
+    frame.addEventListener("turbo:frame-render", () => {
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" })
+    }, { once: true })
   }
 
   // A rejected post keeps the composer mounted: the body, the coordinates, the

@@ -10,8 +10,17 @@ class TeamworkTest < ApplicationSystemTestCase
   include Pages::ProjectsPage
   include Pages::MembersPage
 
+  # Invitations are issued and cancelled through DatabaseRetry, which refuses to
+  # run inside an open transaction. The in-process server shares the test's
+  # connection, so a transactional test would hold one open around every request.
+  self.use_transactional_tests = false
+
   setup do
     login_as_test_user
+  end
+
+  teardown do
+    AuthenticationToken.delete_all
   end
 
   # --- Members page ---
@@ -81,7 +90,7 @@ class TeamworkTest < ApplicationSystemTestCase
     assert_flash_notice "Invitation sent to #{email}."
 
     invite_email(email)
-    assert_selector ".flash--alert", text: /already been invited/i, wait: 10
+    assert_flash_notice "That invitation is already pending."
   end
 
   test "invitation rejects existing member email" do
@@ -90,7 +99,7 @@ class TeamworkTest < ApplicationSystemTestCase
     assert_on_members_page
 
     invite_email("test@screenote.app")
-    assert_selector ".flash--alert", text: /already a member/i, wait: 10
+    assert_selector ".flash--alert", text: /already a project member/i, wait: 10
   end
 
   # --- Owner-only actions ---

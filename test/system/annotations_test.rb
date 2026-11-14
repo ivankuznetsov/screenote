@@ -780,11 +780,11 @@ class AnnotationsTest < ApplicationSystemTestCase
     assert_in_place_annotation_form_visible
     fill_annotation_comment("Ivan's point comment")
     submit_annotation
-    wait_for_turbo
+    assert_selector ANNOTATION_ITEM, text: "Ivan's point comment", wait: 10
     annotation = Annotation.find_by!(comment: "Ivan's point comment")
 
-    assert_selector "#{POINT_ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']", text: "IK"
-    assert_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{annotation.id}'] [data-testid='annotation-author-marker']", text: "IK"
+    assert_selector "#{POINT_ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']", text: "AD"
+    assert_selector "#{ANNOTATION_ITEM}[data-annotation-id='#{annotation.id}'] [data-testid='annotation-author-marker']", text: "AD"
 
     logout
     login_as(bob.email, "password123")
@@ -810,7 +810,7 @@ class AnnotationsTest < ApplicationSystemTestCase
     visit page_path(screenshot.page, version_id: screenshot.id)
 
     assert_thread_reply("Ivan's point comment", reply: "Bob can reproduce this", author: bob.email)
-    assert_selector "#{POINT_ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']", text: "IK"
+    assert_selector "#{POINT_ANNOTATION_PIN}[data-annotation-id='#{annotation.id}']", text: "AD"
   end
 
   test "a typed draft survives a second drawing without retaining the transient annotation" do

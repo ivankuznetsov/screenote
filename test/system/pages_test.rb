@@ -228,7 +228,7 @@ class PagesTest < ApplicationSystemTestCase
             currentSrc: image.currentSrc,
             representationRequests: performance.getEntriesByType("resource")
               .map(entry => entry.name)
-              .filter(url => url.includes("/rails/active_storage/representations/"))
+              .filter(url => url.includes("/media/screenshot_images/"))
           }
         }
       JS
