@@ -36,7 +36,6 @@
           { "context": "CI / system-collaboration", "integration_id": 15368 },
           { "context": "CI / public-cli", "integration_id": 15368 },
           { "context": "CI / container-local", "integration_id": 15368 },
-          { "context": "CI / container-s3", "integration_id": 15368 },
           { "context": "CI / backup-restore", "integration_id": 15368 },
           { "context": "CI / release-artifact", "integration_id": 15368 },
           { "context": "concurrency-qualification / image-attachment-lifecycle", "integration_id": 15368 },

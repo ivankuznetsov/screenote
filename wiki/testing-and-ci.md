@@ -44,7 +44,12 @@ run through `bundle exec ruby` so a cache-restored bundle is visible.
 ## Browser tests
 
 System tests run the application through Capybara's in-process server and use
-the Playwright driver:
+the Playwright driver. Run `bin/playwright-install` first: it installs the Node
+driver matching the bundled `playwright-ruby-client` into this checkout's
+`node_modules/` plus its Chromium build. A driver from another release line
+(for example a stray one in a parent directory) breaks the browser connection
+mid-test and hangs the run, so `ApplicationSystemTestCase` aborts with a clear
+message when the versions differ.
 
 ```sh
 BUNDLE_PATH=vendor/bundle CAPYBARA_RUN_SERVER=true PARALLEL_WORKERS=1 \
@@ -192,12 +197,12 @@ whole application at the configured object store and drives the protected
 session and bearer routes through it, which is the only way to prove the
 application streams the bytes itself: a Disk service has no presigned URL to
 leak and no remote host to redirect to.
-`script/attachment_object_store_qualification` supplies that store the same way
-the database script supplies a database — an ephemeral MinIO container on the
-same immutable image `container-s3` uses — and reruns the gate, so the delivery
-half is reproducible outside CI too. It accepts an operator's own endpoint
-through `SCREENOTE_S3_ENDPOINT` and its companions for a run against the hosted
-provider. The gate exports `SCREENOTE_REQUIRE_S3=1`, which turns the suite's
+`script/attachment_object_store_qualification` runs the gate against an
+S3-compatible test bucket supplied through `SCREENOTE_S3_ENDPOINT` and its
+companions, such as a dedicated bucket on the hosted provider. No object store
+is started for tests and no workflow runs this gate: the MinIO container and
+the `container-s3` CI job were removed on 2026-11-15, so the S3 path is
+qualified manually. The gate exports `SCREENOTE_REQUIRE_S3=1`, which turns the suite's
 "no store configured" skip into a failure, so a qualification run cannot pass
 by not running.
 The S3 suite also creates and replays an API image comment, streams those exact
@@ -214,9 +219,7 @@ exact bytes, private modes, and no token URLs. It also proves revoked and
 expired credentials fail privately, and that an old server receives exactly
 one unsupported image-route request with no text-only fallback. It owns a
 scratch test database lifecycle and cleans its created comments, attachments,
-and blobs so later tests do not inherit state. The `container-s3` job reruns
-that same exact-CLI gate against MinIO, checks the selected Active Storage
-service, and verifies the provider-backed bytes. The real test server keeps the
+and blobs so later tests do not inherit state. The real test server keeps the
 self-hosted storage configuration but does not start the production-only Solid
 Queue Puma supervisor. This is source compatibility evidence; the tagged
 HTTP/HTTPS and release-image CLI qualification remains a separate release-only

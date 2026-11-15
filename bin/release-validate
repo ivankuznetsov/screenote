@@ -51,7 +51,6 @@ class ReleaseValidation
     system-collaboration
     public-cli
     container-local
-    container-s3
     backup-restore
     release-artifact
   ].freeze

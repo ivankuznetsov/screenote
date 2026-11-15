@@ -19,7 +19,7 @@ module S3ContractHelper
     return if missing.empty?
 
     flunk "S3 matrix missing #{missing.join(', ')}" if required
-    skip "run through script/release_test_matrix s3 against MinIO"
+    skip "run through script/attachment_object_store_qualification against a real object store"
   end
 
   def storage_service

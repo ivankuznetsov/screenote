@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+# Installs the Playwright driver that matches the bundled playwright-ruby-client,
+# plus its Chromium build, for the browser system tests.
+#
+# The Ruby client and the Node driver must be the same release line. A stray
+# `playwright` from a parent directory or a global install speaks a different
+# protocol, and the mismatch shows up as a hung browser rather than an error.
+# `--prefix .` keeps the driver in this checkout's node_modules, where `npx`
+# finds it before anything else.
+
+set -Eeuo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+version="$(bundle exec ruby -e 'require "playwright"; puts Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip')"
+
+npm install --no-save --no-audit --no-fund --prefix . "playwright@${version}"
+npx --no-install playwright install chromium

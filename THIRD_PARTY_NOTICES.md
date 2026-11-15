@@ -26,7 +26,7 @@ The following entries are generated from `Gemfile.lock` with Bundler's declared 
 
 ### Apache-2.0
 
-`addressable` 2.9.2, `aws-eventstream` 1.4.0, `aws-partitions` 1.1213.0, `aws-sdk-core` 3.242.0, `aws-sdk-kms` 1.121.0, `aws-sdk-s3` 1.213.0, `aws-sigv4` 1.12.1, `jmespath` 1.6.2, `msgpack` 1.8.3, `websocket-driver` 0.8.2, `websocket-extensions` 0.1.5.
+`addressable` 2.9.2, `aws-eventstream` 1.4.0, `aws-partitions` 1.1213.0, `aws-sdk-core` 3.242.0, `aws-sdk-kms` 1.121.0, `aws-sdk-s3` 1.213.0, `aws-sigv4` 1.12.1, `jmespath` 1.6.2, `msgpack` 1.8.7, `websocket-driver` 0.8.2, `websocket-extensions` 0.1.5.
 
 ### BSD-2-Clause
 
@@ -38,7 +38,7 @@ The following entries are generated from `Gemfile.lock` with Bundler's declared 
 
 ### BSD-3-Clause
 
-`ffi` 1.17.3, `puma` 8.0.2, `sqlite3` 2.10.2.
+`ffi` 1.17.3, `puma` 8.1.1, `sqlite3` 2.10.2.
 
 ### MIT
 
