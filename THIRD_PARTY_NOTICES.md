@@ -38,7 +38,7 @@ The following entries are generated from `Gemfile.lock` with Bundler's declared 
 
 ### BSD-3-Clause
 
-`ffi` 1.17.3, `puma` 8.0.2, `sqlite3` 2.10.2.
+`ffi` 1.17.3, `puma` 8.1.1, `sqlite3` 2.10.2.
 
 ### MIT
 
