@@ -287,7 +287,9 @@ Final-image dependency probes must execute Ruby through Bundler. The release
 image intentionally isolates deployment gems under `BUNDLE_PATH`, so a bare
 `ruby` process is not equivalent to the Rails runtime and can report false
 missing-gem failures. The CI image probe uses `bundle exec ruby` and verifies
-both the selected S3 SDK and libvips binding from the final image.
+both the selected S3 SDK and libvips binding from the final image. That probe lives in
+`script/self_hosted_container_smoke`, so the `container-local` job runs it on
+every pull request.
 
 Non-interactive commands inside a running Compose service use the portable
 short `exec -T` spelling. The hosted runner's Compose 2.38.2 frontend exposes

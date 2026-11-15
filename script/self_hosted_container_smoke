@@ -96,6 +96,15 @@ if [[ "$(docker image inspect --format '{{.Config.User}}' "${IMAGE_TAG}")" != "1
   exit 1
 fi
 
+# Object storage and image processing both depend on native pieces that the
+# rest of this smoke never touches: the S3 SDK is `require: false`, and
+# ruby-vips only opens libvips when it is first required.
+if ! docker run --rm --entrypoint /bin/sh "${IMAGE_TAG}" -c \
+  'cd /rails && bundle exec ruby -e "require %q(aws-sdk-s3); require %q(vips); Aws::S3::Client; puts %(aws-sdk-s3 #{Aws::S3::GEM_VERSION}, libvips #{Vips.version_string})"'; then
+  printf 'self-hosted smoke: final image cannot load aws-sdk-s3 and libvips\n' >&2
+  exit 1
+fi
+
 docker volume create "${ONCE_VOLUME_NAME}" >/dev/null
 docker run --rm \
   --entrypoint /bin/sh \
