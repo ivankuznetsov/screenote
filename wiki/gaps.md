@@ -123,7 +123,7 @@ Areas where documentation is missing or incomplete. Updated from current source,
 - Validated screenshot bytes are synchronously staged before attachment commit, and normal upload errors or transaction rollbacks compensate by removing the object. A hard process termination between the provider write and database commit can still leave an unreferenced object because storage and the primary database do not share a transaction. U7 should add a storage-inventory reconciler or document a dedicated staging-prefix lifecycle policy before claiming orphan-free crash recovery.
 
 ### API Image-Comment Crash Recovery
-- Atomic image-comment creation likewise purges its staged blob on every handled validation, database, or application failure, and the MinIO contract proves that compensation after an injected post-stage database failure. A hard process kill between the object-store write and database ownership can still leave an unreferenced provider object because the two systems cannot share a transaction. Reuse the planned storage-inventory reconciler or a staging-prefix lifecycle policy before claiming crash-orphan freedom.
+- Atomic image-comment creation likewise purges its staged blob on every handled validation, database, or application failure, and the S3 contract proves that compensation after an injected post-stage database failure. A hard process kill between the object-store write and database ownership can still leave an unreferenced provider object because the two systems cannot share a transaction. Reuse the planned storage-inventory reconciler or a staging-prefix lifecycle policy before claiming crash-orphan freedom.
 - `annotation get --attachments-dir` stages every requested image and rolls back files it owns on handled errors. Publishing several no-replace files is not crash-atomic at the filesystem level: process or machine death during the final link sequence can leave a proper subset of private attachment files without the JSON result. A future recovery manifest would be needed if crash-atomic multi-file export becomes a supported guarantee.
 - A same-key replay still repeats the bounded upload preparation and image decode before consulting the durable receipt. This preserves identical validation and error semantics and is not a correctness gap; add a measured fast path only if production replay volume shows that the extra decode matters.
 
@@ -166,13 +166,13 @@ The following gaps from the original bootstrap have been partially or fully addr
   session and bearer routes through it, asserting provider-stored bytes, no
   `Location`, no provider host in any header, application-served byte ranges,
   the five-minute purpose token expiring, and revoked membership losing access.
-  It runs in the existing `script/release_test_matrix s3` gate against MinIO,
-  and `script/attachment_object_store_qualification` supplies that store on any
-  machine with a container engine, so the run no longer waits on an operator.
-  Running it against the production Rabata endpoint specifically still needs
-  operator-supplied credentials, which the same script accepts through
-  `SCREENOTE_S3_ENDPOINT` and its companions.
-- The same MinIO qualification now covers the atomic API writer: it creates and
+  It runs in the `script/release_test_matrix s3` gate, which is manual only:
+  no CI job runs it since the MinIO-backed `container-s3` job was removed
+  (2026-11-15). `script/attachment_object_store_qualification` needs
+  operator-supplied credentials for a real test bucket through
+  `SCREENOTE_S3_ENDPOINT` and its companions, so the S3 contract is unverified
+  on pull requests.
+- The same S3 qualification covers the atomic API writer: it creates and
   replays one image comment, verifies the submitted bytes through the private
   bearer route, and injects a database failure after provider staging to prove
   handled cleanup. This does not replace the still-outstanding production

@@ -26,7 +26,7 @@ class SelfHostedS3ContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "MinIO supports upload checksum range read analysis variant existence and delete" do
+  test "the object store supports upload checksum range read analysis variant existence and delete" do
     require_vips!
     service = storage_service
     bytes = file_fixture("test_image.png").binread

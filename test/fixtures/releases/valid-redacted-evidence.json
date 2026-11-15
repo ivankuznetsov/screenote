@@ -106,7 +106,6 @@
       { "name": "system-collaboration", "conclusion": "success", "evidence_sha256": "3636363636363636363636363636363636363636363636363636363636363636" },
       { "name": "public-cli", "conclusion": "success", "evidence_sha256": "3737373737373737373737373737373737373737373737373737373737373737" },
       { "name": "container-local", "conclusion": "success", "evidence_sha256": "3838383838383838383838383838383838383838383838383838383838383838" },
-      { "name": "container-s3", "conclusion": "success", "evidence_sha256": "3939393939393939393939393939393939393939393939393939393939393939" },
       { "name": "backup-restore", "conclusion": "success", "evidence_sha256": "4040404040404040404040404040404040404040404040404040404040404040" },
       { "name": "release-artifact", "conclusion": "success", "evidence_sha256": "4141414141414141414141414141414141414141414141414141414141414141" }
     ],

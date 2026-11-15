@@ -44,7 +44,25 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
     deviceScaleFactor: Float(ENV.fetch("DEVICE_SCALE_FACTOR", "1"))
   }
 
+  # The Ruby client and the Node driver must be the same release line. A
+  # mismatch does not raise: the browser connection breaks mid-test and the run
+  # hangs. Check once, before the first test drives a browser.
+  def self.assert_playwright_driver_matches_client!
+    return if @playwright_driver_checked
+
+    expected = Playwright::COMPATIBLE_PLAYWRIGHT_VERSION.strip
+    installed = `npx --no-install playwright --version 2>/dev/null`[/\d+\.\d+\.\d+/]
+    release_line = ->(version) { Gem::Version.new(version).segments.first(2) }
+    unless installed && release_line.call(installed) == release_line.call(expected)
+      abort "Playwright driver #{installed || "was not found"}, but playwright-ruby-client needs #{expected}. " \
+        "Run bin/playwright-install."
+    end
+
+    @playwright_driver_checked = true
+  end
+
   setup do
+    ApplicationSystemTestCase.assert_playwright_driver_matches_client!
     start_evidence_trace
     # The test environment's NullStore intentionally makes fail-closed rate
     # limiters unavailable. Give each system test a functional isolated store

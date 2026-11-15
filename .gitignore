@@ -48,3 +48,6 @@
 /.llm-wiki/qmd-cache/
 /.llm-wiki/*.log
 /.hive-state/
+
+# Playwright driver for system tests (bin/playwright-install)
+/node_modules/
